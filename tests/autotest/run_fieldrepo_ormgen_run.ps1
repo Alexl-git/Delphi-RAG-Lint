@@ -58,7 +58,7 @@ foreach ($form in 'new', 'old') {
     $rl = @(& { $ErrorActionPreference = 'Continue'; & $bin 2>&1 | ForEach-Object { "$_" } })
     $rl | Where-Object { $_ -match '^FAIL' } | ForEach-Object { Write-Host "  ${form}: $_" -ForegroundColor Red }
     $sum = $rl | Where-Object { $_ -match '^SUMMARY ' } | Select-Object -Last 1
-    Check "${form}: Assign / AssignTo really copy ($sum)" ($sum -match 'pass=15 fail=0$')
+    Check "${form}: Assign / AssignTo really copy ($sum)" ($sum -match 'pass=27 fail=0$')
   } else { Check "${form}: program built" $false }
 }
 # ---- lint of the generated units (project DB of its own, dll-win64 engine read-only) ----

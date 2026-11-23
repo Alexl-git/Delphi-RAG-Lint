@@ -237,6 +237,19 @@ begin
     { regions 4 / 6: both objects named; nothing for a table without stored columns }
     Check('C1 region 6', RegionBody(vGen.UpdateRegions(Region('6', ''), 'LINE$ITEM', False, vCount), '6').StartsWith(
       '      var LDest:= TmcLINE_ITEM(Dest);'#13#10'      LDest.LINE_NO' + Sp(18) + ':= Self.fLINE_NO' + Sp(18) + ';'#13#10));
+    { a column the generator creates (region 14) and frees (region 15) is copied by content, any other class column by reference }
+    vBody := RegionBody(vGen.UpdateRegions(Region('4', ''), 'LINE$ITEM', False, vCount), '4');
+    Check('C4 region 4: the owned list is assigned, nil source clears, nil destination and self-assignment are skipped',
+      vBody.Contains('      if (Self.fMEMO <> nil) and (LSource <> Self) then'#13#10'        if LSource.MEMO <> nil then'#13#10 +
+        '          Self.fMEMO.Assign(LSource.MEMO)'#13#10'        else'#13#10'          Self.fMEMO.Clear;'#13#10) and not vBody.Contains('Self.fMEMO:='), vBody);
+    vBody := RegionBody(vGen.UpdateRegions(Region('6', ''), 'LINE$ITEM', False, vCount), '6');
+    Check('C5 region 6: same for AssignTo, then Modified (an owned column has no setter call)',
+      vBody.Contains('      if (LDest.MEMO <> nil) and (LDest <> Self) then'#13#10'        if Self.fMEMO <> nil then'#13#10 +
+        '          LDest.MEMO.Assign(Self.fMEMO)'#13#10'        else'#13#10'          LDest.MEMO.Clear;'#13#10) and vBody.EndsWith('      LDest.Modified:= True;'#13#10) and not vBody.Contains('LDest.MEMO:='), vBody);
+    Check('C6 the owned test is the one regions 14 / 15 use',
+      RegionBody(vGen.UpdateRegions(Region('14', ''), 'LINE$ITEM', False, vCount), '14').Contains('fMEMO:= TStringList.Create;') and
+      RegionBody(vGen.UpdateRegions(Region('15', ''), 'LINE$ITEM', False, vCount), '15').Contains('fMEMO.Free;') and
+      not RegionBody(vGen.UpdateRegions(Region('6', ''), 'ORDERS', False, vCount), '6').Contains('Modified'));
     Check('C2 region 11 declares its enumeration local only when needed',
       RegionBody(vGen.UpdateRegions(Region('11', ''), 'ORDERS', False, vCount), '11').StartsWith('  var EnumByte: Byte;'#13#10) and
       not RegionBody(vGen.UpdateRegions(Region('11', ''), 'LINE$ITEM', False, vCount), '11').Contains('var '));
@@ -589,7 +602,7 @@ end;
 { The 1.54 generator differs from TableTools on purpose (owner rulings 2026-11-23). This turns a
   region the generator wrote back into what TableTools wrote, one named change at a time, so a unit
   that differs ONLY by those changes is DELIBERATE-DRIFT and any other difference is DIFFERENT. }
-function LegacyForm(const pId, pBody: string): string;
+function LegacyForm(const pId: string; pBody: string): string;
 var
   vLine, vT: string;
   vSynth: Boolean;
@@ -602,6 +615,13 @@ var
 begin
   Result := '';
   vSynth := False;
+  if pId = '4' then
+    pBody := TRegEx.Replace(pBody, '(?m)^      if \(Self\.f(\w+) <> nil\) and \(LSource <> Self\) then\r?\n(?:(?:        [^\r\n]*|      begin|      end;)\r?\n)+', '      f$1:= $1;'#13#10)
+  else if pId = '6' then
+  begin
+    pBody := TRegEx.Replace(pBody, '(?m)^      if \(LDest\.(\w+) <> nil\) and \(LDest <> Self\) then\r?\n(?:(?:        [^\r\n]*|      begin|      end;)\r?\n)+', '      $1:= f$1;'#13#10);
+    pBody := pBody.Replace('      LDest.Modified:= True;'#13#10, '');
+  end;
   for vLine in OrmSplitLines(pBody) do
   begin
     vT := vLine;

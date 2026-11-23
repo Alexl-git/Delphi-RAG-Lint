@@ -226,6 +226,13 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function IsVarTypeCreatable(const AType: string): Boolean;
+    /// <summary>Region 4 / 6 text for a column the generator creates and frees itself (regions 14 / 15, IsVarTypeCreatable): the object keeps its own list or stream and takes the other one's content.</summary>
+    /// <param name="pCode">Receives the lines.</param>
+    /// <param name="pField">The column; a stream (STPicture) is copied with CopyFrom, a list with Assign / Clear.</param>
+    /// <param name="pDest">Full expression of the object that takes the content (nil: nothing is copied).</param>
+    /// <param name="pSource">Full expression of the object copied from (nil: the destination is emptied).</param>
+    /// <param name="pOther">The typed local; the copy is skipped when it is Self (self-assignment).</param>
+    procedure EmitOwnedCopy(pCode: TStringList; const pField: TOrmField; const pDest, pSource, pOther: string);
     /// <param name="InterfaceObject"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -3000,7 +3007,31 @@ begin
   { 'Self.' and the typed local name both objects: right with and without a 'with' around the region }
   if FFieldList.Count > 0 then
     SectionCode.Add(Format('      var LSource:= Tmc%s(Source);', [GetFieldName(FLoadedTable)]));
-  for CurField in FFieldList do SectionCode.Add(Format('      Self.f%s:= LSource.%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
+  for CurField in FFieldList do
+    if IsVarTypeCreatable(CurField.VAR_TYPE) then
+      EmitOwnedCopy(SectionCode, CurField, 'Self.f' + CurField.GetCurrentFieldName, 'LSource.' + CurField.GetCurrentFieldName, 'LSource')
+    else
+      SectionCode.Add(Format('      Self.f%s:= LSource.%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
+end;
+
+procedure TOrmGenerator.EmitOwnedCopy(pCode: TStringList; const pField: TOrmField; const pDest, pSource, pOther: string);
+begin
+  pCode.Add(Format('      if (%s <> nil) and (%s <> Self) then', [pDest, pOther]));
+  if SameText(pField.VAR_TYPE, STPicture) then
+  begin
+    pCode.Add('      begin');
+    pCode.Add(Format('        %s.Size:= 0;', [pDest]));
+    pCode.Add(Format('        if %s <> nil then', [pSource]));
+    pCode.Add(Format('          %s.CopyFrom(%s, 0);', [pDest, pSource]));
+    pCode.Add('      end;');
+  end
+  else
+  begin
+    pCode.Add(Format('        if %s <> nil then', [pSource]));
+    pCode.Add(Format('          %s.Assign(%s)', [pDest, pSource]));
+    pCode.Add('        else');
+    pCode.Add(Format('          %s.Clear;', [pDest]));
+  end;
 end;
 
 procedure TOrmGenerator.GenerateSection5(SectionCode: TStringList);  // dl:ok param-name-prefix@60ac -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -3013,11 +3044,23 @@ end;
 procedure TOrmGenerator.GenerateSection6(SectionCode: TStringList);  // dl:ok param-name-prefix@76a5 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
+  HasOwned: Boolean;
 begin
   { see GenerateSection4 }
+  HasOwned:= False;
   if FFieldList.Count > 0 then
     SectionCode.Add(Format('      var LDest:= Tmc%s(Dest);', [GetFieldName(FLoadedTable)]));
-  for CurField in FFieldList do SectionCode.Add(Format('      LDest.%s:= Self.f%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
+  for CurField in FFieldList do
+    if IsVarTypeCreatable(CurField.VAR_TYPE) then
+    begin
+      HasOwned:= True;
+      EmitOwnedCopy(SectionCode, CurField, 'LDest.' + CurField.GetCurrentFieldName, 'Self.f' + CurField.GetCurrentFieldName, 'LDest');
+    end
+    else
+      SectionCode.Add(Format('      LDest.%s:= Self.f%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
+  { the property setters of the other columns set Modified; an owned column has none }
+  if HasOwned then
+    SectionCode.Add('      LDest.Modified:= True;');
 end;
 
 procedure TOrmGenerator.GenerateSection7(SectionCode: TStringList; const TableId: string);  // dl:ok param-name-prefix@17bc -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane

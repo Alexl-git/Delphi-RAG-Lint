@@ -66,8 +66,10 @@ Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then
 **Assign / AssignTo (1.54).** TableTools wrote `fX:= X` inside `with Source as T do` and `X:= fX` inside
 `with Dest as T do`: both copy the other object onto itself, so nothing was ever copied. Regions 4 / 6 now name
 both objects (`var LSource:= TmcT(Source); Self.fX:= LSource.X;`), which is right inside the old `with` header and
-without it. Class-typed columns (`TStringList`, `TPicture`, streams) are copied the way `AssignI` copies them, by
-reference: **two objects then own one list**, so give the copy its own before both are freed. Order for existing
+without it. A list or stream the generator creates and frees itself (regions 14 / 15: `TStringList`, the stream type) is
+copied by content into the receiver's own object (nil source empties it, nil destination or `Source = Self` is skipped); a
+class column it does not own (`TPicture`) is copied by reference. `AssignI` and the property setters still
+share the list (`AssignI` is unchanged). Order for existing
 units: `update-orm`, build, then `upgrade-orm-headers`; commit both. A table with a column named `SOURCE` / `DEST`
 needs `upgrade-orm-headers` first (`update-orm` skips such a unit and says so).
 
