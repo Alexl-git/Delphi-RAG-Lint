@@ -81,7 +81,7 @@ function FormTextHash(const pText: string): string;
 /// <param name="pSource">The .pas text.</param>
 /// <returns>The mark; Overall is '' when the source carries none.</returns>
 /// <remarks>Pure; thread-safe. Reads up to the mark constant only, never the data below it.</remarks>
-function ParseConstMark(const pSource: string): TConstUnitMark;  // dl:ok unused-public-symbol -- REVIEWED 2026-11-23 FR-PRELOAD: the inverse of ConstMarkHeader, asserted directly by tests/fieldrepo/ConstGenTests.dpr
+function ParseConstMark(const pSource: string): TConstUnitMark;  // dl:ok unused-public-symbol@fb9f -- REVIEWED 2026-11-23 FR-PRELOAD: the inverse of ConstMarkHeader, asserted directly by tests/fieldrepo/ConstGenTests.dpr
 
 /// <summary>Compares a generated unit file with the repository.</summary>
 /// <param name="pConn">Open repository connection (read only).</param>

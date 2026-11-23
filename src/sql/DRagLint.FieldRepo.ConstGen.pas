@@ -46,7 +46,7 @@ type
 /// <param name="pContIndent">Prefix of every continuation line (default none).</param>
 /// <returns>A literal, 7-bit ASCII, CRLF between pieces, every piece at most 200 characters; '' for the empty string.</returns>
 /// <remarks>Pure; thread-safe.</remarks>
-function PasStringLiteral(const pText: string; const pContIndent: string = ''): string;
+function PasStringLiteral(const pText: string; const pContIndent: string = ''): string;  // dl:ok unused-public-symbol@c059 -- REVIEWED 2026-11-23 FR-PRELOAD: the escaping rule, asserted directly by tests/fieldrepo/ConstGenTests.dpr
 
 /// <summary>True when pName is a Pascal identifier (letter or underscore, then letters, digits, underscores; 7-bit ASCII).</summary>
 /// <param name="pName">Candidate unit name.</param>

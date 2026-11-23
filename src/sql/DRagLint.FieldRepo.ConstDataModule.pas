@@ -25,7 +25,7 @@ type
 /// <param name="pTableName">Repository table name.</param>
 /// <returns>The component name.</returns>
 /// <remarks>Pure; thread-safe.</remarks>
-function ConstMemTableName(const pTableName: string): string;  // dl:ok unused-public-symbol -- REVIEWED 2026-11-23 FR-PRELOAD: the naming rule a reader of the generated module needs; used by the compiled probe ConstProbe.dpr
+function ConstMemTableName(const pTableName: string): string;  // dl:ok unused-public-symbol@405b -- REVIEWED 2026-11-23 FR-PRELOAD: the naming rule a reader of the generated module needs; used by the compiled probe ConstProbe.dpr
 
 /// <summary>Generates the pre-filled data module.</summary>
 /// <param name="pConn">Open repository connection (read only); never modified.</param>
