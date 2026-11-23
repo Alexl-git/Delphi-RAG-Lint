@@ -22368,7 +22368,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Parameter name must carry one of the accepted prefixes (default p, A); a field-prefixed (F) parameter is always reported (naming, info, fixable)",
+        "summary": "Parameter name must carry one of the accepted prefixes (default p, A); a field-prefixed (F) parameter is always reported; Value, Sour... (naming, info, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
