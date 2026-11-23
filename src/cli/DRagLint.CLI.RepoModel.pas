@@ -46,16 +46,6 @@ begin
       Exit(True);
 end;
 
-function CommandLineValue(const pFlag: string): string;
-var
-  VI: Integer;
-begin
-  Result := '';
-  for VI := 1 to ParamCount - 1 do
-    if SameText(ParamStr(VI), pFlag) then
-      Exit(ParamStr(VI + 1));
-end;
-
 function IsRepoModelSub(const pSub: string): Boolean;
 begin
   Result := MatchText(pSub, [SUB_MIGRATE, SUB_CHECK]);

@@ -16,7 +16,7 @@ uses
   Data.DB,
   FireDAC.Comp.Client,
   DRagLint.FieldRepo.Schema,
-  DRagLint.FieldRepo.ConstMark;
+  DRagLint.FieldRepo.ConstMark; // dl:unit DRagLint.FieldRepo.ConstMark accepted -- CONST_MARK_NAME is the const-block marker ConstMark owns; the generator must emit the exact same name
 
 type
   /// <summary>Raised for a bad option: an unknown or refused table, or a unit name that is not an identifier.</summary>

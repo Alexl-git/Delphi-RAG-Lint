@@ -43,14 +43,14 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Quiet([scriptblock]$B) { & { $ErrorActionPreference = 'Continue'; & $B } }
 # settings verb, merged output + exit code
 function Settings([string[]]$A) {
-  $Out = Quiet { & $Exe settings @A --project $Dproj 2>&1 | ForEach-Object { "$_" } }
+  $Out = Quiet { & { $ErrorActionPreference = 'Continue'; & $Exe settings @A --project $Dproj 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" } }
   return $LASTEXITCODE
 }
 # Sorted "rule:line" list of one unit's findings; stderr goes to $script:LastErr.
 function Findings([string]$Unit, [string[]]$Extra = @()) {
   $ErrFile = Join-Path $Work 'err.txt'
   [IO.File]::WriteAllText($ErrFile, '')
-  $Out = Quiet { & $Exe lint $Unit --db $Db --library-db $Lib --json --quiet @Extra 2>$ErrFile }
+  $Out = Quiet { & { $ErrorActionPreference = 'Continue'; & $Exe lint $Unit --db $Db --library-db $Lib --json --quiet @Extra 2>$ErrFile } }
   $script:LastErr = [IO.File]::ReadAllText($ErrFile)
   $Txt = ($Out -join "`n"); $B = $Txt.IndexOf('[')
   if ($B -lt 0) { return ,@() }
@@ -61,8 +61,8 @@ function Has($List, [string]$Rule) { return (@($List | Where-Object { $_ -like "
 function ResetSettings { if (Test-Path $ProjFile) { [IO.File]::Delete($ProjFile) } }
 
 try {
-  Quiet { & $Exe index $Proj --db $Db --quiet 2>&1 | Out-Null }
-  Quiet { & $Exe index (Join-Path $Root 'tests\lint-project\taint-lib\lib') --db $Lib --quiet 2>&1 | Out-Null }
+  Quiet { & { $ErrorActionPreference = 'Continue'; & $Exe index $Proj --db $Db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null }
+  Quiet { & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $Root 'tests\lint-project\taint-lib\lib') --db $Lib --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 
   # baseline, taken before any settings file exists (L4 reference + positive controls)
   $BaseMagic = Findings $UMagic

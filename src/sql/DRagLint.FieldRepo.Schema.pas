@@ -233,14 +233,14 @@ function DefaultRepoPath(const pProjectFile: string): string;
 /// Sets application_id and user_version, journal_mode=DELETE, creates the tables
 /// in one transaction and writes DL_META.schema_version.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Repo.OpenOrCreateRepo (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoInit (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoRestore (DRagLint.CLI.Repo.pas)</para>
-/// <para>Calls: DRagLint.FieldRepo.Schema.NewConnection, DRagLint.FieldRepo.Schema.RepoTableDdl, DRagLint.FieldRepo.Schema.RepoTables, DRagLint.FieldRepo.Schema.SetRepoMeta, ExpandFileName, ExtractFilePath, IntToStr</para>
+/// <para>Called from: DRagLint.CLI.Repo.OpenOrCreateRepo (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoInit (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoRestore (DRagLint.CLI.Repo.pas), DRagLint.CLI.RepoSchema.SyncOnRepo (DRagLint.CLI.RepoSchema.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.NewConnection, DRagLint.FieldRepo.Schema.RepoTableDdl, DRagLint.FieldRepo.Schema.RepoTablesFor, DRagLint.FieldRepo.Schema.SetRepoMeta, ExpandFileName, ExtractFilePath, IntToStr</para>
 /// <para>Catches: Exception (re-raise)</para>
 /// <para>Touches: file system</para>
 /// <para>Transaction: starts, commits, rolls back</para>
 /// <seealso cref="DRagLint.FieldRepo.Schema.NewConnection"/>
 /// <seealso cref="DRagLint.FieldRepo.Schema.RepoTableDdl"/>
-/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTables"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTablesFor"/>
 /// <seealso cref="DRagLint.FieldRepo.Schema.SetRepoMeta"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -256,7 +256,7 @@ procedure CreateRepository(const pFileName: string; pVersion: Integer = REPO_SCH
 /// <exception cref="ERepoSchemaError">The file is not a repository of this version.</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Repo.OpenOrCreateRepo (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoBackup (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoInfo (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoRestore (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.DataServiceGen.RunOrmGenVerb (DRagLint.FieldRepo.DataServiceGen.pas)</para>
+/// <para>Called from: DRagLint.CLI.Repo.OpenOrCreateRepo (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoBackup (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoInfo (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoRestore (DRagLint.CLI.Repo.pas), DRagLint.CLI.RepoConstGen.CheckUnitFile (DRagLint.CLI.RepoConstGen.pas) (+6 more)</para>
 /// <para>Calls: DRagLint.FieldRepo.Schema.NewConnection, DRagLint.FieldRepo.Schema.ValidateRepository</para>
 /// <para>Returns: NewConnection(pFileName, if pReadOnly then 'ReadOnly' else 'ReadWrite')</para>
 /// <para>Catches: Exception (re-raise)</para>
@@ -301,14 +301,15 @@ function RepoRowCount(pConnection: TFDConnection; const pTableName: string): Int
 /// make a repository "non-empty"). Counts only the tables of the file's own schema version.</summary>
 /// <param name="pConnection">An open repository connection.</param>
 /// <returns>True for a freshly created repository.</returns>
-/// <exception cref="ERepoError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.Schema.RepoRowCount: Not a repository table: %s</exception>
+/// <exception cref="ERepoError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.Schema.RepoRowCount: Not a repository table: %s; via DRagLint.FieldRepo.Schema.RepoTablesFor: Unknown repository schema version %d</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.SchemaSeed.RunSchemaSeed (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.FieldRepo.TextBackup.RestoreRepositoryFromStrings (DRagLint.FieldRepo.TextBackup.pas)</para>
-/// <para>Calls: DRagLint.FieldRepo.Schema.RepoRowCount, DRagLint.FieldRepo.Schema.RepoTables, SameText</para>
+/// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.SchemaSeed.ApplySchemaChanges (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.FieldRepo.SchemaSeed.PlanSchemaChanges (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.FieldRepo.SchemaSeed.RunSchemaSeed (DRagLint.FieldRepo.SchemaSeed.pas) (+1 more)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.RepoRowCount, DRagLint.FieldRepo.Schema.RepoSchemaVersion, DRagLint.FieldRepo.Schema.RepoTablesFor, SameText</para>
 /// <para>Returns: True; False</para>
 /// <seealso cref="DRagLint.FieldRepo.Schema.RepoRowCount"/>
-/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTables"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoSchemaVersion"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTablesFor"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RepoIsEmpty(pConnection: TFDConnection): Boolean;

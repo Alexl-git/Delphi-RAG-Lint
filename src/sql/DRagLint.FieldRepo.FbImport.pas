@@ -77,7 +77,7 @@ function ImportTableFromDataSet(pSource: TDataSet; pTarget: TFDConnection;  // d
 /// <exception cref="ERepoError">The source columns do not match the table, or the table is unknown.</exception>
 /// <remarks>The Firebird registry has the schema-1 columns only: the source is compared against the schema-1 column
 /// list whatever the target version is, and columns a newer schema added (CALC_BODY, DOMAIN_NAME, ...) stay NULL.</remarks>
-function ImportSourceDataSet(pSource: TDataSet; pTarget: TFDConnection; const pTargetName: string): Integer;
+function ImportSourceDataSet(pSource: TDataSet; pTarget: TFDConnection; const pTargetName: string): Integer;  // dl:ok unused-public-symbol@9e0e -- REVIEWED 2026-11-23: public API of the importer: tests/fieldrepo/FbImportTests.dpr calls it directly (error paths); outside this project index
 /// <summary>Imports the FIB$ registry tables of a Firebird database into a repository.</summary>
 /// <param name="pConnectionString">FireDAC-style 'Database=..;User=..;Password=..' list separated by ';'.</param>
 /// <param name="pTarget">An open read-write repository connection.</param>
@@ -133,7 +133,8 @@ uses
   FireDAC.Stan.Param,
   FireDAC.Phys,
   FireDAC.Phys.FB,
-  FireDAC.DApt;
+  FireDAC.DApt,
+  DRagLint.Sql.FbConnString;
 
 const
   FIB_VERSION_COLUMN = 'FIB$VERSION';
@@ -298,6 +299,7 @@ var
   Pair: string;
   EqPos: Integer;
 begin
+  RequireFbConnectionSafe(pConnectionString);
   Result := TFDConnection.Create(nil);
   try
     Params := TStringList.Create;

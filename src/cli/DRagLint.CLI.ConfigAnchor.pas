@@ -47,7 +47,7 @@ uses
   , System.IOUtils
   , DRagLint.Core.Interfaces
   , DRagLint.Index.Manifest
-  , DRagLint.Project.Coherence
+  , DRagLint.Project.Coherence // dl:unit DRagLint.Project.Coherence accepted -- PROJECT_TAG_KEY is the key the coherence check reads; the anchor must use the same name, so it travels with that unit
   , DRagLint.Project.Settings
   , DRagLint.CLI.Common
   , DRagLint.CLI.RuleScope

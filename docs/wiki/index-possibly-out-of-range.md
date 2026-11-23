@@ -85,6 +85,36 @@ can see always wins (a local const of the same name shadows it); a name declared
 bounds is skipped; routine-local and implementation-section consts of other units never count. Without
 `--db` such an access is not checked.
 
+## One side at a time: guards, writes, callers, lengths (1.53, SLZ-IDXFP)
+
+When the checks above leave a side open, the rule asks for that side alone, at the access, and follows the index
+back: the guards that dominate the point, the writes that reach it, and what those writes read. A chain that comes
+back to itself through a write holds by induction, unless it drifted towards the bound. New silent shapes:
+
+- **Binary search:** `Mid := (Lo + Hi) shr 1` / `div 2` (also `+ 1`) under `Lo <= Hi` / `Lo < Hi`, with `Lo := Mid + 1`,
+  `Hi := Mid - 1`.
+- **Scans from a counter:** `J := I - 1; while (J >= 0) and A[J] ..` in `for I := 1 to High(A)`.
+- **Found index:** `K := -1; for I .. if .. then K := I; if K >= 0 then A[K]`, whatever sized `A`; look up or append
+  (`if K < 0 then begin K := Length(A); SetLength(A, K + 1) end`); a retry branch that ends in its own leave guard.
+- **Guard forms:** `I + 1 < Length(A)`; `(I = Length(A)) or (A[I] ..)` under `I <= Length(A)`; a Boolean function of this
+  file whose body is one `Result := ..` on that parameter; `if E < 0 then 0 else E`; `if Length(A) = 0 then Exit`
+  before `A[0]`; a minimum (`if Length(B) < N then N := Length(B)`).
+- **Index lists and queues** the routine fills itself with in-range values (`Order := Order + [I]`, `List.Add(I)`,
+  `Work.Enqueue(I)`), read by `for I in Order`, `Order[J]`, `Work.Dequeue`. A list that comes from elsewhere is reported.
+- **Callers and results:** a parameter of a private method (or of a routine of the implementation section) that every
+  call in this file passes in range, several calls deep; the result, or an out / var argument, of a function of this file.
+- **Equal lengths:** two arrays only ever changed together (appended, reset or sized side by side); rows swapped whole
+  (`Prev := Cur`, `Prev := Copy(Cur)`) with one SetLength size; `A := Copy(B)`; one append per trip of `for x in B`;
+  `if Length(A) < Length(B) then SetLength(A, Length(B))`; the branch of `Length(A) <> Length(B)` where they are equal; a size
+  local or size field that is assigned once.
+- **Unsigned index, capped read:** a `Cardinal` index is never negative; `N := Read(Buf, SizeOf(Buf) - 1)` is at most that.
+- **By value (`--db`):** passing the index to another unit's routine that takes it by value is no write.
+
+**One finding per start value:** an element that was already read on every path to the access (same index, not moved
+towards the bound since) is not reported again; the first access carries the finding.
+
+Still reported: an index from an unproven parameter, a list or queue filled elsewhere, a call without a guard on its
+not-found value, an array parameter bounded by another parameter's length.
 ## Autofix (risky, MANUAL ONLY)
 
 `drag-lint lint --in <f.pas> --fix --fix-rule index-possibly-out-of-range [--apply]` inserts,

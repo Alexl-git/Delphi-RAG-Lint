@@ -103,7 +103,7 @@ begin
   VQuery := TFDQuery.Create(nil);
   try
     VQuery.Connection := pConn;
-    VQuery.Open('SELECT "TABLE_NAME", "FIELD_NAME", "FIELD_KIND", "ISCALCULATED", "ISLOOKUP", "PRIMARY_KEY", ' +
+    VQuery.Open('SELECT "TABLE_NAME", "FIELD_NAME", "FIELD_KIND", "ISCALCULATED", "ISLOOKUP", "PRIMARY_KEY", ' +  // dl:ok path-traversal@5054 -- REVIEWED 2026-11-23: SQL text, not a path -- TFDQuery.Open of a constant SELECT; the only variable part is a fixed NULL / column-name literal chosen by a Boolean
       '"DESTTABLE", "DESTKEY", "DESTVALUE", ' + VBodyCol + ' FROM "DL_FIELDS_INFO" ORDER BY "TABLE_NAME", "FIELD_NAME"');
     while not VQuery.Eof do
     begin
@@ -256,18 +256,22 @@ end;
 function CycleText(const pNodes: TArray<string>): string;
 var
   VStart, VI: Integer;
+  VSmallest: string;
 begin
   Result := '';
   if Length(pNodes) = 0 then
     Exit;
   VStart := 0;
+  VSmallest := pNodes[0];
   for VI := 1 to High(pNodes) do
-    if CompareText(pNodes[VI], pNodes[VStart]) < 0 then
+    if CompareText(pNodes[VI], VSmallest) < 0 then
+    begin
       VStart := VI;
-  Result := '';
+      VSmallest := pNodes[VI];
+    end;
   for VI := 0 to High(pNodes) do
     Result := Result + pNodes[(VStart + VI) mod Length(pNodes)] + ' -> ';
-  Result := Result + pNodes[VStart];
+  Result := Result + VSmallest;
 end;
 
 procedure CheckCycles(pEdges: TDictionary<string, TArray<string>>; pFields: TDictionary<string, string>;
@@ -283,6 +287,7 @@ var
   var
     VNextKey, VText, VTableName, VDisplay: string;
     VDep: string;
+    VDeps: TArray<string>;
     VCycle: TArray<string>;
     VI, VFrom: Integer;
     VColorOf: TCycleColor;
@@ -291,8 +296,8 @@ var
     VColor.AddOrSetValue(pKey, ccGrey);
     VStack.Add(pKey);
     VTable := Copy(pKey, 1, Pos('.', pKey) - 1);
-    if pEdges.ContainsKey(pKey) then
-      for VDep in pEdges[pKey] do
+    if pEdges.TryGetValue(pKey, VDeps) then
+      for VDep in VDeps do
       begin
         VNextKey := VTable + '.' + UpperCase(VDep);
         if not VColor.TryGetValue(VNextKey, VColorOf) then
@@ -349,7 +354,7 @@ begin
   VQuery := TFDQuery.Create(nil);
   try
     VQuery.Connection := pConn;
-    VQuery.Open('SELECT "TABLE_NAME", "FIELD_NAME", "LAYOUT_TYPE", "EVENT_NAME" FROM "DL_LAYOUT_EVENTS" ' +
+    VQuery.Open('SELECT "TABLE_NAME", "FIELD_NAME", "LAYOUT_TYPE", "EVENT_NAME" FROM "DL_LAYOUT_EVENTS" ' +  // dl:ok path-traversal@6088 -- REVIEWED 2026-11-23: SQL text, not a path -- TFDQuery.Open of a constant SELECT, no variable part
       'ORDER BY "TABLE_NAME", "FIELD_NAME", "LAYOUT_TYPE", "EVENT_NAME"');
     while not VQuery.Eof do
     begin

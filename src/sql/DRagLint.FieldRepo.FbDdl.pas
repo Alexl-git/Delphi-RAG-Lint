@@ -51,7 +51,7 @@ function ReadDdlFiles(const pFiles: TArray<string>): TFbDdlResult;
 /// <param name="pFileName">Label of the text, e.g. the file path.</param>
 /// <returns>As ReadDdlFiles.</returns>
 /// <exception cref="EFbDdlError">As ReadDdlFiles.</exception>
-function ReadDdlText(const pText, pFileName: string): TFbDdlResult;  // dl:ok unused-public-symbol@60b1 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
+function ReadDdlText(const pText, pFileName: string): TFbDdlResult;  // dl:ok unused-public-symbol@60b1, doc-drift@60b1 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index; REVIEWED 2026-11-23: the raise is one call away -- TDdlParser.Feed reports every malformed statement through TDdlParser.Fail, which raises EFbDdlError (line 194)
 
 implementation
 
@@ -704,7 +704,7 @@ begin
   if IsWord(VIdx, 'CONSTRAINT') then
   begin
     VName := NameAt(VIdx + 1);
-    Inc(VIdx, 2);  // dl:ok index-possibly-out-of-range@17bb -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
+    Inc(VIdx, 2);
   end;
   if IsWord(VIdx, 'PRIMARY') then
   begin
@@ -731,7 +731,7 @@ begin
     AddKey(pTable, ConstraintName(pTable, VKind, VName), VKind, nil);
   end
   else
-    Fail(FToks[pFrom].Line, 'unknown table constraint');  // dl:ok index-possibly-out-of-range@5aaf -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
+    Fail(FToks[pFrom].Line, 'unknown table constraint');
 end;
 
 procedure TDdlParser.ParseTableBody(const pTable: string; pOpen, pClose, pLine: Integer);

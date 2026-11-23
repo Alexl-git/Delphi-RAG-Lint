@@ -104,7 +104,7 @@ $logDry = Join-Path $WorkDir 'dry.log'
 $d1 = Invoke-Verb ($common + @('--dry-run', '--json', '--delphi-lsp', $stub, '--delphi-lsp-config', $cfg)) @{ DRAGLINT_STUB_LOG = $logDry }
 Check 'dry run exits 0' ($d1.Code -eq 0) "code=$($d1.Code) err=$($d1.Err)"
 $dj = $null
-try { $dj = $d1.Out | ConvertFrom-Json } catch { }
+try { $dj = $d1.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'dry run prints one JSON document' ($null -ne $dj) $d1.Out
 $rows = @(if ($dj) { $dj.rows } else { })
 Check 'at least 4 sampled rows' ($rows.Count -ge 4) "rows=$($rows.Count)"
@@ -112,13 +112,13 @@ Check 'every dry row is outcome sampled' (@($rows | Where-Object { $_.outcome -n
 Check 'no DelphiLSP started (no stub log)' (-not (Test-Path $logDry))
 $d2 = Invoke-Verb ($common + @('--dry-run', '--json'))
 $ids1 = ($rows | ForEach-Object { $_.refId }) -join ','
-$ids2 = (@(($d2.Out | ConvertFrom-Json).rows) | ForEach-Object { $_.refId }) -join ','
+$ids2 = (@(($d2.Out | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { $_.refId }) -join ','
 Check 'same seed -> same refIds in the same order (AC2)' ($ids1 -ne '' -and $ids1 -eq $ids2) "a=$ids1 b=$ids2"
 $d3 = Invoke-Verb (@('verify-index', '--db', $db, '--sample', '50', '--seed', '2', '--dry-run', '--json'))
-$ids3 = (@(($d3.Out | ConvertFrom-Json).rows) | ForEach-Object { $_.refId }) -join ','
+$ids3 = (@(($d3.Out | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { $_.refId }) -join ','
 Check 'seed 2 -> a different order (AC2 control)' ($ids3 -ne $ids1) "seed1=$ids1 seed2=$ids3"
 $d4 = Invoke-Verb (@('verify-index', '--db', $db, '--sample', '3', '--dry-run', '--json'))
-Check '--sample 3 -> 3 rows (AC1)' (@(($d4.Out | ConvertFrom-Json).rows).Count -eq 3)
+Check '--sample 3 -> 3 rows (AC1)' (@(($d4.Out | ConvertFrom-Json | ForEach-Object { $_ }).rows).Count -eq 3)
 if ($rows.Count -lt 4) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 $n = $rows.Count
 
@@ -145,7 +145,7 @@ $logA = Join-Path $WorkDir 'a.log'
 $envA = @{ DRAGLINT_STUB_SCRIPT = (WriteScript 'a.script' $ansA); DRAGLINT_STUB_LOG = $logA }
 $ra = Invoke-Verb (VerbArgs @('--json')) $envA
 $ja = $null
-try { $ja = $ra.Out | ConvertFrom-Json } catch { }
+try { $ja = $ra.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'run A exits 1 (a mismatch)' ($ra.Code -eq 1) "code=$($ra.Code) err=$($ra.Err) out=$($ra.Out)"
 Check 'counts.mismatch = 1' ($ja -and $ja.counts.mismatch -eq 1) $ra.Out
 Check 'counts.match = n - 1' ($ja -and $ja.counts.match -eq ($n - 1)) "n=$n"
@@ -180,7 +180,7 @@ $logB = Join-Path $WorkDir 'b.log'
 $envB = @{ DRAGLINT_STUB_SCRIPT = (WriteScript 'b.script' $ansB); DRAGLINT_STUB_LOG = $logB }
 $rb = Invoke-Verb (VerbArgs @('--json')) $envB
 $jb = $null
-try { $jb = $rb.Out | ConvertFrom-Json } catch { }
+try { $jb = $rb.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'run B exits 0 (no mismatch)' ($rb.Code -eq 0) "code=$($rb.Code) err=$($rb.Err)"
 Check 'counts: empty 1, error 1, mismatch 0' ($jb -and $jb.counts.empty -eq 1 -and $jb.counts.error -eq 1 -and $jb.counts.mismatch -eq 0) $rb.Out
 Check 'counts.match = n - 2 (LocationLink row matched)' ($jb -and $jb.counts.match -eq ($n - 2))

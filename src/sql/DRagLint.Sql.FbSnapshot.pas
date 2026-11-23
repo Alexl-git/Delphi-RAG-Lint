@@ -95,6 +95,7 @@ implementation
 uses
   Data.DB
   , FireDAC.Stan.Param
+  , DRagLint.Sql.FbConnString
   ;
 
 function TableExists(AConn: TFDConnection; const AName: string): Boolean;
@@ -168,6 +169,7 @@ var
     Pair  : string     ;
     P     : Integer    ;
   begin
+    RequireFbConnectionSafe(AConnectionString);
     FbConn:= TFDConnection.Create(nil);
     Params:= TStringList.Create;  // dl:ok duplicate-code@163e -- REVIEWED SLZ-S11 2026-11-22: measured 92 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
     try

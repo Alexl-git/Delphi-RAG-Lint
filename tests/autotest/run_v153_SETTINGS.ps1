@@ -52,7 +52,7 @@ function IsAsciiCrlf([string]$Path) {
   }
   return $true
 }
-function Json([string]$F) { if (-not (Test-Path $F)) { return $null }; return (Get-Content $F -Raw | ConvertFrom-Json) }
+function Json([string]$F) { if (-not (Test-Path $F)) { return $null }; return (Get-Content $F -Raw | ConvertFrom-Json | ForEach-Object { $_ }) }
 $Pj = @('--project', $Dproj)
 
 try {
@@ -74,7 +74,7 @@ try {
   Check 'S3 get returns the local value' (($G.code -eq 0) -and ($G.out.Trim() -eq 'fast')) "out=[$($G.out)]"
   $L = Run (@('settings', 'list', '--json') + $Pj)
   $Row = $null
-  try { $Row = @((($L.out | ConvertFrom-Json).settings) | Where-Object { $_.key -eq 'lint.profile' })[0] } catch { }
+  try { $Row = @((($L.out | ConvertFrom-Json | ForEach-Object { $_ }).settings) | Where-Object { $_.key -eq 'lint.profile' })[0] } catch { }
   Check 'S3 list --json source local' (($null -ne $Row) -and ($Row.source -eq 'local')) "out=[$($L.out)]"
 
   # S4 round trip keeps unknown keys, order, ASCII CRLF
@@ -89,7 +89,7 @@ try {
   Check 'S4 slash is not escaped' (-not $Txt.Contains('\/')) ''
   $L = Run (@('settings', 'list', '--json') + $Pj)
   $U = $null
-  try { $U = @(($L.out | ConvertFrom-Json).unknown)[0] } catch { }
+  try { $U = @(($L.out | ConvertFrom-Json | ForEach-Object { $_ }).unknown)[0] } catch { }
   Check 'S4 list --json unknown[0] is zzUnknown' (($null -ne $U) -and ($U.key -eq 'zzUnknown')) "out=[$($L.out)]"
 
   # S5 unknown key
