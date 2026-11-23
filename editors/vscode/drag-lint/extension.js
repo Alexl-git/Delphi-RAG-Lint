@@ -26,6 +26,7 @@ const enginestale = require('./lib/enginestale');
 const exceptionfacts = require('./lib/exceptionfacts');
 const deferredhover = require('./lib/deferredhover');
 const disablerule = require('./lib/disablerule');
+const projectsettings = require('./lib/projectsettings');
 
 // Set once in activate(). restartServer() and updateEngineNow() both need the
 // extension context to locate the private engine copy, and neither is called
@@ -730,6 +731,40 @@ async function selectPlatform() {
   if (pick) await applyContext({ platform: pick.value });
 }
 
+// "Project Settings...": a QuickPick UI over the engine's `settings list|set|unset --json` verb
+// (v153 SETTINGS-VSCODE). The extension never touches the settings files; secrets show masked.
+async function projectSettings() {
+  const project = projectsettings.projectFrom(lastCtx && lastCtx.project, workspace.getConfiguration('dragLint').get('project'));
+  if (!project) { window.showWarningMessage('drag-lint: no project -- run "drag-lint: Select Project" first.'); return; }
+  if (!serverExe || !fs.existsSync(serverExe)) { window.showErrorMessage('drag-lint: engine not found; set "dragLint.serverPath".'); return; }
+  const run = (argv) => new Promise((resolve) => execFile(serverExe, argv, { cwd: path.dirname(project), windowsHide: true, timeout: 60000 },
+    (err, so, se) => resolve({ out: String(so || '') + (so ? '' : String(se || '')), code: err ? (typeof err.code === 'number' ? err.code : 2) : 0 })));
+  const listed = projectsettings.parseList((await run(['settings', 'list', '--project', project, '--json'])).out);
+  if (listed.error) { window.showErrorMessage('drag-lint: ' + listed.error); return; }
+  const pick = await window.showQuickPick(listed.rows.map((r) => ({ label: projectsettings.rowLabel(r), description: projectsettings.sourceText(r), detail: r.description, row: r })),
+    { placeHolder: 'drag-lint project settings for ' + path.basename(project) });
+  if (!pick || !pick.row.settable) return;
+  const row = pick.row;
+  let value;
+  const choices = projectsettings.choicesFor(row);
+  if (choices) { value = await window.showQuickPick(choices); } else { value = await window.showInputBox({ value: projectsettings.currentText(row), prompt: row.description, ignoreFocusOut: true, password: /secret|token|password/i.test(row.key) }); }
+  if (value === undefined) return;
+  let local = false;
+  if (projectsettings.needsScopeQuestion(row)) {
+    const s = await window.showQuickPick(['This project (shared, committed)', 'This machine only (local file)']);
+    if (s === undefined) return;
+    local = s.startsWith('This machine');
+  }
+  const argv = value === projectsettings.RESET ? projectsettings.buildUnsetArgs({ key: row.key, local, project })
+    : projectsettings.buildSetArgs({ key: row.key, value, local, project });
+  log('project settings: ' + argv.join(' '));
+  const { out, code } = await run(argv);
+  const r = projectsettings.describeResult(out, code);
+  if (!r.ok) { window.showErrorMessage('drag-lint: ' + r.message); return; }
+  window.showInformationMessage('drag-lint: ' + r.message);
+  if (projectsettings.affectsLint(row.key)) await refreshProblems();
+}
+
 async function selectProject() {
   const items = [{ label: '$(file) Browse for .dproj / .dpr...', browse: true }, { label: '(auto-detect)', value: '' }];
   try {
@@ -856,6 +891,7 @@ function activate(context) {
   }));
   context.subscriptions.push(commands.registerCommand('dragLint.selectPlatform', selectPlatform));
   context.subscriptions.push(commands.registerCommand('dragLint.selectProject', selectProject));
+  context.subscriptions.push(commands.registerCommand('dragLint.projectSettings', projectSettings));
 
   const exe = resolveExe();
   log('language server exe: ' + exe);
