@@ -451,6 +451,14 @@ type
       FSymIdKept, FSymIdChanged, FSymIdAdded, FSymIdRemoved, FSymIdFiles: Integer;
       { 'table|column|action' of every FK on symbols(id), read once (DetachSymbolIds). }
       FSymIdFkActions        : TArray<string>;
+      { The DEPENDENCY half of a reuse scope -- see "WHAT ELSE DEPENDS ON A CHANGED SYMBOL"
+        above CommitSymbolClaimScope. FScopeChain: the non-local names removed / added / changed
+        (a receiver text naming one is in scope). FScopeTypeUsers: routines that used a removed
+        or changed symbol with a type. FScopeReshaped: type names removed, added or changed. }
+      FScopeChain            : TDictionary<string, Boolean>;
+      FScopeTypeUsers        : TDictionary<Int64 , Boolean>;
+      FScopeReshaped         : TDictionary<string, Boolean>;
+      FScopeFollowRound      : Integer; { 0 = the first scoped pass of a run; N = its Nth follow-up }
       /// <summary>True if ASQL returns at least one row. For EXISTS-style probes;
       /// pass a LIMIT 1 query so SQLite stops at the first hit.</summary>
       /// <param name="ASQL">A SELECT. Must not require parameters.</param>
@@ -1088,7 +1096,13 @@ type
       procedure FinishSymbolClaims;
       procedure CommitSymbolClaimScope;
       procedure DetachSymbolIds(ASkipEmitOwned: Boolean);
-      procedure AddReceiverChainNames(const ANames: TDictionary<string, Boolean>);
+      procedure CollectTypeUsers(const AIds: TList<Int64>);
+      procedure AddReceiverChainRefs;
+      procedure FillDepRoutines(const AIds: TEnumerable<Int64>);
+      procedure AddDependentRefs;
+      function  RoutineHasWith(const APath: string; AFromLine, AToLine: Integer; ACache: TObjectDictionary<string, TStringList>): Boolean;
+      procedure CollectFollowUpRefs;
+      function  CountOf(const ASql: string): Int64;
       function PropertySpecDigests(AFileId: Int64): TDictionary<Int64, string>;
       /// <summary>Forget everything the resolve scope recorded: the scoped file
       /// and name sets, the whole-database latch and its reason, and the share
@@ -5818,6 +5832,9 @@ begin
   FScopeTypesBefore:= TDictionary<string, Boolean>.Create;
   FScopeTypeAncestors:= TDictionary<string, TArray<string>>.Create;
   FScopeTypesAfter := TDictionary<string, Boolean>.Create;
+  FScopeChain      := TDictionary<string, Boolean>.Create;
+  FScopeTypeUsers  := TDictionary<Int64 , Boolean>.Create;
+  FScopeReshaped   := TDictionary<string, Boolean>.Create;
   FScopeWhole      := False;
   FScopeWholeWhy   := '';
   FScopeMaxFiles   := -1;
@@ -7399,6 +7416,9 @@ begin
   FScopeTypesBefore.Free;
   FScopeTypeAncestors.Free;
   FScopeTypesAfter.Free;
+  FScopeChain.Free;
+  FScopeTypeUsers.Free;
+  FScopeReshaped.Free;
   FLateAncCache.Free;
   FQInsertFile.Free;
   FQUpsertFile.Free;
@@ -10120,6 +10140,11 @@ const
   SYMID_KEY_SEP  = #1; { between the parts of an identity key / a fingerprint }
   SYMID_OCC_SEP  = #2; { before the occurrence ordinal }
   SYMID_NULL     = #3; { a NULL column in a fingerprint }
+  { A symbol with no type to hand on to an expression around it. A routine's stored signature
+    ends with its result type, so a method whose signature ends at the `)` has none. }
+  SQL_SYMBOL_TYPELESS = '(kind IN (''procedure'', ''destructor'') OR (kind = ''method'' AND ' +
+                        '(COALESCE(signature, '''') = '''' OR signature LIKE ''%)'')))';
+  MAX_FOLLOW_ROUNDS = 4; { follow-up passes before the run gives up on scoping and resolves the whole database }
   { "Does this file host an include, or is it one?" -- the INCR18 probe. }
   SQL_FILE_INCLUDE_TOUCHED =
     'SELECT 1 FROM file_includes WHERE file_id = :f ' +
@@ -10473,6 +10498,7 @@ begin
       begin
         FillSymIdSet(Reach);
         CollectScopeReach('(SELECT id FROM temp.dl_symid_ids)', -1);
+        CollectTypeUsers(Reach);
       end;
     finally
       Reach.Free;
@@ -10486,6 +10512,11 @@ begin
   if Claims.FRemoved.Count > 0 then
   begin
     FillSymIdSet(Claims.FRemoved);
+    { A ref typed as a removed type keeps a ref_types row that names it and no id -- as a type
+      of another index looks. WidenDerivedScope re-derives these. }
+    FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_symid_typed(r INTEGER PRIMARY KEY)');
+    FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_symid_typed(r) SELECT ref_id FROM ref_types WHERE type_symbol_id IN (SELECT id FROM temp.dl_symid_ids)');
+    FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_symid_typed(r) SELECT ref_id FROM ref_element_types WHERE type_symbol_id IN (SELECT id FROM temp.dl_symid_ids)');
     FConn.ExecSQL('DELETE FROM symbols WHERE id IN (SELECT id FROM temp.dl_symid_ids)');
   end;
 end;
@@ -10539,71 +10570,256 @@ begin
   end;
 end;
 
-{ RECEIVER CHAINS. `H.Field.Show` binds Show through the TYPE of Field: when the
-  re-emit removed, added or changed `Field`, the answer for `Show` may move although
-  neither its name nor its file is in the scope. 1.52 caught it by accident (every
-  name of the file was in scope, and every type of the file went NULL in ref_types);
-  reuse keeps unchanged ids, so the successors are named here: every ref whose
-  receiver's last segment (`H.Field`, `Field[0]`, `GetField()`) is one of ANames,
-  and transitively their successors. Adds to FScopeNames. One scan of refs per
-  round; runs only when the file's diff named something. }
-procedure TSQLiteSymbolStore.AddReceiverChainNames(const ANames: TDictionary<string, Boolean>);
-const
-  MAX_ROUNDS = 8; { a receiver chain longer than this is not a Delphi expression anyone writes }
+{ WHAT ELSE DEPENDS ON A CHANGED SYMBOL. `H.Field.Show` binds Show through the TYPE of
+  Field: when the re-emit removed, added or changed `Field`, the answer for `Show` may move
+  although neither its name nor its file is in the scope. 1.52 caught some of these by
+  accident (every name of the file was in scope). Reuse names only what moved, so the
+  dependents are collected here, REF BY REF. The first cut of 1.53.0 closed over NAMES
+  (every ref called `Show` anywhere, and transitively theirs, cut at 8 rounds): 56 seed names
+  grew to 2157 and a 4-file edit re-resolved 200,016 call sites against 1.52's 75,296, and the
+  cut left a chain longer than 8 hops stale.
+
+    1. RECEIVER TEXT (AddReceiverChainRefs). refs.receiver_text is the whole receiver
+       expression, so every hop of a chain, and every argument inside it, is in the text:
+       a ref whose receiver text holds a moved name as an identifier is in scope. One scan,
+       no closure, no length limit.
+    2. DEPENDENTS WITHOUT A RECEIVER TEXT (AddDependentRefs), inside a routine that used a
+       removed or changed symbol that HAS a type (FScopeTypeUsers, read before the delete):
+       an inline var whose type its initializer decides and a with target -- then every ref
+       of the routine -- and an argument of an overloaded call -- then the routine's calls of
+       overloaded names.
+    3. A NEW BINDING (CollectFollowUpRefs). An ADDED symbol can take over a ref elsewhere
+       (a nearer field, a better overload); which refs is known only after the pass, from the
+       before / after picture the purity scope already takes. Their routines' dependents
+       (as 2) that the pass did not cover get a follow-up pass. Normally there are none. }
+procedure TSQLiteSymbolStore.CollectTypeUsers(const AIds: TList<Int64>);
 var
-  Q      : TFDQuery;
-  Round  : Integer;
-  Nm     : string;
-  Fresh  : TList<string>;
-  Seen   : TDictionary<string, Boolean>;
+  Q: TFDQuery;
 begin
-  if ANames.Count = 0 then Exit;
-  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_symid_names(n TEXT PRIMARY KEY)');
+  if AIds.Count = 0 then Exit;
+  FillSymIdSet(AIds);
+  { A procedure, a destructor and a method without a result have no type to hand on. }
+  FConn.ExecSQL('DELETE FROM temp.dl_symid_ids WHERE id IN (SELECT id FROM symbols WHERE ' + SQL_SYMBOL_TYPELESS + ')');
   Q:= TFDQuery.Create(nil);
-  Fresh:= TList<string>.Create;
-  Seen:= TDictionary<string, Boolean>.Create;
   try
     Q.Connection:= FConn;
-    for Nm in ANames.Keys do
-    begin
-      Seen.AddOrSetValue(Nm, True);
-      Fresh.Add(Nm);
-    end;
     Q.SQL.Text:=
-      'SELECT DISTINCT LOWER(c.name_text) FROM (' +
-      '  SELECT name_text, substr(receiver_text, length(rtrim(receiver_text, replace(receiver_text, ''.'', ''''))) + 1) AS seg' +
-      '  FROM refs WHERE receiver_text IS NOT NULL AND receiver_text <> '''') c ' +
-      'WHERE LOWER(CASE WHEN instr(c.seg, ''('') > 0 THEN substr(c.seg, 1, instr(c.seg, ''('') - 1) ' +
-      '                 WHEN instr(c.seg, ''['') > 0 THEN substr(c.seg, 1, instr(c.seg, ''['') - 1) ' +
-      '                 ELSE c.seg END) IN (SELECT n FROM temp.dl_symid_names)';
-    Round:= 0;
-    while (Fresh.Count > 0) and (Round < MAX_ROUNDS) do
+      'SELECT r.enclosing_symbol_id FROM refs r WHERE r.symbol_id IN (SELECT id FROM temp.dl_symid_ids) ' +
+      'UNION SELECT r.enclosing_symbol_id FROM call_edges ce JOIN refs r ON r.id = ce.ref_id ' +
+      'WHERE ce.target_symbol_id IN (SELECT id FROM temp.dl_symid_ids)';
+    if HasMemberAccesses then
+      Q.SQL.Text:= Q.SQL.Text + ' UNION SELECT r.enclosing_symbol_id FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id ' +
+                                'WHERE ma.member_symbol_id IN (SELECT id FROM temp.dl_symid_ids)';
+    Q.Open;
+    while not Q.Eof do
     begin
-      Inc(Round);
-      FConn.ExecSQL('DELETE FROM temp.dl_symid_names');  // dl:ok sql-update-delete-without-where@b42c -- REVIEWED 2026-11-22 GH18: a scratch temp table emptied before each round
-      for Nm in Fresh do FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_symid_names(n) VALUES (?)', [Nm]);
-      Fresh.Clear;
-      Q.Open;
-      while not Q.Eof do
-      begin
-        Nm:= Q.Fields[0].AsString;
-        if (Nm <> '') and not Seen.ContainsKey(Nm) then
-        begin
-          Seen.Add(Nm, True);
-          Fresh.Add(Nm);
-          FScopeNames.AddOrSetValue(Nm, True);
-        end;
-        Q.Next;
-      end;
-      Q.Close;
+      if not Q.Fields[0].IsNull then FScopeTypeUsers.AddOrSetValue(Q.Fields[0].AsLargeInt, True);
+      Q.Next;
     end;
   finally
-    Seen.Free;
-    Fresh.Free;
     Q.Free;
   end;
 end;
 
+{ Part 1 above: adds to temp.dl_scope_refs. A write target and its twins carry no receiver
+  text of their own, so the other refs at the same position go in with the one that does. }
+procedure TSQLiteSymbolStore.AddReceiverChainRefs;
+var
+  Q, Ins : TFDQuery;
+  Text   : string;
+  I, From: Integer;
+  Hit    : Boolean;
+begin
+  if FScopeChain.Count = 0 then Exit;
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_scope_chain(r INTEGER PRIMARY KEY)');
+  FConn.ExecSQL('DELETE FROM temp.dl_scope_chain');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied before its fill
+  Q  := TFDQuery.Create(nil);
+  Ins:= TFDQuery.Create(nil);
+  try
+    Ins.Connection:= FConn;
+    Ins.SQL.Text:= 'INSERT OR IGNORE INTO temp.dl_scope_chain(r) VALUES (:r)';
+    Ins.ParamByName('r').DataType:= ftLargeint;
+    Ins.Prepare;
+    Q.Connection:= FConn;
+    Q.FetchOptions.Unidirectional:= True;
+    Q.SQL.Text:= 'SELECT id, receiver_text FROM refs WHERE receiver_text IS NOT NULL AND receiver_text <> ''''';
+    Q.Open;
+    var FId : TField:= Q.Fields[0];
+    var FTxt: TField:= Q.Fields[1];
+    while not Q.Eof do
+    begin
+      Text:= LowerCase(FTxt.AsString);
+      Hit:= False;
+      I:= 1;
+      while (I <= Length(Text)) and not Hit do
+      begin
+        if not CharInSet(Text[I], ['a'..'z', '_']) then
+        begin
+          Inc(I);
+          Continue;
+        end;
+        From:= I;
+        while (I <= Length(Text)) and CharInSet(Text[I], ['a'..'z', '_', '0'..'9']) do Inc(I);
+        Hit:= FScopeChain.ContainsKey(Copy(Text, From, I - From));
+      end;
+      if Hit then
+      begin
+        Ins.ParamByName('r').AsLargeInt:= FId.AsLargeInt;
+        Ins.ExecSQL;
+      end;
+      Q.Next;
+    end;
+  finally
+    Ins.Free;
+    Q.Free;
+  end;
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_refs(r) SELECT t.id FROM temp.dl_scope_chain c ' +
+                'JOIN refs o ON o.id = c.r JOIN refs t ON t.file_id = o.file_id AND t.start_line = o.start_line ' +
+                'AND t.start_col = o.start_col');
+end;
+
+{ The one number a SELECT answers. }
+function TSQLiteSymbolStore.CountOf(const ASql: string): Int64;
+begin
+  Result:= FConn.ExecSQLScalar(ASql);
+end;
+
+{ Loads the routines AddDependentRefs works over. }
+procedure TSQLiteSymbolStore.FillDepRoutines(const AIds: TEnumerable<Int64>);
+var
+  Id: Int64;
+begin
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_dep_routines(id INTEGER PRIMARY KEY)');
+  FConn.ExecSQL('DELETE FROM temp.dl_dep_routines');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied before its fill
+  for Id in AIds do FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_dep_routines(id) VALUES (?)', [Id]);
+end;
+
+function TSQLiteSymbolStore.RoutineHasWith(const APath: string; AFromLine, AToLine: Integer;
+  ACache: TObjectDictionary<string, TStringList>): Boolean;
+const
+  WITH_WORD = 'with';
+var
+  Lines: TStringList;
+  S    : string;
+  I, P : Integer;
+begin
+  if not ACache.TryGetValue(APath, Lines) then
+  begin
+    Lines:= TStringList.Create;
+    ACache.Add(APath, Lines);
+    try
+      Lines.LoadFromFile(APath);
+    except
+      on EStreamError do Exit(True); { unreadable: assume it does }
+    end;
+  end;
+  for I:= Max(AFromLine, 1) to Min(AToLine, Lines.Count) do
+  begin
+    S:= LowerCase(Lines[I - 1]);
+    P:= Pos(WITH_WORD, S);
+    while P > 0 do
+    begin
+      if ((P = 1) or not CharInSet(S[P - 1], ['a'..'z', '0'..'9', '_'])) and
+         ((P + Length(WITH_WORD) > Length(S)) or not CharInSet(S[P + Length(WITH_WORD)], ['a'..'z', '0'..'9', '_'])) then Exit(True);
+      P:= Pos(WITH_WORD, S, P + 1);
+    end;
+  end;
+  Result:= False;
+end;
+
+{ Part 2 above: adds to temp.dl_scope_refs the refs that can depend on a typed symbol used in
+  the routines of temp.dl_dep_routines. A rewritten file's own routines are in scope already. }
+procedure TSQLiteSymbolStore.AddDependentRefs;
+var
+  Q    : TFDQuery;
+  Cache: TObjectDictionary<string, TStringList>;
+  Whole: TList<Int64>;
+begin
+  Q:= TFDQuery.Create(nil);
+  Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  Whole:= TList<Int64>.Create;
+  try
+    Q.Connection:= FConn;
+    { An argument's type can pick the overload. }
+    FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_refs(r) SELECT r.id FROM refs r ' +
+                  'WHERE r.enclosing_symbol_id IN (SELECT id FROM temp.dl_dep_routines) ' +
+                  'AND r.kind IN (''call'', ''member-access'', ''index-access'') ' +
+                  'AND r.name_text COLLATE NOCASE IN (SELECT name FROM symbols WHERE directives LIKE ''%overload%'')');
+    Q.SQL.Text:= 'SELECT s.id, f.path, s.start_line, s.end_line, s.impl_start_line, s.impl_end_line, ' +
+                 'EXISTS (SELECT 1 FROM symbols v WHERE v.parent_id = s.id AND v.kind = ''local_var'' ' +
+                 'AND COALESCE(v.signature, '''') = '''') AS inl ' +
+                 'FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.id IN (SELECT id FROM temp.dl_dep_routines)';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      if (Q.Fields[6].AsInteger <> 0) or
+         RoutineHasWith(Q.Fields[1].AsString, Q.Fields[2].AsInteger, Q.Fields[3].AsInteger, Cache) or
+         RoutineHasWith(Q.Fields[1].AsString, Q.Fields[4].AsInteger, Q.Fields[5].AsInteger, Cache) then
+        Whole.Add(Q.Fields[0].AsLargeInt);
+      Q.Next;
+    end;
+    Q.Close;
+    FillDepRoutines(Whole);
+    FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_refs(r) SELECT r.id FROM refs r ' +
+                  'WHERE r.enclosing_symbol_id IN (SELECT id FROM temp.dl_dep_routines)');
+  finally
+    Whole.Free;
+    Cache.Free;
+    Q.Free;
+  end;
+end;
+
+{ Part 3 above. Called by a scoped pass after its last write, while the before / after
+  picture (temp.dl_pur_*) is live: leaves in temp.dl_scope_follow the refs a follow-up pass
+  must re-resolve (empty = none). temp.dl_scope_done holds what the run already covered. }
+procedure TSQLiteSymbolStore.CollectFollowUpRefs;
+var
+  Q  : TFDQuery;
+  Ids: TList<Int64>;
+begin
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_scope_follow(r INTEGER PRIMARY KEY)');
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_scope_done(r INTEGER PRIMARY KEY)');
+  FConn.ExecSQL('DELETE FROM temp.dl_scope_follow');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied before its fill
+  if FScopeFollowRound = 0 then FConn.ExecSQL('DELETE FROM temp.dl_scope_done');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied at the first pass of a run
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_done(r) SELECT r FROM temp.dl_scope_refs');
+  Q:= TFDQuery.Create(nil);
+  Ids:= TList<Int64>.Create;
+  try
+    Q.Connection:= FConn;
+    { Only a ref outside the rewritten files: inside one everything was re-resolved. }
+    Q.SQL.Text:=
+      'SELECT DISTINCT m.enclosing_symbol_id FROM (' +
+      '  SELECT r.id, r.file_id, r.enclosing_symbol_id, r.symbol_id AS now FROM refs r JOIN temp.dl_pur_refs o ON o.id = r.id ' +
+      '   WHERE r.symbol_id IS NOT o.sid OR r.external_target IS NOT o.xt ' +
+      '  UNION ALL SELECT r.id, r.file_id, r.enclosing_symbol_id, ' +
+      '   (SELECT target_symbol_id FROM call_edges WHERE ref_id = r.id LIMIT 1) ' +
+      '   FROM temp.dl_pur_edges o JOIN refs r ON r.id = o.ref_id ' +
+      '   WHERE o.tgt IS NOT (SELECT target_symbol_id FROM call_edges WHERE ref_id = o.ref_id LIMIT 1)' +
+      (if HasMemberAccesses then
+         '  UNION ALL SELECT r.id, r.file_id, r.enclosing_symbol_id, ' +
+         '   (SELECT member_symbol_id FROM member_accesses WHERE ref_id = r.id) ' +
+         '   FROM temp.dl_pur_members o JOIN refs r ON r.id = o.ref_id ' +
+         '   WHERE o.mem IS NOT (SELECT member_symbol_id FROM member_accesses WHERE ref_id = o.ref_id)'
+       else '') +
+      ') m WHERE m.enclosing_symbol_id IS NOT NULL AND m.file_id NOT IN (SELECT f FROM temp.dl_run_files) ' +
+      'AND NOT EXISTS (SELECT 1 FROM symbols WHERE id = m.now AND ' + SQL_SYMBOL_TYPELESS + ')';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Ids.Add(Q.Fields[0].AsLargeInt);
+      Q.Next;
+    end;
+    Q.Close;
+    if Ids.Count = 0 then Exit;
+    FillDepRoutines(Ids);
+    AddDependentRefs;
+    FConn.ExecSQL('INSERT INTO temp.dl_scope_follow(r) SELECT r FROM temp.dl_scope_refs ' +
+                  'WHERE r NOT IN (SELECT r FROM temp.dl_scope_done)');
+  finally
+    Ids.Free;
+    Q.Free;
+  end;
+end;
 { The names half of the resolve scope for a reuse write (UpsertSymbol and
   NoteScopeRemoval collect it for a 1.52 write): only REMOVED, ADDED and CHANGED
   symbols' names enter FScopeNames / FScopeLocalNames / FScopeTypesBefore /
@@ -10617,10 +10833,9 @@ var
   Id     : Int64;
   NewSpec: TDictionary<Int64, string>;
   PropChg: TList<Int64>;
-  Chain  : TDictionary<string, Boolean>;
   OldD, NewD: string;
 
-  procedure AddName(const AName, AKind: string; ATypes: TDictionary<string, Boolean>);
+  procedure AddName(const AName, AKind: string; ATypes: TDictionary<string, Boolean>; AMoved: Boolean = True);
   var
     Lc: string;
   begin
@@ -10630,9 +10845,11 @@ var
     else
     begin
       FScopeNames.AddOrSetValue(Lc, True);
-      Chain.AddOrSetValue(Lc, True);
+      if AMoved then FScopeChain.AddOrSetValue(Lc, True);
     end;
-    if IsTypeDeclaringKind(AKind) then ATypes.AddOrSetValue(Lc, True);
+    if not IsTypeDeclaringKind(AKind) then Exit;
+    ATypes.AddOrSetValue(Lc, True);
+    if AMoved then FScopeReshaped.AddOrSetValue(Lc, True);
   end;
 
 begin
@@ -10658,6 +10875,8 @@ begin
       begin
         FillSymIdSet(PropChg);
         CollectScopeReach('(SELECT id FROM temp.dl_symid_ids)', -1);
+        CollectTypeUsers(PropChg);
+        FillSymIdSet(PropChg);
         DetachSymbolIds(True);
         Claims.FChanged.AddRange(PropChg);
         Inc(FSymIdChanged, PropChg.Count);
@@ -10679,28 +10898,17 @@ begin
     Q.Free;
   end;
   if IncNow then FScopeIncludeTouched:= True;
-  Chain:= TDictionary<string, Boolean>.Create;
-  try
-    for Id in Claims.FRemoved do AddName(Claims.FOldName[Id], Claims.FOldKind[Id], FScopeTypesBefore);
-    for Id in Claims.FAdded do AddName(Claims.FNewName[Id], Claims.FNewKind[Id], FScopeTypesAfter);
-    for Id in Claims.FChanged do
-    begin
-      AddName(Claims.FOldName[Id], Claims.FOldKind[Id], FScopeTypesBefore);
-      AddName(Claims.FNewName[Id], Claims.FNewKind[Id], FScopeTypesAfter);
-    end;
-    { The successors of what moved (see AddReceiverChainNames) -- before the
-      include branch below widens the name set to the whole file. }
-    AddReceiverChainNames(Chain);
-    if Claims.FIncBefore or IncNow then
-    begin
-      for Id in Claims.FOldName.Keys do AddName(Claims.FOldName[Id], Claims.FOldKind[Id], FScopeTypesBefore);
-      for Id in Claims.FNewName.Keys do AddName(Claims.FNewName[Id], Claims.FNewKind[Id], FScopeTypesAfter);
-    end;
-  finally
-    Chain.Free;
+  for Id in Claims.FRemoved do AddName(Claims.FOldName[Id], Claims.FOldKind[Id], FScopeTypesBefore);
+  for Id in Claims.FAdded do AddName(Claims.FNewName[Id], Claims.FNewKind[Id], FScopeTypesAfter);
+  for Id in Claims.FChanged do
+  begin
+    AddName(Claims.FOldName[Id], Claims.FOldKind[Id], FScopeTypesBefore);
+    AddName(Claims.FNewName[Id], Claims.FNewKind[Id], FScopeTypesAfter);
   end;
+  if not (Claims.FIncBefore or IncNow) then Exit;
+  for Id in Claims.FOldName.Keys do AddName(Claims.FOldName[Id], Claims.FOldKind[Id], FScopeTypesBefore, False);
+  for Id in Claims.FNewName.Keys do AddName(Claims.FNewName[Id], Claims.FNewKind[Id], FScopeTypesAfter, False);
 end;
-
 { The parameters FQInsertSymbol and FQUpdateSymbol share (all but :fid / :id). }
 procedure TSQLiteSymbolStore.BindSymbolParams(AQ: TFDQuery; const ASymbol: TSymbol);
 begin
@@ -11431,7 +11639,7 @@ begin
     Q.Prepare;
     for N in FScopeTypesAfter.Keys do
     begin
-      if FScopeTypesBefore.ContainsKey(N) then Continue; { not an addition }
+      if FScopeTypesBefore.ContainsKey(N) and not FScopeReshaped.ContainsKey(N) then Continue; { not an addition }
       if Q.Active then Q.Close;
       Q.ParamByName('n').AsWideString:= N;
       Q.Open;
@@ -11525,7 +11733,7 @@ begin
     Q.Prepare;
     for N in FScopeTypesBefore.Keys do
     begin
-      if FScopeTypesAfter.ContainsKey(N) then Continue; { not a withdrawal }
+      if FScopeTypesAfter.ContainsKey(N) and not FScopeReshaped.ContainsKey(N) then Continue; { not a withdrawal }
       if not FScopeTypeAncestors.TryGetValue(N, Ancs) then Continue; { declared nothing to inherit from }
       Inc(Types);
       for Anc in Ancs do
@@ -11576,6 +11784,7 @@ var
   Fid : Int64   ;
   Nm  : string  ;
   KeepLocals: Boolean;
+  ScopeLine: string;
 begin
   FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_files');
   FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_names');
@@ -11630,10 +11839,34 @@ begin
         filtered by scope -- whole-database work for a one-file scope. The set is the same: the
         pass inserts and deletes no refs row and never writes file_id or name_text, so the ids
         selected here are exactly the rows the predicate selects at every later use. }
+      FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_run_files');
+      FConn.ExecSQL('CREATE TEMP TABLE dl_run_files (f INTEGER PRIMARY KEY)');
+      FConn.ExecSQL('INSERT INTO temp.dl_run_files(f) SELECT f FROM temp.dl_scope_files');
+      if FScopeFollowRound > 0 then
+      begin
+        { A FOLLOW-UP pass (CollectFollowUpRefs): exactly its refs. }
+        FConn.ExecSQL('DELETE FROM temp.dl_scope_files');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: this pass's scratch temp table
+        FConn.ExecSQL('DELETE FROM temp.dl_scope_names');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: this pass's scratch temp table
+        FConn.ExecSQL('INSERT INTO temp.dl_scope_refs(r) SELECT r FROM temp.dl_scope_follow');
+      end;
       FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_refs(r) SELECT refs.id FROM refs ' +
                     'WHERE refs.file_id IN (SELECT f FROM temp.dl_scope_files)');
+      var OfFiles: Int64:= CountOf('SELECT count(*) FROM temp.dl_scope_refs');
       FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_refs(r) SELECT refs.id FROM refs ' +
                     'WHERE refs.name_text COLLATE NOCASE IN (SELECT n FROM temp.dl_scope_names)');
+      var OfNames: Int64:= CountOf('SELECT count(*) FROM temp.dl_scope_refs') - OfFiles;
+      var OfChain: Int64:= 0;
+      var OfUsers: Int64:= 0;
+      if (FSymIdFiles > 0) and (FScopeFollowRound = 0) and not TestScopeNoNames then
+      begin
+        AddReceiverChainRefs;
+        OfChain:= CountOf('SELECT count(*) FROM temp.dl_scope_refs') - OfNames - OfFiles;
+        FillDepRoutines(FScopeTypeUsers.Keys);
+        AddDependentRefs;
+        OfUsers:= CountOf('SELECT count(*) FROM temp.dl_scope_refs') - OfChain - OfNames - OfFiles;
+      end;
+      ScopeLine:= Format('calls      ... scope refs: %d in changed files, %d by name, %d by receiver text, %d by typed use in %d routine(s)',
+                         [OfFiles, OfNames, OfChain, OfUsers, FScopeTypeUsers.Count]);
       FConn.Commit;
     except
       FConn.Rollback;
@@ -11652,7 +11885,12 @@ begin
   else if FScopeLocalNames.Count > 0 then
     ResolveLog(Format('calls      ... %d local / parameter name(s) left out of the name scope (they bind inside their own file)',
                       [FScopeLocalNames.Count]));
-  if FSymIdFiles > 0 then
+  if FScopeFollowRound > 0 then
+    ResolveLog(Format('calls      ... follow-up pass %d: %d ref(s) that depend on a binding the pass before it moved',
+                      [FScopeFollowRound, CountOf('SELECT count(*) FROM temp.dl_scope_refs')]))
+  else if FSymIdFiles > 0 then
+    ResolveLog(ScopeLine);
+  if (FSymIdFiles > 0) and (FScopeFollowRound = 0) then
     ResolveLog(Format('calls      ... symbol-id reuse: %d kept, %d changed, %d added, %d removed in %d file(s); %d name(s) in the name scope',
                       [FSymIdKept, FSymIdChanged, FSymIdAdded, FSymIdRemoved, FSymIdFiles, FScopeNames.Count]));
   Result:= 'refs.id IN (SELECT r FROM temp.dl_scope_refs)';
@@ -11671,6 +11909,11 @@ begin
   FScopeTypesBefore  .Clear;
   FScopeTypeAncestors.Clear;
   FScopeTypesAfter   .Clear;
+  FScopeChain        .Clear;
+  FScopeTypeUsers    .Clear;
+  FScopeReshaped     .Clear;
+  FScopeFollowRound  := 0;
+  FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_symid_typed');
   FScopeWhole        := False;
   FScopeWholeWhy     := '';
   FScopeWholeByShare := False;
@@ -11742,6 +11985,9 @@ begin
     FScopeTypesBefore.Clear;
     FScopeTypeAncestors.Clear;
     FScopeTypesAfter .Clear;
+    FScopeChain      .Clear;
+    FScopeTypeUsers  .Clear;
+    FScopeReshaped   .Clear;
     Exit;
   end;
   { 1.53.0 GH18: under symbol-id reuse (FClaims set by OpenFileTx) the names, the
@@ -20668,6 +20914,8 @@ begin
   FConn.ExecSQL('CREATE TEMP TABLE dl_scope_rt (r INTEGER PRIMARY KEY)');
   FConn.ExecSQL('CREATE TEMP TABLE dl_scope_rt_files (f INTEGER PRIMARY KEY)');
   FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT refs.id FROM refs WHERE ' + DS_UNIVERSE + ' AND (' + AScopeWhere + ')');  // dl:ok sql-injection-concat@a2ea -- AScopeWhere is SQL this pass BUILT (MaterializeResolveScope), never user text
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_symid_typed(r INTEGER PRIMARY KEY)');
+  FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT id FROM refs WHERE id IN (SELECT r FROM temp.dl_symid_typed)'); { 1.53.0 GH18 }
   FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT ref_id FROM ref_types WHERE type_symbol_id IS NULL AND type_qname IN (SELECT qualified_name FROM symbols)');
   FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt(r) SELECT ref_id FROM ref_element_types WHERE type_symbol_id IS NULL AND type_qname IN (SELECT qualified_name FROM symbols)');
   FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_rt_files(f) SELECT DISTINCT refs.file_id FROM refs JOIN temp.dl_scope_rt s ON s.r = refs.id');
@@ -21400,6 +21648,7 @@ var
   Profiled  : Boolean       ;
   PfMark    : Int64         ; { 151 PF: DRAGLINT_PROFILE_CALLS section stamp }
   Scoped    : Boolean       ; { re-resolving only the affected refs -- see ScopedResolveIsSound }
+  FollowUp  : Boolean       ; { the pass moved bindings other refs depend on -- CollectFollowUpRefs }
   ScopeWhere: string        ; { the predicate that selects them ('' when not scoped)           }
   DataVersion0: Int64       ; { PRAGMA data_version right after the transaction opened (item 12) }
   SectionRefs   : Int64     ; { F2: refs attributed to an initialization/finalization section }
@@ -21415,6 +21664,7 @@ begin
     outer TMaps/TClear are unconditional: they are two reads for the whole pass. }
   Profiled:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   AccRes  := 0; AccRcv := 0; AccGuard:= 0; AccEdge:= 0;
+  FollowUp:= False;
   { SCOPED OR WHOLE-DATABASE -- decided once, here, and reported on the pass's
     own line so an operator can see which shape ran. ScopedResolveIsSound carries
     the argument; with AExtraStores attached ExtraStoresDeclineReason adds the library's
@@ -21483,8 +21733,11 @@ begin
     writes nothing but connection-local temp tables, so it is safe outside. }
   { WIDEN BEFORE MATERIALISING. MaterializeResolveScope copies FScopeNames into
     a temp table, so a name added after it would never reach the predicate. }
-  if Scoped then WidenScopeThroughAddedTypes;
-  if Scoped then WidenScopeThroughRemovedTypes;
+  if Scoped and (FScopeFollowRound = 0) then
+  begin
+    WidenScopeThroughAddedTypes;
+    WidenScopeThroughRemovedTypes;
+  end;
   if Scoped then ScopeWhere:= MaterializeResolveScope
   else ScopeWhere:= '';
   { INCR18 step 4: from here to the commit, every binding this pass writes keeps its first old
@@ -21703,6 +21956,12 @@ begin
         bulk ClearCallEdges included. }
       if Scoped then
       begin
+        { 1.53.0 GH18: the bindings too, as ClearCallEdges clears them before a whole pass. No
+          stream unbinds a call or member-access ref that now resolves to nothing; under delete +
+          insert the FK did it for a target in the rewritten file, a kept id does not. }
+        if not SymbolIdReuseOff then
+          FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL AND (' + ScopeWhere + ')' +  // dl:ok sql-injection-concat -- REVIEWED 2026-11-23 GH18-FIN: ScopeWhere and StaleWhere are SQL this pass BUILT (a temp-table subquery, an IN-list of file ids), never user text
+                        IfThen(StaleWhere <> '', ' AND (' + StaleWhere + ')', ''));
         FConn.ExecSQL('DELETE FROM call_edges WHERE ref_id IN ' +
                       '(SELECT refs.id FROM refs WHERE (' + ScopeWhere + ')' +
                       IfThen(StaleWhere <> '', ' AND (' + StaleWhere + ')', '') + ')');
@@ -21978,6 +22237,12 @@ begin
       if Scoped then
       begin
         CollectPurityScope;
+        FollowUp:= False;
+        if FSymIdFiles > 0 then
+        begin
+          CollectFollowUpRefs;
+          FollowUp:= CountOf('SELECT count(*) FROM temp.dl_scope_follow') > 0;
+        end;
         DropPurityMoveTriggers;
       end;
       FConn.Commit;
@@ -22237,6 +22502,20 @@ begin
     QStale.Free;
     Resolver.Free;
   end; // try
+  { 1.53.0 GH18: bindings that moved outside the changed files can move others in their
+    routines -- see "WHAT ELSE DEPENDS ON A CHANGED SYMBOL". }
+  if FollowUp then
+  begin
+    Inc(FScopeFollowRound);
+    if FScopeFollowRound > MAX_FOLLOW_ROUNDS then
+    begin
+      FScopeFollowRound:= 0;
+      FScopeWhole:= True;
+      FScopeWholeWhy:= Format('bindings still moved after %d follow-up pass(es)', [MAX_FOLLOW_ROUNDS]);
+    end;
+    ResolveCallTargets(AExtraStores, False);
+    Exit;
+  end;
   { The scope is consumed: the next pass on this instance (a later --watch tick)
     must be judged by ITS writes. Not reached when the pass raised, which leaves
     the scope wider than the truth -- the safe direction. }
