@@ -40,7 +40,9 @@ try {
   $sum = Select-String -LiteralPath $log -Pattern '^SUMMARY ' | Select-Object -Last 1
   Select-String -LiteralPath $log -Pattern '^FAIL|^SKIP' | ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor Red }
   $skips = @(Select-String -LiteralPath $log -Pattern '^SKIP')
-  if ($skips.Count -gt 0) { Write-Host ("FIELDREPO SCHEMAFACTS: FAIL -- $($skips.Count) SKIP line(s): a skipped parity test is a vanished regression pin") -ForegroundColor Red; exit 1 }
+  # the only allowed SKIP is the live-Firebird reader (3k): it needs DL_TEST_FB_CONNECTION; any other SKIP is a vanished pin
+  $other = @($skips | Where-Object { $_.Line -notmatch '^SKIP 3k ' })
+  if ($other.Count -gt 0) { Write-Host ("FIELDREPO SCHEMAFACTS: FAIL -- $($other.Count) unexpected SKIP line(s)") -ForegroundColor Red; exit 1 }
   if (-not $sum) { Write-Host 'FIELDREPO SCHEMAFACTS: FAIL -- no SUMMARY line (the runner crashed)' -ForegroundColor Red; exit 1 }
   Write-Host "  $($sum.Line)"
   if (($code -ne 0) -or ($sum.Line -notmatch 'fail=0\b')) { Write-Host 'FIELDREPO SCHEMAFACTS: FAIL' -ForegroundColor Red; exit 1 }

@@ -404,6 +404,42 @@ begin
   end;
 end;
 
+{ FR-SCHEMA grant: the Firebird FIB$ registry has the schema-1 columns, so a v1-shaped source must import cleanly
+  into a v2 repository (live `repo import-fb` reported CALC_BODY and the other v2-only columns as missing). }
+procedure TestV1SourceIntoV2;
+var
+  Conn: TFDConnection;
+  Src: TFDMemTable;
+  V1Tab: TRepoTable;
+  N: Integer;
+  Msg, Cls: string;
+begin
+  V1Tab := RepoTablesFor(1)[1];
+  Conn := NewRepo;
+  try
+    Src := MakeSource(V1Tab, '', '');
+    try
+      AddKeyRow(Src, 'T1', 'F1');
+      Msg := RaisedMsg(procedure begin N := ImportSourceDataSet(Src, Conn, 'DL_FIELDS_INFO'); end, Cls);
+      Check('9a v1-shaped source imports cleanly into a v2 repository', Msg = '', Cls + ' ' + Msg);
+      Check('9b the row landed, v2-only columns are NULL',
+        (RepoRowCount(Conn, 'DL_FIELDS_INFO') = 1) and
+        VarIsNull(Scalar(Conn, 'SELECT "CALC_BODY" FROM "DL_FIELDS_INFO"', [])) and
+        VarIsNull(Scalar(Conn, 'SELECT "DOMAIN_NAME" FROM "DL_FIELDS_INFO"', [])));
+      Src.EmptyDataSet;
+      Msg := RaisedMsg(procedure begin ImportTableFromDataSet(Src, Conn, RepoTablesFor(2)[1]); end, Cls);
+      Check('9c control: comparing the same source against the v2 column list reports CALC_BODY missing',
+        ContainsStr(Msg, 'CALC_BODY'), Msg);
+      Msg := RaisedMsg(procedure begin ImportSourceDataSet(Src, Conn, 'NO_SUCH'); end, Cls);
+      Check('9d unknown target table raises ERepoError', Cls = 'ERepoError', Cls + ' ' + Msg);
+    finally
+      Src.Free;
+    end;
+  finally
+    Conn.Free;
+  end;
+end;
+
 begin
   GDir := TPath.Combine(TPath.GetTempPath, Format('dl-fieldrepo-TTB-%d', [GetCurrentProcessId]));
   TDirectory.CreateDirectory(GDir);
@@ -414,6 +450,7 @@ begin
     TestColumnMismatch;
     TestDuplicateKey;
     TestCheckSourceColumns;
+    TestV1SourceIntoV2;
   except
     on E: Exception do
     begin
