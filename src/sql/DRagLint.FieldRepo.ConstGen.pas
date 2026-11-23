@@ -4,15 +4,19 @@ unit DRagLint.FieldRepo.ConstGen;
   (docs\superpowers\specs\2026-11-22-field-repository-v2-design.md section 7, FR-1).
   Reads an open repository and returns the source of ONE unit, shared by SERVER and CLIENT,
   that carries every row of the chosen tables as constant record arrays (the read-only
-  replacement for the FIB$ tables) and, with --memtable, a Fill<Table> procedure per table
-  that loads the rows into a TFDMemTable under the FIB$ field names. The tables and their
-  columns come from RepoTablesFor(schema version of the repository), so v1 and v2 both work. }
+  replacement for the FIB$ tables). The header and a constant carry the repository mark that
+  `repo check-const` compares (DRagLint.FieldRepo.ConstMark). The tables and their columns come
+  from RepoTablesFor(schema version of the repository), so v1 and v2 both work. Readers that need
+  a TFDMemTable use the pre-filled data module (DRagLint.FieldRepo.ConstDataModule). }
 
 interface
 
 uses
   System.SysUtils,
-  FireDAC.Comp.Client;
+  Data.DB,
+  FireDAC.Comp.Client,
+  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.ConstMark;
 
 type
   /// <summary>Raised for a bad option: an unknown or refused table, or a unit name that is not an identifier.</summary>
@@ -26,8 +30,6 @@ type
     SourceName: string;
     /// <summary>Tables to emit (e.g. DL_ENUMVALUES); empty means the four registry tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES.</summary>
     Tables: TArray<string>;
-    /// <summary>True adds a Fill&lt;Table&gt; procedure per table (uses FireDAC.Comp.Client).</summary>
-    MemTable: Boolean;
   end;
 
   /// <summary>Row count of one table to be generated (the --dry-run report).</summary>
@@ -51,6 +53,33 @@ function PasStringLiteral(const pText: string; const pContIndent: string = ''): 
 /// <returns>True for an identifier.</returns>
 function IsPasIdent(const pName: string): Boolean;
 
+/// <summary>Resolves the table selection to table descriptions of the repository's schema version.</summary>
+/// <param name="pConn">Open repository connection (read only).</param>
+/// <param name="pOptions">Selection; only Tables is used.</param>
+/// <returns>The selected tables in generation order.</returns>
+/// <exception cref="EConstGenError">A table is unknown for the repository's schema version or is never generated.</exception>
+function SelectConstTables(pConn: TFDConnection; const pOptions: TConstGenOptions): TArray<TRepoTable>;
+
+/// <summary>A closed query over the whole table in primary-key order, text untrimmed and '' kept apart from NULL.</summary>
+/// <param name="pConn">Open repository connection.</param>
+/// <param name="pTable">The table.</param>
+/// <returns>A new query; the caller opens and frees it.</returns>
+function NewConstQuery(pConn: TFDConnection; const pTable: TRepoTable): TFDQuery;
+
+/// <summary>The fields of an open query in the table's column order.</summary>
+/// <param name="pQuery">Open query over the table.</param>
+/// <param name="pTable">The table.</param>
+/// <returns>One field per column; owned by the query.</returns>
+/// <exception cref="EConstGenError">The query has no field for a column.</exception>
+function ConstColumnFields(pQuery: TFDQuery; const pTable: TRepoTable): TArray<TField>;
+
+/// <summary>The header comment of a generated unit: origin, source repository name, repository mark.</summary>
+/// <param name="pSourceName">Source repository name; a non-printable character is shown as ?.</param>
+/// <param name="pMarks">Marks of the generated tables.</param>
+/// <param name="pFormHash">FormTextHash of the form text; '' for a constant unit.</param>
+/// <returns>CRLF-terminated comment lines, 7-bit ASCII.</returns>
+function ConstHeaderComment(const pSourceName: string; const pMarks: TArray<TConstTableMark>; const pFormHash: string): string;
+
 /// <summary>Counts the rows each selected table would contribute, without generating anything.</summary>
 /// <param name="pConn">Open repository connection (read only).</param>
 /// <param name="pOptions">Selection; UnitName is not used.</param>
@@ -61,7 +90,7 @@ function CountConstRows(pConn: TFDConnection; const pOptions: TConstGenOptions):
 
 /// <summary>Generates the registry unit.</summary>
 /// <param name="pConn">Open repository connection (read only); never modified.</param>
-/// <param name="pOptions">Unit name, source name, table selection, memtable switch.</param>
+/// <param name="pOptions">Unit name, source name, table selection.</param>
 /// <returns>The unit source: 7-bit ASCII, CRLF, identical bytes for identical repository content.</returns>
 /// <exception cref="EConstGenError">UnitName is not an identifier, or a table is unknown or refused.</exception>
 /// <remarks>Pure over the connection. Rows are in primary-key order; a column that holds a NULL in the data gets a
@@ -74,9 +103,7 @@ implementation
 uses
   System.Classes,
   System.StrUtils,
-  System.Math,
-  Data.DB,
-  DRagLint.FieldRepo.Schema;
+  System.Math;
 
 const
   CRLF = #13#10;
@@ -198,8 +225,7 @@ begin
       Exit(True);
 end;
 
-{ Resolves the requested names to table descriptions of the repository's schema version. }
-function SelectTables(pConn: TFDConnection; const pOptions: TConstGenOptions): TArray<TRepoTable>;
+function SelectConstTables(pConn: TFDConnection; const pOptions: TConstGenOptions): TArray<TRepoTable>;
 var
   VNames: TArray<string>;
   VName: string;
@@ -238,8 +264,7 @@ begin
     Result := Result + IfThen(Result = '', '', ', ') + QuoteRepoIdent(VKey.Name);
 end;
 
-{ A closed query over the whole table in primary-key order; the caller opens it inside its try-finally. }
-function NewQuery(pConn: TFDConnection; const pTable: TRepoTable): TFDQuery;
+function NewConstQuery(pConn: TFDConnection; const pTable: TRepoTable): TFDQuery;
 begin
   Result := TFDQuery.Create(nil);
   Result.Connection := pConn;
@@ -248,8 +273,7 @@ begin
   Result.SQL.Text := 'SELECT * FROM ' + QuoteRepoIdent(pTable.Name) + ' ORDER BY ' + OrderBy(pTable);
 end;
 
-{ The query's fields in the table's column order, resolved once. }
-function ColumnFields(pQuery: TFDQuery; const pTable: TRepoTable): TArray<TField>;
+function ConstColumnFields(pQuery: TFDQuery; const pTable: TRepoTable): TArray<TField>;
 var
   VI: Integer;
 begin
@@ -272,10 +296,10 @@ begin
   Result.Table := pTable;
   Result.Rows := 0;
   SetLength(Result.NullCols, Length(pTable.Columns));
-  VQ := NewQuery(pConn, pTable);
+  VQ := NewConstQuery(pConn, pTable);
   try
     VQ.Open;
-    VFields := ColumnFields(VQ, pTable);
+    VFields := ConstColumnFields(VQ, pTable);
     while not VQ.Eof do
     begin
       Inc(Result.Rows);
@@ -294,7 +318,7 @@ var
   VTabs: TArray<TRepoTable>;
   VI: Integer;
 begin
-  VTabs := SelectTables(pConn, pOptions);
+  VTabs := SelectConstTables(pConn, pOptions);
   SetLength(Result, Length(VTabs));
   for VI := 0 to High(VTabs) do
   begin
@@ -340,27 +364,6 @@ end;
 function RecordName(const pTable: TRepoTable): string;
 begin
   Result := 'T' + pTable.Name + 'Row';
-end;
-
-function FieldDefLine(const pCol: TRepoColumn): string;
-begin
-  case pCol.Kind of
-    rckInteger: Result := 'ftInteger';
-    rckSmallint, rckByte: Result := 'ftSmallint';
-    rckBoolean: Result := 'ftBoolean';
-  else
-    Result := 'ftWideMemo';
-  end;
-end;
-
-function AccessorName(pKind: TRepoColKind): string;
-begin
-  case pKind of
-    rckInteger, rckSmallint, rckByte: Result := 'AsInteger';
-    rckBoolean: Result := 'AsBoolean';
-  else
-    Result := 'AsString';
-  end;
 end;
 
 procedure EmitRecordType(pSb: TStringBuilder; const pData: TTableData);
@@ -434,10 +437,10 @@ begin
     .Append(CRLF);
   pSb.Append(INDENT1).Append(pData.Table.Name).Append('_ROWS: array[0..').Append(IntToStr(pData.Rows - 1)).Append('] of ')
     .Append(RecordName(pData.Table)).Append(' = (').Append(CRLF);
-  VQ := NewQuery(pConn, pData.Table);
+  VQ := NewConstQuery(pConn, pData.Table);
   try
     VQ.Open;
-    VFields := ColumnFields(VQ, pData.Table);
+    VFields := ConstColumnFields(VQ, pData.Table);
     VN := 0;
     while not VQ.Eof do
     begin
@@ -451,112 +454,18 @@ begin
   pSb.Append(INDENT1).Append(');').Append(CRLF).Append(CRLF);
 end;
 
-{ DL_FIELDS_INFO -> DlFieldsInfo: the PascalCase form the routine names use. }
-function PascalName(const pTableName: string): string;
-var
-  VParts: TArray<string>;
-  VI: Integer;
-begin
-  VParts := pTableName.Split(['_']);
-  for VI := 0 to High(VParts) do
-    VParts[VI] := UpperCase(Copy(VParts[VI], 1, 1)) + LowerCase(Copy(VParts[VI], 2, MaxInt));
-  Result := string.Join('', VParts);
-end;
-
-function SizeConstName(const pTable: TRepoTable; const pCol: TRepoColumn): string;
-begin
-  Result := pTable.Name + '_' + pCol.Name + '_SIZE';
-end;
-
-procedure EmitFillDecl(pSb: TStringBuilder; const pTable: TRepoTable);
-begin
-  pSb.Append('/// <summary>Loads ').Append(pTable.Name).Append(' into pTable: creates the field definitions of the FIB$ table')
-    .Append(' (same names, types, sizes) and appends every generated row; NULL columns stay NULL.</summary>').Append(CRLF);
-  pSb.Append('/// <param name="pTable">Memory table to fill; closed and its field definitions replaced. Caller owns it.</param>')
-    .Append(CRLF);
-  pSb.Append('procedure Fill').Append(PascalName(pTable.Name)).Append('(pTable: TFDMemTable);').Append(CRLF).Append(CRLF);
-end;
-
-{ Implementation-section constants: the FIB$ string sizes the field definitions use. }
-procedure EmitSizeConsts(pSb: TStringBuilder; const pTable: TRepoTable);
-var
-  VCol: TRepoColumn;
-begin
-  for VCol in pTable.Columns do
-    if VCol.Kind = rckString then
-      pSb.Append(INDENT1).Append(SizeConstName(pTable, VCol)).Append(' = ').Append(IntToStr(VCol.MaxLen)).Append(';').Append(CRLF);
-end;
-
-procedure EmitAddRow(pSb: TStringBuilder; const pData: TTableData);
-var
-  VI: Integer;
-  VCol: TRepoColumn;
-  VAssign, VSrc: string;
-begin
-  pSb.Append('procedure Add').Append(PascalName(pData.Table.Name)).Append('Row(pTable: TFDMemTable; const pRow: ')
-    .Append(RecordName(pData.Table)).Append(');').Append(CRLF);
-  pSb.Append('begin').Append(CRLF);
-  pSb.Append(INDENT1).Append('pTable.Append;').Append(CRLF);
-  for VI := 0 to High(pData.Table.Columns) do
-  begin
-    VCol := pData.Table.Columns[VI];
-    VSrc := 'pRow.' + VCol.Name;
-    VAssign := 'pTable.FieldByName(''' + VCol.Name + ''').' + AccessorName(VCol.Kind) + ' := ' + VSrc + ';';
-    if pData.NullCols[VI] then
-      pSb.Append(INDENT1).Append('if not ').Append(VSrc).Append('IsNull then').Append(CRLF)
-        .Append(INDENT2).Append(VAssign).Append(CRLF)
-    else
-      pSb.Append(INDENT1).Append(VAssign).Append(CRLF);
-  end;
-  pSb.Append(INDENT1).Append('pTable.Post;').Append(CRLF);
-  pSb.Append('end;').Append(CRLF).Append(CRLF);
-end;
-
-procedure EmitFillBody(pSb: TStringBuilder; const pData: TTableData);
-var
-  VCol: TRepoColumn;
-  VDefs: string;
-begin
-  if pData.Rows > 0 then
-    EmitAddRow(pSb, pData);
-  pSb.Append('procedure Fill').Append(PascalName(pData.Table.Name)).Append('(pTable: TFDMemTable);').Append(CRLF);
-  if pData.Rows > 0 then
-    pSb.Append('var').Append(CRLF).Append(INDENT1).Append('I: Integer;').Append(CRLF);
-  pSb.Append('begin').Append(CRLF);
-  pSb.Append(INDENT1).Append('pTable.Close;').Append(CRLF);
-  pSb.Append(INDENT1).Append('pTable.FieldDefs.Clear;').Append(CRLF);
-  for VCol in pData.Table.Columns do
-  begin
-    VDefs := if VCol.Kind = rckString then 'ftWideString, ' + SizeConstName(pData.Table, VCol) else FieldDefLine(VCol);
-    pSb.Append(INDENT1).Append('pTable.FieldDefs.Add(''').Append(VCol.Name).Append(''', ').Append(VDefs).Append(');').Append(CRLF);
-  end;
-  pSb.Append(INDENT1).Append('pTable.CreateDataSet;').Append(CRLF);
-  if pData.Rows > 0 then
-  begin
-    pSb.Append(INDENT1).Append('for I := Low(').Append(pData.Table.Name).Append('_ROWS) to High(')
-      .Append(pData.Table.Name).Append('_ROWS) do').Append(CRLF);
-    pSb.Append(INDENT2).Append('Add').Append(PascalName(pData.Table.Name)).Append('Row(pTable, ')
-      .Append(pData.Table.Name).Append('_ROWS[I]);').Append(CRLF);
-  end;
-  pSb.Append('end;').Append(CRLF).Append(CRLF);
-end;
-
-
-function HeaderComment(const pOptions: TConstGenOptions; const pData: TArray<TTableData>): string;
+function ConstHeaderComment(const pSourceName: string; const pMarks: TArray<TConstTableMark>; const pFormHash: string): string;
 var
   VSb: TStringBuilder;
-  VD: TTableData;
   VC: Char;
 begin
   VSb := TStringBuilder.Create;
   try
     VSb.Append('// Generated by drag-lint repo gen-const -- do not edit.').Append(CRLF);
     VSb.Append('// Source repository: ');
-    for VC in pOptions.SourceName do
+    for VC in pSourceName do
       VSb.Append(if IsPrintAscii(VC) then VC else '?');
-    VSb.Append(CRLF);
-    for VD in pData do
-      VSb.Append('//   ').Append(VD.Table.Name).Append(': ').Append(IntToStr(VD.Rows)).Append(' rows').Append(CRLF);
+    VSb.Append(CRLF).Append(ConstMarkHeader(pMarks, pFormHash));
     Result := VSb.ToString;
   finally
     VSb.Free;
@@ -567,42 +476,31 @@ function GenRepoConstUnit(pConn: TFDConnection; const pOptions: TConstGenOptions
 var
   VTabs: TArray<TRepoTable>;
   VData: TArray<TTableData>;
+  VMarks: TArray<TConstTableMark>;
   VSb: TStringBuilder;
   VI: Integer;
 begin
   if not IsPasIdent(pOptions.UnitName) then
     raise EConstGenError.Create('unit name "' + pOptions.UnitName + '" is not an identifier');
-  VTabs := SelectTables(pConn, pOptions);
+  VTabs := SelectConstTables(pConn, pOptions);
   SetLength(VData, Length(VTabs));
   for VI := 0 to High(VTabs) do
     VData[VI] := ScanTable(pConn, VTabs[VI]);
+  VMarks := ConstTableMarks(pConn, VTabs);
   VSb := TStringBuilder.Create;
   try
     VSb.Append('unit ').Append(pOptions.UnitName).Append(';').Append(CRLF).Append(CRLF);
-    VSb.Append(HeaderComment(pOptions, VData)).Append(CRLF);
+    VSb.Append(ConstHeaderComment(pOptions.SourceName, VMarks, '')).Append(CRLF);
     VSb.Append('interface').Append(CRLF).Append(CRLF);
-    if pOptions.MemTable then
-      VSb.Append('uses').Append(CRLF).Append(INDENT1).Append('Data.DB,').Append(CRLF)
-        .Append(INDENT1).Append('FireDAC.Comp.Client;').Append(CRLF).Append(CRLF);
     VSb.Append('type').Append(CRLF);
     for VI := 0 to High(VData) do
       EmitRecordType(VSb, VData[VI]);
     VSb.Append('const').Append(CRLF);
+    VSb.Append(INDENT1).Append('/// <summary>Content hash of the repository tables this unit was generated from.</summary>').Append(CRLF);
+    VSb.Append(INDENT1).Append(CONST_MARK_NAME).Append(' = ''').Append(ConstMarkHash(VMarks)).Append(''';').Append(CRLF).Append(CRLF);
     for VI := 0 to High(VData) do
       EmitConsts(VSb, pConn, VData[VI]);
-    if pOptions.MemTable then
-      for VI := 0 to High(VData) do
-        EmitFillDecl(VSb, VData[VI].Table);
     VSb.Append('implementation').Append(CRLF).Append(CRLF);
-    if pOptions.MemTable then
-    begin
-      VSb.Append('const').Append(CRLF);
-      for VI := 0 to High(VData) do
-        EmitSizeConsts(VSb, VData[VI].Table);
-      VSb.Append(CRLF);
-      for VI := 0 to High(VData) do
-        EmitFillBody(VSb, VData[VI]);
-    end;
     VSb.Append('end.').Append(CRLF);
     Result := VSb.ToString;
   finally

@@ -2,9 +2,11 @@ program ConstProbe;
 
 {$APPTYPE CONSOLE}
 
-{ drag-lint 1.53 lane FR-CONSTGEN -- the compile + round-trip probe of the registry-constant generator.
-  It uses the GENERATED unit uFieldRegistry (generated with --memtable from a repository), fills one
-  TFDMemTable per generated table and prints the rows in the `repo backup` text form (#DLREPO records and
+{ drag-lint 1.53 lanes FR-CONSTGEN / FR-PRELOAD -- the compile + round-trip probe of the registry generator.
+  It uses the GENERATED units uFieldRegistry (constants) and uRegistryDm (data module dmRegistry, pre-filled
+  TFDMemTables), both generated from one repository. It requires that both carry the same repository mark, that each
+  mem table is open, read only and without a change log after Create alone, that its first row equals the constant
+  array's, and prints the rows of the mem tables in the `repo backup` text form (#DLREPO records and
   the "#end TABLE n" trailers) so the runner can compare the output with the backup of the same repository.
   Argument 1: the repository schema version (1 or 2), which selects the column lists.
   Not part of the product; built only by tests\autotest\run_fieldrepo_constgen.ps1. }
@@ -31,21 +33,37 @@ uses
   FireDAC.Comp.Client,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.TextBackup,
-  uFieldRegistry;
+  DRagLint.FieldRepo.ConstDataModule,
+  uFieldRegistry,
+  uRegistryDm;
 
 const
   TABLES: array[0..3] of string = ('DL_FIELDS_INFO', 'DL_DATASETS_INFO', 'DL_ENUMVALUES', 'DL_ERROR_MESSAGES');
 
-procedure FillByName(const pName: string; pTable: TFDMemTable);
+var
+  GModule: TdmRegistry;
+
+procedure Need(pCond: Boolean; const pWhat: string);
 begin
-  if pName = 'DL_FIELDS_INFO' then
-    FillDlFieldsInfo(pTable)
-  else if pName = 'DL_DATASETS_INFO' then
-    FillDlDatasetsInfo(pTable)
-  else if pName = 'DL_ENUMVALUES' then
-    FillDlEnumvalues(pTable)
-  else
-    FillDlErrorMessages(pTable);
+  if not pCond then
+    raise Exception.Create(pWhat);
+end;
+
+{ The state a reader finds right after the module was created. }
+procedure CheckModule;
+begin
+  Need(TdmRegistry.REPO_CONTENT_HASH = uFieldRegistry.REPO_CONTENT_HASH, 'the two units carry different marks');
+  Need(GModule.mtDlFieldsInfo.RecordCount = DL_FIELDS_INFO_ROW_COUNT, 'row count differs from the constant unit');
+  Need(GModule.mtDlFieldsInfo.RecNo = 1, 'the first row is not current');
+  Need(GModule.mtDlFieldsInfo.FieldByName('FIELD_NAME').AsString = DL_FIELDS_INFO_ROWS[0].FIELD_NAME, 'first row differs');
+end;
+
+function MemByName(const pName: string): TFDMemTable;
+begin
+  Result := GModule.FindComponent(ConstMemTableName(pName)) as TFDMemTable;
+  Need(Result.Active, pName + ' is not open');
+  Need(not Result.CanModify, pName + ' can be modified');
+  Need((not Result.CachedUpdates) and (Result.ChangeCount = 0), pName + ' has a change log');
 end;
 
 function KeyText(pTable: TFDMemTable; const pTab: TRepoTable): string;
@@ -110,21 +128,16 @@ var
   vMem: TFDMemTable;
   vCount: Integer;
 begin
-  vMem := TFDMemTable.Create(nil);
-  try
-    FillByName(pTab.Name, vMem);
-    vCount := 0;
-    vMem.First;
-    while not vMem.Eof do
-    begin
-      PrintRecord(vMem, pTab);
-      Inc(vCount);
-      vMem.Next;
-    end;
-    Writeln('#end ', pTab.Name, ' ', vCount);
-  finally
-    vMem.Free;
+  vMem := MemByName(pTab.Name);
+  vCount := 0;
+  vMem.First;
+  while not vMem.Eof do
+  begin
+    PrintRecord(vMem, pTab);
+    Inc(vCount);
+    vMem.Next;
   end;
+  Writeln('#end ', pTab.Name, ' ', vCount);
 end;
 
 var
@@ -132,10 +145,16 @@ var
   vName: string;
 begin
   try
-    for vTab in RepoTablesFor(StrToInt(ParamStr(1))) do
-      for vName in TABLES do
-        if vTab.Name = vName then
-          PrintTable(vTab);
+    GModule := TdmRegistry.Create(nil);
+    try
+      CheckModule;
+      for vTab in RepoTablesFor(StrToInt(ParamStr(1))) do
+        for vName in TABLES do
+          if vTab.Name = vName then
+            PrintTable(vTab);
+    finally
+      GModule.Free;
+    end;
   except
     on E: Exception do
     begin
