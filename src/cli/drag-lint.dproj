@@ -398,9 +398,15 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.ParamArray.Prepare.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.OrmGen.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.DataServiceGen.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.Kinds.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.Exceptions.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.Check.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.Migrate.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.ChangeSet.pas"/>
         <DCCReference Include="DRagLint.CLI.CheckInit.pas"/>
         <DCCReference Include="DRagLint.CLI.Repo.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoParamArray.pas"/>
+        <DCCReference Include="DRagLint.CLI.RepoModel.pas"/>
         <DCCReference Include="DRagLint.CLI.Explain.pas"/>
         <DCCReference Include="DRagLint.CLI.RuleScope.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.pas"/>
