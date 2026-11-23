@@ -44,7 +44,8 @@ function PlanGenDataService(pRepo: TFDConnection; const pServerDir, pClientDir: 
   const pTables: TArray<string>; pSaveForm: TOrmSaveForm = osfLegacy): TArray<TOrmFileChange>;
 
 type
-  /// <summary>Options of the three generator verbs (repo gen-orm / update-orm / gen-dataservice).</summary>
+  /// <summary>Options of the generator verbs (repo gen-orm / update-orm / gen-dataservice /
+  /// upgrade-orm-headers).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.FieldRepo.DataServiceGen.pas) ?, DRagLint.CLI.Repo.RepoOrmVerb (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.DataServiceGen.PlanVerb (DRagLint.FieldRepo.DataServiceGen.pas) ?, DRagLint.FieldRepo.DataServiceGen.ReportPlan (DRagLint.FieldRepo.DataServiceGen.pas) ?, DRagLint.FieldRepo.DataServiceGen.RunOrmGenVerb (DRagLint.FieldRepo.DataServiceGen.pas) ?</para>
@@ -52,11 +53,11 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TOrmVerbOptions = record
-    /// <summary>Sub-verb: 'gen-orm', 'update-orm' or 'gen-dataservice'.</summary>
+    /// <summary>Sub-verb: 'gen-orm', 'update-orm', 'gen-dataservice' or 'upgrade-orm-headers'.</summary>
     Sub: string;
     /// <summary>Repository file (opened read-only).</summary>
     RepoPath: string;
-    /// <summary>Folder of the i/u units (--code-dir); gen-orm and update-orm.</summary>
+    /// <summary>Folder of the i/u units (--code-dir); gen-orm, update-orm and upgrade-orm-headers.</summary>
     CodeDir: string;
     /// <summary>Folder of the _SERVER units (--server-dir); update-orm (optional) and gen-dataservice.</summary>
     ServerDir: string;
@@ -111,6 +112,7 @@ const
   SUB_GEN_ORM = 0;
   SUB_UPDATE_ORM = 1;
   SUB_GEN_DATASERVICE = 2;
+  SUB_UPGRADE_HEADERS = 3;
 
 procedure GenerateDIServerObjectStart(DIText: TStringList);  // dl:ok param-name-prefix@eade -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 begin
@@ -284,7 +286,7 @@ function PlanVerb(pConn: TFDConnection; const pOptions: TOrmVerbOptions; const p
 begin
   Result:= False;
   pPlan:= nil;
-  case IndexText(pOptions.Sub, ['gen-orm', 'update-orm', 'gen-dataservice']) of
+  case IndexText(pOptions.Sub, ['gen-orm', 'update-orm', 'gen-dataservice', 'upgrade-orm-headers']) of
     SUB_GEN_ORM:
       begin
         if not RequireDir(pOptions.CodeDir, '--code-dir', pOptions.Sub, pOut) then
@@ -303,6 +305,12 @@ begin
           RequireDir(pOptions.ClientDir, '--client-dir', pOptions.Sub, pOut)) then
           Exit;
         pPlan:= PlanGenDataService(pConn, pOptions.ServerDir, pOptions.ClientDir, pTables, pOptions.SaveForm);
+      end;
+    SUB_UPGRADE_HEADERS:
+      begin
+        if not RequireDir(pOptions.CodeDir, '--code-dir', pOptions.Sub, pOut) then
+          Exit;
+        pPlan:= PlanUpgradeOrmHeaders(pConn, pOptions.CodeDir, pTables, pSkipped);
       end;
   else
     pOut.Add(Format('repo %s: unknown generator sub-verb', [pOptions.Sub]));
@@ -333,7 +341,7 @@ begin
       if C.Kind <> ockUnchanged then
         for S in OrmSplitLines(OrmChangeDiff(C)) do
           pOut.Add(S);
-  if not SameText(pOptions.Sub, 'update-orm') then
+  if MatchText(pOptions.Sub, ['gen-orm', 'gen-dataservice']) then
     for C in pPlan do
       if C.Kind = ockNew then
         pOut.Add('add to project: ' + C.FileName);

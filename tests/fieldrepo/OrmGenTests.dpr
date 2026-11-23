@@ -17,13 +17,15 @@ program OrmGenTests;
                                      update-orm over the given folders (a COPY: the regenerated units are written there);
                                      per unit: byte-identical / identical-ignoring-blanks /
                                      identical-ignoring-blanks-and-case / different, region ids that
-                                     differ, and a check that every byte outside the regions is kept }
+                                     differ, and a check that every byte outside the regions is kept
+    --emit-fixture <dir>             the units tests\autotest\run_fieldrepo_ormgen_run.ps1 compiles and runs }
 
 uses
   Winapi.Windows,
   System.SysUtils,
   System.Classes,
   System.IOUtils,
+  System.RegularExpressions,
   System.Generics.Collections,
   Data.DB,
   FireDAC.Stan.Intf,
@@ -50,6 +52,7 @@ uses
   DRagLint.FieldRepo.Schema in '..\..\src\sql\DRagLint.FieldRepo.Schema.pas',
   DRagLint.FieldRepo.FbImport in '..\..\src\sql\DRagLint.FieldRepo.FbImport.pas',
   DRagLint.FieldRepo.OrmGen in '..\..\src\sql\DRagLint.FieldRepo.OrmGen.pas',
+  DRagLint.FieldRepo.OrmHeaders in '..\..\src\sql\DRagLint.FieldRepo.OrmHeaders.pas',
   DRagLint.FieldRepo.DataServiceGen in '..\..\src\sql\DRagLint.FieldRepo.DataServiceGen.pas';
 
 var
@@ -177,8 +180,8 @@ begin
       '    fNAME' + Sp(21) + ': string' + Sp(4) + ';'#13#10 +
       '    fSTATUS' + Sp(19) + ': TOrderStatus;'#13#10, vBody);
     vBody := RegionBody(vOut, '7');
-    Check('L4 region 7 NAME accessor is GetZNAME', Pos('function TmcORDERS.GetZNAME: string;'#13#10'begin'#13#10 +
-      '  result:= fNAME;'#13#10'end;'#13#10' '#13#10'procedure TmcORDERS.SetZNAME(const Value: string);'#13#10 +
+    Check('L4 region 7 NAME accessor is GetNAME', Pos('function TmcORDERS.GetNAME: string;'#13#10'begin'#13#10 +
+      '  result:= fNAME;'#13#10'end;'#13#10' '#13#10'procedure TmcORDERS.SetNAME(const Value: string);'#13#10 +
       'begin'#13#10'  fNAME:= Value;'#13#10'  fModified:= True;'#13#10'end;'#13#10' '#13#10, vBody) > 0, vBody);
     vBody := RegionBody(vOut, '9');
     Check('L5 region 9 generator key gets NextID', vBody.StartsWith(
@@ -210,6 +213,40 @@ begin
     Check('L8c TStringList param is AsWideMemo (current form)', Pos('].AsWideMemo:= Obj.MEMO.Text;', vBody) > 0, vBody);
     vBody := RegionBody(vOut, '2');
     Check('L9 region 2 interface form with DOC_SUMMARY lines', Pos('/// Line one'#13#10'/// Line two'#13#10, vBody) > 0, vBody);
+    { the accessor of NAME hides TComponent.SetName: reintroduce in the class, not in the interface }
+    vBody := RegionBody(vGen.UpdateRegions(Region('1A', ''), 'ORDERS', False, vCount), '1A');
+    Check('L4b region 1A: SetNAME is reintroduced, no other setter is', vBody.Contains('    procedure SetNAME(const Value: string); reintroduce;'#13#10) and
+      vBody.Contains('    procedure SetID(const Value: Int64);'#13#10), vBody);
+    vBody := RegionBody(vGen.UpdateRegions(Region('2', ''), 'ORDERS', True, vCount), '2');
+    Check('L4c interface form has no directive', vBody.Contains('    procedure SetNAME(const Value: string);'#13#10), vBody);
+    { summaries: the author's text stays, a placeholder or an empty one becomes what the row says }
+    Check('S1 DOC_SUMMARY of the row is kept', vBody.Contains('/// The name'#13#10), vBody);
+    Check('S2 empty DOC_SUMMARY: column and key', vBody.Contains('/// <summary>              '#13#10'/// Column ORDERS.ID, part of the primary key.'#13#10'/// </summary>'), vBody);
+    Check('S3 empty DOC_REMARKS: no remarks block', not vBody.Contains('<remarks>'), vBody);
+    pRepo.ExecSQL('INSERT INTO DL_FIELDS_INFO (TABLE_NAME, FIELD_NAME, VAR_TYPE, FIELD_AS_TYPE, FIELD_KIND, DISPLAY_LABEL, DOC_SUMMARY, DOC_REMARKS, DOCUMENTATION) ' +
+      'VALUES (''DOCT'', ''AFIELD'', ''string'', ''AsString'', 1, ''A <b> & c'', ''Summary here'', ''Remarks here'', NULL), ' +
+      '(''DOCT'', ''BFIELD'', ''string'', ''AsString'', 1, ''B'', '' summary HERE '', ''Keep me'', ''From the documentation column'')');
+    try
+      vBody := RegionBody(vGen.UpdateRegions(Region('2', ''), 'DOCT', False, vCount), '2');
+      Check('S4 placeholder: label in XML-safe form, placeholder remarks dropped', vBody.Contains('/// Column DOCT.AFIELD ("A &lt;b&gt; &amp; c").'#13#10) and
+        not vBody.Contains('Remarks here'), vBody);
+      Check('S5 DOCUMENTATION wins over the built text, real remarks kept', vBody.Contains('/// From the documentation column'#13#10) and vBody.Contains('/// Keep me'#13#10), vBody);
+    finally
+      pRepo.ExecSQL('DELETE FROM DL_FIELDS_INFO WHERE TABLE_NAME = ''DOCT''');
+    end;
+    { regions 4 / 6: both objects named; nothing for a table without stored columns }
+    Check('C1 region 6', RegionBody(vGen.UpdateRegions(Region('6', ''), 'LINE$ITEM', False, vCount), '6').StartsWith(
+      '      var LDest:= TmcLINE_ITEM(Dest);'#13#10'      LDest.LINE_NO' + Sp(18) + ':= Self.fLINE_NO' + Sp(18) + ';'#13#10));
+    Check('C2 region 11 declares its enumeration local only when needed',
+      RegionBody(vGen.UpdateRegions(Region('11', ''), 'ORDERS', False, vCount), '11').StartsWith('  var EnumByte: Byte;'#13#10) and
+      not RegionBody(vGen.UpdateRegions(Region('11', ''), 'LINE$ITEM', False, vCount), '11').Contains('var '));
+    pRepo.ExecSQL('INSERT INTO DL_FIELDS_INFO (TABLE_NAME, FIELD_NAME, VAR_TYPE, FIELD_AS_TYPE, FIELD_KIND, ISCALCULATED) VALUES (''NOCOL'', ''C'', ''string'', ''AsString'', 1, 1)');
+    try
+      vOut := vGen.UpdateRegions(Region('4', 'x'#13#10) + Region('6', 'x'#13#10) + Region('11', 'x'#13#10), 'NOCOL', False, vCount);
+      Check('C3 no stored column: empty regions, no unused local', vOut = Region('4', '') + Region('6', '') + Region('11', ''), vOut);
+    finally
+      pRepo.ExecSQL('DELETE FROM DL_FIELDS_INFO WHERE TABLE_NAME = ''NOCOL''');
+    end;
     Check('L10 unknown table raises EOrmGenError', (function: Boolean
       begin
         Result := False;
@@ -239,9 +276,10 @@ begin
     vOut := vGen.UpdateRegions(vText, 'ORDERS', False, vCount);
     Check('B1 outside bytes kept (LF, tab, blanks, no final EOL)', vOut =
       'unit uORDERS;'#10'  x := 1;  '#9#10'  {$REGION ''DB-RAD 4''}'#10 +
-      '      fID' + Sp(23) + ':= ID' + Sp(23) + ';'#13#10 +
-      '      fNAME' + Sp(21) + ':= NAME' + Sp(21) + ';'#13#10 +
-      '      fSTATUS' + Sp(19) + ':= STATUS' + Sp(19) + ';'#13#10 +
+      '      var LSource:= TmcORDERS(Source);'#13#10 +
+      '      Self.fID' + Sp(23) + ':= LSource.ID' + Sp(23) + ';'#13#10 +
+      '      Self.fNAME' + Sp(21) + ':= LSource.NAME' + Sp(21) + ';'#13#10 +
+      '      Self.fSTATUS' + Sp(19) + ':= LSource.STATUS' + Sp(19) + ';'#13#10 +
       '  {$ENDREGION ''DB-RAD 4''}'#10'end.', vOut);
     { positive control: a text without regions comes back byte for byte }
     vText := 'a'#13'b'#10'c'#13#10'd';
@@ -350,6 +388,107 @@ begin
   end;
 end;
 
+function ReadOld(const pFile: string): string;
+begin
+  Result := TFile.ReadAllText(pFile);
+end;
+
+{ the shapes ORM3 units carry: generated, re-formatted (YADF), hand-edited }
+procedure TestHeaderUpgrade(pRepo: TFDConnection; const pRepoFile: string);
+const
+  RGN4 = '      {$REGION ''DB-RAD 4''}'#13#10'      x'#13#10'      {$ENDREGION ''DB-RAD 4''}'#13#10;
+  RGN6 = '      {$REGION ''DB-RAD 6''}'#13#10'      y'#13#10'      {$ENDREGION ''DB-RAD 6''}'#13#10;
+  OLD4 = 'procedure TmcORDERS.Assign(Source: TPersistent);'#13#10'begin'#13#10'  if not (Source is TmcORDERS) then inherited'#13#10 +
+    '  else'#13#10'    with Source as TmcORDERS do'#13#10'    begin'#13#10 + RGN4 + '    end;'#13#10#13#10'end; // procedure'#13#10;
+  OLD6 = 'procedure TmcORDERS.AssignTo(Dest: TPersistent);'#13#10'begin'#13#10'  if not (Dest is TmcORDERS) then'#13#10'    inherited'#13#10 +
+    '  else'#13#10'    WITH Dest AS TmcORDERS DO'#13#10'    begin'#13#10 + RGN6 + '    end;'#13#10' '#13#10'end;'#13#10;
+  NEW4 = 'procedure TmcORDERS.Assign(Source: TPersistent);'#13#10'begin'#13#10'  if Source is not TmcORDERS then'#13#10'    inherited'#13#10 +
+    '  else'#13#10'  begin'#13#10 + RGN4 + '    end;'#13#10#13#10'end; // procedure'#13#10;
+  NEW6 = 'procedure TmcORDERS.AssignTo(Dest: TPersistent);'#13#10'begin'#13#10'  if Dest is not TmcORDERS then'#13#10'    inherited'#13#10 +
+    '  else'#13#10'  begin'#13#10 + RGN6 + '    end;'#13#10' '#13#10'end;'#13#10;
+  READ_HEAD = 'function TmcORDERS.Reader(AStream:TABZMemoryStream): boolean;'#13#10;
+  READ_VARS = 'var'#13#10'  StreamSize: integer;'#13#10'  ByteTemp  : Byte   ;'#13#10;
+  READ_BODY = 'begin'#13#10'  result:= True;'#13#10'end;'#13#10#13#10;
+  FOREIGN = 'procedure TmcOTHER.Assign(Source: TPersistent);'#13#10'begin'#13#10'  with Source as TmcORDERS do Foo;'#13#10'end;'#13#10;
+var
+  vNotes, vOut: TStringList;
+  vGot, vDir, vFile, vHand, vBefore: string;
+  vOpt: TOrmVerbOptions;
+begin
+  vNotes := TStringList.Create;
+  vOut := TStringList.Create;
+  try
+    vGot := UpgradeOrmHeaderText('head'#13#10 + READ_HEAD + READ_VARS + READ_BODY + OLD4 + OLD6 + FOREIGN, 'ORDERS', vNotes);
+    Check('H1 generated and re-formatted headers are upgraded, the rest kept byte for byte',
+      (vGot = 'head'#13#10 + READ_HEAD + READ_BODY + NEW4 + NEW6 + FOREIGN) and (vNotes.Count = 0), vNotes.Text + vGot);
+    Check('H2 a second run changes nothing and reports nothing', (UpgradeOrmHeaderText(vGot, 'ORDERS', vNotes) = vGot) and (vNotes.Count = 0), vNotes.Text);
+    { hand-edited: a statement before the region, one after it, a comment in the header }
+    vHand := OLD4.Replace('    begin'#13#10, '    begin'#13#10'      Foo;'#13#10);
+    vGot := UpgradeOrmHeaderText(vHand + OLD6, 'ORDERS', vNotes);
+    Check('H3 hand-edited Assign is left alone and listed, AssignTo is still upgraded', (vGot = vHand + NEW6) and (vNotes.Count = 1) and
+      vNotes[0].StartsWith('Assign '), vNotes.Text + vGot);
+    vNotes.Clear;
+    vHand := OLD6.Replace('    end;'#13#10' ', '    end;'#13#10'  Foo;'#13#10);
+    Check('H4 a statement after the region: left alone and listed', (UpgradeOrmHeaderText(NEW4 + vHand, 'ORDERS', vNotes) = NEW4 + vHand) and (vNotes.Count = 1), vNotes.Text);
+    vNotes.Clear;
+    vHand := OLD4.Replace('then inherited', 'then inherited // keep');
+    Check('H5 a comment in the header: left alone and listed', (UpgradeOrmHeaderText(vHand + NEW6, 'ORDERS', vNotes) = vHand + NEW6) and (vNotes.Count = 1), vNotes.Text);
+    vNotes.Clear;
+    vHand := READ_HEAD + READ_VARS + 'begin'#13#10'  AStream.Read(ByteTemp);'#13#10'end;'#13#10;
+    Check('H6 Reader locals still used: left alone and listed', (UpgradeOrmHeaderText(vHand + NEW4 + NEW6, 'ORDERS', vNotes) = vHand + NEW4 + NEW6) and
+      (vNotes.Count = 1) and vNotes[0].StartsWith('Reader '), vNotes.Text);
+    vNotes.Clear;
+    vHand := READ_HEAD + 'var'#13#10'  StreamSize: integer;'#13#10'  Mine: Byte;'#13#10'  ByteTemp: Byte;'#13#10 + READ_BODY;
+    Check('H7 Reader var block with another local: left alone and listed', (UpgradeOrmHeaderText(vHand + NEW4 + NEW6, 'ORDERS', vNotes) = vHand + NEW4 + NEW6) and (vNotes.Count = 1), vNotes.Text);
+    vNotes.Clear;
+    Check('H8 LF-only unit keeps LF', UpgradeOrmHeaderText((OLD4 + OLD6).Replace(#13#10, #10), 'ORDERS', vNotes) = (NEW4 + NEW6).Replace(#13#10, #10));
+
+    { the verb: dry run by default, --apply writes with a backup }
+    vDir := TPath.Combine(GDir, 'HDR');
+    ForceDirectories(vDir);
+    vFile := TPath.Combine(vDir, 'uORDERS.PAS');
+    vBefore := 'unit uORDERS;'#13#10 + OLD4 + OLD6.Replace('    begin'#13#10, '    begin'#13#10'      Foo;'#13#10) + 'end.'#13#10;
+    TFile.WriteAllText(vFile, vBefore, TEncoding.ASCII);
+    vOpt := Default(TOrmVerbOptions);
+    vOpt.Sub := 'upgrade-orm-headers';
+    vOpt.RepoPath := pRepoFile;
+    vOpt.CodeDir := vDir;
+    vOpt.Tables := 'ORDERS';
+    vOpt.Backup := True;
+    Check('H9 verb dry run: diff, the hand-edited header listed, nothing written', (RunOrmGenVerb(vOpt, vOut) = 0) and
+      vOut.Text.Contains('+  if Source is not TmcORDERS then') and vOut.Text.Contains('uORDERS.PAS: AssignTo is not in the generated form') and
+      vOut[vOut.Count - 1].EndsWith('repo upgrade-orm-headers: 0 new, 1 changed, 0 unchanged, 1 skipped; dry run') and (ReadOld(vFile) = vBefore), vOut.Text);
+    vOut.Clear;
+    vOpt.Apply := True;
+    Check('H10 verb apply writes the unit and a .BCK1', (RunOrmGenVerb(vOpt, vOut) = 0) and ReadOld(vFile).Contains(NEW4) and
+      ReadOld(vFile).Contains('with Dest as TmcORDERS do'.Replace('with', 'WITH').Replace(' as ', ' AS ').Replace(' do', ' DO')) and
+      (ReadOld(vFile + '.BCK1') = vBefore), vOut.Text);
+    vOut.Clear;
+    vOpt.CodeDir := '';
+    Check('H11 missing --code-dir -> 1', (RunOrmGenVerb(vOpt, vOut) = 1) and vOut.Text.Contains('--code-dir'), vOut.Text);
+
+    { a column SOURCE hides the parameter inside the old 'with': update-orm refuses that unit }
+    AddRow(pRepo, 'TRAP', 'SOURCE', 'Integer', 'AsInteger', False, '');
+    try
+      vFile := TPath.Combine(vDir, 'uTRAP.PAS');
+      vBefore := 'unit uTRAP;'#13#10 + OLD4.Replace('ORDERS', 'TRAP') + 'end.'#13#10;
+      TFile.WriteAllText(vFile, vBefore, TEncoding.ASCII);
+      TFile.WriteAllText(TPath.Combine(vDir, 'iTRAP.PAS'), 'unit iTRAP;'#13#10, TEncoding.ASCII);
+      vNotes.Clear;
+      Check('W1 column SOURCE under the old header: unit skipped and named', (Length(PlanUpdateOrm(pRepo, vDir, '', '', ['TRAP'], vNotes)) = 1) and
+        (vNotes.Count = 1) and vNotes[0].Contains('upgrade-orm-headers'), vNotes.Text);
+      TFile.WriteAllText(vFile, vBefore.Replace('if not (Source is TmcTRAP) then inherited', 'if Source is not TmcTRAP then inherited').Replace('with Source as TmcTRAP do', ''), TEncoding.ASCII);
+      vNotes.Clear;
+      Check('W2 under the new header it is regenerated', (Length(PlanUpdateOrm(pRepo, vDir, '', '', ['TRAP'], vNotes)) = 2) and (vNotes.Count = 0), vNotes.Text);
+    finally
+      pRepo.ExecSQL('DELETE FROM DL_FIELDS_INFO WHERE TABLE_NAME = ''TRAP''');
+    end;
+  finally
+    vOut.Free;
+    vNotes.Free;
+  end;
+end;
+
 procedure TestVerb(const pRepoFile: string);
 var
   vOpt: TOrmVerbOptions;
@@ -441,7 +580,72 @@ begin
   end;
 end;
 
-function DifferingRegions(const pOld, pNew: string; out pLevel: Integer): string;
+{ The 1.54 generator differs from TableTools on purpose (owner rulings 2026-11-23). This turns a
+  region the generator wrote back into what TableTools wrote, one named change at a time, so a unit
+  that differs ONLY by those changes is DELIBERATE-DRIFT and any other difference is DIFFERENT. }
+function LegacyForm(const pId, pBody: string): string;
+var
+  vLine, vT: string;
+  vSynth: Boolean;
+
+  function OldAccessor(const pText: string): string;
+  begin
+    Result := TRegEx.Replace(pText, '\b(Get|Set)NAME\b', '$1ZNAME');
+  end;
+
+begin
+  Result := '';
+  vSynth := False;
+  for vLine in OrmSplitLines(pBody) do
+  begin
+    vT := vLine;
+    if pId = '4' then
+    begin
+      if vT.Trim.StartsWith('var LSource:= Tmc') and vT.EndsWith('(Source);') then
+        Continue;
+      vT := TRegEx.Replace(vT, '^      Self\.f(\w+)(\s*):= LSource\.', '      f$1$2:= ');
+    end
+    else if pId = '6' then
+    begin
+      if vT.Trim.StartsWith('var LDest:= Tmc') and vT.EndsWith('(Dest);') then
+        Continue;
+      vT := TRegEx.Replace(vT, '^      LDest\.(\w+)(\s*):= Self\.f', '      $1$2:= f');
+    end
+    else if pId = '11' then
+    begin
+      if (vT = '  var EnumByte: Byte;') or (vT = '  var StreamLen: Integer;') then
+        Continue;
+      vT := vT.Replace('(EnumByte)', '(ByteTemp)').Replace(', StreamLen)', ', StreamSize)');
+    end
+    else if pId = '2' then
+    begin
+      if vT.StartsWith('/// Column ') then
+      begin
+        vT := '/// Summary here';
+        vSynth := True;
+      end
+      else if vSynth and vT.StartsWith('/// </summary>') then
+      begin
+        vT := vT + #13#10'/// <remarks>'#13#10'/// Remarks here'#13#10'/// </remarks>';
+        vSynth := False;
+      end;
+      vT := OldAccessor(vT);
+    end
+    else if pId = '1A' then
+      vT := OldAccessor(vT).Replace('const Value: string); reintroduce;', 'const Value: string);')
+    else if pId = '7' then
+      vT := OldAccessor(vT);
+    Result := Result + vT + #13#10;
+  end;
+end;
+
+const
+  LEVEL_DELIBERATE = 3;
+  LEVEL_DIFFERENT = 4;
+
+{ level: 0 byte-identical, 1 same ignoring blanks, 2 same ignoring blanks + case,
+  3 only deliberate drift (ids in pDeliberate), 4 different (ids in the result) }
+function DifferingRegions(const pOld, pNew: string; out pLevel: Integer; out pDeliberate: string): string;
 var
   vLines: TArray<string>;
   vId: string;
@@ -449,8 +653,8 @@ var
   vIds: TList<string>;
   vO, vN: string;
 begin
-  { level: 0 byte-identical, 1 same ignoring blanks, 2 same ignoring blanks + case, 3 different }
   Result := '';
+  pDeliberate := '';
   pLevel := 0;
   vIds := TList<string>.Create;
   try
@@ -468,9 +672,14 @@ begin
         pLevel := if pLevel < 1 then 1 else pLevel
       else if Squash(vO, True) = Squash(vN, True) then
         pLevel := if pLevel < 2 then 2 else pLevel
+      else if Squash(vO, True) = Squash(LegacyForm(vId, vN), True) then
+      begin
+        pLevel := if pLevel < LEVEL_DELIBERATE then LEVEL_DELIBERATE else pLevel;
+        pDeliberate := pDeliberate + vId + ' ';
+      end
       else
       begin
-        pLevel := 3;
+        pLevel := LEVEL_DIFFERENT;
         Result := Result + vId + ' ';
       end;
     end;
@@ -478,6 +687,7 @@ begin
     vIds.Free;
   end;
   Result := Result.Trim;
+  pDeliberate := pDeliberate.Trim;
 end;
 
 function Chg(const pOld, pNew: string): TOrmFileChange;
@@ -503,31 +713,43 @@ begin
   Check('D5 lines added at the end', vD.Contains('+b'#13#10'+c'#13#10), vD);
 end;
 
-procedure TestGoldenDetectors;var
+procedure TestGoldenDetectors;
+var
   vLevel: Integer;
-  vA: string;
+  vA, vDel, vNew: string;
 begin
   vA := 'x'#13#10 + Region('1', 'a b'#13#10);
   { positive controls: the golden's detectors must be able to fire }
   Check('G1 outside change is detected', OutsideRegions(vA) <> OutsideRegions('y'#13#10 + Region('1', 'a b'#13#10)));
   Check('G2 region-only change is not an outside change', OutsideRegions(vA) = OutsideRegions('x'#13#10 + Region('1', 'zzz'#13#10)));
-  Check('G3 blank-only difference = level 1', (DifferingRegions(vA, 'x'#13#10 + Region('1', 'ab'#13#10), vLevel) = '') and (vLevel = 1), IntToStr(vLevel));
-  Check('G4 case-only difference = level 2', (DifferingRegions(vA, 'x'#13#10 + Region('1', 'A B'#13#10), vLevel) = '') and (vLevel = 2), IntToStr(vLevel));
-  Check('G5 real difference = level 3 with the id', (DifferingRegions(vA, 'x'#13#10 + Region('1', 'c'#13#10), vLevel) = '1') and (vLevel = 3), IntToStr(vLevel));
-  Check('G6 identical = level 0', (DifferingRegions(vA, vA, vLevel) = '') and (vLevel = 0), IntToStr(vLevel));
+  Check('G3 blank-only difference = level 1', (DifferingRegions(vA, 'x'#13#10 + Region('1', 'ab'#13#10), vLevel, vDel) = '') and (vLevel = 1), IntToStr(vLevel));
+  Check('G4 case-only difference = level 2', (DifferingRegions(vA, 'x'#13#10 + Region('1', 'A B'#13#10), vLevel, vDel) = '') and (vLevel = 2), IntToStr(vLevel));
+  Check('G5 real difference = level 4 with the id', (DifferingRegions(vA, 'x'#13#10 + Region('1', 'c'#13#10), vLevel, vDel) = '1') and (vLevel = LEVEL_DIFFERENT), IntToStr(vLevel));
+  { deliberate drift: exactly the named change passes, the same change plus anything else does not }
+  vNew := '      var LSource:= TmcT(Source);'#13#10'      Self.fA   := LSource.A   ;'#13#10;
+  Check('G7 region 4 deliberate form', (DifferingRegions(Region('4', 'fA:=A;'#13#10), Region('4', vNew), vLevel, vDel) = '') and
+    (vLevel = LEVEL_DELIBERATE) and (vDel = '4'), vDel);
+  Check('G8 region 4 with another column is DIFFERENT', (DifferingRegions(Region('4', 'fB:=B;'#13#10), Region('4', vNew), vLevel, vDel) = '4') and (vLevel = LEVEL_DIFFERENT), vDel);
+  Check('G9 the same text in another region is DIFFERENT', (DifferingRegions(Region('5', 'fA:=A;'#13#10), Region('5', vNew), vLevel, vDel) = '5') and (vLevel = LEVEL_DIFFERENT), vDel);
+  Check('G10 a hand-written summary in the unit is DIFFERENT', (DifferingRegions(Region('2', '/// <summary>'#13#10'/// Mine'#13#10'/// </summary>'#13#10),
+    Region('2', '/// <summary>'#13#10'/// Column T.A.'#13#10'/// </summary>'#13#10), vLevel, vDel) = '2') and (vLevel = LEVEL_DIFFERENT), vDel);
+  Check('G11 a lost column is DIFFERENT', (DifferingRegions(Region('6', 'A:=fA;'#13#10'B:=fB;'#13#10),
+    Region('6', '      var LDest:= TmcT(Dest);'#13#10'      LDest.A   := Self.fA   ;'#13#10), vLevel, vDel) = '6') and (vLevel = LEVEL_DIFFERENT), vDel);
+  Check('G6 identical = level 0', (DifferingRegions(vA, vA, vLevel, vDel) = '') and (vLevel = 0), IntToStr(vLevel));
 end;
 
 function RunGolden(const pRepo, pObjects, pServer, pClient, pReport: string): Integer;
 const
-  LEVEL_NAME: array [0 .. 3] of string = ('BYTE-IDENTICAL', 'SAME-IGNORING-BLANKS', 'SAME-IGNORING-BLANKS-AND-CASE', 'DIFFERENT');
+  LEVEL_NAME: array [0 .. LEVEL_DIFFERENT] of string = ('BYTE-IDENTICAL', 'SAME-IGNORING-BLANKS',
+    'SAME-IGNORING-BLANKS-AND-CASE', 'DELIBERATE-DRIFT', 'DIFFERENT');
 var
   vConn: TFDConnection;
   vPlan: TArray<TOrmFileChange>;
   vSkipped, vOut: TStringList;
   C: TOrmFileChange;
   vLevel, vOutsideBad: Integer;
-  vCounts: array [0 .. 3] of Integer;
-  vIds, vNoRegion: string;
+  vCounts: array [0 .. LEVEL_DIFFERENT] of Integer;
+  vIds, vNoRegion, vDeliberate: string;
 begin
   FillChar(vCounts, SizeOf(vCounts), 0);
   vOutsideBad := 0;
@@ -538,7 +760,7 @@ begin
     vPlan := PlanUpdateOrm(vConn, pObjects, pServer, pClient, [], vSkipped);
     for C in vPlan do
     begin
-      vIds := DifferingRegions(C.OldText, C.NewText, vLevel);
+      vIds := DifferingRegions(C.OldText, C.NewText, vLevel, vDeliberate);
       Inc(vCounts[vLevel]);
       vNoRegion := '';
       if OutsideRegions(C.OldText) <> OutsideRegions(C.NewText) then
@@ -548,15 +770,16 @@ begin
       end;
       if not C.OldText.Contains('DB-RAD') then
         vNoRegion := vNoRegion + ' NO-REGIONS';
-      vOut.Add(Format('UNIT %s %s%s%s', [ExtractFileName(C.FileName), LEVEL_NAME[vLevel],
-        if vIds <> '' then ' regions=' + vIds else '', vNoRegion]));
+      vOut.Add(Format('UNIT %s %s%s%s%s', [ExtractFileName(C.FileName), LEVEL_NAME[vLevel],
+        if vIds <> '' then ' regions=' + vIds else '', vNoRegion,
+        if vDeliberate <> '' then ' deliberate=' + vDeliberate else '']));
     end;
     { regenerate INTO the folders given (the runner passes a COPY of ORM3) for side-by-side diffs }
     ApplyOrmChanges(vPlan, False);
     for vIds in vSkipped do
       vOut.Add('SKIPPED ' + vIds);
-    vOut.Add(Format('GOLDEN units=%d byte_identical=%d same_ignoring_blanks=%d same_ignoring_blanks_and_case=%d different=%d outside_changed=%d skipped=%d',
-      [Length(vPlan), vCounts[0], vCounts[1], vCounts[2], vCounts[3], vOutsideBad, vSkipped.Count]));
+    vOut.Add(Format('GOLDEN units=%d byte_identical=%d same_ignoring_blanks=%d same_ignoring_blanks_and_case=%d deliberate=%d different=%d outside_changed=%d skipped=%d',
+      [Length(vPlan), vCounts[0], vCounts[1], vCounts[2], vCounts[LEVEL_DELIBERATE], vCounts[LEVEL_DIFFERENT], vOutsideBad, vSkipped.Count]));
     vOut.SaveToFile(pReport, TEncoding.ASCII);
     Writeln(vOut[vOut.Count - 1]);
     Result := if vOutsideBad = 0 then 0 else 1;
@@ -567,10 +790,84 @@ begin
   end;
 end;
 
+{ ---- fixture for tests\fieldrepo\ormgen (run_fieldrepo_ormgen_run.ps1) ---- }
+
+{ The Assign / AssignTo header TableTools wrote around regions 4 and 6, put back into a freshly
+  generated unit: the region text must also be right under it. }
+function WithOldHeaders(const pText, pIdent: string): string;
+begin
+  Result := pText.Replace(
+    '  if Source is not Tmc' + pIdent + ' then'#13#10'    inherited'#13#10'  else'#13#10'  begin'#13#10,
+    '  if not (Source is Tmc' + pIdent + ') then'#13#10'    inherited'#13#10'  else'#13#10'    with Source as Tmc' + pIdent + ' do'#13#10'    begin'#13#10);
+  Result := Result.Replace(
+    '  if Dest is not Tmc' + pIdent + ' then'#13#10'    inherited'#13#10'  else'#13#10'  begin'#13#10,
+    '  if not (Dest is Tmc' + pIdent + ') then'#13#10'    inherited'#13#10'  else'#13#10'    with Dest as Tmc' + pIdent + ' do'#13#10'    begin'#13#10);
+end;
+
+procedure AddFixtureTables(pRepo: TFDConnection);
+begin
+  AddRow(pRepo, 'ORMFIX', 'ID', 'Int64', 'AsLargeInt', True, 'GEN_ORMFIX_ID', False, '', False, 1, 'Summary here', '0');
+  AddRow(pRepo, 'ORMFIX', 'NAME', 'string', 'AsString', False, '', False, '', False, 1, 'Summary here', '''N/A''');
+  AddRow(pRepo, 'ORMFIX', 'ACTIVE', 'Boolean', 'AsBoolean', False, '', False, '', False, 1, 'Summary here', 'FALSE');
+  AddRow(pRepo, 'ORMFIX', 'AMOUNT', 'double', 'AsFloat', False, '');
+  AddRow(pRepo, 'ORMFIX', 'QTY', 'integer', 'AsInteger', False, '');
+  AddRow(pRepo, 'ORMFIX', 'SMALLN', 'smallint', 'AsInteger', False, '');
+  AddRow(pRepo, 'ORMFIX', 'FLAG8', 'Byte', 'AsByte', False, '');
+  AddRow(pRepo, 'ORMFIX', 'STATUS', 'TOrderStatus', 'AsByte', False, '', True, 'TOrderStatus');
+  AddRow(pRepo, 'ORMFIX', 'STAMP', 'TSQLTimeStamp', 'AsSQLTimeStamp', False, '');
+  AddRow(pRepo, 'ORMFIX', 'WHENAT', 'TDateTime', 'AsDateTime', False, '', False, '', False, 1, '', '''01/01/2020''');
+  AddRow(pRepo, 'ORMFIX', 'RAW', 'TBytes', 'AsBytes', False, '');
+  AddRow(pRepo, 'ORMFIX', 'MEMO', 'TStringList', 'AsString', False, '', False, '', False, 1, 'Free text of the row');
+  AddRow(pRepo, 'ORMFIX', 'PIC', 'TPicture', 'AsBlob', False, '');
+  AddRow(pRepo, 'ORMFIX', 'BCD', 'TBcd', 'AsBCD', False, '');
+  AddRow(pRepo, 'ORMFIX', 'CALCF', 'string', 'AsString', False, '', False, '', True);
+  AddRow(pRepo, 'ORMFIX', 'INTERNALF', 'string', 'AsString', False, '', False, '', False, 2);
+  AddRow(pRepo, 'PLAINFIX', 'CODE', 'string', 'AsString', True, '');
+  AddRow(pRepo, 'PLAINFIX', 'LINE_NO', 'integer', 'AsInteger', True, '');
+  AddRow(pRepo, 'EMPTYFIX', 'ONLYCALC', 'string', 'AsString', False, '', False, '', True);
+end;
+
+{ <dir>\new = the units as generated; <dir>\old = the same units with the old 'with' headers }
+function RunEmitFixture(const pDir: string): Integer;
+const
+  ORM_TABLES: array [0 .. 2] of string = ('ORMFIX', 'PLAINFIX', 'EMPTYFIX');
+var
+  vConn: TFDConnection;
+  vNew, vOld, vFile, vText: string;
+begin
+  vNew := TPath.Combine(pDir, 'new');
+  vOld := TPath.Combine(pDir, 'old');
+  ForceDirectories(vNew);
+  ForceDirectories(vOld);
+  GDir := pDir;
+  vFile := TPath.Combine(pDir, 'fixture.dlrepo');
+  if TFile.Exists(vFile) then
+    TFile.Delete(vFile);
+  CreateRepository(vFile);
+  vConn := OpenRepository(vFile, False);
+  try
+    AddFixtureTables(vConn);
+    ApplyOrmChanges(PlanGenOrm(vConn, vNew, [ORM_TABLES[0], ORM_TABLES[1], ORM_TABLES[2]], FixedGuid), False);
+    ApplyOrmChanges(PlanGenDataService(vConn, vNew, vNew, [ORM_TABLES[0], ORM_TABLES[1]]), False);
+  finally
+    vConn.Free;
+  end;
+  for vFile in TDirectory.GetFiles(vNew, '*.pas') do
+  begin
+    vText := TFile.ReadAllText(vFile);
+    vText := WithOldHeaders(vText, TPath.GetFileNameWithoutExtension(vFile).Substring(1));
+    TFile.WriteAllText(TPath.Combine(vOld, ExtractFileName(vFile)), vText, TEncoding.ASCII);
+  end;
+  Writeln('EMITTED ', Length(TDirectory.GetFiles(vNew, '*.pas')));
+  Result := 0;
+end;
+
 var
   vRepo: TFDConnection;
 begin
   try
+    if (ParamCount = 2) and (ParamStr(1) = '--emit-fixture') then
+      Halt(RunEmitFixture(ParamStr(2)));
     if (ParamCount = 3) and (ParamStr(1) = '--import') then
       Halt(RunImport(ParamStr(2), ParamStr(3)));
     if (ParamCount = 6) and (ParamStr(1) = '--golden') then
@@ -584,6 +881,7 @@ begin
     try
       TestLoadAndSections(vRepo);
       TestBytesOutsideRegions(vRepo);
+      TestHeaderUpgrade(vRepo, TPath.Combine(GDir, 'fixture.dlrepo'));
       TestPlans(vRepo);
       { a column the units do not have yet, so the verb's dry run has a diff to show }
       AddRow(vRepo, 'ORDERS', 'BMOUNT', 'Double', 'AsFloat', False, '');

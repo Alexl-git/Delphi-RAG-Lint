@@ -8,3 +8,12 @@ iFIB_FIELDS_INFO.PAS                 repository has UI_TAG (and other columns) t
 uFIB_FIELDS_INFO.PAS                 same
 uFIB_FIELDS_INFO_SERVER.PAS          same
 uSTATIONS_SERVER.PAS                 region 9 hand-edited (Year > 0 guard, AsMemo, AsByteStr for STATIONTYPE)
+# @region <id> <the one change>: a region that differs from the unit ONLY by that change counts as
+# DELIBERATE-DRIFT (LegacyForm in OrmGenTests.dpr reverses exactly it). Any other difference in the
+# same region is still DIFFERENT. An @region no unit shows any more is STALE and fails: delete it.
+@region 1A  1.54 TT-GENFIX: SetZNAME/GetZNAME -> SetNAME (reintroduce) / GetNAME (property-accessor-name)
+@region 2   1.54 TT-GENFIX: 'Summary here' + 'Remarks here' -> a summary built from the row; NAME accessors
+@region 4   1.54 TT-GENFIX: 'fX:= X' -> 'var LSource' + 'Self.fX:= LSource.X' (Assign copied nothing)
+@region 6   1.54 TT-GENFIX: 'X:= fX' -> 'var LDest' + 'LDest.X:= Self.fX' (AssignTo copied nothing)
+@region 7   1.54 TT-GENFIX: GetZNAME/SetZNAME -> GetNAME/SetNAME
+@region 11  1.54 TT-GENFIX: ByteTemp of the method header -> 'var EnumByte' of the region (unused-local)
