@@ -25,7 +25,7 @@ type
   /// notifications (dropped, traced) and answers server-to-client requests via OnServerRequest
   /// (default: result null). The child is assigned to the drag-lint job object, so it never
   /// outlives the verb.</remarks>
-  TLspVerifyClient = class
+  TLspVerifyClient = class  // dl:ok high-response@2155 -- REVIEWED 2026-11-23: one cohesive job -- the child-process JSON-RPC session (spawn, initialize, didOpen, request, shutdown); the response set is the callee set of that single linear protocol script, not unrelated responsibilities
   strict private
     FExe     : string;
     FTrace   : string;

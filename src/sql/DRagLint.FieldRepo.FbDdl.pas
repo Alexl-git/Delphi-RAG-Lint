@@ -51,7 +51,7 @@ function ReadDdlFiles(const pFiles: TArray<string>): TFbDdlResult;
 /// <param name="pFileName">Label of the text, e.g. the file path.</param>
 /// <returns>As ReadDdlFiles.</returns>
 /// <exception cref="EFbDdlError">As ReadDdlFiles.</exception>
-function ReadDdlText(const pText, pFileName: string): TFbDdlResult;  // dl:ok unused-public-symbol@60b1 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
+function ReadDdlText(const pText, pFileName: string): TFbDdlResult;  // dl:ok unused-public-symbol@60b1, doc-drift@60b1 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index; REVIEWED 2026-11-23: the raise is one call away -- TDdlParser.Feed reports every malformed statement through TDdlParser.Fail, which raises EFbDdlError (line 194)
 
 implementation
 

@@ -66,7 +66,7 @@ type
   /// <summary>Reads and edits the settings of ONE project folder.</summary>
   /// <remarks>Not thread-safe; one instance per call, the caller frees it. Both
   /// files are read once in the constructor and held for the instance lifetime.</remarks>
-  TProjectSettings = class
+  TProjectSettings = class  // dl:ok high-response@8667 -- REVIEWED 2026-11-23: one cohesive job -- the two-file settings store (shared + local JSON): load, dotted-key get/set/remove, resolve and save; the callee set is the JSON object API plus path helpers of that one store
   strict private
     FAnchor          : string;
     FProjectFile     : string;
@@ -161,7 +161,7 @@ uses
   System.StrUtils
   , System.Math
   , System.IOUtils
-  , DRagLint.Core.Model
+  , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- DRAG_HOME_DIR is the name of the project anchor folder (_D-RAG) that holds drag-lint-project.json; one definition keeps this path in step with the anchor lookup everywhere else
   , DRagLint.Project.OwnRoots
   ;
 
@@ -609,6 +609,7 @@ var
   Child: TJSONObject;
 begin
   Result:= False;
+  if (pIdx < 0) or (pIdx > High(pSegs)) then Exit;
   P:= FindPair(pObj, pSegs[pIdx]);
   if P = nil then Exit;
   if pIdx = High(pSegs) then

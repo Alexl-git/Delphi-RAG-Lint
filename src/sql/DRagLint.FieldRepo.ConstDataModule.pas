@@ -48,7 +48,7 @@ uses
   FireDAC.Stan.Intf,
   FireDAC.Stan.StorageBin,
   DRagLint.FieldRepo.Schema,
-  DRagLint.FieldRepo.ConstMark;
+  DRagLint.FieldRepo.ConstMark; // dl:unit DRagLint.FieldRepo.ConstMark accepted -- CONST_MARK_NAME is the const-block marker ConstMark owns; the data module must emit the exact same name
 
 const
   CRLF = #13#10;

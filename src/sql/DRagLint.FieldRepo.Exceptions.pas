@@ -66,6 +66,14 @@ begin
   Result := (pRowValue = '') or SameText(pRowValue, pFindingValue);
 end;
 
+function RowMatchesTarget(const pRow: TFrException; const pFinding: TFrFinding): Boolean;
+begin
+  Result := KeyMatches(pRow.DatasetKey, pFinding.DatasetKey)
+    and KeyMatches(pRow.TableName, pFinding.TableName)
+    and KeyMatches(pRow.FieldName, pFinding.FieldName)
+    and KeyMatches(pRow.Prop, pFinding.Prop);
+end;
+
 function LoadExceptions(pConn: TFDConnection): TArray<TFrException>;
 var
   VQuery: TFDQuery;
@@ -77,7 +85,7 @@ begin
   VQuery := TFDQuery.Create(nil);
   try
     VQuery.Connection := pConn;
-    VQuery.Open('SELECT "RULE_ID", "DATASET_KEY", "TABLE_NAME", "FIELD_NAME", "PROP", "REASON" ' +
+    VQuery.Open('SELECT "RULE_ID", "DATASET_KEY", "TABLE_NAME", "FIELD_NAME", "PROP", "REASON" ' +  // dl:ok path-traversal@652f -- REVIEWED 2026-11-23: SQL text, not a path -- TFDQuery.Open of a constant SELECT, no variable part
       'FROM "DL_EXCEPTIONS" ORDER BY "RULE_ID", "DATASET_KEY", "TABLE_NAME", "FIELD_NAME", "PROP"');
     while not VQuery.Eof do
     begin
@@ -102,10 +110,7 @@ begin
   Result := False;
   for VRow in pExceptions do
     if ((VRow.RuleId = WILDCARD_RULE) or KeyMatches(VRow.RuleId, pFinding.RuleId))
-      and KeyMatches(VRow.DatasetKey, pFinding.DatasetKey)
-      and KeyMatches(VRow.TableName, pFinding.TableName)
-      and KeyMatches(VRow.FieldName, pFinding.FieldName)
-      and KeyMatches(VRow.Prop, pFinding.Prop) then
+      and RowMatchesTarget(VRow, pFinding) then
       Exit(True);
 end;
 

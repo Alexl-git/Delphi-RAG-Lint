@@ -173,7 +173,7 @@ uses
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
-  , DRagLint.Lint.SchemaRules       { 1.53 FR-LINT }
+  , DRagLint.Lint.SchemaRules       { 1.53 FR-LINT } // dl:unit DRagLint.Lint.SchemaRules accepted -- SCHEMA_LENGTH_BOUND_RULE and SCHEMA_MAXLEN_DRIFT_RULE are the rule ids of the two schema rules; the CLI names them only to route the rule selection (AddAll / LintRuleWants), the rules themselves live in that unit
   , DRagLint.Lint   .SharedUnit
   , DRagLint.Lint.Bookmarks { bookmarks verb: dl:bk comment anchors (E-BOOKMARKS) }
   , DRagLint.CLI.Bookmarks { bookmarks-strip / bookmarks-restore (E-BOOKMARKS phase 2) }
@@ -1819,7 +1819,7 @@ begin
     else if A = '--save' then Result.CompareSave:= True
     else if A = '--update-doc' then Result.UpdateDoc:= True
     { 1.53 SETTINGS-CORE: settings key/value words and --local are read from ParamStr by DRagLint.CLI.Settings }
-    else if (Result.Command = 'settings') and ((A = '--local') or not A.StartsWith('--')) then begin end
+    else if (Result.Command = 'settings') and ((A = '--local') or not A.StartsWith('--')) then begin end  // dl:ok empty-conditional@8764 -- REVIEWED 2026-11-23: intentional no-op arm -- the settings words and --local are read from ParamStr by CLI.Settings; this arm only stops them being taken as the path by the next arm
     else if ((Result.Path = '') or Result.PathFromConfig) and (not A.StartsWith('--')) then
     begin
       Result.Path          := A;
@@ -11582,7 +11582,7 @@ var
 begin
   Path:= AArgs.ConfigPath;
   { 1.53 SETTINGS: lint.config / lint.profile / taint.envSource from <anchor>\_D-RAG\drag-lint-project(.local).json }
-  SetAnchor:= TProjectSettings.ResolveAnchor(AArgs.ProjectPath, IfThen(AArgs.StandInFor <> '', AArgs.StandInFor, IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile)), AArgs.DbPath, '');
+  SetAnchor:= TProjectSettings.ResolveAnchor(AArgs.ProjectPath, (if AArgs.StandInFor <> '' then AArgs.StandInFor else if AArgs.Path <> '' then AArgs.Path else AArgs.InFile), AArgs.DbPath, '');
   { 1.53 BUGS: only the --db names this run, and the DB may be a copy away from its project: ask the index itself }
   var AnchorDb: string:= DbWhenNoFile(AArgs.DbPath, AArgs.StandInFor + AArgs.Path + AArgs.InFile);
   SetAnchor:= SettingsAnchorOr(SetAnchor, AnchorDb);
@@ -11647,7 +11647,7 @@ begin
   if Path = '' then
   begin
     var Anchor: string := AArgs.StandInFor;
-    if Anchor = '' then Anchor:= IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile);
+    if Anchor = '' then Anchor:= if AArgs.Path <> '' then AArgs.Path else AArgs.InFile;
     { ...AND THE --db PATH, which is the only anchor `lint-all` has.
 
       T3 anchored the per-file verb to its file and stopped there. `lint-all
@@ -29672,7 +29672,7 @@ begin
     else if Args.Command = 'verify-index'      then Result:= if NoDbResolved(Args.DbPath, 'verify-index') then 2 else RunVerifyIndexVerb(Args) { 1.53.0 LSP1-VERB: DRagLint.CLI.VerifyIndex }
     else if Args.Command = 'check-init'        then Result:= RunCheckInit(if Args.SubCommand <> '' then Args.SubCommand else Args.QName, Args.At, Args.DbPath, Args.ProjectPath, Args.AsJson or SameText(Args.Format, 'json'), Args.HbExplain, Args.MaxRoutines, Args.MaxSeconds) { 1.52 FRAME: DRagLint.CLI.CheckInit; v152 HBFIX --max-seconds }
     else if Args.Command = 'repo'              then Result:= RunRepoVerb(Args.SubCommand, Args.RepoPath, Args.ProjectPath, Args.FbConnection, Args.InFile, Args.Output, Args.Replace, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Repo }
-    else if Args.Command = 'settings'          then Result:= RunSettingsVerb(Args.SubCommand, IfThen(Args.ProjectFromConfig, '', Args.ProjectPath), IfThen(Args.DbFromConfig, '', Args.DbPath), Args.InFile, Args.AsJson or SameText(Args.Format, 'json')) { 1.53 SETTINGS-CORE: DRagLint.CLI.Settings }
+    else if Args.Command = 'settings'          then Result:= RunSettingsVerb(Args.SubCommand, (if Args.ProjectFromConfig then '' else Args.ProjectPath), (if Args.DbFromConfig then '' else Args.DbPath), Args.InFile, Args.AsJson or SameText(Args.Format, 'json')) { 1.53 SETTINGS-CORE: DRagLint.CLI.Settings }
     else if Args.Command = 'explain'           then Result:= RunExplain(if Args.SubCommand <> '' then Args.SubCommand else Args.Rule, Args.RulesDir, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Explain }
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)
     else if Args.Command = 'allow'             then Result:= DoAllow           (Args)

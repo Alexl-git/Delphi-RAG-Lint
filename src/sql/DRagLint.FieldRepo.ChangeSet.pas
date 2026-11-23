@@ -17,7 +17,7 @@ type
   TFrChangeOp = (fcoInsert, fcoUpdate, fcoDelete);
 
   /// <summary>Which way a sync flows; there is NO default direction (FU-3).</summary>
-  TFrDirection = (fdDbToRepo, fdRepoToDb, fdDfmToRepo, fdRepoToDfm);
+  TFrDirection = (fdDbToRepo, fdRepoToDb, fdDfmToRepo, fdRepoToDfm);  // dl:ok unused-enum-value@e430 -- REVIEWED 2026-11-23: the complete direction set of the spec (FU-3, no default direction); FrDirectionName maps all four through DIR_NAMES and tests/fieldrepo/ModelTests.dpr S2c names them; only fdDbToRepo has a producer so far
 
   /// <summary>One proposed change.</summary>
   TFrChange = record
@@ -50,7 +50,7 @@ type
 /// <summary>Command-line name of a direction: db-to-repo, repo-to-db, dfm-to-repo, repo-to-dfm.</summary>
 /// <param name="pDirection">The direction.</param>
 /// <returns>The name used in the header line and the JSON.</returns>
-function FrDirectionName(pDirection: TFrDirection): string;
+function FrDirectionName(pDirection: TFrDirection): string;  // dl:ok unused-public-symbol@43ca -- REVIEWED 2026-11-23: public API of the change-set model: tests/fieldrepo/ModelTests.dpr S2c calls it; outside this project index
 
 /// <summary>Renders a change set as ASCII text.</summary>
 /// <param name="pSet">The change set.</param>
