@@ -1781,7 +1781,7 @@ var
 
       SiteList:= nil;
       Shown   := 0;
-      for C:= 0 to High(Masking) do  // dl:ok index-possibly-out-of-range@5445 -- REVIEWED 2026-11-19 SLZ-MARK: MaskUnits is parallel to Masking, filled in the same loop
+      for C:= 0 to High(Masking) do
       begin
         if Shown >= CMaxDupSitesShown then Break;
         SiteList:= SiteList + [Format('%s:%d uses %s',
@@ -5547,7 +5547,7 @@ begin
       ProfLine('  (accessor-set parse)'    , TAccess);
       ProfLine('  (per-file store reads)'  , TOuter );
       var Listed: Int64:= TCirc + TGlob + TDupD + TCens + TPurity + TEnum + TRts + TUuiu + TGod + TUpub + TUpriv + TAccess + TOuter;
-      for var Li:= 0 to High(LapNames) do  // dl:ok index-possibly-out-of-range@11ef -- REVIEWED 2026-11-19 SLZ-MARK: LapTicks and LapNames are parallel arrays
+      for var Li:= 0 to High(LapNames) do
       begin
         ProfLine(LapNames[Li], LapTicks[Li]);
         Inc(Listed, LapTicks[Li]);

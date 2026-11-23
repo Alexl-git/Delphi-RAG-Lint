@@ -560,7 +560,7 @@ end;
 function TSeedRun.Fit(const pValue, pTable, pField: string; pCol: Integer): string;
 begin
   Result := pValue;
-  if (FStringMax[pCol] > 0) and (Length(Result) > FStringMax[pCol]) then  // dl:ok index-possibly-out-of-range@c6a6 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
+  if (FStringMax[pCol] > 0) and (Length(Result) > FStringMax[pCol]) then
   begin
     FWarnings.Add(Format('%s.%s %s cut to %d chars: %s', [pTable, pField, SCHEMA_COLS[pCol],
       FStringMax[pCol], pValue]));

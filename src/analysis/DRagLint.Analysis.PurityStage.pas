@@ -906,7 +906,7 @@ begin
   FScopeCount:= 0;
   SetLength(FInScope, Length(FRoutines));
   SetLength(FClassOf, Length(FRoutines));
-  for I:= 0 to High(FRoutines) do FClassOf[I]:= ClassIdOf(FRoutines[I]);  // dl:ok index-possibly-out-of-range@751c -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+  for I:= 0 to High(FRoutines) do FClassOf[I]:= ClassIdOf(FRoutines[I]);
   var HasScope: Boolean:= FStore.LastCallsScope(Scope);
   if HasScope and (GetEnvironmentVariable(ENV_NO_SCOPED_PURITY) <> '') then
   begin
@@ -920,7 +920,7 @@ begin
   end;
   if not HasScope then
   begin
-    for I:= 0 to High(FRoutines) do FInScope[I]:= True;  // dl:ok index-possibly-out-of-range@bed5 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+    for I:= 0 to High(FRoutines) do FInScope[I]:= True;
     FScopeCount:= Length(FRoutines);
     Exit;
   end;
@@ -935,7 +935,7 @@ begin
   try
     for var Fid in Scope.FileIds do ScopeFile.AddOrSetValue(Fid, True);
     for var N in Scope.Names do ScopeName.AddOrSetValue(LowerKey(N), True);
-    for I:= 0 to High(FRoutines) do  // dl:ok index-possibly-out-of-range@68a2 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+    for I:= 0 to High(FRoutines) do
       if ScopeFile.ContainsKey(FRoutines[I].FileId) then Mark(I)
       else if (not FFacts.TryGetValue(FRoutines[I].Id, F)) or (F.EffectFree < 0) then Mark(I)
       else if (FClassOf[I] <> 0) and ClassTouched(FClassOf[I]) then Mark(I);
@@ -977,7 +977,7 @@ begin
         Result.AddRange(FStore.CallerRoutinesOf(AId));
         CallersOf.Add(AId, Result);
       end;
-    for I:= 0 to High(FRoutines) do  // dl:ok index-possibly-out-of-range@68a2 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+    for I:= 0 to High(FRoutines) do
       if FClassOf[I] <> 0 then
       begin
         if not OfClass.TryGetValue(FClassOf[I], IxList) then
@@ -1030,7 +1030,7 @@ function TPurityRun.StoredSummary(AIndex: Integer): TEffectSummary;
 var
   F: TSymbolFacts;
 begin
-  if not FFacts.TryGetValue(FRoutines[AIndex].Id, F) then Exit(Default(TEffectSummary));  // dl:ok index-possibly-out-of-range@d195 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+  if not FFacts.TryGetValue(FRoutines[AIndex].Id, F) then Exit(Default(TEffectSummary));
   Result:= TEffectSummary.Decode(F.EffectSummary);
   Result.Witness:= F.EffectWitness;
 end;
@@ -1047,7 +1047,7 @@ begin
   begin
     var Files: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
     try
-      for var I:= 0 to High(FRoutines) do  // dl:ok index-possibly-out-of-range@0be8 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+      for var I:= 0 to High(FRoutines) do
         if FInScope[I] then Files.AddOrSetValue(FRoutines[I].FileId, True);
       FileIds:= Files.Keys.ToArray;
     finally
@@ -1080,7 +1080,7 @@ begin
   L:= TList<TSymbol>.Create;
   try
     if FScoped then
-      for var I:= 0 to High(FRoutines) do  // dl:ok index-possibly-out-of-range@0be8 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+      for var I:= 0 to High(FRoutines) do
         if FInScope[I] then
         begin
           var Up: TSymbol:= FRoutines[I];
@@ -1910,7 +1910,7 @@ var
   T        : Integer;
   CalleeSum: TEffectSummary;
 begin
-  if FUses[AIndex][AUse].IsBuiltin then CalleeSum:= FUses[AIndex][AUse].Builtin  // dl:ok index-possibly-out-of-range@adbb -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+  if FUses[AIndex][AUse].IsBuiltin then CalleeSum:= FUses[AIndex][AUse].Builtin
   else if FIndexOf.TryGetValue(FUses[AIndex][AUse].TargetId, T) then CalleeSum:= FSummary[T]
   else
   begin
@@ -2031,7 +2031,7 @@ function TPurityRun.SameComp(AIndex, AUse: Integer): Boolean;
 var
   T: Integer;
 begin
-  Result:= InScopeTarget(AIndex, AUse, T) and (FComp[T] = FComp[AIndex]);  // dl:ok index-possibly-out-of-range@8945 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+  Result:= InScopeTarget(AIndex, AUse, T) and (FComp[T] = FComp[AIndex]);
 end;
 
 { Strongly connected components of the scope's call graph (Tarjan, iterative:
@@ -2083,7 +2083,7 @@ begin
   SetLength(Low, Length(FRoutines));
   SetLength(Num, Length(FRoutines));
   SetLength(OnStack, Length(FRoutines));
-  for var I:= 0 to High(FRoutines) do  // dl:ok index-possibly-out-of-range@0be8 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+  for var I:= 0 to High(FRoutines) do
   begin
     FComp[I]:= -1;
     Num[I]:= -1;
@@ -2093,7 +2093,7 @@ begin
   Stack:= TStack<Integer>.Create;
   Work := TStack<TPair<Integer, Integer>>.Create;
   try
-    for var Root:= 0 to High(FRoutines) do  // dl:ok index-possibly-out-of-range@57a1 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+    for var Root:= 0 to High(FRoutines) do
     begin
       if (not FInScope[Root]) or (Num[Root] >= 0) then Continue;
       Work.Push(TPair<Integer, Integer>.Create(Root, 0));
@@ -2141,7 +2141,7 @@ begin
   RevIn:= TObjectDictionary<Integer, TList<Integer>>.Create([doOwnsValues]);
   Queue:= TQueue<Integer>.Create;
   try
-    for var I:= 0 to High(FRoutines) do  // dl:ok index-possibly-out-of-range@0be8 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+    for var I:= 0 to High(FRoutines) do
     begin
       FRank[I]:= MaxInt;
       if not FInScope[I] then Continue;
@@ -2175,7 +2175,7 @@ begin
     end;
     while Queue.Count > 0 do
     begin
-      T:= Queue.Dequeue;  // dl:ok index-possibly-out-of-range@aab4 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+      T:= Queue.Dequeue;
       if not RevIn.TryGetValue(T, L) then Continue;
       for var C in L do
         if FRank[C] = MaxInt then
@@ -2199,7 +2199,7 @@ var
   Best   : Integer;
   T      : Integer;
 begin
-  Result:= FLocal[AIndex];  // dl:ok index-possibly-out-of-range@e89d -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+  Result:= FLocal[AIndex];
   Result.Params:= Copy(FLocal[AIndex].Params);   { AddParam must not write through to FLocal }
   Changed:= False;
   for var J:= 0 to High(FUses[AIndex]) do
@@ -2222,7 +2222,7 @@ var
 begin
   ComputeComponents;
   ComputeSourceRanks;
-  for var I:= 0 to High(FRoutines) do  // dl:ok index-possibly-out-of-range@0be8 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+  for var I:= 0 to High(FRoutines) do
   begin
     if not FInScope[I] then Continue;
     W:= CanonicalSummaryOf(I);
@@ -2241,7 +2241,7 @@ begin
   FStats.EffectFree:= 0;
   Rows:= TList<TEffectFactRow>.Create;
   try
-    for var I:= 0 to High(FRoutines) do  // dl:ok index-possibly-out-of-range@0be8 -- REVIEWED 2026-11-19 (INCR18 step 4): a per-routine parallel array, SetLength'd to Length(FRoutines) (Load, DetermineScope, ComputeComponents, ComputeSourceRanks) before any index over FRoutines reaches it
+    for var I:= 0 to High(FRoutines) do
     begin
       { Counted over EVERY routine, so the summary line means the same thing
         on a scoped run; written for the scope only -- an outside row already
