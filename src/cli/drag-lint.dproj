@@ -131,6 +131,7 @@
         <DCCReference Include="..\parser\DRagLint.Parser.Markdown.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.TextNodes.pas"/>
         <DCCReference Include="..\sql\DRagLint.Sql.FbSnapshot.pas"/>
+        <DCCReference Include="..\sql\DRagLint.Sql.FbConnString.pas"/>
         <DCCReference Include="..\sql\DRagLint.Sql.OrmLinker.pas"/>
         <DCCReference Include="..\sql\DRagLint.Sql.Guarded.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.EngineHold.pas"/>
