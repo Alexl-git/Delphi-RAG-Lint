@@ -127,7 +127,7 @@ type
     DatasetKey: string;
   end;
 
-  TSchemaScan = class  // dl:ok high-response -- REVIEWED 2026-11-22 FR-LINT: one private scan object per run; the response set is its SQL / dictionary / text helpers, each method one target source
+  TSchemaScan = class  // dl:ok high-response@a48f -- REVIEWED 2026-11-22 FR-LINT: one private scan object per run; the response set is its SQL / dictionary / text helpers, each method one target source
   private
     FStore: ISymbolStore;
     FIndex: TFDConnection;

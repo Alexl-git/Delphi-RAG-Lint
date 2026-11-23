@@ -557,7 +557,7 @@ begin
   Result.DefaultVal:= ADefault;
 end;
 
-class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;  // dl:ok method-too-long@b13f -- REVIEWED 2026-11-21 SLZ-S05: 444 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;  // dl:ok method-too-long@8fe6 -- REVIEWED 2026-11-22 FR-LINT: 450 lines (+6, two catalog rows); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   L: TList<TRuleInfo>;
   procedure B(const AId, ACat, ASev, ATitle: string; AEnabled: Boolean = True;  // dl:ok too-many-parameters@2c1c -- REVIEWED 2026-11-21 SLZ-S05: 8 parameters; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
