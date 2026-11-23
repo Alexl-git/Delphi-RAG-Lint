@@ -61,6 +61,11 @@ interface
 function RunRuleScope(const pAction, pRuleId, pScope, pFile: string; pLine: Integer;
   const pReason, pProject, pConfigPath: string; pJson: Boolean): Integer;
 
+/// <summary>The nearest drag-lint-lint.json walking up from pDir: in each folder, then in its _D-RAG.</summary>
+/// <param name="pDir">The folder to start in.</param>
+/// <returns>The config path, or '' when none exists up to the drive root.</returns>
+function FindConfigAbove(const pDir: string): string;
+
 implementation
 
 uses

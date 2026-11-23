@@ -500,6 +500,7 @@ uses
   DRagLint.CLI.RepoConstGen in 'DRagLint.CLI.RepoConstGen.pas',
   DRagLint.CLI.RepoSchema in 'DRagLint.CLI.RepoSchema.pas',
   DRagLint.CLI.Explain in 'DRagLint.CLI.Explain.pas',
+  DRagLint.CLI.ConfigAnchor in 'DRagLint.CLI.ConfigAnchor.pas',
   DRagLint.CLI.RuleScope in 'DRagLint.CLI.RuleScope.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
