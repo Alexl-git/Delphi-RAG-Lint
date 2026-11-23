@@ -8,14 +8,6 @@ unit DRagLint.CLI.ConfigAnchor;
 
 interface
 
-/// <summary>The project source file (.dpr / .dpk / .lpr) an index was built from.</summary>
-/// <param name="pDbPath">The index file.</param>
-/// <returns>The full path, or '' when the index is not a project index (no project_tag), cannot be
-/// opened, holds no such file or several in different folders, or the file is not on this machine.</returns>
-/// <remarks>Opens the index read-only; the answer for the last pDbPath is kept, so repeated calls for one
-/// index open it once. Never raises for an unreadable index. Not thread-safe.</remarks>
-function IndexedProjectFile(const pDbPath: string): string;
-
 /// <summary>The index that anchors a run no file names.</summary>
 /// <param name="pDbPath">--db value, or ''.</param>
 /// <param name="pFile">The file the run is about (any of its names), or ''.</param>
@@ -99,6 +91,9 @@ begin
   if not TFile.Exists(GProjectFile) then GProjectFile:= '';
 end;
 
+{ The project source file (.dpr / .dpk / .lpr) pDbPath was built from; '' when it is not a project
+  index, cannot be opened, names no single project file, or the file is not on this machine. Opens the
+  index once per pDbPath. }
 function IndexedProjectFile(const pDbPath: string): string;
 begin
   LoadIndexFacts(pDbPath);

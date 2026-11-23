@@ -899,7 +899,7 @@ var
     Result := SubLiterals(pList);
     for lId in TRegEx.Matches(TRegEx.Replace(pList, '''[^'']*''', ''), '[A-Za-z_][A-Za-z0-9_]*') do
       if pConsts.TryValue(lId.Value, pFrom, pTo, lValue) then
-        Result := Result + [lValue]; // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-23 v153 BUGS: TArray<string> concat, not a string; a handful of sub-verb names per CLI routine
+        Result := Result + [lValue];
   end;
 
 begin
@@ -907,9 +907,9 @@ begin
   lSpan := Copy(pText, pFrom, pTo - pFrom);
   for lM in TRegEx.Matches(lSpan, '(?:Ansi)?(?:Same|Match|Index)Text\s*\(\s*' + CASE_WRAP_RE + pOperandRe
     + '\s*\)?\s*,\s*(\[[^\]]*\]|''[^'']*''|[A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]) do
-    Result := Result + Words(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
+    Result := Result + Words(lM.Groups[1].Value);
   for lM in TRegEx.Matches(lSpan, pOperandRe + '\s*(?:=|<>)\s*(''[^'']*''|[A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]) do
-    Result := Result + Words(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
+    Result := Result + Words(lM.Groups[1].Value);
 end;
 
 { B25: the routines pSpan hands the operand pOperandRe to as their FIRST argument (case fold allowed). }
