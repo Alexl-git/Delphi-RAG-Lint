@@ -24,6 +24,11 @@ const
   REPO_TABLE_LAYOUT_EVENTS = 'DL_LAYOUT_EVENTS';
   /// <summary>Name of the lint exception table (schema 2).</summary>
   REPO_TABLE_EXCEPTIONS = 'DL_EXCEPTIONS';
+  /// <summary>Schema-fact tables (schema 2, FR-SCHEMA): written only by the DB-to-repository change set.</summary>
+  REPO_TABLE_DOMAINS = 'DL_DOMAINS';
+  REPO_TABLE_CONSTRAINTS = 'DL_CONSTRAINTS';
+  REPO_TABLE_CONSTRAINT_COLUMNS = 'DL_CONSTRAINT_COLUMNS';
+  REPO_TABLE_GENERATORS = 'DL_GENERATORS';
   /// <summary>SQLite application_id of a field repository ('DLFR').</summary>
   REPO_APPLICATION_ID = $444C4652;
   /// <summary>File extension of a repository file.</summary>
@@ -199,6 +204,12 @@ function QuoteRepoIdent(const pName: string): string;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RepoTableDdl(const pTable: TRepoTable): string;  // dl:ok unused-public-symbol@5822
+
+/// <summary>The column definition of one column, as used inside CREATE TABLE and ALTER TABLE ADD COLUMN.</summary>
+/// <param name="pCol">The column.</param>
+/// <param name="pInlinePk">True to append an inline PRIMARY KEY (single-column keys only).</param>
+/// <returns>E.g. "DOMAIN_NAME" VARCHAR(68) CHECK (length("DOMAIN_NAME") &lt;= 68).</returns>
+function ColumnDdl(const pCol: TRepoColumn; pInlinePk: Boolean): string;
 
 /// <summary>Default repository path of a project: the project folder, then
 /// REPO_FOLDER_NAME, then the project base name with REPO_FILE_EXT.</summary>
@@ -436,7 +447,43 @@ begin
     Small('FIELD_SCALE'),
     Small('UI_TAG', '0')]);
   if pVersion >= 2 then
-    Result.Columns := Result.Columns + [Txt('CALC_BODY')];
+    Result.Columns := Result.Columns + [Txt('CALC_BODY'), Str('DOMAIN_NAME', 68),  // dl:ok large-magic-number@fd01, magic-literal@fd01
+      Col('CHAR_LENGTH', rckInteger, 0, False, '', 0)];
+end;
+
+function DomainsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_DOMAINS, '', [
+    Str('DOMAIN_NAME', 68, True, 1),  // dl:ok large-magic-number@fd02, magic-literal@fd02
+    Small('FIELD_TYPE'), Small('FIELD_SUBTYPE'), Small('FIELD_LENGTH'),
+    Col('CHAR_LENGTH', rckInteger, 0, False, '', 0),
+    Small('FIELD_SCALE'), Small('FIELD_PRECISION'), Small('NULL_FLAG'),
+    Txt('DEFAULT_SOURCE'), Txt('CHECK_SOURCE'), Str('CHARSET', 63)]);  // dl:ok large-magic-number@fd03, magic-literal@fd03
+end;
+
+function ConstraintsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_CONSTRAINTS, '', [
+    Str('CONSTRAINT_NAME', 68, True, 1),  // dl:ok large-magic-number@fd04, magic-literal@fd04
+    Str('TABLE_NAME', 68, True),  // dl:ok large-magic-number@fd05, magic-literal@fd05
+    Str('KIND', 10, True),  // dl:ok magic-literal@fd06
+    Str('REF_TABLE', 68),  // dl:ok large-magic-number@fd07, magic-literal@fd07
+    Str('REF_CONSTRAINT', 68),  // dl:ok large-magic-number@fd08, magic-literal@fd08
+    Str('UPDATE_RULE', 11),  // dl:ok magic-literal@fd09
+    Str('DELETE_RULE', 11)]);  // dl:ok magic-literal@fd0a
+end;
+
+function ConstraintColumnsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_CONSTRAINT_COLUMNS, '', [
+    Str('CONSTRAINT_NAME', 68, True, 1),  // dl:ok large-magic-number@fd0b, magic-literal@fd0b
+    Col('POSITION', rckInteger, 0, True, '', 2),
+    Str('COLUMN_NAME', 68, True)]);  // dl:ok large-magic-number@fd0c, magic-literal@fd0c
+end;
+
+function GeneratorsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_GENERATORS, '', [Str('GENERATOR_NAME', 68, True, 1)]);  // dl:ok large-magic-number@fd0d, magic-literal@fd0d
 end;
 
 function LayoutEventsTable: TRepoTable;
@@ -502,7 +549,8 @@ begin
     raise ERepoError.CreateFmt('Unknown repository schema version %d', [pVersion]);
   Result := [MetaTable, FieldsInfoTable(pVersion), DatasetsInfoTable, EnumValuesTable, ErrorMessagesTable];
   if pVersion >= 2 then
-    Result := Result + [LayoutEventsTable, ExceptionsTable];
+    Result := Result + [LayoutEventsTable, ExceptionsTable, DomainsTable, ConstraintsTable,
+      ConstraintColumnsTable, GeneratorsTable];
 end;
 
 function RepoTables: TArray<TRepoTable>;
@@ -759,7 +807,9 @@ begin
   Result := True;
   for Tab in RepoTablesFor(RepoSchemaVersion(pConnection)) do
     if (not SameText(Tab.Name, REPO_META_TABLE)) and (not SameText(Tab.Name, REPO_TABLE_LAYOUT_EVENTS))
-      and (not SameText(Tab.Name, REPO_TABLE_EXCEPTIONS)) and (RepoRowCount(pConnection, Tab.Name) > 0) then
+      and (not SameText(Tab.Name, REPO_TABLE_EXCEPTIONS)) and (not SameText(Tab.Name, REPO_TABLE_DOMAINS))
+      and (not SameText(Tab.Name, REPO_TABLE_CONSTRAINTS)) and (not SameText(Tab.Name, REPO_TABLE_CONSTRAINT_COLUMNS))
+      and (not SameText(Tab.Name, REPO_TABLE_GENERATORS)) and (RepoRowCount(pConnection, Tab.Name) > 0) then
       Exit(False);
 end;
 

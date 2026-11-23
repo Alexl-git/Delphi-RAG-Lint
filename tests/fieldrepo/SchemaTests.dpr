@@ -176,11 +176,12 @@ var
   vTab: TRepoTable;
 begin
   vTabs := RepoTables;
-  Check('12a REPO_SCHEMA_VERSION is 2 and RepoTables is the v2 set', (REPO_SCHEMA_VERSION = 2) and (Length(vTabs) = 7));
-  Check('12b v2 order ends DL_LAYOUT_EVENTS, DL_EXCEPTIONS',
+  Check('12a REPO_SCHEMA_VERSION is 2 and RepoTables is the v2 set', (REPO_SCHEMA_VERSION = 2) and (Length(vTabs) = 11));
+  Check('12b v2 order: DL_LAYOUT_EVENTS, DL_EXCEPTIONS, then the four schema tables',
     (vTabs[5].Name = 'DL_LAYOUT_EVENTS') and (vTabs[6].Name = 'DL_EXCEPTIONS'));
-  Check('12c v2 DL_FIELDS_INFO has 41 columns, CALC_BODY LAST (TEXT)',
-    (Length(vTabs[1].Columns) = 41) and (vTabs[1].Columns[40].Name = 'CALC_BODY') and (vTabs[1].Columns[40].Kind = rckText));
+  Check('12c v2 DL_FIELDS_INFO has 43 columns: CALC_BODY (TEXT), DOMAIN_NAME, CHAR_LENGTH last',
+    (Length(vTabs[1].Columns) = 43) and (vTabs[1].Columns[40].Name = 'CALC_BODY') and (vTabs[1].Columns[40].Kind = rckText)
+    and (vTabs[1].Columns[41].Name = 'DOMAIN_NAME') and (vTabs[1].Columns[42].Name = 'CHAR_LENGTH'));
   Check('12d layout events table: 5 columns, 4-part key, EVENT_CODE text',
     (Length(vTabs[5].Columns) = 5) and (Length(vTabs[5].PkColumns) = 4)
     and vTabs[5].FindColumn('EVENT_CODE', vCol) and (vCol.Kind = rckText) and (vCol.PkOrder = 0));

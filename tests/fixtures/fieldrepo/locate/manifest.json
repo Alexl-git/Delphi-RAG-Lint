@@ -1,0 +1,9 @@
+{
+  "indexes": {
+    "sections": [
+      { "name": "Man", "include": [ "man/App.dproj" ], "fieldRepository": "repos/man.dlrepo" },
+      { "name": "Both", "include": [ "both/App.dproj" ], "fieldRepository": "repos/manifest-both.dlrepo" },
+      { "name": "None", "include": [ "none/App.dproj" ] }
+    ]
+  }
+}

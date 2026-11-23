@@ -41,19 +41,48 @@ uses
   DRagLint.FieldRepo.TextBackup;
 
 const
-  PLAN_FMT = 'v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, create DL_LAYOUT_EVENTS, create DL_EXCEPTIONS, ' +
+  PLAN_FMT = 'v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, create DL_LAYOUT_EVENTS, ' +
+    'DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, ' +
     'FIELD_KIND 2 for %d ISCALCULATED rows, user_version 2';
   CALC_ROWS_SQL = 'SELECT COUNT(*) FROM "DL_FIELDS_INFO" WHERE "ISCALCULATED" = 1 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1)';
 
-procedure ApplyMigration(pConn: TFDConnection);
+{ The v2-only columns of DL_FIELDS_INFO and the v2-only tables are derived from the two table sets, so a column
+  or table a lane adds to v2 (FR-SCHEMA: DOMAIN_NAME, CHAR_LENGTH, the four schema tables) migrates with no edit here. }
+function FindTable(const pTables: TArray<TRepoTable>; const pName: string; out pTable: TRepoTable): Boolean;
 var
   VTable: TRepoTable;
 begin
+  for VTable in pTables do
+    if SameText(VTable.Name, pName) then
+    begin
+      pTable := VTable;
+      Exit(True);
+    end;
+  pTable := Default(TRepoTable);
+  Result := False;
+end;
+
+procedure AddV2Columns(pConn: TFDConnection);
+var
+  VCol, VOldCol: TRepoColumn;
+  VNew, VOld: TRepoTable;
+begin
+  FindTable(RepoTablesFor(2), 'DL_FIELDS_INFO', VNew);
+  FindTable(RepoTablesFor(1), 'DL_FIELDS_INFO', VOld);
+  for VCol in VNew.Columns do
+    if not VOld.FindColumn(VCol.Name, VOldCol) then
+      pConn.ExecSQL('ALTER TABLE "DL_FIELDS_INFO" ADD COLUMN ' + ColumnDdl(VCol, False));
+end;
+
+procedure ApplyMigration(pConn: TFDConnection);
+var
+  VTable, VOld: TRepoTable;
+begin
   pConn.StartTransaction;
   try
-    pConn.ExecSQL('ALTER TABLE "DL_FIELDS_INFO" ADD COLUMN "CALC_BODY" TEXT');
+    AddV2Columns(pConn);
     for VTable in RepoTablesFor(2) do
-      if SameText(VTable.Name, REPO_TABLE_LAYOUT_EVENTS) or SameText(VTable.Name, REPO_TABLE_EXCEPTIONS) then
+      if not FindTable(RepoTablesFor(1), VTable.Name, VOld) then
         pConn.ExecSQL(RepoTableDdl(VTable));
     pConn.ExecSQL('UPDATE "DL_FIELDS_INFO" SET "FIELD_KIND" = 2 WHERE "ISCALCULATED" = 1 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1)');
     SetRepoMeta(pConn, 'schema_version', '2');
