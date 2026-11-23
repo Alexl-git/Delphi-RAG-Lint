@@ -15,8 +15,15 @@ uses
   FireDAC.Comp.Client;
 
 const
-  /// <summary>Schema version of the repository; mirrored in PRAGMA user_version and DL_META.</summary>
-  REPO_SCHEMA_VERSION = 1;
+  /// <summary>Schema version a NEW repository is created with; mirrored in PRAGMA user_version and DL_META.
+  /// Version 2 (1.53) adds DL_FIELDS_INFO.CALC_BODY, DL_LAYOUT_EVENTS and DL_EXCEPTIONS.</summary>
+  REPO_SCHEMA_VERSION = 2;
+  /// <summary>Oldest schema version OpenRepository still accepts (1 = the 1.52 five-table layout).</summary>
+  REPO_SCHEMA_MIN_VERSION = 1;
+  /// <summary>Name of the layout event code table (schema 2): event code of non-DBTable layouts.</summary>
+  REPO_TABLE_LAYOUT_EVENTS = 'DL_LAYOUT_EVENTS';
+  /// <summary>Name of the lint exception table (schema 2).</summary>
+  REPO_TABLE_EXCEPTIONS = 'DL_EXCEPTIONS';
   /// <summary>SQLite application_id of a field repository ('DLFR').</summary>
   REPO_APPLICATION_ID = $444C4652;
   /// <summary>File extension of a repository file.</summary>
@@ -136,6 +143,19 @@ type
 /// </remarks>
 function RepoTables: TArray<TRepoTable>;
 
+/// <summary>The table set of one schema version: v1 = the five 1.52 tables; v2 = the same order with
+/// DL_FIELDS_INFO.CALC_BODY appended as its last column, then DL_LAYOUT_EVENTS and DL_EXCEPTIONS.
+/// RepoTables is RepoTablesFor(REPO_SCHEMA_VERSION).</summary>
+/// <param name="pVersion">1 or 2.</param>
+/// <returns>A fresh array of table descriptions.</returns>
+/// <exception cref="ERepoError">The version is outside REPO_SCHEMA_MIN_VERSION..REPO_SCHEMA_VERSION.</exception>
+function RepoTablesFor(pVersion: Integer): TArray<TRepoTable>;
+
+/// <summary>Reads PRAGMA user_version of an open repository connection.</summary>
+/// <param name="pConnection">A connected SQLite connection.</param>
+/// <returns>The schema version stored in the file.</returns>
+function RepoSchemaVersion(pConnection: TFDConnection): Integer;
+
 /// <summary>Looks a repository table up by name, case-insensitively.</summary>
 /// <param name="pName">Table name.</param>
 /// <param name="pTable">Receives the table when found.</param>
@@ -193,8 +213,10 @@ function RepoTableDdl(const pTable: TRepoTable): string;  // dl:ok unused-public
 /// </remarks>
 function DefaultRepoPath(const pProjectFile: string): string;
 
-/// <summary>Creates a new repository file with all five tables.</summary>
+/// <summary>Creates a new repository file with every table of the given schema version.</summary>
 /// <param name="pFileName">Target file; its folder is created.</param>
+/// <param name="pVersion">Schema version to create; default REPO_SCHEMA_VERSION (2). 1 exists for
+/// restoring a `#DLREPO 1` backup into a missing file and for tests.</param>
 /// <exception cref="ERepoError">The file already exists.</exception>
 /// <remarks>
 /// Sets application_id and user_version, journal_mode=DELETE, creates the tables
@@ -211,9 +233,10 @@ function DefaultRepoPath(const pProjectFile: string): string;
 /// <seealso cref="DRagLint.FieldRepo.Schema.SetRepoMeta"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-procedure CreateRepository(const pFileName: string);
+procedure CreateRepository(const pFileName: string; pVersion: Integer = REPO_SCHEMA_VERSION);
 
-/// <summary>Opens an existing repository and validates it.</summary>
+/// <summary>Opens an existing repository and validates it against the table set of ITS OWN
+/// schema version (1 or 2).</summary>
 /// <param name="pFileName">Repository file.</param>
 /// <param name="pReadOnly">True opens with OpenMode=ReadOnly.</param>
 /// <returns>A connected connection; the caller frees it. Its FormatOptions.StrsTrim is
@@ -262,7 +285,9 @@ procedure ValidateRepository(pConnection: TFDConnection);  // dl:ok unused-publi
 /// </remarks>
 function RepoRowCount(pConnection: TFDConnection; const pTableName: string): Integer;
 
-/// <summary>True when every repository table except DL_META has no rows.</summary>
+/// <summary>True when every repository table except DL_META, DL_LAYOUT_EVENTS and DL_EXCEPTIONS
+/// has no rows (the two schema-2 tables are user data a seed / import never writes, so they do not
+/// make a repository "non-empty"). Counts only the tables of the file's own schema version.</summary>
 /// <param name="pConnection">An open repository connection.</param>
 /// <returns>True for a freshly created repository.</returns>
 /// <exception cref="ERepoError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.Schema.RepoRowCount: Not a repository table: %s</exception>
@@ -367,7 +392,7 @@ begin
     Str('META_VALUE', 1000)]);  // dl:ok magic-literal@cc89
 end;
 
-function FieldsInfoTable: TRepoTable;
+function FieldsInfoTable(pVersion: Integer): TRepoTable;
 begin
   Result := MakeTable('DL_FIELDS_INFO', 'FIB$FIELDS_INFO', [
     Str('TABLE_NAME', 68, True, 1),  // dl:ok large-magic-number@fcb2, magic-literal@fcb2
@@ -410,6 +435,29 @@ begin
     Small('FIELD_LENGTH'),
     Small('FIELD_SCALE'),
     Small('UI_TAG', '0')]);
+  if pVersion >= 2 then
+    Result.Columns := Result.Columns + [Txt('CALC_BODY')];
+end;
+
+function LayoutEventsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_LAYOUT_EVENTS, '', [
+    Str('TABLE_NAME', 68, True, 1),
+    Str('FIELD_NAME', 68, True, 2),
+    Str('LAYOUT_TYPE', 40, True, 3),
+    Str('EVENT_NAME', 63, True, 4),
+    Txt('EVENT_CODE')]);
+end;
+
+function ExceptionsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_EXCEPTIONS, '', [
+    Col('RULE_ID', rckString, 63, True, '', 1),
+    Col('DATASET_KEY', rckString, 255, True, '''''', 2),
+    Col('TABLE_NAME', rckString, 68, True, '''''', 3),
+    Col('FIELD_NAME', rckString, 68, True, '''''', 4),
+    Col('PROP', rckString, 63, True, '''''', 5),
+    Str('REASON', 220, True)]);
 end;
 
 function DatasetsInfoTable: TRepoTable;
@@ -448,9 +496,23 @@ begin
     Col('CONSTR_TYPE', rckString, 15, True, '''UNIQUE''', 0)]);  // dl:ok magic-literal@2a00
 end;
 
+function RepoTablesFor(pVersion: Integer): TArray<TRepoTable>;
+begin
+  if (pVersion < REPO_SCHEMA_MIN_VERSION) or (pVersion > REPO_SCHEMA_VERSION) then
+    raise ERepoError.CreateFmt('Unknown repository schema version %d', [pVersion]);
+  Result := [MetaTable, FieldsInfoTable(pVersion), DatasetsInfoTable, EnumValuesTable, ErrorMessagesTable];
+  if pVersion >= 2 then
+    Result := Result + [LayoutEventsTable, ExceptionsTable];
+end;
+
 function RepoTables: TArray<TRepoTable>;
 begin
-  Result := [MetaTable, FieldsInfoTable, DatasetsInfoTable, EnumValuesTable, ErrorMessagesTable];
+  Result := RepoTablesFor(REPO_SCHEMA_VERSION);
+end;
+
+function RepoSchemaVersion(pConnection: TFDConnection): Integer;
+begin
+  Result := pConnection.ExecSQLScalar('PRAGMA user_version');
 end;
 
 function TRepoTable.PkColumns: TArray<TRepoColumn>;
@@ -584,24 +646,26 @@ begin
   end;
 end;
 
-procedure CreateRepository(const pFileName: string);
+procedure CreateRepository(const pFileName: string; pVersion: Integer);
 var
   Conn: TFDConnection;
   Tab: TRepoTable;
+  Tables: TArray<TRepoTable>;
 begin
+  Tables := RepoTablesFor(pVersion);
   if TFile.Exists(pFileName) then
     raise ERepoError.CreateFmt('Repository already exists: %s', [pFileName]);
   TDirectory.CreateDirectory(ExtractFilePath(ExpandFileName(pFileName)));
   Conn := NewConnection(pFileName, 'CreateUTF8');
   try
     Conn.ExecSQL('PRAGMA application_id = ' + IntToStr(REPO_APPLICATION_ID));
-    Conn.ExecSQL('PRAGMA user_version = ' + IntToStr(REPO_SCHEMA_VERSION));
+    Conn.ExecSQL('PRAGMA user_version = ' + IntToStr(pVersion));
     Conn.ExecSQLScalar('PRAGMA journal_mode = DELETE');
     Conn.StartTransaction;
     try
-      for Tab in RepoTables do
+      for Tab in Tables do
         Conn.ExecSQL(RepoTableDdl(Tab));
-      SetRepoMeta(Conn, 'schema_version', IntToStr(REPO_SCHEMA_VERSION));
+      SetRepoMeta(Conn, 'schema_version', IntToStr(pVersion));
       Conn.Commit;
     except
       Conn.Rollback;
@@ -656,10 +720,10 @@ begin
     raise ERepoSchemaError.CreateFmt('Not a field repository: application_id is %d, expected %d',
       [Id, REPO_APPLICATION_ID]);
   Ver := pConnection.ExecSQLScalar('PRAGMA user_version');
-  if Ver <> REPO_SCHEMA_VERSION then
-    raise ERepoSchemaError.CreateFmt('Unsupported repository schema: user_version is %d, expected %d',
-      [Ver, REPO_SCHEMA_VERSION]);
-  for Tab in RepoTables do
+  if (Ver < REPO_SCHEMA_MIN_VERSION) or (Ver > REPO_SCHEMA_VERSION) then
+    raise ERepoSchemaError.CreateFmt('Unsupported repository schema: user_version is %d, expected %d..%d',
+      [Ver, REPO_SCHEMA_MIN_VERSION, REPO_SCHEMA_VERSION]);
+  for Tab in RepoTablesFor(Ver) do
     ValidateColumns(pConnection, Tab);
 end;
 
@@ -693,8 +757,9 @@ var
   Tab: TRepoTable;
 begin
   Result := True;
-  for Tab in RepoTables do
-    if (not SameText(Tab.Name, REPO_META_TABLE)) and (RepoRowCount(pConnection, Tab.Name) > 0) then
+  for Tab in RepoTablesFor(RepoSchemaVersion(pConnection)) do
+    if (not SameText(Tab.Name, REPO_META_TABLE)) and (not SameText(Tab.Name, REPO_TABLE_LAYOUT_EVENTS))
+      and (not SameText(Tab.Name, REPO_TABLE_EXCEPTIONS)) and (RepoRowCount(pConnection, Tab.Name) > 0) then
       Exit(False);
 end;
 

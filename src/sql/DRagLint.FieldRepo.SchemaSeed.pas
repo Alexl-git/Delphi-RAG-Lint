@@ -617,7 +617,8 @@ begin
     Q.Connection := FConn;
     Q.Open(
       'SELECT rowid, TRIM("TABLE_NAME"), TRIM("FIELD_NAME") FROM ' + QuoteRepoIdent(FIELDS_TABLE) +  // dl:ok path-traversal@366d -- SQL text, not a path: identifiers go through QuoteRepoIdent
-      ' WHERE "ISCALCULATED" = 0 AND "ISLOOKUP" = 0 AND ' + SQL_NOT_SYSTEM + ' ORDER BY 2, 3');
+      ' WHERE "ISCALCULATED" = 0 AND "ISLOOKUP" = 0 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1) AND ' +
+      SQL_NOT_SYSTEM + ' ORDER BY 2, 3');
     while not Q.Eof do
     begin
       Table := Q.Fields[1].AsString;
@@ -631,7 +632,7 @@ begin
     end;
     Q.Close;
     for RowId in RowIds do
-      FConn.ExecSQL('UPDATE ' + QuoteRepoIdent(FIELDS_TABLE) + ' SET "ISCALCULATED" = 1 WHERE rowid = :R',
+      FConn.ExecSQL('UPDATE ' + QuoteRepoIdent(FIELDS_TABLE) + ' SET "ISCALCULATED" = 1, "FIELD_KIND" = 2 WHERE rowid = :R',
         [RowId], [ftLargeint]);
     Inc(pRes.Orphaned, RowIds.Count);
   finally
@@ -685,7 +686,8 @@ begin
     begin
       Pk := PkOf(Table);
       AllFields := ReadNames('SELECT TRIM("FIELD_NAME") FROM ' + QuoteRepoIdent(FIELDS_TABLE) +
-        ' WHERE TRIM("TABLE_NAME") = :T AND "ISCALCULATED" = 0 AND "ISLOOKUP" = 0 ORDER BY "FIELD_NAME"', [Table]);
+        ' WHERE TRIM("TABLE_NAME") = :T AND "ISCALCULATED" = 0 AND "ISLOOKUP" = 0 ' +
+          'AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1) ORDER BY "FIELD_NAME"', [Table]);
       if (Length(Pk) = 0) or (Length(AllFields) = 0) then
       begin
         Inc(pRes.DatasetsSkipped);

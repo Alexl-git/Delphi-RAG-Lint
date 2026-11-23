@@ -71,11 +71,11 @@ var
   Cols, Vals: string;
   Ti, Row: Integer;
 begin
-  CreateRepository(pFile);
+  CreateRepository(pFile, 1);  { FR-MODEL: the 4-tab fixture is a schema-1 repository; the schema-2 tables are no tabs }
   Conn := OpenRepository(pFile, False);
   try
     Ti := 0;
-    for Table in RepoTables do
+    for Table in RepoTablesFor(1) do
     begin
       if SameText(Table.Name, REPO_META_TABLE) then
         Continue;

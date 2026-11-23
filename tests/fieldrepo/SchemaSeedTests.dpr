@@ -475,6 +475,12 @@ begin
     { vanished column + a new table }
     vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME", "FIELD_NAME") VALUES (''RDB$FAKE'', ''F'')');
     vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME", "FIELD_NAME") VALUES (''V_ORDERS'', ''EXTRA'')');
+    { FR-MODEL: calc (2), aggregate (5) and graphical (10) rows are not orphans }
+    vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME", "FIELD_NAME", "FIELD_KIND", "ISCALCULATED", "CALC_BODY") ' +
+      'VALUES (''ORDERS'', ''CALCF'', 2, 1, ''{{CALCF}} := 1;'')');
+    vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME", "FIELD_NAME", "FIELD_KIND") VALUES (''ORDERS'', ''AGGF'', 5)');
+    vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME", "FIELD_NAME", "FIELD_KIND") VALUES (''ORDERS'', ''PICF'', 10)');
+    vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME", "FIELD_NAME", "FIELD_KIND") VALUES (''ORDERS'', ''LOOKF'', 3)');
     vOpt.DropOrdersName := True;
     vOpt.AddNewTable := True;
     FreeSchemaSources(vSrc);
@@ -485,6 +491,14 @@ begin
       (FieldVal(vConn, 'ORDERS', 'NAME', 'DISPLAY_LABEL') = 'Customer') and (vRes.Orphaned = 1) and
       HasLine(vRes.Diff, '! FIELD ORDERS.NAME ISCALCULATED (column vanished)'),
       Format('orphaned=%d', [vRes.Orphaned]));
+    Check('O1b a vanished data column becomes FIELD_KIND 2 (calc)',
+      FieldVal(vConn, 'ORDERS', 'NAME', 'FIELD_KIND') = '2', FieldVal(vConn, 'ORDERS', 'NAME', 'FIELD_KIND'));
+    Check('O1c calc / aggregate / graphical / lookup rows survive refresh unchanged',
+      (FieldVal(vConn, 'ORDERS', 'CALCF', 'FIELD_KIND') = '2') and (BoolVal(vConn, 'ORDERS', 'CALCF', 'ISCALCULATED') = 1)
+      and (FieldVal(vConn, 'ORDERS', 'CALCF', 'CALC_BODY') = '{{CALCF}} := 1;')
+      and (FieldVal(vConn, 'ORDERS', 'AGGF', 'FIELD_KIND') = '5') and (BoolVal(vConn, 'ORDERS', 'AGGF', 'ISCALCULATED') = 0)
+      and (FieldVal(vConn, 'ORDERS', 'PICF', 'FIELD_KIND') = '10') and (BoolVal(vConn, 'ORDERS', 'PICF', 'ISCALCULATED') = 0)
+      and (FieldVal(vConn, 'ORDERS', 'LOOKF', 'FIELD_KIND') = '3') and (BoolVal(vConn, 'ORDERS', 'LOOKF', 'ISCALCULATED') = 0));
     Check('O2 present columns stay non-calculated (control)',
       (BoolVal(vConn, 'ORDERS', 'QTY', 'ISCALCULATED') = 0) and
       (BoolVal(vConn, 'ORDERS', 'ID', 'ISCALCULATED') = 0));
