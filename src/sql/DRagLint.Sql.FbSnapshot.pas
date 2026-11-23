@@ -41,7 +41,6 @@ uses
   , FireDAC .Phys    .FB
   , FireDAC .Phys    .FBDef
   , DRagLint.Storage .SQLite
-  , DRagLint.Sql     .FbConnString
   ;
 
 type
@@ -96,6 +95,7 @@ implementation
 uses
   Data.DB
   , FireDAC.Stan.Param
+  , DRagLint.Sql.FbConnString
   ;
 
 function TableExists(AConn: TFDConnection; const AName: string): Boolean;

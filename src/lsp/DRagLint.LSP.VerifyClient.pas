@@ -239,7 +239,7 @@ begin
     if Line.ToLower.StartsWith('content-length:') then
       BodyLen:= StrToIntDef(Trim(Copy(Line, Length('content-length:') + 1, MaxInt)), -1);
   if BodyLen < 0 then BodyLen:= 0;   { unreadable header: drop it, keep going }
-  Total:= HdrEnd + Length(CRLF2) + BodyLen;  // dl:ok index-possibly-out-of-range@8128 -- REVIEWED 2026-11-23 LSP1-VERB: Total <= the old FAccLen <= Length(FAcc) (checked by FAccLen < Total above); the Move runs only when Total < Length(FAcc)
+  Total:= HdrEnd + Length(CRLF2) + BodyLen;
   if FAccLen < Total then Exit;
   pBody:= TEncoding.UTF8.GetString(FAcc, HdrEnd + Length(CRLF2), BodyLen);
   Dec(FAccLen, Total);

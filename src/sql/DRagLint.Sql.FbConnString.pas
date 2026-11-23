@@ -22,7 +22,7 @@ const
 /// with no '=' counts too); 'line break' when the string holds a CR or LF; '' when the string is acceptable.</returns>
 /// <remarks>Pure and thread-safe. Only a canonical key name or 'line break' is returned, never a value, so the
 /// result is safe to print.</remarks>
-function FbForbiddenKey(const pConnection: string): string;
+function FbForbiddenKey(const pConnection: string): string;  // dl:ok unused-public-symbol@7975 -- REVIEWED 2026-11-23 INT-FINAL: the pure key check is the public test seam; tests\fieldrepo\FbConnStringTests.dpr (outside the indexed project) calls it directly, RequireFbConnectionSafe is the production entry
 
 /// <summary>Refuses a connection string with a forbidden key before anything is opened.</summary>
 /// <param name="pConnection">The --connection value.</param>

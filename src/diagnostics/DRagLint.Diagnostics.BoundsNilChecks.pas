@@ -6419,7 +6419,7 @@ begin
   end;
 end;
 { Write W leaves AX + AOff on the side AQ asks for, as AX is read at AAt. }
-function TBnRun.EventSide(const W: TTSNode; const AX: string; const AAt: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@c9cf -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
+function TBnRun.EventSide(const W: TTSNode; const AX: string; const AAt: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@c9cf, cyclomatic-complexity@1dec -- REVIEWED 2026-11-23 SLZ-IDXFP + INT-FINAL: guard clauses per syntax shape; each early exit is a classification and each branch one shape
 var
   Args, Rhs, S: TTSNode;
   K: Integer;
@@ -6458,7 +6458,7 @@ begin
   if S.IsNull or not RunsInBlock(W, S) then Exit;
   S:= S.NextNamedSibling;
   while (not S.IsNull) and IsTrivia(S) do S:= S.NextNamedSibling;
-  Result:= (not S.IsNull) and (S.NodeType = 'if') and IsLeaveStmt(S.ChildByField('then')) and ((AAt.StartByte >= S.EndByte) or (AAt.EndByte <= W.StartByte))
+  Result:= (not S.IsNull) and (S.NodeType = 'if') and IsLeaveStmt(S.ChildByField('then')) and ((AAt.StartByte >= S.EndByte) or (AAt.EndByte <= W.StartByte))  // dl:ok boolean-expression-complexity@efdc -- REVIEWED 2026-11-23 INT-FINAL: one named-by-comment condition (an if that leaves, with the access outside it); a helper would only rename it
     and FactSide(S.ChildByField('condition'), AX, True, AQ, AOff, ADepth + 1);
 end;
 
