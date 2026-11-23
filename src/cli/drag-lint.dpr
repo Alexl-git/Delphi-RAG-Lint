@@ -494,6 +494,8 @@ uses
   DRagLint.CLI.ConvertApplyJson in 'DRagLint.CLI.ConvertApplyJson.pas',
   DRagLint.CLI.ConvertApply in 'DRagLint.CLI.ConvertApply.pas',
   DRagLint.CLI.CheckInit in 'DRagLint.CLI.CheckInit.pas',
+  DRagLint.CLI.VerifyIndex in 'DRagLint.CLI.VerifyIndex.pas',
+  DRagLint.LSP.VerifyClient in '..\lsp\DRagLint.LSP.VerifyClient.pas',
   DRagLint.CLI.Repo in 'DRagLint.CLI.Repo.pas',
   DRagLint.CLI.Settings in 'DRagLint.CLI.Settings.pas',
   DRagLint.CLI.RepoParamArray in 'DRagLint.CLI.RepoParamArray.pas',
