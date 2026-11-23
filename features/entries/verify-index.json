@@ -1,0 +1,80 @@
+{
+  "id": "verify-index",
+  "title": "verify-index",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "1.52.3-alpha",
+  "summary": "Measures drag-lint resolution against DelphiLSP: samples resolved references and reports the mismatch rate and the rows",
+  "intro": "Internal measurement verb: takes a deterministic sample of resolved references from one project index, asks DelphiLSP where each name is declared, and reports how often the two disagree; read-only, needs a .delphilsp.json.",
+  "wikiPage": "verify-index",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "verify-index",
+      "usage": "drag-lint verify-index (--db <db> | --project <x.dproj>) [--delphi-lsp-config <file>] [--sample N] [--seed N] [--delphi-lsp <exe>] [--delphi-lsp-bits 32|64] [--timeout-ms N] [--warmup-ms N] [--trace <file>] [--dry-run] [--json] (internal: mismatch rate of the index vs DelphiLSP)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--project",
+          "arg": "FILE"
+        },
+        {
+          "name": "--delphi-lsp-config",
+          "arg": "FILE"
+        },
+        {
+          "name": "--sample",
+          "arg": "N"
+        },
+        {
+          "name": "--seed",
+          "arg": "N"
+        },
+        {
+          "name": "--delphi-lsp",
+          "arg": "EXE"
+        },
+        {
+          "name": "--delphi-lsp-bits",
+          "arg": "32|64"
+        },
+        {
+          "name": "--timeout-ms",
+          "arg": "N"
+        },
+        {
+          "name": "--warmup-ms",
+          "arg": "N"
+        },
+        {
+          "name": "--trace",
+          "arg": "FILE"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "agent",
+  "questions": [
+    {
+      "ask": "How often does the index resolve a name differently from the compiler?",
+      "command": "drag-lint verify-index --project <x.dproj> --db <copy.sqlite>"
+    }
+  ],
+  "notes": "internal: 1.53.0 slice of LSP1-VERIFY; read-only; needs a .delphilsp.json (RAD Studio writes it when the project is opened).",
+  "verified": {
+    "date": "2026-11-23",
+    "by": "ENGINE",
+    "build": "1.52.3-alpha",
+    "surfaceHash": "a1102cd17b96b78462236b8c99254e3274ce09eb080a37fc30a51c93e8125457"
+  }
+}

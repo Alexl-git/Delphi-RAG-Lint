@@ -39,6 +39,7 @@ uses
   , System.Classes
   , System.IOUtils
   , System.JSON
+  , System.NetEncoding
   ;
 
 const
@@ -86,6 +87,11 @@ const
     EOF, because a scripted session that ends cleanly is not the exit-code
     test. The delay is what lets a merge guard blow a budget on purpose. }
   SCRIPT_ENV_VAR = 'DRAGLINT_STUB_SCRIPT';
+
+  { POSITION KEY (verify-index guard). A script line whose method is
+    <method>@<file>:<line0>:<char0> (file = URI basename, URL-decoded; line and
+    character as sent, 0-based) answers only a request at that exact position and
+    is tried before the plain <method> line. }
 
   { REQUEST LOG (scripted mode). One line per received frame:
     <method> TAB <id-or-dash>, so a guard can prove which frames the proxy
@@ -188,6 +194,10 @@ var
   IdText: string;
   Entry : TScriptLine;
   Found : Boolean;
+  PosKey: string;
+  Uri   : string;
+  PLine : Integer;
+  PChar : Integer;
 begin
   Json:= TJSONObject.ParseJSONValue(ABody);
   try
@@ -200,6 +210,19 @@ begin
       TFile.AppendAllText(ALogPath, Method + #9 + IdText + #13#10, TEncoding.ASCII);
     if (IdVal = nil) or (Method = '') then Exit;   { notification, or a client response }
     Found:= False;
+    PosKey:= '';
+    if Obj.TryGetValue<string>('params.textDocument.uri', Uri) and Obj.TryGetValue<Integer>('params.position.line', PLine)
+      and Obj.TryGetValue<Integer>('params.position.character', PChar) then
+      PosKey:= Method + '@' + TNetEncoding.URL.Decode(Copy(Uri, LastDelimiter('/', Uri) + 1, MaxInt)) + ':' + IntToStr(PLine) + ':' + IntToStr(PChar);
+    if PosKey <> '' then
+      for Entry in AScript do
+        if (not Found) and (Entry.Method = PosKey) then
+        begin
+          Found:= True;
+          if Entry.DelayMs > 0 then Sleep(Entry.DelayMs);
+          WriteFrame(AOut, '{"jsonrpc":"2.0","id":' + IdText + ',"result":' + Entry.Result + '}');
+        end;
+    if not Found then
     for Entry in AScript do
       if Entry.Method = Method then
       begin
