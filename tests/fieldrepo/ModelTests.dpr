@@ -464,7 +464,7 @@ begin
     MakeChange(3, fcoDelete, 'DL_FIELDS_INFO MSCLIST|OLD', '', 'gone', '', ''),
     MakeChange(4, fcoUpdate, 'MSCLIST.DIMABBR', 'FIELD_SIZE', '20', 'caf' + WideChar($E9), 'Firebird refuses: data in the column')];
   vText := RenderChangeSetText(vSet);
-  Check('S1a header line', vText[0] = 'direction db-to-repo, 4 changes, 1 blocked', vText[0]);
+  Check('S1a header line', vText[0] = 'direction db-to-repo, 4 changes, 1 blocked, 0 unchecked', vText[0]);
   Check('S1b update line', vText[2] = '[2] update DL_FIELDS_INFO MSCLIST|DIMABBR DISPLAY_WIDTH: 10 -> 12', vText[2]);
   Check('S1c insert and delete lines without a property', (vText[1] = '[1] insert DL_FIELDS_INFO MSCLIST|DIMNAME:  -> new row')
     and (vText[3] = '[3] delete DL_FIELDS_INFO MSCLIST|OLD: gone -> '), vText[1]);

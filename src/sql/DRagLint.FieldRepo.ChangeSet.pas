@@ -56,7 +56,8 @@ function FrDirectionName(pDirection: TFrDirection): string;
 /// <param name="pSet">The change set.</param>
 /// <returns>The header `direction DIR, N changes, B blocked`, then one line per change
 /// `[id] op target prop: old -> new` (`[id] op target: old -> new` when Prop is empty) followed, for a blocked
-/// change, by `  BLOCKED: reason`. Non-ASCII, control characters and backslash in values are escaped.</returns>
+/// change, by `  BLOCKED: reason`, for an unchecked unblocked one by `  (unchecked)`. The header ends `, U unchecked`
+/// (U = not checked and not blocked). Non-ASCII, control characters and backslash in values are escaped.</returns>
 function RenderChangeSetText(const pSet: TFrChangeSet): TArray<string>;
 
 /// <summary>Renders a change set as JSON mirroring the record.</summary>
@@ -129,13 +130,23 @@ begin
       Inc(Result);
 end;
 
+function UncheckedCount(const pSet: TFrChangeSet): Integer;
+var
+  VChange: TFrChange;
+begin
+  Result := 0;
+  for VChange in pSet.Changes do
+    if (not VChange.Checked) and (VChange.Blocked = '') then
+      Inc(Result);
+end;
+
 function RenderChangeSetText(const pSet: TFrChangeSet): TArray<string>;
 var
   VChange: TFrChange;
   VLine: string;
 begin
-  Result := [Format('direction %s, %d changes, %d blocked', [FrDirectionName(pSet.Direction), Length(pSet.Changes),
-    BlockedCount(pSet)])];
+  Result := [Format('direction %s, %d changes, %d blocked, %d unchecked', [FrDirectionName(pSet.Direction),
+    Length(pSet.Changes), BlockedCount(pSet), UncheckedCount(pSet)])];
   for VChange in pSet.Changes do
   begin
     VLine := Format('[%d] %s %s', [VChange.Id, OP_NAMES[VChange.Op], EscapeValue(VChange.Target)]);
@@ -144,7 +155,9 @@ begin
     VLine := VLine + ': ' + EscapeValue(VChange.OldValue) + ' -> ' + EscapeValue(VChange.NewValue);
     Result := Result + [VLine];
     if VChange.Blocked <> '' then
-      Result := Result + ['  BLOCKED: ' + EscapeValue(VChange.Blocked)];
+      Result := Result + ['  BLOCKED: ' + EscapeValue(VChange.Blocked)]
+    else if not VChange.Checked then
+      Result := Result + ['  (unchecked)'];
   end;
 end;
 
