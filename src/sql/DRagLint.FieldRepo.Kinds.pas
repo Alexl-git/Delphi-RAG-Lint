@@ -61,7 +61,7 @@ function FrKindHasBody(pKind: TFrFieldKind): Boolean;
 /// empty or malformed identifier, or `{{TABLE.FIELD}}` (reserved, an error in 1.53).</exception>
 /// <remarks>Grammar: `{{` identifier `}}`, identifier = [A-Za-z_][A-Za-z0-9_$]*. There are no escapes:
 /// `{{{{` is an error, a literal `{{` in a string has to be rewritten.</remarks>
-function ParseMacros(const pBody: string): TArray<TFrMacro>;
+function ParseMacros(const pBody: string): TArray<TFrMacro>;  // dl:ok unused-public-symbol@0107 -- REVIEWED 2026-11-23: public API of the calc-body grammar: tests/fieldrepo/ModelTests.dpr K2 asserts its errors directly; outside this project index
 
 /// <summary>The fields a calc body depends on.</summary>
 /// <param name="pBody">The CALC_BODY text.</param>
@@ -105,11 +105,7 @@ function FrKindCodeKnown(const pCode: Variant): Boolean;
 begin
   if VarIsNull(pCode) or VarIsEmpty(pCode) then
     Exit(True);
-  case Integer(pCode) of
-    CODE_DATA, CODE_CALC, CODE_LOOKUP, CODE_INTERNAL_CALC, CODE_AGGREGATE, CODE_GRAPHICAL: Result := True;
-  else
-    Result := False;
-  end;
+  Result := Integer(pCode) in [CODE_DATA, CODE_CALC, CODE_LOOKUP, CODE_INTERNAL_CALC, CODE_AGGREGATE, CODE_GRAPHICAL];
 end;
 
 function FrKindFromCode(const pCode: Variant): TFrFieldKind;

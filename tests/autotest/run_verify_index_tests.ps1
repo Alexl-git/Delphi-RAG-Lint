@@ -26,7 +26,8 @@ try {
   # The engine units live in many (nested) folders and the list is too long for one command line:
   # a .cfg beside a COPY of the dpr carries the search path.
   $SrcRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\src')).Path
-  $dirs = @(Get-ChildItem $SrcRoot -Directory -Recurse | ForEach-Object { $_.FullName })
+  # Source folders only: a main tree also holds build output (Win32\Debug\*.dcu), and a Win32 dcu found first is F2048.
+  $dirs = @(Get-ChildItem $SrcRoot -Directory -Recurse | Where-Object { Get-ChildItem $_.FullName -Filter *.pas -File | Select-Object -First 1 } | ForEach-Object { $_.FullName })
   $dirs += (Resolve-Path (Join-Path $PSScriptRoot '..\..\third_party\delphi-tree-sitter')).Path
   Copy-Item $Dpr (Join-Path $WorkDir $DprName)
   $cfg = @('-NSSystem;Winapi;System.Win;Data;Data.Win', ('-U"{0}"' -f ($dirs -join ';')), ('-E"{0}"' -f $WorkDir), ('-N0"{0}"' -f $DcuDir))
@@ -45,7 +46,9 @@ try {
   $exe = Join-Path $WorkDir "$Base.exe"
   if (-not (Test-Path $exe)) { Write-Host "FATAL: built exe missing: $exe" -ForegroundColor Red; exit 2 }
   # the engine units import the tree-sitter / SQLite DLLs at load time
-  Get-ChildItem (Join-Path $PSScriptRoot '..\..\third_party\dll-win64') -Filter *.dll | Copy-Item -Destination $WorkDir
+  # READ-only use of the staged tree: the DLLs are copied OUT of it into this run's own $WorkDir.
+  $dllSrc = Join-Path $PSScriptRoot '..\..\third_party\dll-win64'
+  Get-ChildItem $dllSrc -Filter *.dll | Copy-Item -Destination $WorkDir
   & $exe
   $rc = $LASTEXITCODE
   if ($rc -eq 0) { Write-Host 'PASS' -ForegroundColor Green } else { Write-Host 'FAIL' -ForegroundColor Red }

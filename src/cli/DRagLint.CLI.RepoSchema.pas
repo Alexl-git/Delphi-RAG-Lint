@@ -45,6 +45,7 @@ uses
 const
   EXIT_OK = 0;
   EXIT_FAIL = 1;
+  EXIT_BAD_SELECT = 2;
   SUB_SEED = 'seed-fb';
   SUB_REFRESH = 'refresh-schema';
   MASK = '***';
@@ -136,17 +137,26 @@ begin
       Result := Result + [VChange];
 end;
 
-procedure PrintApplied(const pRes: TSchemaApplyResult; pSeed: Boolean);
+{ Writes a progress line: stdout normally, stderr under --json so that stdout stays ONE JSON document. }
+procedure Say(pJson: Boolean; const pText: string);
+begin
+  if pJson then
+    Writeln(ErrOutput, pText)
+  else
+    Writeln(pText);
+end;
+
+procedure PrintApplied(const pRes: TSchemaApplyResult; pSeed, pJson: Boolean);
 var
   VLine: string;
 begin
   for VLine in pRes.Log do
-    Writeln(VLine);
-  Writeln('applied: ', pRes.Applied, ' changes', IfThen(pSeed, ' (seed)', ''));
-  Writeln('datasets inserted: ', pRes.DatasetsInserted, ', updated: ', pRes.DatasetsUpdated,
-    ', skipped: ', pRes.DatasetsSkipped);
+    Say(pJson, VLine);
+  Say(pJson, Format('applied: %d changes%s', [pRes.Applied, IfThen(pSeed, ' (seed)', '')]));
+  Say(pJson, Format('datasets inserted: %d, updated: %d, skipped: %d',
+    [pRes.DatasetsInserted, pRes.DatasetsUpdated, pRes.DatasetsSkipped]));
   for VLine in pRes.Warnings do
-    Writeln('warning: ', VLine);
+    Say(pJson, 'warning: ' + VLine);
 end;
 
 function SyncOnRepo(const pSub, pPath: string; const pModel: TFbSchemaModel; pWrite, pJson: Boolean;
@@ -182,17 +192,17 @@ begin
       for VLine in RenderChangeSetText(VSet) do
         Writeln(VLine);
     for VLine in pWarnings + VWarn do
-      Writeln('warning: ', VLine);
+      Say(pJson, 'warning: ' + VLine);
     if not pWrite then
     begin
-      Writeln('dry run: nothing written (add --apply, or --select <file>, to write)');
+      Say(pJson, 'dry run: nothing written (add --apply, or --select <file>, to write)');
       Exit(EXIT_OK);
     end;
     VChosen := ChosenChanges(VSet, pSelectFile);
     VRes := ApplySchemaChanges(VRepo, pModel, VMode, VChosen, TTimeZone.Local.ToUniversalTime(Now));
     if (VMode = ssmSeed) and (pModel.Source = 'live') then
       SetRepoMeta(VRepo, 'source_database', pModel.Database);
-    PrintApplied(VRes, VMode = ssmSeed);
+    PrintApplied(VRes, VMode = ssmSeed, pJson);
   finally
     VRepo.Free;
   end;
@@ -221,6 +231,12 @@ begin
     VModel := ReadModel(pConnection, VDdl, VWarnings);
     Result := SyncOnRepo(pSub, pPath, VModel, (CommandLineFlag('--apply') or (VSelect <> '')) and not CommandLineFlag('--dry-run'), pJson, VSelect, VWarnings);
   except
+    on E: EFrChangeSetError do
+    begin
+      { a --select file naming an unknown or blocked change id: exit 2, nothing applied (field repository v2 design) }
+      Writeln(ErrOutput, 'repo ', pSub, ': --select: ', E.Message);
+      Result := EXIT_BAD_SELECT;
+    end;
     on E: Exception do
     begin
       Writeln(ErrOutput, 'repo ', pSub, ': ', ScrubSecrets(E.Message, pConnection));

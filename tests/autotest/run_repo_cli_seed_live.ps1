@@ -23,7 +23,17 @@ param(
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
-if ([string]::IsNullOrWhiteSpace($env:DL_TEST_FB_CONNECTION)) { Write-Host 'SKIP live Firebird seed (DL_TEST_FB_CONNECTION not set)'; exit 0 }
+# No DL_TEST_FB_CONNECTION: use a SCRATCH database on a private embedded Firebird 4 (tests/autotest/lib/FirebirdScratch.ps1);
+# SKIP only on a machine without any Firebird 4. Firebird is only READ either way.
+$script:ScratchWork = $null
+if ([string]::IsNullOrWhiteSpace($env:DL_TEST_FB_CONNECTION)) {
+  . "$PSScriptRoot\lib\FirebirdScratch.ps1"
+  $script:ScratchWork = Join-Path ([IO.Path]::GetTempPath()) ('dl-fbscratch-' + [guid]::NewGuid().ToString('N'))
+  [IO.Directory]::CreateDirectory($script:ScratchWork) | Out-Null
+  $env:DL_TEST_FB_CONNECTION = New-ScratchFbConnection $script:ScratchWork (Resolve-Path "$PSScriptRoot\..\..").Path
+  if ([string]::IsNullOrWhiteSpace($env:DL_TEST_FB_CONNECTION)) { Write-Host 'SKIP live Firebird seed (DL_TEST_FB_CONNECTION not set and no Firebird 4 installed for an embedded scratch)'; exit 0 }
+  $null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -MessageData $script:ScratchWork -Action { try { [IO.Directory]::Delete($Event.MessageData, $true) } catch { $null = $_ } }
+}
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe
 $ErrorActionPreference = 'Continue'

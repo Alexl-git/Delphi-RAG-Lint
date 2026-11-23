@@ -91,6 +91,7 @@ uses
   DRagLint.Parser.Markdown in '..\parser\DRagLint.Parser.Markdown.pas',
   DRagLint.Query.TextNodes in '..\query\DRagLint.Query.TextNodes.pas',
   DRagLint.Sql.FbSnapshot in '..\sql\DRagLint.Sql.FbSnapshot.pas',
+  DRagLint.Sql.FbConnString in '..\sql\DRagLint.Sql.FbConnString.pas',
   DRagLint.Sql.OrmLinker in '..\sql\DRagLint.Sql.OrmLinker.pas',
   DRagLint.Sql.Guarded in '..\sql\DRagLint.Sql.Guarded.pas',
   DRagLint.Core.EngineHold in '..\core\DRagLint.Core.EngineHold.pas',

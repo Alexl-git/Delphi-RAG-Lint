@@ -392,7 +392,7 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "8f0efa9a901ae75e4415072a879de6f81ddb60e3dbe7c2bd8dd8ecbae3dcc4d7",
+    "hash": "0f865abddf116024a1cd806c5c5ebe41c84f068ceb422cbbd7de6ec6d751ffeb",
     "version": "1.53.0-alpha"
   },
   "features/finalization-after-dependency.md": {
@@ -1088,7 +1088,7 @@
     "version": "1.52.0-alpha"
   },
   "features/v152-index-possibly-out-of-range.md": {
-    "hash": "0b94936c87bd42ab3e42243ffe15006797e1c5a033892190c30d43e06ca11c85",
+    "hash": "d5459a91a20486d0e8f8007d92c9f013823ed9edeca4214469d2d294ef169a6c",
     "version": "1.53.0-alpha"
   },
   "features/v152-per-rule-budget.md": {

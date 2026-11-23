@@ -34,22 +34,22 @@ $lib = (Join-Path $vsDir 'lib\projectsettings.js').Replace([string][char]92, '/'
 # Run `node -e <js>` with the lib path in $env:PS_LIB and extra data in $env:PS_ARG; returns stdout.
 function NodeEval($js, $arg = '') {
   $env:PS_LIB = $lib; $env:PS_ARG = $arg
-  $o = & node -e $js 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & node -e $js 2>&1 | ForEach-Object { "$_" } }
   if ($LASTEXITCODE -ne 0) { throw "node failed: $o" }
   return ($o -join "`n")
 }
 function ArgvFor($call) {
   $js = "const ps=require(process.env.PS_LIB);const project=process.env.PS_ARG;process.stdout.write(JSON.stringify($call));"
-  return @((NodeEval $js $script:Project) | ConvertFrom-Json)
+  return @((NodeEval $js $script:Project) | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Run($argv) {
-  $out = & $Exe @argv 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>$null }
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = ($out -join "`n") }
 }
 function Describe($stdout, $code) {
   $env:PS_ARG = $stdout
   $js = "const ps=require(process.env.PS_LIB);process.stdout.write(JSON.stringify(ps.describeResult(process.env.PS_ARG,$code)));"
-  return (NodeEval $js $stdout) | ConvertFrom-Json
+  return (NodeEval $js $stdout) | ConvertFrom-Json | ForEach-Object { $_ }
 }
 
 try {
@@ -65,13 +65,13 @@ try {
   $a = ArgvFor "ps.buildSetArgs({key:'lint.profile',value:'strict',local:false,project})"
   $r = Run $a
   $g = Run @('settings', 'get', 'lint.profile', '--project', $script:Project, '--json')
-  $gv = try { ($g.Out | ConvertFrom-Json).value } catch { '' }
+  $gv = try { ($g.Out | ConvertFrom-Json | ForEach-Object { $_ }).value } catch { '' }
   Check 'E1 set lint.profile strict (project scope) -> exit 0, get = strict' ($r.Code -eq 0 -and $gv -eq 'strict') "code=$($r.Code) get=$($g.Out)"
 
   $a = ArgvFor "ps.buildSetArgs({key:'lint.profile',value:'fast',local:true,project})"
   $r = Run $a
   $l = Run @('settings', 'list', '--project', $script:Project, '--json')
-  $row = try { ($l.Out | ConvertFrom-Json).settings | Where-Object key -eq 'lint.profile' } catch { $null }
+  $row = try { ($l.Out | ConvertFrom-Json | ForEach-Object { $_ }).settings | Where-Object key -eq 'lint.profile' } catch { $null }
   Check 'E2 set --local -> exit 0, local file exists, source = local' ($r.Code -eq 0 -and (Test-Path $local) -and $row.source -eq 'local' -and $row.value -eq 'fast') "code=$($r.Code) row=$($row | ConvertTo-Json -Compress)"
 
   $a = ArgvFor "ps.buildUnsetArgs({key:'lint.profile',local:true,project})"
@@ -87,7 +87,7 @@ try {
 
   $l = Run @('settings', 'list', '--project', $script:Project, '--json')
   $env:PS_ARG = $l.Out
-  $pl = (NodeEval "const ps=require(process.env.PS_LIB);process.stdout.write(JSON.stringify(ps.parseList(process.env.PS_ARG)));" $l.Out) | ConvertFrom-Json
+  $pl = (NodeEval "const ps=require(process.env.PS_LIB);process.stdout.write(JSON.stringify(ps.parseList(process.env.PS_ARG)));" $l.Out) | ConvertFrom-Json | ForEach-Object { $_ }
   $want = 'ownRoots,excludeRoots,reportsDir,fieldRepository,popupForms,checkInit,lint.config,lint.profile,taint.envSource'
   $got = ($pl.rows | ForEach-Object { $_.key }) -join ','
   Check 'E5 parseList on real list --json: 9 rows in spec order' ($pl.rows.Count -eq 9 -and $got -eq $want -and $pl.error -eq '') "got=$got err=$($pl.error)"
@@ -97,7 +97,7 @@ try {
   Check 'E6 popupForms is read-only and offers no editor' ($pf.settable -eq $false -and $ch -eq '[]') "settable=$($pf.settable) choices=$ch"
 
   $bad = @()
-  foreach ($t in Get-ChildItem (Join-Path $vsDir 'test\*.test.js')) { & node $t.FullName *> $null; if ($LASTEXITCODE -ne 0) { $bad += $t.Name } }
+  foreach ($t in Get-ChildItem (Join-Path $vsDir 'test\*.test.js')) { & { $ErrorActionPreference = 'Continue'; & node $t.FullName *> $null }; if ($LASTEXITCODE -ne 0) { $bad += $t.Name } }
   Check 'N1 every node test passes' ($bad.Count -eq 0) ($bad -join ',')
 
   $pkg = [IO.File]::ReadAllText((Join-Path $vsDir 'package.json'))

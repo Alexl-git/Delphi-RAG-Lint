@@ -153,7 +153,7 @@ uses
   , System.NetEncoding
   , System.StrUtils
   , DRagLint.Charts.Index
-  , DRagLint.LSP.Proxy
+  , DRagLint.LSP.Proxy // dl:unit DRagLint.LSP.Proxy accepted -- LSP_BITS_32 / LSP_BITS_64 are the DelphiLSP bitness values the proxy defines; verify-index normalises its DelphiLspBits option to one of the same two values
   , DRagLint.LSP.VerifyClient
   ;
 
