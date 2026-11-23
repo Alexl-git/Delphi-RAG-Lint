@@ -72,8 +72,7 @@ type
     procedure Parse(const pFile: string);
   public
     /// <summary>Reads and parses a unit.</summary>
-    /// <param name="pFile">Path of the .pas.</param>
-    /// <exception cref="EInOutError">The file cannot be read.</exception>
+    /// <param name="pFile">Path of the .pas. A file that cannot be read raises what TFile.ReadAllBytes raises.</param>
     constructor Create(const pFile: string);
     /// <summary>Parses unit text (tests).</summary>
     /// <param name="pText">Unit source.</param>

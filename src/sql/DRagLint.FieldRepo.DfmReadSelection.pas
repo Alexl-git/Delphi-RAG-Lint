@@ -1,4 +1,4 @@
-unit DRagLint.FieldRepo.DfmReadSelection;
+unit DRagLint.FieldRepo.DfmReadSelection;  // dl:ok unit-used-by-no-unit@b68d -- REVIEWED 2026-11-23 TT-DFMREAD: spec 4.4 engine side of the field-selection dialog (a later lane); tests/fieldrepo/DfmReadTests.dpr uses it
 
 { drag-lint 1.54 -- lane TT-DFMREAD: the per-dataset field selection rules (design
   2026-11-22-field-repository-v2-design.md section 4.4). The selection itself lives in the DFM (its persistent

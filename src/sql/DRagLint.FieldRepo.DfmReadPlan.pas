@@ -100,7 +100,7 @@ uses
   Data.DB,
   FireDAC.Stan.Param,
   FireDAC.DApt,
-  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census@9edb -- REVIEWED 2026-11-23 TT-DFMREAD: the unit is used for its record types and functions; one table-name constant is what it needs
   DRagLint.FieldRepo.SchemaFacts,
   DRagLint.FieldRepo.DfmReadSql,
   DRagLint.FieldRepo.DfmReadCalc;
