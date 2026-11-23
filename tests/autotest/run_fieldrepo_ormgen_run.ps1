@@ -61,6 +61,44 @@ foreach ($form in 'new', 'old') {
     Check "${form}: Assign / AssignTo really copy ($sum)" ($sum -match 'pass=15 fail=0$')
   } else { Check "${form}: program built" $false }
 }
+# ---- lint of the generated units (project DB of its own, dll-win64 engine read-only) ----
+if (-not $SkipLint) {
+  $rules = 'with-hides-outer-symbol', 'with-statement', 'unused-unit-in-uses', 'doc-placeholder', 'is-not-operator', 'unused-local', 'property-accessor-name', 'raise-bare-exception'
+  function Get-LintCounts([string]$dir) {
+    $db = Join-Path $dir 'lint.sqlite'
+    $js = Join-Path $dir 'lint.json'
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $dir 'OrmGenAssignRun.dpr') --db $db *> (Join-Path $dir 'index.log') }
+    & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --enable ($rules -join ',') --json 2> (Join-Path $dir 'lint.err') | Out-File -LiteralPath $js -Encoding ascii }
+    $all = Get-Content -LiteralPath $js -Raw | ConvertFrom-Json
+    $c = @{}
+    $rules | ForEach-Object { $c[$_] = 0 }
+    $c['lines'] = @()
+    foreach ($x in $all) {
+      if ($x.file_path -match '(?i)\\([iu](ORMFIX|PLAINFIX|EMPTYFIX)(_SERVER|_CLIENT)?|LintBad)\.pas$' -and $c.ContainsKey($x.rule)) {
+        $c[$x.rule]++
+        $c['lines'] += "$([IO.Path]::GetFileName($x.file_path)):$($x.start_line) $($x.rule)"
+      }
+    }
+    $c['total'] = @($all).Count
+    return $c
+  }
+  $ld = Join-Path $Work 'lint-new'
+  [IO.Directory]::CreateDirectory($ld) | Out-Null
+  Get-ChildItem -LiteralPath $stubs -File | Where-Object { $_.Name -ne 'LintBad.pas' } | ForEach-Object { [IO.File]::Copy($_.FullName, (Join-Path $ld $_.Name), $true) }
+  Get-ChildItem -LiteralPath (Join-Path $fx 'new') -Filter *.pas -File | ForEach-Object { [IO.File]::Copy($_.FullName, (Join-Path $ld $_.Name), $true) }
+  $c = Get-LintCounts $ld
+  Check "lint ran on the generated units ($($c['total']) findings over the project)" ($c['total'] -gt 0)
+  foreach ($r in $rules) { Check "lint new: $r = 0" ($c[$r] -eq 0) (@($c['lines'] | Where-Object { $_ -match " $r`$" } | Select-Object -First 5) -join ' | ') }
+  # positive control: the same run must be able to report every one of the rules
+  $lb = Join-Path $Work 'lint-bad'
+  [IO.Directory]::CreateDirectory($lb) | Out-Null
+  Get-ChildItem -LiteralPath $ld -File | Where-Object { $_.Extension -match '(?i)\.(pas|dpr)' } | ForEach-Object { [IO.File]::Copy($_.FullName, (Join-Path $lb $_.Name), $true) }
+  [IO.File]::Copy((Join-Path $stubs 'LintBad.pas'), (Join-Path $lb 'LintBad.pas'), $true)
+  $dpr = Join-Path $lb 'OrmGenAssignRun.dpr'
+  [IO.File]::WriteAllText($dpr, [IO.File]::ReadAllText($dpr).Replace('  uPLAINFIX_CLIENT;', "  uPLAINFIX_CLIENT,`r`n  LintBad;"), [Text.Encoding]::ASCII)
+  $c = Get-LintCounts $lb
+  foreach ($r in $rules) { Check "lint control: $r fires on LintBad.pas" ($c[$r] -gt 0) }
+}
 Write-Host "SUMMARY pass=$($script:pass) fail=$($script:fail)"
 if ($script:fail -gt 0) { Write-Host 'ORMGEN RUN: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'ORMGEN RUN: PASS' -ForegroundColor Green

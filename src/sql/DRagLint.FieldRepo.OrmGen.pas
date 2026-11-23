@@ -1138,6 +1138,13 @@ begin
         Exit(True);
 end;
 
+{ A unit the text uses only through inline functions: the compiler wants it (H2443) while the
+  unused-unit-in-uses rule sees no reference, so the generated line carries a review marker. }
+procedure AddInlineUnit(pUnits: TStrings; const pUnit, pMarkerHash, pInlined: string);
+begin
+  pUnits.Add(pUnit + ',' + Format('  // dl:ok unused-unit-in-uses@%s -- inline %s (H2443)', [pMarkerHash, pInlined]));
+end;
+
 { 'uses' and one unit per line; nothing for an empty list }
 procedure AddUsesClause(pOut: TStringList; pUnits: TStrings);
 var
@@ -1147,7 +1154,7 @@ begin
     Exit;
   pOut.Add('uses');
   for I:= 0 to pUnits.Count - 1 do
-    pOut.Add('  ' + pUnits[I] + (if I < pUnits.Count - 1 then ',' else ';'));
+    pOut.Add('  ' + pUnits[I] + (if I = pUnits.Count - 1 then ';' else if pUnits[I].Contains(',') then '' else ','));
   pOut.Add('');
 end;
 
@@ -1460,7 +1467,7 @@ begin
     PasObject.Add('    procedure EnsureQueriesPrepared; '                                                 );
     PasObject.Add('	 public                            '                                                  );
     PasObject.Add('		destructor Destroy; override;    '                                                   );
-    PasObject.Add('		[Spring.Container.Common.Inject]                                  '                  );
+    PasObject.Add('		[InjectAttribute]                                  '                  );
     PasObject.Add('		constructor Create(const ThreadStorage: IThreadStorage; const ALog: IABZLoggingSys);');
     PasObject.Add('    // IDataService (Base / Threading)                                '                );
     PasObject.Add('		function GetThreadStorage: IThreadStorage;                        '                  );
@@ -1477,16 +1484,18 @@ begin
     PasObject.Add('                         '                                                             );
     PasObject.Add('implementation           '                                                             );
     PasObject.Add('                         '                                                             );
-    { System.Classes, FireDAC.DatS, Data.SqlTimSt, Data.FmtBcd: the inline functions the text calls (H2443) }
     Units.Clear;
-    Units.Add('System.Classes');
+    if HasVarType(FFieldList, 'TStringList') then { TStrings.Text }
+      Units.Add('System.Classes')
+    else
+      AddInlineUnit(Units, 'System.Classes', '2465', 'TFDParams.GetItem');
     Units.Add('System.SysUtils');
     if HasVarType(FFieldList, STPicture) then { TBlobField }
       Units.Add('Data.DB');
-    if HasVarType(FFieldList, 'TSQLTimeStamp') then { inline TFDParam.SetAsSQLTimeStamp }
-      Units.Add('Data.SqlTimSt');
-    if HasVarType(FFieldList, 'TBcd') then { inline TFDParam.SetAsFMTBCD }
-      Units.Add('Data.FmtBcd');
+    if HasVarType(FFieldList, 'TSQLTimeStamp') then
+      AddInlineUnit(Units, 'Data.SqlTimSt', '2bcd', 'TFDParam.SetAsSQLTimeStamp');
+    if HasVarType(FFieldList, 'TBcd') then
+      AddInlineUnit(Units, 'Data.FmtBcd', '3265', 'TFDParam.SetAsFMTBCD');
     Units.Add('FireDAC.DatS');
     Units.Add('FireDAC.Stan.Error');
     Units.Add('FireDAC.Stan.Param');
