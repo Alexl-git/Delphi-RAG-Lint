@@ -45,7 +45,9 @@ try {
   $exe = Join-Path $WorkDir "$Base.exe"
   if (-not (Test-Path $exe)) { Write-Host "FATAL: built exe missing: $exe" -ForegroundColor Red; exit 2 }
   # the engine units import the tree-sitter / SQLite DLLs at load time
-  Get-ChildItem (Join-Path $PSScriptRoot '..\..\third_party\dll-win64') -Filter *.dll | Copy-Item -Destination $WorkDir
+  # READ-only use of the staged tree: the DLLs are copied OUT of it into this run's own $WorkDir.
+  $dllSrc = Join-Path $PSScriptRoot '..\..\third_party\dll-win64'
+  Get-ChildItem $dllSrc -Filter *.dll | Copy-Item -Destination $WorkDir
   & $exe
   $rc = $LASTEXITCODE
   if ($rc -eq 0) { Write-Host 'PASS' -ForegroundColor Green } else { Write-Host 'FAIL' -ForegroundColor Red }

@@ -137,41 +137,74 @@ function Has-SymId([int]$symid) {
 
 Push-Location C:\TEMP
 try {
-  # --- index p2index.pas ALONE first (gives DoWork the LOWER ids) ---
-  & { $ErrorActionPreference = 'Continue'; & $exePath index $target --db $db 2>$null } | Out-Null
-  Check 'index p2index.pas exits 0' ($LASTEXITCODE -eq 0)
+  # 1.53 GH18-SYMID: an incremental index keeps the id of a symbol whose declaration did not change, so
+  # a blank line above DoWork keeps its id AND its symbol_facts row (refreshed, not orphaned). The 1.52
+  # behaviour (delete + insert -> a NEW id, the old row cascaded away) is the DRAGLINT_NO_SYMBOL_ID_REUSE
+  # escape hatch and is kept here as the positive control of the cascade. A genuinely changed symbol
+  # (renamed) must still cascade in the default mode.
+  foreach ($mode in 'reuse', 'hatch') {
+    $db = Join-Path $scratch "docp2index_$mode.sqlite"
+    Copy-Item (Join-Path $fixtureDir 'p2index.pas') $target -Force
+    Copy-Item (Join-Path $fixtureDir 'anchor.pas')  $anchorTarget -Force
+    $env:DRAGLINT_NO_SYMBOL_ID_REUSE = $(if ($mode -eq 'hatch') { '1' } else { '' })
+    try {
+      # --- index p2index.pas ALONE first (gives DoWork the LOWER ids) ---
+      & { $ErrorActionPreference = 'Continue'; & $exePath index $target --db $db 2>$null } | Out-Null
+      Check "[$mode] index p2index.pas exits 0" ($LASTEXITCODE -eq 0)
 
-  # --- then index anchor.pas SEPARATELY (gives AnchorFunc HIGHER ids; never reindexed again) ---
-  & { $ErrorActionPreference = 'Continue'; & $exePath index $anchorTarget --db $db 2>$null } | Out-Null
-  Check 'index anchor.pas exits 0' ($LASTEXITCODE -eq 0)
+      # --- then index anchor.pas SEPARATELY (gives AnchorFunc HIGHER ids; never reindexed again) ---
+      & { $ErrorActionPreference = 'Continue'; & $exePath index $anchorTarget --db $db 2>$null } | Out-Null
+      Check "[$mode] index anchor.pas exits 0" ($LASTEXITCODE -eq 0)
 
-  $before = Get-Snapshot 'DoWork'
-  Check 'DoWork: symbol found pre-edit'              ($before.SYMID -ge 0)
-  Check 'DoWork: symbol_facts row PRESENT'            ($before.PRESENT -eq 1)
-  Check 'DB: exactly 2 routine-with-body symbols'     ($before.ROUTINE_COUNT -eq 2)
-  Check 'DB: exactly 2 symbol_facts rows'             ($before.TOTAL -eq 2)
-  Check 'DB: no orphan symbol_facts rows'             ($before.ORPHANS -eq 0)
-  $oldId = $before.SYMID
+      $before = Get-Snapshot 'DoWork'
+      Check "[$mode] DoWork: symbol found pre-edit"              ($before.SYMID -ge 0)
+      Check "[$mode] DoWork: symbol_facts row PRESENT"            ($before.PRESENT -eq 1)
+      Check "[$mode] DB: exactly 2 routine-with-body symbols"     ($before.ROUTINE_COUNT -eq 2)
+      Check "[$mode] DB: exactly 2 symbol_facts rows"             ($before.TOTAL -eq 2)
+      Check "[$mode] DB: no orphan symbol_facts rows"             ($before.ORPHANS -eq 0)
+      $oldId = $before.SYMID
 
-  # --- edit p2index.pas: add a blank line right after `implementation`, ---
-  # --- shifting DoWork's ImplStartLine/ImplEndLine down by one.         ---
-  $src = Get-Content $target -Raw
-  $src = $src -replace '(?m)^implementation\r?\n', "implementation`r`n`r`n"
-  [System.IO.File]::WriteAllText($target, $src, [System.Text.Encoding]::ASCII)
+      # --- edit p2index.pas: add a blank line right after `implementation`, ---
+      # --- shifting DoWork's ImplStartLine/ImplEndLine down by one.         ---
+      $src = Get-Content $target -Raw
+      $src = $src -replace '(?m)^implementation\r?\n', "implementation`r`n`r`n"
+      [System.IO.File]::WriteAllText($target, $src, [System.Text.Encoding]::ASCII)
 
-  # --- reindex p2index.pas ONLY (anchor.pas untouched -> its rows stay live, ---
-  # --- forcing a genuinely NEW id for DoWork, never a reused old one).      ---
-  & { $ErrorActionPreference = 'Continue'; & $exePath index $target --db $db 2>$null } | Out-Null
-  Check 'reindex p2index.pas exits 0' ($LASTEXITCODE -eq 0)
+      # --- reindex p2index.pas ONLY (anchor.pas untouched). ---
+      & { $ErrorActionPreference = 'Continue'; & $exePath index $target --db $db 2>$null } | Out-Null
+      Check "[$mode] reindex p2index.pas exits 0" ($LASTEXITCODE -eq 0)
 
-  $after = Get-Snapshot 'DoWork'
-  Check 'DoWork: symbol found post-edit'                        ($after.SYMID -ge 0)
-  Check 'DoWork: NEW id differs from OLD id (real reindex, not a no-op)' ($after.SYMID -ne $oldId)
-  Check 'DoWork: symbol_facts row PRESENT for the NEW id'        ($after.PRESENT -eq 1)
-  Check 'DB: still exactly 2 routine-with-body symbols'         ($after.ROUTINE_COUNT -eq 2)
-  Check 'DB: still exactly 2 symbol_facts rows (no orphan/dup)' ($after.TOTAL -eq 2)
-  Check 'DB: no orphan symbol_facts rows post-reindex'          ($after.ORPHANS -eq 0)
-  Check "OLD id's symbol_facts row is GONE (ON DELETE CASCADE fired)" (-not (Has-SymId $oldId))
+      $after = Get-Snapshot 'DoWork'
+      Check "[$mode] DoWork: symbol found post-edit"                        ($after.SYMID -ge 0)
+      if ($mode -eq 'reuse') {
+        Check '[reuse] DoWork: id is REUSED (declaration unchanged, GH18-SYMID)' ($after.SYMID -eq $oldId)
+      } else {
+        Check '[hatch] DoWork: NEW id differs from OLD id (the 1.52 delete + insert)' ($after.SYMID -ne $oldId)
+      }
+      Check "[$mode] DoWork: symbol_facts row PRESENT for the current id"    ($after.PRESENT -eq 1)
+      Check "[$mode] DB: still exactly 2 routine-with-body symbols"         ($after.ROUTINE_COUNT -eq 2)
+      Check "[$mode] DB: still exactly 2 symbol_facts rows (no orphan/dup)" ($after.TOTAL -eq 2)
+      Check "[$mode] DB: no orphan symbol_facts rows post-reindex"          ($after.ORPHANS -eq 0)
+      if ($mode -eq 'hatch') {
+        Check "[hatch] OLD id's symbol_facts row is GONE (ON DELETE CASCADE fired)" (-not (Has-SymId $oldId))
+      }
+
+      # --- a genuinely changed symbol (DoWork renamed): in the default mode the old id must cascade. ---
+      # (Not asserted under the hatch: delete + insert hands the highest rowid straight back, which is the
+      # rowid-reuse masking this runner's header describes.)
+      if ($mode -eq 'reuse') {
+      $reId = $after.SYMID
+      $src = (Get-Content $target -Raw) -replace '\bDoWork\b', 'DoWorkRenamed'
+      [System.IO.File]::WriteAllText($target, $src, [System.Text.Encoding]::ASCII)
+      & { $ErrorActionPreference = 'Continue'; & $exePath index $target --db $db 2>$null } | Out-Null
+      Check "[$mode] reindex after the rename exits 0" ($LASTEXITCODE -eq 0)
+      $ren = Get-Snapshot 'DoWorkRenamed'
+      Check "[$mode] renamed symbol found with a symbol_facts row"       (($ren.SYMID -ge 0) -and ($ren.PRESENT -eq 1))
+      Check "[$mode] removed symbol's symbol_facts row is GONE (cascade)" (-not (Has-SymId $reId))
+      Check "[$mode] DB: 2 symbol_facts rows, no orphans after the rename" (($ren.TOTAL -eq 2) -and ($ren.ORPHANS -eq 0))
+      }
+    } finally { Remove-Item Env:\DRAGLINT_NO_SYMBOL_ID_REUSE -ErrorAction SilentlyContinue }
+  }
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

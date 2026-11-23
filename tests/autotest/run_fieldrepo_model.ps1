@@ -39,7 +39,7 @@ try {
   # ---- B: engine
   if (-not (Test-Path -LiteralPath $Exe)) { Check 'B0 engine exe exists' $false $Exe; throw 'no exe' }
   function Run([string[]]$a) {
-    $o = & $Exe @a 2>&1
+    $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }
     $out = ($o | ForEach-Object { "$_" }) -join "`n"
     [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
   }
@@ -52,7 +52,7 @@ try {
   $r = Run @('repo', 'check', '--repo', $x)
   Check 'B3 repo check exits 1 with the planted lines' (($r.Code -eq 1) -and ($r.Out -match 'kind-flag-mismatch ORDERS.BADFLAG') -and ($r.Out -match 'CYC_A -> CYC_B -> CYC_A') -and ($r.Out -match 'WARN lookup-key-not-pk') -and ($r.Out -match 'layout-event-unknown-field') -and ($r.Out -match 'check: 6 findings \(5 errors, 1 warnings\)')) "exit=$($r.Code)`n$($r.Out)"
   $r = Run @('repo', 'check', '--repo', $x, '--json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'B3b repo check --json is valid, 6 findings' (($r.Code -eq 1) -and $j -and ($j.findings.Count -eq 6) -and ($j.warnings -eq 1)) "exit=$($r.Code)"
   $bk = Join-Path $work 'x.txt'
   $r = Run @('repo', 'backup', '--repo', $x, '--output', $bk)
