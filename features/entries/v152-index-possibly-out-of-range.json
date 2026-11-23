@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.52.0-alpha",
   "summary": "Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
-  "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound, index parameters and (with --db) a constant array of another unit, and how its manual-only autofix inserts an InRange check.",
+  "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound, parallel arrays, index lists, index parameters and (with --db) a constant array of another unit, and how its manual-only autofix inserts an InRange check.",
   "wikiPage": "index-possibly-out-of-range",
   "surfaces": [
     {
@@ -33,9 +33,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-21",
+    "date": "2026-11-23",
     "by": "ENGINE",
-    "build": "1.52.2-alpha",
+    "build": "1.52.3-alpha",
     "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
   }
 }
