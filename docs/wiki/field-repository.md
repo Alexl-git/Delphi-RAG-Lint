@@ -4,7 +4,8 @@ The field repository is the TableTools field registry (`FIB$FIELDS_INFO`,
 `FIB$DATASETS_INFO`, `FIB$ENUMVALUES`, `FIB$ERROR_MESSAGES`) kept in ONE SQLite file
 (`.dlrepo`) instead of tables in the Firebird database. The five tables are `DL_META`,
 `DL_FIELDS_INFO`, `DL_DATASETS_INFO`, `DL_ENUMVALUES` and `DL_ERROR_MESSAGES`.
-**Firebird is not modified**: every verb that reads it only runs SELECTs.
+**Firebird is not modified**: every verb that reads it only runs SELECTs. The one exception is
+`repo alter-table --apply` ([[repo-alter-table]], 1.54).
 
 ## Where the repository lives
 

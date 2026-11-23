@@ -435,6 +435,14 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.Locate.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbSchemaRead.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbDdl.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.DbProvider.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.DbProviderFb.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.Alter.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.AlterFacts.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.AlterApply.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.AlterReport.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.SchemaHook.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.SchemaHookMicronite.pas"/>
         <DCCReference Include="DRagLint.CLI.CheckInit.pas"/>
         <DCCReference Include="DRagLint.CLI.VerifyIndex.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.VerifyClient.pas"/>
@@ -448,6 +456,7 @@
         <DCCReference Include="DRagLint.CLI.RepoDfmWrite.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoHandlers.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoFib.pas"/>
+        <DCCReference Include="DRagLint.CLI.RepoAlter.pas"/>
         <DCCReference Include="DRagLint.CLI.Explain.pas"/>
         <DCCReference Include="DRagLint.CLI.ConfigAnchor.pas"/>
         <DCCReference Include="DRagLint.CLI.RuleScope.pas"/>

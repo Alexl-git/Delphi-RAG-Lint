@@ -1709,6 +1709,10 @@ begin
     else if (A = '--dataset') and (i < ParamCount) then Inc(i) // repo read-dfm: DRagLint.CLI.RepoDfm reads it from ParamStr
     else if (A = '--select') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: the change-set id file, read from ParamStr
     else if (A = '--table') and (i < ParamCount) then Inc(i)
+    { repo alter-table (1.54): DRagLint.CLI.RepoAlter reads these from ParamStr }
+    else if (A = '--order') and (i < ParamCount) then Inc(i)
+    else if (A = '--hook') and (i < ParamCount) then Inc(i)
+    else if A = '--safe-path' then // repo alter-table: a bare switch, DRagLint.CLI.RepoAlter reads it from ParamStr
     else if (A = '--step-size') and (i < ParamCount) then Inc(i)
     else if (A = '--progress-form') and (i < ParamCount) then Inc(i)
     else if (A = '--scope') and (i < ParamCount) then

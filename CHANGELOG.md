@@ -13,6 +13,12 @@ Merged lanes:
 - TT-DFMREAD: `repo read-dfm --dfm <file>[;...] [--dataset <Name>] --direction dfm-to-repo` reads the persistent fields of a form (text or binary DFM; data, calc, internal-calc, lookup, aggregate), its lookup wiring and the code of OnCalcFields / OnGetText into the field repository as a change set: dry run by default, `--apply` or `--select <id file>` in one transaction. Code and facts it cannot express are BLOCKED or reported, never guessed. `ExpandSelection` (spec 4.4) is the rule for the later field-selection dialog. No extraction, resolver or lint change.
 - SEARCHFAST: the `search` index stage no longer slows down with the size of the index. The one ANALYZE runs on an empty database and recorded every FTS5 data table as two rows, so SQLite scanned the whole table for each segment FTS5 dropped; the writer now corrects that statistic (existing indexes heal on their next write), and a run that has to fill a large share of the table rebuilds `symbol_search_fts` in one pass inside the stage's transaction. library-Win64 in place: 7,135 s -> 49 s for 1.45 M rows. No re-parse.
 
+Lane TT-ALTER (lane/v154-tt-alter):
+
+- NEW `drag-lint repo alter-table` (Table Tools): plans and, with `--apply`, runs the ALTER TABLE that brings a Firebird table in line with a field-repository column; see wiki page repo-alter-table.
+- `repo alter-table` now refuses a --connection string through the shared `DRagLint.Sql.FbConnString` (OpenMode, CreateDatabase, DropDatabase, ConnectionDef, ConnectionDefName, and a line break) instead of a private copy of the key list; test L9 in run_repo_cli_alter.ps1.
+- `repo alter-table` review: `--select` with `--apply` needs the `plan <hash>` line of its dry run; drops run last, after the safe changes; leading zeros, TODAY / NOW words and values the scan cannot compare are value losses; OCTETS, WITH TIME ZONE and delimited mixed-case names are refused; a domain change keeps NOT NULL; another DriverID than FB is refused; the swap is READ COMMITTED under its table lock; a lost connection is reported as `unknown`; `not applied` names what an apply left out.
+
 ## v1.53.0-alpha -- 2026-11-23
 
 In integration (lane/v153-int2). One re-parse for 1.53.0: extractor 1.42.0 -> 1.43.0-alpha (GRAMMAR); resolver stays 1.31.0-alpha. VS Code extension 1.6.12.

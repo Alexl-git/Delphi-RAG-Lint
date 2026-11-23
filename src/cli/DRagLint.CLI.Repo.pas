@@ -4,13 +4,14 @@ unit DRagLint.CLI.Repo;
   docs\superpowers\plans\2026-11-16-tabletools-phase1.md section 6).
   DRagLint.CLI.pas parses the flags and calls RunRepoVerb in ONE dispatch line;
   everything else lives here (lane TTE). Implemented: init, info, import-fb, seed-fb,
-  refresh-schema, backup, restore, gen-memtable. Firebird is only READ. }
+  refresh-schema, backup, restore, gen-memtable. Firebird is only READ, except by
+  "repo alter-table --apply" (1.54, DRagLint.CLI.RepoAlter). }
 
 interface
 
 /// <summary>Runs `drag-lint repo &lt;sub-verb&gt; ...`: init, info, import-fb, seed-fb,
 /// refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice,
-/// migrate, check (the last two: DRagLint.CLI.RepoModel, 1.53), gen-const, check-const (DRagLint.CLI.RepoConstGen) (PLAN D11;
+/// migrate, check (the last two: DRagLint.CLI.RepoModel, 1.53), gen-const, check-const (DRagLint.CLI.RepoConstGen), alter-table (DRagLint.CLI.RepoAlter, 1.54) (PLAN D11;
 /// gen-param-array is DRagLint.CLI.RepoParamArray and needs no repository; the generator verbs take
 /// --code-dir / --server-dir / --client-dir / --table, print a dry-run diff and write only with --apply,
 /// --no-backup skips the .BCKn copy).</summary>
@@ -69,7 +70,8 @@ uses
   DRagLint.CLI.RepoDfm,
   DRagLint.CLI.RepoDfmWrite,
   DRagLint.CLI.RepoHandlers,
-  DRagLint.CLI.RepoFib
+  DRagLint.CLI.RepoFib,
+  DRagLint.CLI.RepoAlter
   ;
 
 const
@@ -81,11 +83,12 @@ const
   LOCAL_INFO    = 1;
   LOCAL_BACKUP  = 2;
   LOCAL_RESTORE = 3;
+  LOCAL_ALTER   = 4;
   FB_IMPORT     = 0;
   { positions in the --save-form value list of RepoOrmVerb }
   SAVE_FORM_LEGACY  = 0;
   SAVE_FORM_CURRENT = 1;
-  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check, gen-const, check-const, read-dfm'
+  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check, gen-const, check-const, read-dfm, alter-table'
     + REPO_DFMWRITE_SUBS + REPO_HANDLERS_SUBS + REPO_FIB_SUBS; // 1.54 scaffolds: '' until their lane names a sub-verb
 
 function CommandLineFlag(const pFlag: string): Boolean;
@@ -409,11 +412,12 @@ begin
   if IsRepoDfmSub(pSub) then Exit(RunRepoDfmVerb(Path, pJson)); // 1.54 TT-DFMREAD: read-dfm
   if IsRepoDfmWriteSub(pSub) then Exit(RunRepoDfmWriteVerb(pSub, Path, pJson)); // 1.54 TT-DFMWRITE
   if IsRepoHandlersSub(pSub) then Exit(RunRepoHandlersVerb(pSub, Path, pJson)); // 1.54 TT-HANDLERS
-  case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
+  case IndexText(pSub, ['init', 'info', 'backup', 'restore', 'alter-table']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
     LOCAL_BACKUP: Result:= RepoBackup(Path, pOutFile);
     LOCAL_RESTORE: Result:= RepoRestore(Path, pInFile, pReplace);
+    LOCAL_ALTER: Result:= RunRepoAlterTable(Path, pConnection, pJson); // 1.54 TT-ALTER
   else
     Result:= RepoFbVerb(pSub, Path, pConnection, pReplace);
   end;
@@ -428,7 +432,7 @@ end;
 function IsImplementedSub(const pSub: string): Boolean;
 begin
   Result:= MatchText(pSub, ['init', 'info', 'import-fb', 'seed-fb', 'refresh-schema', 'backup',
-    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'gen-const', 'check-const']) or IsRepoModelSub(pSub) or IsLaneSub(pSub);
+    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'gen-const', 'check-const', 'alter-table']) or IsRepoModelSub(pSub) or IsLaneSub(pSub);
 end;
 
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de -- REVIEWED 2026-11-17 v152 TTE: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape)

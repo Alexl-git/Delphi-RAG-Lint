@@ -392,8 +392,8 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "831c44648df21d81111fda80443164998090dec88ae2a20248fabffe45846024",
-    "version": "1.53.0-alpha"
+    "hash": "7c19db827796b01c02ca84814ed42a61bee3214026552f664652685f73b19065",
+    "version": "1.54.0-alpha"
   },
   "features/finalization-after-dependency.md": {
     "hash": "ab4ca22ab2db61fa0144d423d879dced716a9354472d7a2a0565b48e3f0ddb15",
@@ -787,9 +787,13 @@
     "hash": "c0029757af11d4cface3d701ecd1f6d79cc6d1640294e31d3863bc530d0c4b5b",
     "version": "1.52.2-alpha"
   },
+  "features/repo-alter-table.md": {
+    "hash": "f1d7f0b49eb5750128bb9caa2e18241e7217642f6d1fb4d25e28b630de356e75",
+    "version": "1.54.0-alpha"
+  },
   "features/repo-read-dfm.md": {
-    "hash": "0a1f88504010a31954b22835775147a597a7b6943d0e8e9780d40bf95bedc0ea",
-    "version": "1.53.0-alpha"
+    "hash": "d610e337dd36515eb95b836e08797b5d54870ea540be34c66b868d8733035532",
+    "version": "1.54.0-alpha"
   },
   "features/rescan-this-unit.md": {
     "hash": "f7c6b71edcec4128c4324e8770cca47077b5d539d15424c8ae013c31c01c1269",
@@ -876,12 +880,12 @@
     "version": "1.52.2-alpha"
   },
   "features/shutdown.md": {
-    "hash": "c76482b93cd254caaceb31808ed73aa5aed9a9b6cbbc21a5b541216cb8df36b5",
-    "version": "1.53.0-alpha"
+    "hash": "ae2de76c406ae4ea838dc097a26cdafe03078d0fa9783ac6a9404f79318a8e79",
+    "version": "1.54.0-alpha"
   },
   "features/sql.md": {
-    "hash": "7473785e55356a3b331aab875dc199805ebdf508675e7e3239e7dad78c623e22",
-    "version": "1.53.0-alpha"
+    "hash": "13f6efa11c0c770389ae81a4fd7a7980f636dd5a79cc9a5b24fb43793a59ef1f",
+    "version": "1.54.0-alpha"
   },
   "features/stream-buffer-after-free.md": {
     "hash": "2cd27e8f817d84fbce03b3dbf3c947512dee4b02c9533544d2a9f70f58c368fa",

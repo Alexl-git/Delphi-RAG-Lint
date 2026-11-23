@@ -899,7 +899,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 13 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
 | [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 29 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
-| [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 26 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
+| [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 27 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
 | [Uses and Dependencies](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#uses-and-dependencies) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#uses-and-dependencies) |
 <!-- dl:registry:end feature-summary -->
 
