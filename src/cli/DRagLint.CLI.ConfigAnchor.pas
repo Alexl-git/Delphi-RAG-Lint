@@ -16,19 +16,36 @@ interface
 /// index open it once. Never raises for an unreadable index. Not thread-safe.</remarks>
 function IndexedProjectFile(const pDbPath: string): string;
 
-/// <summary>The nearest drag-lint-lint.json at or above the project: in each folder, then in its
-/// _D-RAG.</summary>
+/// <summary>The index that anchors a run no file names.</summary>
+/// <param name="pDbPath">--db value, or ''.</param>
+/// <param name="pFile">The file the run is about (any of its names), or ''.</param>
+/// <returns>pDbPath, or '' when a file names the run (the file is the more specific anchor).</returns>
+function DbWhenNoFile(const pDbPath, pFile: string): string;
+
+/// <summary>The project-settings folder of a run: the one already resolved, else that of the project
+/// the index was built from.</summary>
+/// <param name="pAnchor">The folder already resolved, or ''.</param>
+/// <param name="pDbPath">The anchoring index, or ''.</param>
+/// <returns>The folder, or ''.</returns>
+function SettingsAnchorOr(const pAnchor, pDbPath: string): string;
+
+/// <summary>The lint config of a run: the one already found, else the nearest drag-lint-lint.json at or
+/// above the project (in each folder, then in its _D-RAG).</summary>
+/// <param name="pPath">The config already found, or ''.</param>
 /// <param name="pProject">--project value; '' = the project pDbPath was indexed from.</param>
-/// <param name="pDbPath">The index file.</param>
+/// <param name="pDbPath">The anchoring index, or '' (then pPath is the answer).</param>
 /// <returns>The config path, or '' when there is none.</returns>
-function ConfigAboveProject(const pProject, pDbPath: string): string;
+function ConfigPathOr(const pPath, pProject, pDbPath: string): string;
 
 /// <summary>Says on stderr, once per process, that the rulings of an index's project could not be
-/// found: it IS a project index, but its project is not on this machine.</summary>
-/// <param name="pDbPath">The index file.</param>
-/// <remarks>Silent for a folder-scan index, and for a project that is here but has no config. The caller
-/// keeps it off machine-readable and --quiet runs. Not thread-safe.</remarks>
-procedure NoteNoLintConfig(const pDbPath: string);
+/// found: no config was found, it IS a project index, but its project is not on this machine.</summary>
+/// <param name="pPath">The config found, or ''.</param>
+/// <param name="pProject">--project value, or ''.</param>
+/// <param name="pDbPath">The anchoring index, or ''.</param>
+/// <remarks>Silent with a config or a --project, for a folder-scan index, for a project that is here but
+/// has no config, and under --quiet / --json / --format sarif (TManifestIO.QuietNoManifest). Not
+/// thread-safe.</remarks>
+procedure NoteNoLintConfig(const pPath, pProject, pDbPath: string);
 
 implementation
 
@@ -37,7 +54,9 @@ uses
   , System.StrUtils
   , System.IOUtils
   , DRagLint.Core.Interfaces
+  , DRagLint.Index.Manifest
   , DRagLint.Project.Coherence
+  , DRagLint.Project.Settings
   , DRagLint.CLI.Common
   , DRagLint.CLI.RuleScope
   ;
@@ -86,15 +105,28 @@ begin
   Result:= GProjectFile;
 end;
 
-function ConfigAboveProject(const pProject, pDbPath: string): string;
+function DbWhenNoFile(const pDbPath, pFile: string): string;
 begin
+  Result:= if pFile = '' then pDbPath else '';
+end;
+
+function SettingsAnchorOr(const pAnchor, pDbPath: string): string;
+begin
+  Result:= pAnchor;
+  if (Result = '') and (pDbPath <> '') then Result:= TProjectSettings.ResolveAnchor('', IndexedProjectFile(pDbPath), '', '');
+end;
+
+function ConfigPathOr(const pPath, pProject, pDbPath: string): string;
+begin
+  if (pPath <> '') or (pDbPath = '') then Exit(pPath);
   var ProjectFile: string:= if pProject <> '' then TPath.GetFullPath(StringReplace(pProject, '/', '\', [rfReplaceAll]))
     else IndexedProjectFile(pDbPath);
   Result:= if ProjectFile = '' then '' else FindConfigAbove(ExtractFilePath(ProjectFile));
 end;
 
-procedure NoteNoLintConfig(const pDbPath: string);
+procedure NoteNoLintConfig(const pPath, pProject, pDbPath: string);
 begin
+  if (pPath + pProject <> '') or (pDbPath = '') or TManifestIO.QuietNoManifest then Exit;
   LoadIndexFacts(pDbPath);
   if GNoted or (GTag = '') or (GProjectFile <> '') then Exit;
   GNoted:= True;
