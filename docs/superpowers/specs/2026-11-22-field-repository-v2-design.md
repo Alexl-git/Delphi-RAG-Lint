@@ -319,16 +319,13 @@ CONSTGEN), new `schema-lint` (LINT); each runs `featuregen verify --id <id> --by
 | DL_DATASET_FIELD_USE (rev 1 of this spec) | DROPPED: the DFM's persistent fields are the selection (FR-2) |
 | `dfm-survey` verb, plan `fr-survey` (rev 1) | DROPPED: survey done ad hoc (section 8) |
 
-## 12. Open questions for the owner
+## 12. Owner rulings on the open questions (2026-11-22, all answered)
 
-1. **Datasets built in code.** Some datasets get their fields at run time (no DFM, no persistent fields), so there
-   is nothing to hold their field selection (FR-2). Should DL (a) leave them out of the selection dialog, (b) treat
-   the code that creates the fields as the selection (DL edits that code later), or (c) keep a small selection list
-   in the repository only for such datasets?
-2. **Deleting vanished fields.** When Firebird no longer has a column, the refresh lists a delete that is NOT
-   pre-checked (you must tick it). Are hand-kept facts on that row (caption, calc code) to be deleted with it, or
-   kept as an orphan you can reuse if the column comes back?
-3. **Manifest key.** Lint finds the repository through `fieldRepository` in the project's
-   `drag-lint-project.json`, or the same key on the project's section of `drag-lint.json`. For Micronite all three
-   projects would point at one file under SERVER's `_DL-REPO`. Is SERVER the right owner folder, or should the
-   repository sit in a neutral shared folder (like the library under `C:\Projects\.drag-lint\`)?
+1. **Datasets built in code**: LEFT OUT of the selection dialog (no DFM fields, no selection).
+2. **Vanished columns**: the delete stays unchecked by default; when ticked it removes the row WITH its hand-kept
+   facts (no orphan is kept).
+3. **Repository folder**: Micronite SERVER, CLIENT and PACKAGE point their `fieldRepository` key at one file under
+   `C:\Projects\DB\ORM3\COMMON\DL-REPO` (configuration only; the `--project` default is unchanged).
+4. **gen-const for TFDMemTable readers**: pre-filled at compile time (generated data module, FireDAC binary `Content`)
+   instead of fill code, if the measurement shows it is faster (lane FR-PRELOAD). The repository is the master: generated
+   files are not reviewed as a second source, and a content hash lets a build see when they are behind the repository.
