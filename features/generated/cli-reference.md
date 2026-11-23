@@ -1867,7 +1867,7 @@ Described in [Rename Symbol](../../docs/wiki/Rename-Symbol.md).
 Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
 
 ```text
-drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice|migrate|check|gen-const|check-const> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--ddl <file.sql>[;...]] [--select <file>] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--apply] [--dry-run] [--json] [--unit <UnitName>] [--datamodule <Name>] [--unit-file <file.pas>]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
+drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice|migrate|check|gen-const|check-const|read-dfm> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--ddl <file.sql>[;...]] [--select <file>] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--apply] [--dry-run] [--json] [--unit <UnitName>] [--datamodule <Name>] [--unit-file <file.pas>] [--dfm <file.dfm>[;...]] [--dataset <Name>] [--direction dfm-to-repo]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
 drag-lint repo init (--repo <file> | --project <project file>) (create an empty field repository; exit 1 when the file exists)
 drag-lint repo info (--repo <file> | --project <project file>) [--json|--format json] (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)
 drag-lint repo import-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace] (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)
@@ -1884,6 +1884,7 @@ drag-lint repo migrate (--repo <file> | --project <project file>) [--apply] (sch
 drag-lint repo check (--repo <file> | --project <project file>) [--json] (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc macros and dependency cycles, layout-event rows; exit 0 clean, 1 findings)
 drag-lint repo gen-const (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run] (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)
 drag-lint repo check-const (--repo <file> | --project <project file>) --unit-file <file.pas> (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)
+drag-lint repo read-dfm --dfm <file.dfm>[;...] [--dataset <Name>] --direction dfm-to-repo (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json] (the persistent fields of a form's datasets as a change set: data, calc, lookup, internal-calc and aggregate fields, captions / formats / widths, lookup wiring, OnCalcFields code as CALC_BODY with {{FIELD}} macros, OnGetText code; text or binary DFM, BDE or FireDAC; the table comes from UpdateTableName, TableName or a one-table SELECT, anything else is listed as UNRESOLVED; no --apply = dry run; exit 1 read / apply failure, 2 usage or a bad --select file)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1903,6 +1904,8 @@ drag-lint repo check-const (--repo <file> | --project <project file>) --unit-fil
 | `--table` | `<Name>` |  |  |
 | `--unit` | `<UnitName>` |  |  |
 | `--datamodule` | `<Name>` |  |  |
+| `--dataset` | `<Name>` |  |  |
+| `--direction` | `dfm-to-repo` |  |  |
 | `--unit-file` | `<file.pas>` |  |  |
 | `--connection` | `<Firebird connection string>` |  |  |
 | `--ddl` | `<file.sql>[;...]` |  |  |
@@ -1921,7 +1924,10 @@ drag-lint repo check-const (--repo <file> | --project <project file>) --unit-fil
 | `--client-dir` | `<folder>` |  |  |
 | `--save-form` | `<legacy\|current>` |  |  |
 
-Described in [Field repository](../../docs/wiki/field-repository.md).
+Described in:
+
+* [Field repository](../../docs/wiki/field-repository.md)
+* [Read a form into the field repository](../../docs/wiki/repo-read-dfm.md)
 
 ### resolve-dbs
 

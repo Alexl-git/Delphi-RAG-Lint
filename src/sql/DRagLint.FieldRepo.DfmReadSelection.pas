@@ -35,7 +35,7 @@ type
 /// <remarks>S1: a calc / internal-calc / aggregate field adds its CalcDependencies transitively (a cycle ends, it is
 /// not an error here); a lookup field adds its SOURCEKEY. S2: the result always contains pSelected, so unselecting a
 /// field removes nothing else. S3: expanding an expanded selection gives the same selection. Pure.</remarks>
-function ExpandSelection(const pSelected: TArray<string>;
+function ExpandSelection(const pSelected: TArray<string>;  // dl:ok unused-public-symbol@487e -- REVIEWED 2026-11-23 TT-DFMREAD: spec 4.4 engine side of the field-selection dialog (a later lane); tests/fieldrepo/DfmReadTests.dpr calls it
   const pAllFieldsOfTable: TArray<TFrSelectionField>): TArray<string>;
 
 implementation

@@ -88,6 +88,9 @@ const
   TABLE_EXTENSIONS: array[0..1] of string = ('DB', 'DBF');
   FROM_END_WORDS: array[0..9] of string = ('WHERE', 'GROUP', 'ORDER', 'HAVING', 'PLAN', 'FETCH', 'ROWS', 'OFFSET', 'FOR',
     'WINDOW');
+  { Words that are values where a column may stand. }
+  VALUE_WORDS: array[0..10] of string = ('NULL', 'TRUE', 'FALSE', 'USER', 'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP',
+    'CURRENT_USER', 'CURRENT_ROLE', 'LOCALTIME', 'LOCALTIMESTAMP');
   JOIN_WORDS: array[0..7] of string = ('JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER', 'CROSS', 'NATURAL');
 
 function IsWordChar(pC: Char): Boolean;
@@ -194,9 +197,10 @@ begin
   Result := (pToken.Kind = stkWord) and MatchText(pToken.Text, pWords);
 end;
 
+{ A quoted name, or a word that is not a number. }
 function IsName(const pToken: TSqlToken): Boolean;
 begin
-  Result := pToken.Kind in [stkWord, stkQuoted];
+  Result := (pToken.Kind = stkQuoted) or ((pToken.Kind = stkWord) and (not CharInSet(pToken.Text[1], ['0'..'9'])));
 end;
 
 { Index of the first token at parenthesis depth 0 that is one of pWords, from pFrom; Length when none. }
@@ -254,7 +258,7 @@ begin
     Result := 2;
   end;
   pOut.Star := IsSymbol(pItem[Result], STAR);
-  if pOut.Star or IsName(pItem[Result]) then
+  if pOut.Star or (IsName(pItem[Result]) and (VQualified or (not IsKeyword(pItem[Result], VALUE_WORDS)))) then
   begin
     pOut.Column := pItem[Result].Text;
     Inc(Result);
@@ -288,7 +292,7 @@ begin
   { an expression: only a trailing name after a complete operand is its alias }
   Result := Default(TDfmrSqlItem);
   VLast := High(pItem);
-  if (VLast > 0) and IsName(pItem[VLast]) and (not IsSymbol(pItem[VLast - 1], DOT)) then
+  if (VLast > 0) and IsName(pItem[VLast]) and ((pItem[VLast - 1].Kind <> stkSymbol) or IsSymbol(pItem[VLast - 1], CLOSE_PAREN)) then
     Result.OutName := pItem[VLast].Text;
 end;
 
@@ -309,6 +313,11 @@ begin
   VPos := 1;
   if (Length(pTokens) > 2) and IsSymbol(pTokens[1], DOT) and IsKeyword(pTokens[2], TABLE_EXTENSIONS) then
     Inc(VPos, 2);
+  if (VPos < Length(pTokens)) and IsSymbol(pTokens[VPos], DOT) then
+  begin
+    pReason := 'the SQL qualifies its table name';
+    Exit(False);
+  end;
   if (VPos < Length(pTokens)) and IsKeyword(pTokens[VPos], ['AS']) then
     Inc(VPos);
   if (VPos < Length(pTokens)) and IsName(pTokens[VPos]) and (not IsKeyword(pTokens[VPos], ['ON', 'USING'])) then
@@ -344,6 +353,29 @@ begin
   Result := True;
 end;
 
+{ Number of tokens of the value after FIRST / SKIP: n, ?, :param or a parenthesised expression. }
+function RowCountTokens(const pTokens: TSqlTokens; pFrom: Integer): Integer;
+var
+  VDepth: Integer;
+begin
+  Result := 1;
+  if pFrom >= Length(pTokens) then
+    Exit;
+  if IsSymbol(pTokens[pFrom], ':') then
+    Exit(2);
+  if not IsSymbol(pTokens[pFrom], OPEN_PAREN) then
+    Exit;
+  VDepth := 1;
+  while (VDepth > 0) and (pFrom + Result < Length(pTokens)) do
+  begin
+    if IsSymbol(pTokens[pFrom + Result], OPEN_PAREN) then
+      Inc(VDepth)
+    else if IsSymbol(pTokens[pFrom + Result], CLOSE_PAREN) then
+      Dec(VDepth);
+    Inc(Result);
+  end;
+end;
+
 { First token after SELECT that belongs to the select list: DISTINCT / ALL / FIRST n / SKIP n are skipped. }
 function SelectListStart(const pTokens: TSqlTokens): Integer;
 begin
@@ -352,7 +384,7 @@ begin
     if IsKeyword(pTokens[Result], ['DISTINCT', 'ALL']) then
       Inc(Result)
     else if IsKeyword(pTokens[Result], ['FIRST', 'SKIP']) then
-      Inc(Result, 2)
+      Inc(Result, 1 + RowCountTokens(pTokens, Result + 1))
     else
       Break;
 end;

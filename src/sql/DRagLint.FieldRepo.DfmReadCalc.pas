@@ -7,8 +7,11 @@ unit DRagLint.FieldRepo.DfmReadCalc;
   One OnCalcFields handler computes many fields; CALC_BODY holds the statements of ONE. The body of field F is a
   slice of the handler: every top-level statement up to the last one that assigns F, except the statements whose
   only effect is another calculated field or a local variable F does not need. Inside a kept statement the
-  assignments to other calculated fields are cut out. Anything else (a call, a write to something unknown) is kept:
-  the slice may be too long, never too short. Local variables / constants become inline declarations.
+  assignments to other calculated fields are cut out, except one that also moves a dataset (Locate, FindKey, ...).
+  Anything else (a call statement, a write to something unknown) is kept. A needed local that only a dropped statement
+  may set (a var argument of a function), and a calculated field that changes after the body reads it, BLOCK the body.
+  Side effects of other functions called in a dropped expression are not seen. Local variables / constants become
+  inline declarations.
 
   Persistent fields become field macros (spec 4.3) where the macro means the same thing (Value, or the typed accessor of
   the field class). Whatever a macro cannot express (IsNull, another accessor, a Variant read, `with`, Exit,
@@ -119,6 +122,8 @@ type
   TLocalDecl = record
     Names: TArray<string>;
     InlineText: string;
+    Mentions: TArray<string>; // every identifier of the declaration, lower case
+    IsConst: Boolean;
   end;
 
   { One top-level statement and what running it changes. }
@@ -136,7 +141,7 @@ type
   end;
 
   { One handler: the AST work of CalcBody / EventBody. }
-  THandler = class
+  THandler = class  // dl:ok high-response@e935 -- REVIEWED 2026-11-23 TT-DFMREAD: one handler's slicer; its state (edits, cuts, locals) is shared by every step and the response set is AST and string helper calls
   strict private
     FSource: TBytes;
     FContext: TDfmrCodeContext;
@@ -149,6 +154,7 @@ type
     FCuts: TList<TByteRange>;
     FProblems: TStringList;
     FFormNames: TStringList;
+    FReads: TArray<string>; // calculated fields the scanned statement reads (or writes in an assignment kept whole)
     procedure ReadHeader;
     procedure ReadLocals(const pNode: TTSNode; const pKeyword: string);
     procedure ReadDeclarations;
@@ -169,6 +175,8 @@ type
     function TargetField(const pNode: TTSNode): string;
     function IsLocal(const pName: string): Boolean;
     function HasExit(const pNode: TTSNode): Boolean;
+    function MovesDataset(const pNode: TTSNode): Boolean;
+    function ConditionOf(const pGuard: TTSNode): TTSNode;
     function IsExitGuard(const pNode: TTSNode): Boolean;
     function GuardCondition(const pNode: TTSNode): string;
     procedure Problem(const pText: string);
@@ -187,6 +195,9 @@ type
     function InlineDecls: string;
     function Slice(const pField: string): Boolean;
     procedure CheckKept(pCalc: Boolean);
+    procedure CheckLocals;
+    procedure CheckLaterWrites(pIndex: Integer; const pField: string);
+    procedure CheckBraces;
     function Finish(const pText: string): TDfmrBody;
   public
     constructor Create(const pSource: TBytes; const pNode: TTSNode; const pContext: TDfmrCodeContext;
@@ -200,6 +211,8 @@ type
 const
   CRLF = #13#10;
   INDENT = '  ';
+  KEYWORD_CONST = 'const';
+  MACRO_OPEN = '{{';
   N_PROC = 'defProc';
   N_BLOCK = 'block';
   N_STATEMENT = 'statement';
@@ -222,6 +235,9 @@ const
   MEMBER_BY_NAME = 'FieldByName';
   MEMBER_VALUES = 'FieldValues';
   MEMBER_CLEAR = 'Clear';
+  { Functions that move the cursor of a dataset (the procedures that do are statements of their own). }
+  MOVERS: array[0..9] of string = ('Locate', 'LocateEx', 'LocateNext', 'FindKey', 'FindFirst', 'FindNext', 'FindLast',
+    'FindPrior', 'GotoKey', 'MoveBy');
 
 function NodeText(const pSource: TBytes; const pNode: TTSNode): string;
 begin
@@ -259,6 +275,17 @@ begin
       Result := Result + [NodeText(pSource, pNode.NamedChild(VI))]
     else if pNode.NamedChild(VI).NodeType = 'type' then
       Break;
+end;
+
+{ Every identifier of a node. }
+procedure AddIdentifiers(const pSource: TBytes; const pNode: TTSNode; var pList: TArray<string>);
+var
+  VI: Integer;
+begin
+  if pNode.NodeType = N_IDENT then
+    AddName(pList, NodeText(pSource, pNode));
+  for VI := 0 to Integer(pNode.NamedChildCount) - 1 do
+    AddIdentifiers(pSource, pNode.NamedChild(VI), pList);
 end;
 
 { THandler }
@@ -313,7 +340,7 @@ begin
   if (not FirstNamed(FNode, 'declProc', VHead)) or (not FirstNamed(VHead, 'declArgs', VArgs)) then
     Exit;
   for VI := 0 to Integer(VArgs.NamedChildCount) - 1 do
-    FParams := FParams + DeclaredNames(FSource, VArgs.NamedChild(VI));  // dl:ok concat-in-loop@6bf1 -- REVIEWED 2026-11-23 TT-DFMREAD: a dynamic array of at most three parameter names, not a string
+    FParams := FParams + DeclaredNames(FSource, VArgs.NamedChild(VI));
 end;
 
 procedure THandler.ReadLocals(const pNode: TTSNode; const pKeyword: string);
@@ -326,6 +353,9 @@ begin
     VDecl.Names := DeclaredNames(FSource, pNode.NamedChild(VI));
     if Length(VDecl.Names) = 0 then
       Continue;
+    VDecl.IsConst := pKeyword = KEYWORD_CONST;
+    VDecl.Mentions := nil;
+    AddIdentifiers(FSource, pNode.NamedChild(VI), VDecl.Mentions);
     VDecl.InlineText := pKeyword + ' ' + NodeText(FSource, pNode.NamedChild(VI)).Trim;
     if not VDecl.InlineText.EndsWith(';') then
       VDecl.InlineText := VDecl.InlineText + ';';
@@ -344,7 +374,7 @@ begin
     if VChild.NodeType = 'declVars' then
       ReadLocals(VChild, 'var')
     else if VChild.NodeType = 'declConsts' then
-      ReadLocals(VChild, 'const')
+      ReadLocals(VChild, KEYWORD_CONST)
     else if VChild.NodeType = N_BLOCK then
       ReadStatements(VChild)
     else if not MatchStr(VChild.NodeType, ['declProc', N_COMMENT]) then
@@ -376,6 +406,16 @@ begin
     Result := Result or HasExit(pNode.NamedChild(VI));
 end;
 
+{ True when the node calls a function that moves a dataset. }
+function THandler.MovesDataset(const pNode: TTSNode): Boolean;
+var
+  VI: Integer;
+begin
+  Result := (pNode.NodeType = N_DOT) and MatchText(LastChildText(pNode), MOVERS);
+  for VI := 0 to Integer(pNode.NamedChildCount) - 1 do
+    Result := Result or MovesDataset(pNode.NamedChild(VI));
+end;
+
 { `if C then Exit;` or `if C then begin Exit; end;` }
 function THandler.IsExitGuard(const pNode: TTSNode): Boolean;
 var
@@ -387,10 +427,22 @@ begin
   Result := TRegEx.IsMatch(NodeText(FSource, VThen), EXIT_ONLY, [roIgnoreCase]);
 end;
 
-{ The condition of an Exit guard, edits applied. }
+{ The condition of an `if`: the first child after the keyword that is no comment. }
+function THandler.ConditionOf(const pGuard: TTSNode): TTSNode;
+var
+  VI: Integer;
+begin
+  Result := pGuard.NamedChild(1);
+  for VI := 1 to Integer(pGuard.NamedChildCount) - 1 do
+    if pGuard.NamedChild(VI).NodeType <> N_COMMENT then
+      Exit(pGuard.NamedChild(VI));
+end;
+
+{ The condition of an Exit guard, edits applied; on one line unless a // comment may end a line of it. }
 function THandler.GuardCondition(const pNode: TTSNode): string;
 begin
-  Result := NodeEdited(pNode.NamedChild(1)).Replace(#13, '').Replace(#10, ' ');
+  Result := NodeEdited(ConditionOf(pNode)).Replace(#13, '');
+  Result := Result.Replace(#10, if Result.Contains('//') then CRLF else ' ');
 end;
 
 procedure THandler.ReadStatements(const pBlock: TTSNode);
@@ -548,8 +600,8 @@ begin
     { an inline variable: a local from here on, its declaration is the statement itself }
     if not FirstNamed(VTarget, N_IDENT, VIdent) then
       Exit;
+    VDecl := Default(TLocalDecl);
     VDecl.Names := [NodeText(FSource, VIdent)];
-    VDecl.InlineText := '';
     if not IsLocal(VDecl.Names[0]) then
       FLocals := FLocals + [VDecl];
     AddName(pStatement.Locals, VDecl.Names[0]);
@@ -586,7 +638,8 @@ begin
     AssignEffect(pNode, pStatement)
   else if pNode.NodeType = N_STATEMENT then
     CallEffect(pNode, pStatement)
-  else if MatchStr(pNode.NodeType, ['raise', 'goto', 'label', 'asm', 'lambda']) then
+  else if MatchStr(pNode.NodeType, ['raise', 'goto', 'label', 'asm', 'lambda'])
+    or ((pNode.NodeType = N_DOT) and MatchText(LastChildText(pNode), MOVERS)) then
     pStatement.Other := True;
   for VI := 0 to Integer(pNode.NamedChildCount) - 1 do
     CollectEffects(pNode.NamedChild(VI), pStatement);
@@ -640,7 +693,7 @@ begin
     CallEffect(pNode, VEffect);
     VCut := pNode.NamedChild(0);
   end;
-  if (Length(VEffect.Fields) = 1) and (not SameText(VEffect.Fields[0], pKeep)) then
+  if (Length(VEffect.Fields) = 1) and (not SameText(VEffect.Fields[0], pKeep)) and (not MovesDataset(pNode)) then
   begin
     VRange.First := VCut.StartByte;
     VRange.Last := VCut.EndByte;
@@ -654,6 +707,8 @@ end;
 
 procedure THandler.UseField(const pNode: TTSNode; const pField: TDfmrCodeField; const pMember: string);
 begin
+  if pField.IsCalc then
+    AddName(FReads, pField.CompName);
   if pField.MacroName = '' then
     Problem(pField.CompName + ' is not a field of the dataset''s table')
   else if (pMember <> '') and SameText(pMember, pField.Accessor) then
@@ -805,17 +860,27 @@ var
   VDecl: TLocalDecl;
   VStatement: TStatement;
   VName: string;
+  VMentions: TArray<string>;
   VNeeded: Boolean;
+  VI: Integer;
 begin
   Result := '';
-  for VDecl in FLocals do
+  VMentions := nil;
+  for VStatement in FStatements do
+    if VStatement.Kept then
+      VMentions := VMentions + VStatement.Mentions;
+  { backwards: a declaration may need the ones above it }
+  for VI := High(FLocals) downto 0 do
   begin
+    VDecl := FLocals[VI];
     VNeeded := False;
-    for VStatement in FStatements do
-      for VName in VDecl.Names do
-        VNeeded := VNeeded or (VStatement.Kept and MatchText(VName, VStatement.Mentions));
+    for VName in VDecl.Names do
+      VNeeded := VNeeded or MatchText(VName, VMentions);
     if VNeeded and (VDecl.InlineText <> '') then
-      Result := Result + VDecl.InlineText + CRLF;
+    begin
+      Result := VDecl.InlineText + CRLF + Result;
+      VMentions := VMentions + VDecl.Mentions;
+    end;
   end;
 end;
 
@@ -899,8 +964,61 @@ begin
   end;
 end;
 
+{ Refuses a needed variable no kept statement sets while an earlier dropped one names it (a var argument). }
+procedure THandler.CheckLocals;
+var
+  VDecl: TLocalDecl;
+  VStatement: TStatement;
+  VName: string;
+  VNamed, VSet, VDropped: Boolean;
+begin
+  for VDecl in FLocals do
+    for VName in VDecl.Names do
+    begin
+      VNamed := False;
+      VSet := VDecl.IsConst;
+      VDropped := False;
+      for VStatement in FStatements do
+        if not MatchText(VName, VStatement.Mentions) then
+          Continue
+        else if VStatement.Kept then
+        begin
+          VSet := VSet or MatchText(VName, VStatement.Locals) or ((not VNamed) and VStatement.Other);
+          VNamed := True;
+        end
+        else
+          VDropped := VDropped or (not VNamed);
+      if VNamed and VDropped and (not VSet) then
+        Problem('the local ' + VName + ' may be set by a statement left out');
+    end;
+end;
+
+{ Refuses a calculated field that statement pIndex reads (FReads) and a later one assigns: the macro is its final value. }
+procedure THandler.CheckLaterWrites(pIndex: Integer; const pField: string);
+var
+  VI: Integer;
+  VName: string;
+begin
+  for VName in FReads do
+    for VI := pIndex + 1 to High(FStatements) do
+      if (not SameText(VName, pField)) and MatchText(VName, FStatements[VI].Fields) then
+        Problem(UpperCase(VName) + ' changes after this body reads it');
+end;
+
+{ Refuses source text a reader of the body would take for a macro. }
+procedure THandler.CheckBraces;
+var
+  VStatement: TStatement;
+begin
+  for VStatement in FStatements do
+    if VStatement.Kept
+      and (VStatement.Comments + NodeText(FSource, VStatement.Node) + VStatement.TrailingComment).Contains(MACRO_OPEN) then
+      Problem('the code holds ' + MACRO_OPEN);
+end;
+
 function THandler.Finish(const pText: string): TDfmrBody;
 begin
+  CheckBraces;
   Result.Text := pText;
   Result.Blocked := string.Join('; ', FProblems.ToStringArray);
   Result.FormNames := FFormNames.ToStringArray;
@@ -908,16 +1026,19 @@ end;
 
 function THandler.CalcBody(const pField: string): TDfmrBody;
 var
-  VStatement: TStatement;
+  VI: Integer;
 begin
   if not Slice(pField) then
     Exit(Default(TDfmrBody));
   CheckKept(True);
-  for VStatement in FStatements do
-    if VStatement.Kept then
+  CheckLocals;
+  for VI := 0 to High(FStatements) do
+    if FStatements[VI].Kept then
     begin
-      CutOthers(VStatement.Node, pField);
-      Scan(VStatement.Node);
+      FReads := nil;
+      CutOthers(FStatements[VI].Node, pField);
+      Scan(FStatements[VI].Node);
+      CheckLaterWrites(VI, pField);
     end;
   Result := Finish(Render(True));
 end;

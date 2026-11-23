@@ -32,7 +32,6 @@ uses
   DRagLint.FieldRepo.Kinds,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.ChangeSet,
-  DRagLint.FieldRepo.DfmRead,
   DRagLint.FieldRepo.DfmReadPlan;
 
 const
@@ -256,10 +255,13 @@ end;
 function ReadOptions(pJson: Boolean; out pError: string): TRunOptions;
 var
   VDirection: string;
+  VI: Integer;
 begin
   pError := '';
   Result.Json := pJson;
   Result.Files := CommandLineValue('--dfm').Split([';'], TStringSplitOptions.ExcludeEmpty);
+  for VI := 0 to High(Result.Files) do
+    Result.Files[VI] := Trim(Result.Files[VI]);
   Result.Dataset := CommandLineValue('--dataset');
   Result.SelectFile := CommandLineValue('--select');
   Result.Write := (CommandLineFlag('--apply') or (Result.SelectFile <> '')) and not CommandLineFlag('--dry-run');

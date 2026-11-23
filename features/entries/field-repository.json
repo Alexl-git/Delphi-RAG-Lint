@@ -45,11 +45,6 @@
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "read-dfm"
-    },
-    {
-      "type": "cli",
-      "verb": "repo",
       "sub": "backup"
     },
     {
@@ -301,10 +296,6 @@
       "command": "drag-lint repo refresh-schema --ddl <schema.sql> --repo <file>"
     },
     {
-      "ask": "How do I read the persistent fields and calc code of a form into the repository?",
-      "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file>"
-    },
-    {
       "ask": "How do I see what is in it?",
       "command": "drag-lint repo info --repo <file> --json"
     },
@@ -317,6 +308,6 @@
     "date": "2026-11-23",
     "by": "ENGINE",
     "build": "1.53.0-alpha",
-    "surfaceHash": "25ffe09954e95c15be829e992fb18dcfcbf9a9b355d20cd579bc1a5b6ad8f5a8"
+    "surfaceHash": "c1bf3a004cc975812c13b5a5ba839c8fa3b7cf9b0fd766c5e342c03ee3a260c6"
   }
 }

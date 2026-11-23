@@ -1,0 +1,35 @@
+{
+  "id": "repo-read-dfm",
+  "title": "Read a form into the field repository",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Reads the persistent fields, lookup wiring and calc / OnGetText code of a DFM into the field repository as a change set, dry run by default",
+  "intro": "Read this when the fields of a form should become rows of the field repository. drag-lint repo read-dfm reads a text or binary DFM and its unit, prints the changes that bring the repository in line with them, and writes only with --apply or --select. What the DFM does not state is reported, never guessed.",
+  "wikiPage": "repo-read-dfm",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "read-dfm"
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I read the persistent fields and calc code of a form into the repository?",
+      "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file>"
+    },
+    {
+      "ask": "Which datasets of a form have a table drag-lint can name?",
+      "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file> --json"
+    }
+  ],
+  "verified": {
+    "date": "2026-11-23",
+    "by": "ENGINE",
+    "build": "1.53.0-alpha",
+    "surfaceHash": "3e497be9e452533907ae61a5c2dc32d7532aafd3df9bef212a0e5410bf44e5df"
+  }
+}

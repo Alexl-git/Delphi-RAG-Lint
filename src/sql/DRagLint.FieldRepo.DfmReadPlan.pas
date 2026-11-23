@@ -72,8 +72,8 @@ const
 /// <param name="pRepo">Open repository connection, schema 2; only SELECTs run.</param>
 /// <param name="pFiles">DFM files; the unit of the same name is read for handler code when it exists.</param>
 /// <param name="pDataset">Dataset component name (case-insensitive); '' = every dataset of every file.</param>
-/// <returns>The plan. Every change is checked, except alternatives that contradict each other and a data field the
-/// repository knows as calc / lookup; a value that cannot be stored is blocked.</returns>
+/// <returns>The plan. Every change is checked, except alternatives that contradict each other, a data field the
+/// repository knows as calc / lookup, and a body or lookup wiring of a field that does not become that kind; a value that cannot be stored is blocked.</returns>
 /// <exception cref="EDfmReadError">A file cannot be read, or no file holds the dataset.</exception>
 /// <exception cref="ERepoError">The repository is schema 1 (run repo migrate first).</exception>
 /// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids.</remarks>
@@ -176,7 +176,7 @@ type
     Reason: string;
   end;
 
-  TDfmRead = class
+  TDfmRead = class  // dl:ok high-response@c61e -- REVIEWED 2026-11-23 TT-DFMREAD: one read = collect facts + compare; private to the unit, its response set is FireDAC, dictionary and string calls
   strict private
     FRepo: TFDConnection;
     FPlan: TDfmrPlan;
@@ -184,7 +184,7 @@ type
     FRows: TDictionary<string, TRepoRow>;
     FSchemaTables: TDictionary<string, Boolean>;
     FForms: TDictionary<string, TDfmrForm>;
-    FRoots: TDictionary<string, string>;
+    FRoots: TDictionary<string, string>; // `folder|root object` -> DFM; `folder|` = the folder was listed
     FUnits: TObjectDictionary<string, TDfmrUnit>;
     FFacts: TObjectDictionary<string, TFieldFacts>;
     FOrder: TList<TFieldFacts>;
@@ -197,8 +197,10 @@ type
     function FactsOf(const pTable, pField: string): TFieldFacts;
     function LookupTarget(const pForm: TDfmrForm; const pName: string; out pDataset: TDfmrDataset): Boolean;
     procedure ReadDataset(const pForm: TDfmrForm; const pDataset: TDfmrDataset);
-    procedure ReadField(const pForm: TDfmrForm; const pField: TDfmrField; const pTable, pColumn: string);
-    procedure ReadLookup(const pForm: TDfmrForm; const pField: TDfmrField; pFacts: TFieldFacts; const pSource: string);
+    procedure ReadField(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pField: TDfmrField;
+      const pTable, pColumn: string);
+    procedure ReadLookup(const pForm: TDfmrForm; const pOwner: TDfmrDataset; const pField: TDfmrField; pFacts: TFieldFacts;
+      const pSource: string);
     procedure ReadCalc(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pContext: TDfmrCodeContext;
       const pField: TDfmrField; pFacts: TFieldFacts; var pReport: TDfmrDatasetReport);
     procedure ReadEvents(const pForm: TDfmrForm; const pContext: TDfmrCodeContext; const pField: TDfmrField;
@@ -207,7 +209,8 @@ type
     function AddChange(pOp: TFrChangeOp; const pFacts: TFieldFacts; const pProp, pOld, pNew: string): Integer;
     procedure PlanNew(pFacts: TFieldFacts);
     procedure PlanExisting(pFacts: TFieldFacts; const pRow: TRepoRow);
-    procedure PlanKind(pFacts: TFieldFacts; const pRow: TRepoRow; pQuery: TFDQuery);
+    procedure ListRoots(const pFolder: string);
+    function PlanKind(pFacts: TFieldFacts; const pRow: TRepoRow; pQuery: TFDQuery): TFrFieldKind;
     procedure PlanColumn(pFacts: TFieldFacts; const pColumn: TFactColumn; const pOld: string);
     procedure PlanEvents(pFacts: TFieldFacts);
     function NewRowBlock(pFacts: TFieldFacts): string;
@@ -381,6 +384,7 @@ begin
   FRows := TDictionary<string, TRepoRow>.Create;
   FSchemaTables := TDictionary<string, Boolean>.Create;
   FForms := TDictionary<string, TDfmrForm>.Create;
+  FRoots := TDictionary<string, string>.Create;
   FUnits := TObjectDictionary<string, TDfmrUnit>.Create([doOwnsValues]);
   FFacts := TObjectDictionary<string, TFieldFacts>.Create([doOwnsValues]);
   FOrder := TList<TFieldFacts>.Create;
@@ -461,21 +465,30 @@ begin
   FUnits.Add(LowerCase(VPas), Result);
 end;
 
-{ The one DFM of the same folder whose root object is pRoot; '' = none or more than one. }
-function TDfmRead.SiblingForm(const pFile, pRoot: string): string;
+{ Root objects of the DFMs of a folder; a DFM that cannot be read is a warning. }
+procedure TDfmRead.ListRoots(const pFolder: string);
 var
   VFile, VRoot: string;
 begin
-  if FRoots = nil then
-  begin
-    FRoots := TDictionary<string, string>.Create;
-    for VFile in TDirectory.GetFiles(TPath.GetDirectoryName(TPath.GetFullPath(pFile)), '*.dfm') do
-    begin
-      VRoot := LowerCase(DfmRootName(VFile));
+  for VFile in TDirectory.GetFiles(pFolder, '*.dfm') do
+    try
+      VRoot := LowerCase(pFolder + '|' + DfmRootName(VFile));
       FRoots.AddOrSetValue(VRoot, if FRoots.ContainsKey(VRoot) then '' else VFile);
+    except
+      on E: EDfmReadError do
+        FWarnings.Add('lookup datasets: ' + E.Message);
     end;
-  end;
-  if not FRoots.TryGetValue(LowerCase(pRoot), Result) then
+end;
+
+{ The one DFM of the same folder whose root object is pRoot; '' = none or more than one. }
+function TDfmRead.SiblingForm(const pFile, pRoot: string): string;
+var
+  VFolder: string;
+begin
+  VFolder := TPath.GetDirectoryName(TPath.GetFullPath(pFile));
+  if FRoots.TryAdd(LowerCase(VFolder) + '|', '') then
+    ListRoots(VFolder);
+  if not FRoots.TryGetValue(LowerCase(VFolder + '|' + pRoot), Result) then
     Result := '';
 end;
 
@@ -519,27 +532,61 @@ begin
     end;
 end;
 
-procedure TDfmRead.ReadLookup(const pForm: TDfmrForm; const pField: TDfmrField; pFacts: TFieldFacts; const pSource: string);
+{ The column behind a dataset field a lookup names; pBlocked = why it is none of the dataset's table. An unresolved dataset
+  states nothing: the name as written. }
+function LookupColumn(const pDataset: TDfmrDataset; const pSource: TDatasetSource; const pName: string;
+  out pBlocked: string): string;
+var
+  VField, VNamed: TDfmrField;
+  VTable, VColumn: string;
+begin
+  pBlocked := '';
+  Result := UpperCase(Trim(pName));
+  if pSource.TableName = '' then
+    Exit;
+  VNamed := Default(TDfmrField);
+  VNamed.FieldName := pName;
+  for VField in pDataset.Fields do
+    if SameText(VField.FieldName, Trim(pName)) then
+    begin
+      VNamed := VField;
+      Break;
+    end;
+  if FieldSource(pSource, VNamed, VTable, VColumn, pBlocked) and SameText(VTable, pSource.TableName) then
+    Exit(VColumn);
+  pBlocked := Format('%s is not a column of %s (%s)', [Result, pSource.TableName,
+    if pBlocked = '' then 'it comes from ' + VTable else pBlocked]);
+end;
+
+procedure TDfmRead.ReadLookup(const pForm: TDfmrForm; const pOwner: TDfmrDataset; const pField: TDfmrField;
+  pFacts: TFieldFacts; const pSource: string);
 var
   VDataset: TDfmrDataset;
   VSource: TDatasetSource;
-  VBlocked, VTable: string;
+  VMulti, VBlocked, VTable, VKey, VResult: string;
   VPk: TArray<string>;
 begin
-  VBlocked := if pField.KeyFields.Contains(MULTI_FIELD) or pField.LookupKeyFields.Contains(MULTI_FIELD)
-    then 'multi-field lookup key' else '';
-  if pField.KeyFields <> '' then
-    pFacts.Add(COL_SOURCE_KEY, UpperCase(pField.KeyFields), VBlocked, pSource);
-  if pField.LookupKeyFields <> '' then
-    pFacts.Add(COL_DEST_KEY, UpperCase(pField.LookupKeyFields), VBlocked, pSource);
-  if pField.LookupResult <> '' then
-    pFacts.Add(COL_DEST_VALUE, UpperCase(pField.LookupResult), '', pSource);
   VSource := Default(TDatasetSource);
   if not LookupTarget(pForm, pField.LookupDataSet, VDataset) then
     VSource.Reason := 'not found in the DFMs of this folder'
   else
     VSource := SourceOf(VDataset);
   VTable := VSource.TableName;
+  VMulti := if pField.KeyFields.Contains(MULTI_FIELD) or pField.LookupKeyFields.Contains(MULTI_FIELD)
+    then 'multi-field lookup key' else '';
+  if pField.KeyFields <> '' then
+  begin
+    VKey := LookupColumn(pOwner, SourceOf(pOwner), pField.KeyFields, VBlocked);
+    pFacts.Add(COL_SOURCE_KEY, VKey, if VMulti = '' then VBlocked else VMulti, pSource);
+  end;
+  VKey := LookupColumn(VDataset, VSource, pField.LookupKeyFields, VBlocked);
+  if pField.LookupKeyFields <> '' then
+    pFacts.Add(COL_DEST_KEY, VKey, if VMulti = '' then VBlocked else VMulti, pSource);
+  if pField.LookupResult <> '' then
+  begin
+    VResult := LookupColumn(VDataset, VSource, pField.LookupResult, VBlocked);
+    pFacts.Add(COL_DEST_VALUE, VResult, VBlocked, pSource);
+  end;
   if VTable <> '' then
     pFacts.Add(COL_DEST_TABLE, VTable, '', pSource)
   else if pField.LookupDataSet <> '' then
@@ -549,7 +596,7 @@ begin
   if (VTable = '') or (pField.LookupKeyFields = '') then
     Exit;
   VPk := PrimaryKey(FRepo, VTable);
-  if (Length(VPk) > 0) and ((Length(VPk) > 1) or (not SameText(VPk[0], pField.LookupKeyFields))) then
+  if (Length(VPk) > 0) and ((Length(VPk) > 1) or (not SameText(VPk[0], VKey))) then
     FWarnings.Add(Format('%s: lookup key %s is not the primary key of %s (%s)', [pSource, pField.LookupKeyFields, VTable,
       string.Join(',', VPk)]));
 end;
@@ -623,7 +670,8 @@ begin
   end;
 end;
 
-procedure TDfmRead.ReadField(const pForm: TDfmrForm; const pField: TDfmrField; const pTable, pColumn: string);
+procedure TDfmRead.ReadField(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pField: TDfmrField;
+  const pTable, pColumn: string);
 var
   VFacts: TFieldFacts;
   VPair: TDfmrPair;
@@ -637,7 +685,7 @@ begin
   for VPair in pField.Typed do
     VFacts.Add(VPair.Name, VPair.Value, '', VSource);
   if pField.Kind = frkLookup then
-    ReadLookup(pForm, pField, VFacts, VSource);
+    ReadLookup(pForm, pDataset, pField, VFacts, VSource);
   if (pField.Kind = frkAggregate) and (pField.Expression <> '') then
     VFacts.Add(COL_BODY, pField.Expression, '', VSource);
 end;
@@ -668,7 +716,7 @@ begin
       VReport.Unattributed := VReport.Unattributed + [VField.FieldName];
       Continue;
     end;
-    ReadField(pForm, VField, VTable, VColumn);
+    ReadField(pForm, pDataset, VField, VTable, VColumn);
     if VField.Kind in [frkCalc, frkInternalCalc] then
       ReadCalc(pForm, pDataset, VContext, VField, FactsOf(VTable, VColumn), VReport);
     ReadEvents(pForm, VContext, VField, FactsOf(VTable, VColumn));
@@ -788,13 +836,15 @@ begin
   PlanEvents(pFacts);
 end;
 
-{ A kind change of an existing row; FIELD_KIND carries ISCALCULATED and ISLOOKUP with it. }
-procedure TDfmRead.PlanKind(pFacts: TFieldFacts; const pRow: TRepoRow; pQuery: TFDQuery);
+{ A kind change of an existing row; FIELD_KIND carries ISCALCULATED and ISLOOKUP with it. Returns the kind the row has
+  when the checked changes are applied. }
+function TDfmRead.PlanKind(pFacts: TFieldFacts; const pRow: TRepoRow; pQuery: TFDQuery): TFrFieldKind;
 var
   VKind: TFactValue;
   VNew: TFrFieldKind;
   VI, VCount: Integer;
 begin
+  Result := pRow.Kind;
   VCount := Length(pFacts.Kinds);
   for VKind in pFacts.Kinds do
   begin
@@ -806,13 +856,27 @@ begin
       FChanges.List[VI].Blocked := Format('%s is a real column of %s; %s makes it %s',
         [pFacts.FieldName, pFacts.TableName, VKind.Source, FrKindName(VNew)]);
     FChanges.List[VI].Checked := (VCount = 1) and (VNew <> frkData) and (FChanges.List[VI].Blocked = '');
+    if FChanges.List[VI].Checked then
+      Result := VNew;
   end;
+end;
+
+{ True when a field of a kind has the column: a body or lookup wiring means nothing on a data field. }
+function KindHasColumn(pKind: TFrFieldKind; const pColumn: string): Boolean;
+begin
+  Result := True;
+  if pColumn = COL_BODY then
+    Result := FrKindHasBody(pKind)
+  else if MatchText(pColumn, [COL_SOURCE_KEY, COL_DEST_TABLE, COL_DEST_KEY, COL_DEST_VALUE]) then
+    Result := pKind = frkLookup;
 end;
 
 procedure TDfmRead.PlanExisting(pFacts: TFieldFacts; const pRow: TRepoRow);
 var
   VQuery: TFDQuery;
   VColumn: TFactColumn;
+  VKind: TFrFieldKind;
+  VI, VFirst: Integer;
 begin
   pFacts.TableName := pRow.TableName;
   pFacts.FieldName := pRow.FieldName;
@@ -820,10 +884,13 @@ begin
   try
     VQuery.Connection := FRepo;
     VQuery.Open(SQL_FIELD_ROW, [pRow.TableName, pRow.FieldName]);
-    PlanKind(pFacts, pRow, VQuery);
+    VKind := PlanKind(pFacts, pRow, VQuery);
+    VFirst := FChanges.Count;
     for VColumn in pFacts.Columns do
       if (VColumn.Name <> COL_KIND) and (not MatchText(VColumn.Name, INSERT_ONLY)) then
         PlanColumn(pFacts, VColumn, VQuery.FieldByName(VColumn.Name).AsString);
+    for VI := VFirst to FChanges.Count - 1 do
+      FChanges.List[VI].Checked := FChanges.List[VI].Checked and KindHasColumn(VKind, FChanges.List[VI].Prop);
   finally
     VQuery.Free;
   end;

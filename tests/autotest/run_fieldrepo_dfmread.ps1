@@ -16,6 +16,9 @@
     D10 --select: both alternatives refused, one applied; an update without its row refused
     D11 a schema column is not turned into a calc field; a data field the schema does not have is blocked; non-PK lookup key warned
     D12 --json is one JSON object with the same counts
+    D13 a second folder: lookup datasets come from the folder of each DFM; an unreadable DFM beside it is a warning
+    D14 continued + quoted strings, two components of one field, an inline frame's dataset, a dataset without fields
+    D15 apply is one transaction; repository columns the DFM does not state survive apply
   Run: pwsh -File tests\autotest\run_fieldrepo_dfmread.ps1 [-Exe <drag-lint.exe>] [-SkipUnit]
 #>
 [CmdletBinding()]
@@ -125,9 +128,103 @@ try {
   $null = Run @('repo', 'seed-fb', '--ddl', $ddl, '--repo', $z, '--apply')
   $r = Dfm @() $dfm $z
   Check 'D11a a real column is not turned into a calc field' (Has $r "ORDERS|TOTAL FIELD_KIND: 1 -> 2`n  BLOCKED: TOTAL is a real column of ORDERS") $r.Out
+  Check 'D11a2 its body is not a checked change' ($r.Out -match 'ORDERS\|TOTAL CALC_BODY: [^\n]*\n  \(unchecked\)') $r.Out
   Check 'D11b a data field the schema does not have is blocked' ($r.Out -match "insert DL_FIELDS_INFO ORDERS\|PRICE: [^\n]*\n  BLOCKED: not a column of ORDERS in the repository schema facts") $r.Out
   Check 'D11c the DFM wins on a hand-kept value, schema columns are not touched' ((Has $r 'update DL_FIELDS_INFO ORDERS|QTY DISPLAY_FORMAT:  -> #,##0') -and ($r.Out -notmatch '\] update [^\n]* (FIELD_AS_TYPE|VAR_TYPE|STRING_SIZE)')) $r.Out
   Check 'D11d a lookup key that is not the primary key is a warning' (Has $r 'lookup key ID is not the primary key of TOOLS (TOOLNO)') $r.Out
+  # a second folder, odd DFM text
+  $fix2 = Join-Path $work 'forms2'
+  [IO.Directory]::CreateDirectory($fix2) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $fix2 'uOther2.dfm'), "object dmOther: TdmOther`r`n  object tblReason: TTable`r`n    TableName = 'Reasons2.db'`r`n  end`r`nend`r`n")
+  [IO.File]::WriteAllBytes((Join-Path $fix2 'uJunk.dfm'), [byte[]](0xFF, 0x0A, 0x00, 0x41, 0x42))
+  [IO.File]::WriteAllBytes((Join-Path $fix2 'uJunk2.dfm'), [byte[]](0x54, 0x50, 0x46, 0x30, 0x05, 0x54))
+  [IO.File]::WriteAllText((Join-Path $fix2 'uTwo.dfm'), @'
+object frmTwo: TfrmTwo
+  object qryLong: TFDQuery
+    SQL.Strings = (
+      'SELECT T.ID, '#39'end'#39' AS MARK, T.CAPTION AS ' +
+        'CAP'
+      'FROM LONGTAB T -- end')
+    object qryLongID: TIntegerField
+      FieldName = 'ID'
+    end
+    object qryLongCAP: TStringField
+      DisplayLabel = 'It'#39's' +
+        ' "end"'
+      FieldName = 'CAP'
+      Size = 10
+    end
+    object qryLongCAP2: TStringField
+      DisplayLabel = 'Other'
+      FieldName = 'cap'
+      Size = 10
+    end
+    object qryLongREASON: TStringField
+      FieldKind = fkLookup
+      FieldName = 'REASON'
+      LookupDataSet = dmOther.tblReason
+      LookupKeyFields = 'Code'
+      LookupResultField = 'Text'
+      KeyFields = 'ID'
+      Lookup = True
+    end
+    object qryLongDEST: TStringField
+      FieldKind = fkLookup
+      FieldName = 'DESTNAME'
+      LookupDataSet = qryDest
+      LookupKeyFields = 'DNO'
+      LookupResultField = 'FULLNAME'
+      KeyFields = 'CAP'
+      Lookup = True
+    end
+  end
+  object qryDest: TFDQuery
+    SQL.Strings = (
+      'SELECT D.NO AS DNO, D.A || D.B AS FULLNAME FROM DEST D')
+  end
+  object tblNone: TTable
+    TableName = 'NONE.DB'
+  end
+  inline Frame1: TFrame1
+    inherited tblIn: TTable
+      object tblInNEW: TIntegerField
+        FieldName = 'NEWONE'
+      end
+    end
+  end
+end
+'@.Replace("`r`n", "`n").Replace("`n", "`r`n"))
+  $w = NewRepo 'w.dlrepo'
+  $r = Dfm @() ($dfm + '; ' + (Join-Path $fix2 'uTwo.dfm')) $w
+  Check 'D13a the data module of the second folder' (($r.Code -eq 0) -and ($r.Out -match 'LONGTAB\|REASON: [^\n]*DESTTABLE=REASONS2\n') -and ($r.Out -match 'ORDERS\|REASON: [^\n]*DESTTABLE=REASONS\n')) "exit=$($r.Code)`n$($r.Out)"
+  Check 'D13b unreadable DFMs of the folder are warnings' (($r.Out -match 'warning: lookup datasets: [^\n]*uJunk\.dfm') -and ($r.Out -match 'warning: lookup datasets: [^\n]*uJunk2\.dfm')) $r.Out
+  $rj = Dfm @() (Join-Path $fix2 'uJunk2.dfm') $w
+  Check 'D13c an unreadable DFM asked for exits 1 with its name' (($rj.Code -eq 1) -and (Has $rj 'unreadable binary DFM')) $rj.Out
+  Check 'D14a continued SQL and label' ((Has $r 'LONGTAB|CAPTION DISPLAY_LABEL:  -> It''s "end"') -and (Has $r 'qryLong (TFDQuery) -> LONGTAB: 3 data, 0 calc, 2 lookup')) $r.Out
+  Check 'D14e lookup keys are columns, not the names the SQL gives them; a computed result is blocked' ((Has $r 'SOURCEKEY=CAPTION; DESTKEY=NO; DESTTABLE=DEST') -and (Has $r "LONGTAB|DESTNAME DESTVALUE:  -> FULLNAME`n  BLOCKED: FULLNAME is not a column of DEST (computed by the SQL)")) $r.Out
+  Check 'D14b two components of one field: unchecked alternatives' (($r.Out -match 'LONGTAB\|CAPTION DISPLAY_LABEL:  -> Other\n  \(unchecked\)') -and ([regex]::Matches($r.Out, '(?m)^\[\d+\] insert DL_FIELDS_INFO LONGTAB\|CAPTION').Count -eq 1)) $r.Out
+  Check 'D14c an inline dataset is reported, its new field gives no change' ((Has $r 'tblIn (TTable) -> UNRESOLVED (no TableName and no SQL in the DFM (inherited') -and -not (Has $r '|NEWONE')) $r.Out
+  Check 'D14d a dataset without fields' (Has $r 'tblNone (TTable) -> NONE: 0 data') $r.Out
+  # transaction + hand-kept columns
+  [IO.File]::WriteAllText($sel, "1`n22")
+  $hy = (Get-FileHash -LiteralPath $y).Hash
+  $s4 = Dfm @('--select', $sel) $dfm $y
+  Check 'D15a a failing change rolls the good one back' (($s4.Code -eq 1) -and ((Run @('repo', 'info', '--json', '--repo', $y)).Out -match '"DL_FIELDS_INFO":0')) "$hy $($s4.Out)"
+  $s5 = Dfm @('--select', $sel, '--dry-run') $dfm $y
+  Check 'D15b --select with --dry-run writes nothing' (($s5.Code -eq 0) -and (Has $s5 'dry run: nothing written')) $s5.Out
+  $bk = Join-Path $work 'x.txt'
+  $null = Run @('repo', 'backup', '--repo', $x, '--out', $bk)
+  $bt = [IO.File]::ReadAllText($bk)
+  $hand = $bt -replace '(\[DL_FIELDS_INFO ORDERS\|PRICE\]\r?\n(?:[^\[]*?\n)?DISPLAY_WIDTH=)0', '${1}77' -replace '(\[DL_FIELDS_INFO ORDERS\|QTY\][^\[]*?DISPLAY_FORMAT=)[^\r\n]*', '${1}HAND'
+  Check 'D15c0 the fixture was edited' (($hand -ne $bt) -and $hand.Contains('HAND') -and $hand.Contains('=77'))
+  [IO.File]::WriteAllText($bk, $hand)
+  $v = Join-Path $work 'v.dlrepo'
+  $null = Run @('repo', 'restore', '--repo', $v, '--in', $bk)
+  $r = Dfm @('--apply') $dfm $v
+  $null = Run @('repo', 'backup', '--repo', $v, '--out', (Join-Path $work 'v.txt'))
+  $vt = [IO.File]::ReadAllText((Join-Path $work 'v.txt'))
+  Check 'D15c a hand-kept column the DFM does not state survives apply' (($r.Code -eq 0) -and $vt.Contains('DISPLAY_WIDTH=77')) $r.Out
+  Check 'D15d a hand-kept value the DFM contradicts is replaced and logged' ((Has $r 'replacing HAND with #,##0') -and (Has $r 'applied: 1 changes') -and -not $vt.Contains('HAND')) $r.Out
   # json
   $o = & $Exe repo read-dfm --repo $y --dfm $dfm --direction dfm-to-repo --json 2>$null
   $j = ($o -join "`n") | ConvertFrom-Json

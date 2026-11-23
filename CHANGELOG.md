@@ -3,6 +3,12 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.54.0-alpha -- unreleased
+
+Merged lanes:
+
+- TT-DFMREAD: `repo read-dfm --dfm <file>[;...] [--dataset <Name>] --direction dfm-to-repo` reads the persistent fields of a form (text or binary DFM; data, calc, internal-calc, lookup, aggregate), its lookup wiring and the code of OnCalcFields / OnGetText into the field repository as a change set: dry run by default, `--apply` or `--select <id file>` in one transaction. Code and facts it cannot express are BLOCKED or reported, never guessed. `ExpandSelection` (spec 4.4) is the rule for the later field-selection dialog. No extraction, resolver or lint change.
+
 ## v1.53.0-alpha -- 2026-11-23
 
 In integration (lane/v153-int2). One re-parse for 1.53.0: extractor 1.42.0 -> 1.43.0-alpha (GRAMMAR); resolver stays 1.31.0-alpha. VS Code extension 1.6.12.

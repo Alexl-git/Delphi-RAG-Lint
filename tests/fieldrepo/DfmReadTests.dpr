@@ -123,6 +123,17 @@ begin
   CheckText('stored procedure', Col('SELECT A FROM P(1)', 'A'), '!the SQL selects from a stored procedure');
   CheckText('update', Col('UPDATE T SET A = 1', 'A'), '!the SQL is not a plain SELECT');
   CheckText('empty', Col('', 'A'), '!the SQL is empty in the DFM');
+  CheckText('a literal is not a column', Col('SELECT T.*, 0 AS EXTRA FROM T', 'EXTRA'), '?computed by the SQL');
+  CheckText('a decimal is not a qualified column', Col('SELECT A, 1.5 AS X FROM T', 'X'), '?computed by the SQL');
+  CheckText('NULL is not a column', Col('SELECT A, NULL AS X FROM T', 'X'), '?computed by the SQL');
+  CheckText('CURRENT_DATE is not a column', Col('SELECT A, CURRENT_DATE X FROM T', 'X'), '?computed by the SQL');
+  CheckText('a quoted name is a column', Col('SELECT "NULL" AS X FROM T', 'X'), 'T.NULL');
+  CheckText('FIRST in parentheses', Col('SELECT FIRST (10) SKIP (2) A B FROM T', 'B'), 'T.A');
+  CheckText('FIRST with a parameter', Col('SELECT FIRST :N ID, NAME FROM T', 'ID'), 'T.ID');
+  CheckText('FIRST with a parameter makes no column', Col('SELECT FIRST :N ID, NAME FROM T', 'N'), '?the SQL does not say which table it comes from');
+  CheckText('schema-qualified table', Col('SELECT A FROM dbo.Tools', 'A'), '!the SQL qualifies its table name');
+  CheckText('the last operand of an expression is no alias', Col('SELECT A || B, B FROM T', 'B'), 'T.B');
+  CheckText('expression alias', Col('SELECT A || B AB FROM T', 'AB'), '?computed by the SQL');
   CheckText('FIRST n and semicolon', Col('SELECT FIRST 1 A FROM T;', 'A'), 'T.A');
 end;
 
@@ -216,6 +227,30 @@ begin
     '// total'#13#10'{{TOTAL}} := 1;');
   Check('C15 a nested routine blocks', Body(Handler('procedure P; begin end;'#13#10, '  T1TOTAL.Value := 1;'), 'T1TOTAL').Contains('declares'));
   Check('C16 the component itself blocks', Body(Handler('', '  T1TOTAL.Value := Calc(T1QTY);'), 'T1TOTAL').Contains('the field component T1QTY itself is used'));
+  CheckText('C17 a // comment inside a guard condition ends at its line', Body(Handler('', '  if (T1QTY.Value = 0) // none'#13#10'    or (T1PRICE.Value = 0) then Exit;'#13#10'  T1TOTAL.Value := 1;'), 'T1TOTAL'),
+    'if not (({{QTY}} = 0) // none'#13#10'    or ({{PRICE}} = 0)) then'#13#10'begin'#13#10'  {{TOTAL}} := 1;'#13#10'end;');
+  CheckText('C17b a comment before the guard condition', Body(Handler('', '  if { none } T1QTY.Value = 0 then Exit;'#13#10'  T1TOTAL.Value := 1;'), 'T1TOTAL'),
+    'if not ({{QTY}} = 0) then'#13#10'begin'#13#10'  {{TOTAL}} := 1;'#13#10'end;');
+  Check('C18 macro braces in the code block', Body(Handler('', '  T1NAME.Value := ''{{QTY}}'';'), 'T1NAME').StartsWith('!'), Body(Handler('', '  T1NAME.Value := ''{{QTY}}'';'), 'T1NAME'));
+  Check('C18b macro braces in a comment block', Body(Handler('', '  {{ note }'#13#10'  T1NAME.Value := ''x'';'), 'T1NAME').StartsWith('!'));
+  CheckText('C18c end, quotes and nested comments in the code are text', Body(Handler('', '  T1NAME.Value := ''it''''s the end; { // '' + ''(*''; (* { end; *)'#13#10'  // begin end;'#13#10'  T1TOTAL.Value := 1;'), 'T1NAME'),
+    '{{NAME}} := ''it''''s the end; { // '' + ''(*''; (* { end; *)');
+  CheckText('C19 a constant another constant needs', Body(Handler('const'#13#10'  A = 1;'#13#10'  B = A + 1;'#13#10'  C = 3;'#13#10, '  T1TOTAL.Value := B;'), 'T1TOTAL'),
+    'const A = 1;'#13#10'const B = A + 1;'#13#10'{{TOTAL}} := B;');
+  CheckText('C20 a cursor move inside another field''s assignment is kept',
+    Body(Handler('', '  T1TOTAL.Value := Ord(T2.Locate(''ID'', 1, []));'#13#10'  T1NAME.Value := Edit1.Text;'), 'T1NAME'),
+    '{{TOTAL}} := Ord(T2.Locate(''ID'', 1, []));'#13#10'{{NAME}} := Edit1.Text; {form: Edit1,T2}');
+  CheckText('C20b a cursor move whose result goes to an unused local is kept',
+    Body(Handler('var Ok: Boolean;'#13#10, '  Ok := T2.FindKey([1]);'#13#10'  T1NAME.Value := Edit1.Text;'), 'T1NAME'),
+    'var Ok: Boolean;'#13#10'Ok := T2.FindKey([1]);'#13#10'{{NAME}} := Edit1.Text; {form: Edit1,T2}');
+  Check('C21 a local set by a statement left out blocks', Body(Handler('var S: string;'#13#10, '  T1TOTAL.Value := Split(T1QTY.Value, S);'#13#10'  T1NAME.Value := S;'), 'T1NAME')
+    .StartsWith('!the local S may be set by a statement left out'), Body(Handler('var S: string;'#13#10, '  T1TOTAL.Value := Split(T1QTY.Value, S);'#13#10'  T1NAME.Value := S;'), 'T1NAME'));
+  CheckText('C21b a local read by a statement left out does not', Body(Handler('var S: string;'#13#10, '  S := ''a'';'#13#10'  T1TOTAL.Value := Length(S);'#13#10'  T1NAME.Value := S;'), 'T1NAME'),
+    'var S: string;'#13#10'S := ''a'';'#13#10'{{NAME}} := S;');
+  Check('C22 a calc field that changes after it was read blocks', Body(Handler('', '  T1NOTE.Value := ''a'';'#13#10'  T1NAME.Value := T1NOTE.Value;'#13#10'  T1NOTE.Value := ''b'';'), 'T1NAME')
+    .StartsWith('!T1NOTE changes after this body reads it'), Body(Handler('', '  T1NOTE.Value := ''a'';'#13#10'  T1NAME.Value := T1NOTE.Value;'#13#10'  T1NOTE.Value := ''b'';'), 'T1NAME'));
+  CheckText('C22b fields set together, then one again, do not', Body(Handler('', '  if T1QTY.Value > 0 then begin T1NOTE.Value := ''a''; T1NAME.Value := ''a''; end;'#13#10'  T1NOTE.Value := ''b'';'), 'T1NAME'),
+    'if {{QTY}} > 0 then begin ; {{NAME}} := ''a''; end;');
 end;
 
 procedure TestEvent;

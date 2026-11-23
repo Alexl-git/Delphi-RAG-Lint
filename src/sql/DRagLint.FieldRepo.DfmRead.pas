@@ -219,8 +219,8 @@ begin
   VLines := TStringList.Create;
   try
     VLines.LineBreak := LIST_BREAK;
-    VI := pRow + 1;  // dl:ok index-possibly-out-of-range@4a99 -- REVIEWED 2026-11-23 TT-DFMREAD: VI is tested against Length(Props) first; pRow / pObject are rows and object ordinals the caller enumerates (First has one entry per object)
-    while (VI < Length(Props)) and (Props[VI].Depth > Props[pRow].Depth) do  // dl:ok index-possibly-out-of-range@7261 -- REVIEWED 2026-11-23 TT-DFMREAD: VI is tested against Length(Props) first; pRow / pObject are rows and object ordinals the caller enumerates (First has one entry per object)
+    VI := pRow + 1;
+    while (VI < Length(Props)) and (Props[VI].Depth > Props[pRow].Depth) do
     begin
       if Props[VI].Parent = pRow then
         VLines.Add(Props[VI].ValueText);
@@ -266,7 +266,12 @@ begin
   VOut := TBytesStream.Create;
   try
     VIn.Position := VPos - 1;
-    ObjectBinaryToText(VIn, VOut);
+    try
+      ObjectBinaryToText(VIn, VOut);
+    except
+      on E: EStreamError do
+        raise EDfmReadError.CreateFmt('unreadable binary DFM %s: %s', [pFile, E.Message]);
+    end;
     Result := EnsureUtf8Bytes(Copy(VOut.Bytes, 0, VOut.Size));
   finally
     VOut.Free;
