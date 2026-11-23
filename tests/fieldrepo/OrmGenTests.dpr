@@ -246,6 +246,11 @@ begin
     Check('C5 region 6: same for AssignTo, then Modified (an owned column has no setter call)',
       vBody.Contains('      if (LDest.MEMO <> nil) and (LDest <> Self) then'#13#10'        if Self.fMEMO <> nil then'#13#10 +
         '          LDest.MEMO.Assign(Self.fMEMO)'#13#10'        else'#13#10'          LDest.MEMO.Clear;'#13#10) and vBody.EndsWith('      LDest.Modified:= True;'#13#10) and not vBody.Contains('LDest.MEMO:='), vBody);
+    vBody := RegionBody(vGen.UpdateRegions(Region('5', ''), 'LINE$ITEM', False, vCount), '5');
+    Check('C7 region 5 (AssignI): the content is copied, the alias test is by instance, the getter is read once',
+      vBody.Contains('    var LMEMO:= Value.MEMO;'#13#10'    if (Self.fMEMO <> nil) and (Self.fMEMO <> LMEMO) then'#13#10 +
+        '      if LMEMO <> nil then'#13#10'        Self.fMEMO.Assign(LMEMO)'#13#10'      else'#13#10'        Self.fMEMO.Clear;'#13#10) and
+      not vBody.Contains('fMEMO' + Sp(20) + ':=') and not vBody.Contains('Self <>'), vBody);
     Check('C6 the owned test is the one regions 14 / 15 use',
       RegionBody(vGen.UpdateRegions(Region('14', ''), 'LINE$ITEM', False, vCount), '14').Contains('fMEMO:= TStringList.Create;') and
       RegionBody(vGen.UpdateRegions(Region('15', ''), 'LINE$ITEM', False, vCount), '15').Contains('fMEMO.Free;') and
@@ -508,6 +513,101 @@ begin
   end;
 end;
 
+{ AssignI -> Assign overload: the i / u pair }
+procedure TestAssignUpgrade(const pRepoFile: string);
+const
+  I_OLD = 'unit iORDERS;'#13#10'interface'#13#10'type'#13#10'  ImcORDERS = interface(IMicObject)'#13#10'    procedure AssignI(const IValue: ImcORDERS);'#13#10'  end;'#13#10'end.'#13#10;
+  I_NEW = 'unit iORDERS;'#13#10'interface'#13#10'type'#13#10'  ImcORDERS = interface(IMicObject)'#13#10'    procedure Assign(const IValue: ImcORDERS);'#13#10'  end;'#13#10'end.'#13#10;
+  U_HEAD = 'unit uORDERS;'#13#10'interface'#13#10'type'#13#10'  TmcORDERS = class(TMicObjectBase<ImcORDERS>, ImcORDERS)'#13#10'  published'#13#10;
+  U_DECL_OLD = '     procedure Assign(Source: TPersistent); override;'#13#10'     procedure Initialize; override;'#13#10'     procedure AssignI(const Value: ImcORDERS);'#13#10;
+  U_DECL_NEW = '     procedure Assign(Source: TPersistent); overload; override;'#13#10'     procedure Initialize; override;'#13#10'  public'#13#10'     procedure Assign(const Value: ImcORDERS); reintroduce; overload;'#13#10'  published'#13#10;
+  U_IMPL_OLD = '  end;'#13#10'implementation'#13#10'procedure TmcORDERS.AssignI(const Value: ImcORDERS);'#13#10'begin'#13#10'{$REGION ''DB-RAD 5''}'#13#10'  x'#13#10'{$ENDREGION ''DB-RAD 5''}'#13#10'end;'#13#10'end.'#13#10;
+  U_IMPL_NEW = '  end;'#13#10'implementation'#13#10'procedure TmcORDERS.Assign(const Value: ImcORDERS);'#13#10'begin'#13#10'{$REGION ''DB-RAD 5''}'#13#10'  x'#13#10'{$ENDREGION ''DB-RAD 5''}'#13#10'end;'#13#10'end.'#13#10;
+var
+  vNotes, vOut: TStringList;
+  vI, vU, vDir, vCaller: string;
+  vOpt: TOrmVerbOptions;
+  vCalls: TArray<Integer>;
+begin
+  vNotes := TStringList.Create;
+  vOut := TStringList.Create;
+  try
+    UpgradeOrmAssignPair(I_OLD, U_HEAD + U_DECL_OLD + U_IMPL_OLD, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI1 generated pair: AssignI becomes the overloaded Assign on both sides, the rest byte for byte',
+      (vI = I_NEW) and (vU = U_HEAD + U_DECL_NEW + U_IMPL_NEW) and (vNotes.Count = 0), vNotes.Text + vI + vU);
+    UpgradeOrmAssignPair(I_NEW, U_HEAD + U_DECL_NEW + U_IMPL_NEW, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI2 second run: nothing changes, no note', (vI = I_NEW) and (vU = U_HEAD + U_DECL_NEW + U_IMPL_NEW) and (vNotes.Count = 0), vNotes.Text);
+    { the pair rule: a hand-edited side keeps BOTH as they are }
+    UpgradeOrmAssignPair(I_OLD.Replace('IValue', 'IV'), U_HEAD + U_DECL_OLD + U_IMPL_OLD, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI3 hand-edited i unit (parameter renamed): u stays too, one note', (vI = I_OLD.Replace('IValue', 'IV')) and (vU = U_HEAD + U_DECL_OLD + U_IMPL_OLD) and (vNotes.Count = 1), vNotes.Text);
+    vNotes.Clear;
+    UpgradeOrmAssignPair(I_OLD, U_HEAD + U_DECL_OLD + U_IMPL_OLD.Replace('begin'#13#10'{$REGION', 'begin'#13#10'  Foo;'#13#10'{$REGION'), 'ORDERS', True, vNotes, vI, vU);
+    Check('AI4 hand-edited u body header: i stays too, one note', (vI = I_OLD) and (vU = U_HEAD + U_DECL_OLD + U_IMPL_OLD.Replace('begin'#13#10'{$REGION', 'begin'#13#10'  Foo;'#13#10'{$REGION')) and (vNotes.Count = 1), vNotes.Text);
+    vNotes.Clear;
+    UpgradeOrmAssignPair(I_OLD, U_HEAD + U_DECL_OLD + U_IMPL_OLD.Replace('end;'#13#10'end.', '  // AssignI is gone'#13#10'end;'#13#10'end.'), 'ORDERS', True, vNotes, vI, vU);
+    Check('AI4b a comment naming AssignI in the body is not code: converted, the comment kept', (vI = I_NEW) and (vNotes.Count = 0) and vU.Contains('// AssignI is gone') and
+      vU.Contains('procedure TmcORDERS.Assign(const Value'), vNotes.Text + vI + vU);
+    vNotes.Clear;
+    UpgradeOrmAssignPair(I_OLD.Replace('    procedure', '    /// <seealso cref="iORDERS.AssignI"/>'#13#10'    procedure'), U_HEAD + U_DECL_OLD.Replace('     procedure AssignI', '     /// AssignI of the autodoc block'#13#10'     procedure AssignI') + U_IMPL_OLD, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI4c doc comments naming AssignI (autodoc) are not code: converted, the comments kept', (vNotes.Count = 0) and vI.Contains('cref="iORDERS.AssignI"') and vI.Contains('procedure Assign(const IValue') and
+      vU.Contains('/// AssignI of the autodoc block') and vU.Contains('procedure TmcORDERS.Assign(const Value'), vNotes.Text + vI + vU);
+    vNotes.Clear;
+    UpgradeOrmAssignPair(I_OLD, U_HEAD + U_DECL_OLD + U_IMPL_OLD + '  Typed.AssignI(Base);'#13#10, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI4d a call of AssignI in the u unit itself is hand code: the pair is converted, the call stays', (vNotes.Count = 0) and (vI = I_NEW) and
+      (vU = U_HEAD + U_DECL_NEW + U_IMPL_NEW + '  Typed.AssignI(Base);'#13#10), vNotes.Text + vU);
+    vNotes.Clear;
+    { a commented-out declaration above the real one: editing the comment would leave a pair that does not compile }
+    UpgradeOrmAssignPair(I_OLD.Replace('    procedure', '    // procedure AssignI(const IValue: ImcORDERS);'#13#10'    procedure'), U_HEAD + U_DECL_OLD + U_IMPL_OLD, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI4e commented-out declaration in i: both left unchanged, one note', (vNotes.Count = 1) and (vU = U_HEAD + U_DECL_OLD + U_IMPL_OLD) and
+      (vI = I_OLD.Replace('    procedure', '    // procedure AssignI(const IValue: ImcORDERS);'#13#10'    procedure')), vNotes.Text + vI + vU);
+    vNotes.Clear;
+    UpgradeOrmAssignPair(I_OLD, U_HEAD + '     // procedure Assign(Source: TPersistent); override;'#13#10 + U_DECL_OLD + U_IMPL_OLD, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI4f commented-out Assign(Source) in u: both left unchanged, one note', (vNotes.Count = 1) and (vI = I_OLD) and
+      (vU = U_HEAD + '     // procedure Assign(Source: TPersistent); override;'#13#10 + U_DECL_OLD + U_IMPL_OLD), vNotes.Text + vI + vU);
+    vNotes.Clear;
+    UpgradeOrmAssignPair('', U_HEAD + U_DECL_OLD + U_IMPL_OLD, 'ORDERS', False, vNotes, vI, vU);
+    Check('AI5 i unit missing: u stays, one note', (vU = U_HEAD + U_DECL_OLD + U_IMPL_OLD) and (vNotes.Count = 1), vNotes.Text);
+    vNotes.Clear;
+    UpgradeOrmAssignPair(I_OLD, U_HEAD + U_DECL_NEW + U_IMPL_NEW, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI6 u already converted, i not: i is completed (a half pair does not compile)', (vI = I_NEW) and (vU = U_HEAD + U_DECL_NEW + U_IMPL_NEW) and (vNotes.Count = 0), vNotes.Text);
+    UpgradeOrmAssignPair('unit iORDERS;'#13#10, 'unit uORDERS;'#13#10, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI7 units without AssignI: untouched, silent', (vI = 'unit iORDERS;'#13#10) and (vU = 'unit uORDERS;'#13#10) and (vNotes.Count = 0), vNotes.Text);
+    UpgradeOrmAssignPair((I_OLD + U_HEAD).Replace(#13#10, #10), (U_DECL_OLD + U_IMPL_OLD).Replace(#13#10, #10), 'ORDERS', True, vNotes, vI, vU);
+    Check('AI7b LF-only text: converted, LF kept', (vNotes.Count = 0) and not vU.Contains(#13) and vU.Contains('procedure Assign(const Value: ImcORDERS); reintroduce; overload;'), vNotes.Text);
+    vCalls := FindAssignICalls('x'#13#10'  Typed.AssignI(Base);'#13#10'  // Typed.AssignI(Base);'#13#10'    procedure AssignI(const Value: ImcX);'#13#10'procedure TmcX.AssignI(const Value: ImcX);'#13#10'  AssignI(B);'#13#10);
+    Check('AI8 calls found, a declaration / implementation header / comment is not a call', (Length(vCalls) = 2) and (vCalls[0] = 2) and (vCalls[1] = 6));
+
+    { the verb: dry run lists the calls and writes nothing; apply converts the pair; a second apply changes nothing }
+    vDir := TPath.Combine(GDir, 'ASSIGNI');
+    ForceDirectories(vDir);
+    TFile.WriteAllText(TPath.Combine(vDir, 'iORDERS.PAS'), I_OLD, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(vDir, 'uORDERS.PAS'), U_HEAD + U_DECL_OLD + U_IMPL_OLD, TEncoding.ASCII);
+    vCaller := 'unit uCALLER;'#13#10'implementation'#13#10'begin'#13#10'  Typed.AssignI(Base);'#13#10'end.'#13#10;
+    TFile.WriteAllText(TPath.Combine(vDir, 'uCALLER.PAS'), vCaller, TEncoding.ASCII);
+    vOpt := Default(TOrmVerbOptions);
+    vOpt.Sub := 'upgrade-orm-headers';
+    vOpt.RepoPath := pRepoFile;
+    vOpt.CodeDir := vDir;
+    vOpt.Tables := 'ORDERS';
+    vOpt.Backup := True;
+    Check('AI9 verb dry run: both units shown, the call listed with file(line), nothing written',
+      (RunOrmGenVerb(vOpt, vOut) = 0) and vOut.Text.Contains('+    procedure Assign(const IValue: ImcORDERS);') and
+      vOut.Text.Contains('uCALLER.PAS(4): a call of AssignI stays') and vOut[vOut.Count - 1].EndsWith('2 changed, 0 unchanged, 3 skipped; dry run') and
+      (ReadOld(TPath.Combine(vDir, 'iORDERS.PAS')) = I_OLD) and (ReadOld(TPath.Combine(vDir, 'uORDERS.PAS')) = U_HEAD + U_DECL_OLD + U_IMPL_OLD), vOut.Text);
+    vOut.Clear;
+    vOpt.Apply := True;
+    Check('AI10 verb apply: i and u converted, the caller is not edited',
+      (RunOrmGenVerb(vOpt, vOut) = 0) and (ReadOld(TPath.Combine(vDir, 'iORDERS.PAS')) = I_NEW) and
+      (ReadOld(TPath.Combine(vDir, 'uORDERS.PAS')) = U_HEAD + U_DECL_NEW + U_IMPL_NEW) and (ReadOld(TPath.Combine(vDir, 'uCALLER.PAS')) = vCaller), vOut.Text);
+    vOut.Clear;
+    Check('AI11 second apply changes nothing', (RunOrmGenVerb(vOpt, vOut) = 0) and vOut.Text.Contains('0 changed') and
+      (ReadOld(TPath.Combine(vDir, 'iORDERS.PAS')) = I_NEW), vOut.Text);
+  finally
+    vOut.Free;
+    vNotes.Free;
+  end;
+end;
+
 procedure TestVerb(const pRepoFile: string);
 var
   vOpt: TOrmVerbOptions;
@@ -617,6 +717,8 @@ begin
   vSynth := False;
   if pId = '4' then
     pBody := TRegEx.Replace(pBody, '(?m)^      if \(Self\.f(\w+) <> nil\) and \(LSource <> Self\) then\r?\n(?:(?:        [^\r\n]*|      begin|      end;)\r?\n)+', '      f$1:= $1;'#13#10)
+  else if pId = '5' then
+    pBody := TRegEx.Replace(pBody, '(?m)^    var (\w+):= Value\.(\w+);\r?\n    if \(Self\.f\2 <> nil\)[^\r\n]*\r?\n(?:(?:      [^\r\n]*|    begin|    end;)\r?\n)+', '    f$2:= Value.$2;'#13#10)
   else if pId = '6' then
   begin
     pBody := TRegEx.Replace(pBody, '(?m)^      if \(LDest\.(\w+) <> nil\) and \(LDest <> Self\) then\r?\n(?:(?:        [^\r\n]*|      begin|      end;)\r?\n)+', '      $1:= f$1;'#13#10);
@@ -830,6 +932,15 @@ begin
     '  if not (Dest is Tmc' + pIdent + ') then'#13#10'    inherited'#13#10'  else'#13#10'    with Dest as Tmc' + pIdent + ' do'#13#10'    begin'#13#10);
 end;
 
+{ the AssignI form of the units written before 1.54 (the reverse of UpgradeOrmAssignPair) }
+function WithLegacyAssignI(const pText, pIdent: string): string;
+begin
+  Result := pText.Replace('procedure Assign(const IValue: Imc' + pIdent + ');', 'procedure AssignI(const IValue: Imc' + pIdent + ');');
+  Result := Result.Replace('procedure Assign(Source: TPersistent); overload; override;', 'procedure Assign(Source: TPersistent); override;');
+  Result := Result.Replace('  public'#13#10'     procedure Assign(const Value: Imc' + pIdent + '); reintroduce; overload;'#13#10'  published'#13#10, '     procedure AssignI(const Value: Imc' + pIdent + ');'#13#10);
+  Result := Result.Replace('procedure Tmc' + pIdent + '.Assign(const Value: Imc' + pIdent + ');', 'procedure Tmc' + pIdent + '.AssignI(const Value: Imc' + pIdent + ');');
+end;
+
 procedure AddFixtureTables(pRepo: TFDConnection);
 begin
   AddRow(pRepo, 'ORMFIX', 'ID', 'Int64', 'AsLargeInt', True, 'GEN_ORMFIX_ID', False, '', False, 1, 'Summary here', '0');
@@ -845,6 +956,7 @@ begin
   AddRow(pRepo, 'ORMFIX', 'RAW', 'TBytes', 'AsBytes', False, '');
   AddRow(pRepo, 'ORMFIX', 'MEMO', 'TStringList', 'AsString', False, '', False, '', False, 1, 'Free text of the row');
   AddRow(pRepo, 'ORMFIX', 'PIC', 'TPicture', 'AsBlob', False, '');
+  AddRow(pRepo, 'ORMFIX', 'STRM', 'TABZMemoryStream', 'AsBlob', False, '');
   AddRow(pRepo, 'ORMFIX', 'BCD', 'TBcd', 'AsBCD', False, '');
   AddRow(pRepo, 'ORMFIX', 'CALCF', 'string', 'AsString', False, '', False, '', True);
   AddRow(pRepo, 'ORMFIX', 'INTERNALF', 'string', 'AsString', False, '', False, '', False, 2);
@@ -860,11 +972,14 @@ const
 var
   vConn: TFDConnection;
   vNew, vOld, vFile, vText: string;
+  vSkipped: TStringList;
 begin
   vNew := TPath.Combine(pDir, 'new');
   vOld := TPath.Combine(pDir, 'old');
   ForceDirectories(vNew);
   ForceDirectories(vOld);
+  ForceDirectories(TPath.Combine(pDir, 'legacy'));
+  ForceDirectories(TPath.Combine(pDir, 'upgraded'));
   GDir := pDir;
   vFile := TPath.Combine(pDir, 'fixture.dlrepo');
   if TFile.Exists(vFile) then
@@ -883,6 +998,29 @@ begin
     vText := TFile.ReadAllText(vFile);
     vText := WithOldHeaders(vText, TPath.GetFileNameWithoutExtension(vFile).Substring(1));
     TFile.WriteAllText(TPath.Combine(vOld, ExtractFileName(vFile)), vText, TEncoding.ASCII);
+    { legacy = old headers + AssignI, then update-orm over it: regions regenerate under the old headers }
+    vText := WithLegacyAssignI(vText, TPath.GetFileNameWithoutExtension(vFile).Substring(1));
+    TFile.WriteAllText(TPath.Combine(pDir, 'legacy\' + ExtractFileName(vFile)), vText, TEncoding.ASCII);
+  end;
+  vConn := OpenRepository(TPath.Combine(pDir, 'fixture.dlrepo'), False);
+  try
+    vSkipped := TStringList.Create;
+    try
+      ApplyOrmChanges(PlanUpdateOrm(vConn, TPath.Combine(pDir, 'legacy'), '', '', [ORM_TABLES[0], ORM_TABLES[1], ORM_TABLES[2]], vSkipped), False);
+      if vSkipped.Count > 0 then
+        Writeln('LEGACY SKIPPED ', vSkipped.Text);
+      { upgraded = legacy + repo upgrade-orm-headers: must equal the units as generated, byte for byte }
+      for vFile in TDirectory.GetFiles(TPath.Combine(pDir, 'legacy'), '*.pas') do
+        TFile.Copy(vFile, TPath.Combine(pDir, 'upgraded\' + ExtractFileName(vFile)), True);
+      vSkipped.Clear;
+      ApplyOrmChanges(PlanUpgradeOrmHeaders(vConn, TPath.Combine(pDir, 'upgraded'), [ORM_TABLES[0], ORM_TABLES[1], ORM_TABLES[2]], vSkipped), False);
+      if vSkipped.Count > 0 then
+        Writeln('UPGRADE SKIPPED ', vSkipped.Text);
+    finally
+      vSkipped.Free;
+    end;
+  finally
+    vConn.Free;
   end;
   Writeln('EMITTED ', Length(TDirectory.GetFiles(vNew, '*.pas')));
   Result := 0;
@@ -908,6 +1046,7 @@ begin
       TestLoadAndSections(vRepo);
       TestBytesOutsideRegions(vRepo);
       TestHeaderUpgrade(vRepo, TPath.Combine(GDir, 'fixture.dlrepo'));
+      TestAssignUpgrade(TPath.Combine(GDir, 'fixture.dlrepo'));
       TestPlans(vRepo);
       { a column the units do not have yet, so the verb's dry run has a diff to show }
       AddRow(vRepo, 'ORDERS', 'BMOUNT', 'Double', 'AsFloat', False, '');

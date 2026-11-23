@@ -3,7 +3,7 @@ program OrmGenAssignRun;
 {$APPTYPE CONSOLE}
 
 { drag-lint 1.54 lane TT-GENFIX -- runs code the ORM generator wrote (OrmGenTests --emit-fixture).
-  The stub units of this folder stand in for ORM3. Contract: the generated Assign / AssignTo copy
+  The stub units of this folder stand in for ORM3. Contract: the generated Assign (object and Imc overload) / AssignTo copy
   every stored column; a list the generator owns (created in DB-RAD 14, freed in 15) is copied by
   content into the receiver's own list; a class column it does not own (TPicture) stays a reference.
   One PASS / FAIL line per check, then "SUMMARY pass=N fail=M". }
@@ -16,6 +16,7 @@ uses
   Data.FmtBcd,
   MSCTYPES,
   MStreams,
+  uMicObjectBase,
   iORMFIX,
   uORMFIX,
   iPLAINFIX,
@@ -69,12 +70,6 @@ begin
     (pA.WHENAT = EncodeDate(2025, 1, 2)) and (Length(pA.RAW) = 3) and (BcdToInteger(pA.BCD) = 42);
 end;
 
-{ the reference semantics of AssignI leave two owners: hand the copy its own list back before Free }
-procedure Detach(pObj: TmcORMFIX);
-begin
-  pObj.MEMO := nil;
-end;
-
 { bytes the memory manager holds allocated now }
 function HeapUsed: NativeUInt;
 var
@@ -101,8 +96,10 @@ procedure TestAssign;
 var
   vSrc, vDst, vByI: TmcORMFIX;
   vChild: TFixChild;
+  vSrcI: ImcORMFIX;
 begin
   vSrc := TmcORMFIX.Create(nil);
+  vSrcI := vSrc;
   vDst := TmcORMFIX.Create(nil);
   vByI := TmcORMFIX.Create(nil);
   vChild := TFixChild.Create(nil);
@@ -112,18 +109,17 @@ begin
     vDst.Assign(vSrc);
     Check('A1 Assign copies every scalar column', SameScalars(vDst));
     Check('A2 Assign leaves the source as it was', SameScalars(vSrc) and (vSrc.MEMO.Text = 'note'#13#10));
-    Check('A3 Assign does not set Modified (fields, like AssignI)', not vDst.Modified);
-    vByI.AssignI(vSrc);
+    Check('A3 Assign does not set Modified (fields, like Assign(Imc))', not vDst.Modified);
+    vByI.Assign(vSrcI);
     Check('A4 owned list: same text, own instance', (vDst.MEMO <> vSrc.MEMO) and (vDst.MEMO.Text = vSrc.MEMO.Text));
-    Check('A4b AssignI still shares the list (unchanged)', vByI.MEMO = vSrc.MEMO);
-    Detach(vByI);
+    Check('A4b Assign(Imc): own instance, same text (owner ruling 2026-11-23)', (vByI.MEMO <> vSrc.MEMO) and (vByI.MEMO.Text = vSrc.MEMO.Text));
     vChild.Assign(vSrc);
     Check('A5 descendant receives the copy', SameScalars(vChild));
   finally
     vChild.Free;
     vByI.Free;
     vDst.Free;
-    vSrc.Free;
+    vSrcI := nil;
   end;
 end;
 
@@ -240,6 +236,257 @@ begin
   end;
 end;
 
+{ the stream column STRM: pMode 0 = Assign(object), 1 = AssignTo, 2 = Assign(Imc). The caller holds both objects by an interface }
+procedure CopyBy(pMode: Integer; pSrc, pDst: TmcORMFIX);
+begin
+  case pMode of
+    0: pDst.Assign(pSrc);
+    1: TFixAccess(pSrc).AssignTo(pDst);
+  else
+    pDst.Assign(pSrc as ImcORMFIX);
+  end;
+end;
+
+procedure FillStrm(pObj: TmcORMFIX);
+var
+  vB: TBytes;
+begin
+  vB := TBytes.Create(9, 8, 7);
+  pObj.STRM.Size := 0;
+  pObj.STRM.WriteBuffer(vB[0], 3);
+  pObj.STRM.Position := 1;
+end;
+
+function SameBytes(pA, pB: TStream): Boolean;
+begin
+  Result := (pA.Size = pB.Size) and CompareMem(TMemoryStream(pA).Memory, TMemoryStream(pB).Memory, pA.Size);
+end;
+
+procedure DropStrm(pObj: TmcORMFIX);
+var
+  vOld: TABZMemoryStream;
+begin
+  vOld := pObj.STRM;
+  pObj.STRM := nil;
+  vOld.Free;
+end;
+
+procedure TestStreamColumn;
+const
+  CNames: array [0 .. 2] of string = ('Assign', 'AssignTo', 'Assign(Imc)');
+var
+  vSrc, vDst: TmcORMFIX;
+  vSrcI, vDstI: ImcORMFIX;
+  vMode: Integer;
+  vHit: Integer;
+begin
+  for vMode := 0 to 2 do
+  begin
+    vSrc := TmcORMFIX.Create(nil);
+    vSrcI := vSrc;
+    vDst := TmcORMFIX.Create(nil);
+    vDstI := vDst;
+    try
+      FillStrm(vSrc);
+      vDst.STRM.WriteBuffer(vSrc.STRM.Memory^, 1);
+      CopyBy(vMode, vSrc, vDst);
+      Check('M' + IntToStr(vMode) + 'a ' + CNames[vMode] + ' stream: own instance, same bytes, old bytes gone',
+        (vDst.STRM <> vSrc.STRM) and SameBytes(vSrc.STRM, vDst.STRM));
+      Check('M' + IntToStr(vMode) + 'b ' + CNames[vMode] + ' stream: source Position kept (1), copy at Position 0',
+        (vSrc.STRM.Position = 1) and (vDst.STRM.Position = 0));
+      vSrc.STRM.Size := 0;
+      Check('M' + IntToStr(vMode) + 'c emptying the source leaves the copy', vDst.STRM.Size = 3);
+      { nil source stream: the copy is emptied }
+      DropStrm(vSrc);
+      CopyBy(vMode, vSrc, vDst);
+      Check('M' + IntToStr(vMode) + 'd nil source stream empties the copy', (vDst.STRM <> nil) and (vDst.STRM.Size = 0));
+      { nil destination stream: skipped }
+      vSrc.STRM := TABZMemoryStream.Create;
+      FillStrm(vSrc);
+      DropStrm(vDst);
+      vHit := 0;
+      try
+        CopyBy(vMode, vSrc, vDst);
+      except
+        Inc(vHit);
+      end;
+      Check('M' + IntToStr(vMode) + 'e nil destination stream: no exception, nothing created', (vHit = 0) and (vDst.STRM = nil));
+      { self }
+      CopyBy(vMode, vSrc, vSrc);
+      Check('M' + IntToStr(vMode) + 'f self: stream kept', (vSrc.STRM.Size = 3) and (vSrc.STRM.Position = 1));
+    finally
+      vDstI := nil;
+      vSrcI := nil;
+    end;
+  end;
+end;
+
+procedure TestAssignI;
+var
+  vSrc, vDst: TmcORMFIX;
+  vSrcI, vDstI: ImcORMFIX;
+  vBefore: NativeUInt;
+  vHit, I: Integer;
+  vShared: TStringList;
+begin
+  vSrc := TmcORMFIX.Create(nil);
+  vSrcI := vSrc;
+  vDst := TmcORMFIX.Create(nil);
+  vDstI := vDst;
+  try
+    Fill(vSrc);
+    vDst.Assign(vSrcI);
+    Check('I1 Assign(Imc): own instance, same text', (vDst.MEMO <> vSrc.MEMO) and (vDst.MEMO.Text = 'note'#13#10));
+    vSrc.MEMO.Text := 'changed';
+    Check('I2 changing the source does not change the copy', vDst.MEMO.Text = 'note'#13#10);
+    DropMemo(vSrc);
+    vDst.Assign(vSrcI);
+    Check('I3 nil source list empties the copy', (vDst.MEMO <> nil) and (vDst.MEMO.Count = 0));
+    vSrc.MEMO := TStringList.Create;
+    vSrc.MEMO.Text := 'kept';
+    DropMemo(vDst);
+    vHit := 0;
+    try
+      vDst.Assign(vSrcI);
+    except
+      Inc(vHit);
+    end;
+    Check('I4 nil destination list: no exception, nothing created', (vHit = 0) and (vDst.MEMO = nil));
+    { both objects hold one list instance (the setter shares it) }
+    vShared := vSrc.MEMO;
+    vDst.MEMO := vShared;
+    vHit := 0;
+    try
+      vDst.Assign(vSrcI);
+    except
+      Inc(vHit);
+    end;
+    Check('I5 aliased list: skipped, content intact', (vHit = 0) and (vShared.Text = 'kept'#13#10));
+    vDst.MEMO := nil;
+    vSrc.Assign(vSrcI);
+    Check('I6 Assign(Imc) from an interface of Self keeps the list', vSrc.MEMO.Text = 'kept'#13#10);
+  finally
+    vDstI := nil;
+    vSrcI := nil;
+  end;
+  vHit := 0;
+  vBefore := HeapUsed;
+  for I := 1 to 200 do
+  try
+    vSrc := TmcORMFIX.Create(nil);
+    vSrcI := vSrc;
+    vDst := TmcORMFIX.Create(nil);
+    vDstI := vDst;
+    Fill(vSrc);
+    vDst.Assign(vSrcI);
+    vDstI := nil;
+    vSrcI := nil;
+  except
+    Inc(vHit);
+  end;
+  Check('I8 freeing both raises nothing', vHit = 0);
+  Check('I9 no leak over 200 Assign(Imc) / release rounds (delta ' + IntToStr(Int64(HeapUsed) - Int64(vBefore)) + ')', HeapUsed <= vBefore + 4096);
+end;
+
+{ The overload set Assign(TPersistent) / Assign(Imc) on a reference-counted base (stub modelled on TMicObjectBase:
+  FRefCount from 0, _Release frees). MicDestroyCount counts destructors. }
+procedure TestOverloads;
+var
+  vSrc, vDst: TmcORMFIX;
+  vOther: TmcPLAINFIX;
+  vSrcI, vDstI, vNilI: ImcORMFIX;
+  vP, vNilP: TPersistent;
+  vD0, vHit: Integer;
+  vList: TStringList;
+begin
+  { object to object, both held only by object references: neither may be freed by the call }
+  vD0 := MicDestroyCount;
+  vSrc := TmcORMFIX.Create(nil);
+  vDst := TmcORMFIX.Create(nil);
+  Fill(vSrc);
+  vDst.Assign(vSrc);
+  Check('O1 object to object: copied', SameScalars(vDst));
+  Check('O1b object to object: no destructor ran (no temporary interface)', MicDestroyCount = vD0);
+  vDst.Assign(vDst);
+  Check('O1c self assignment by object: still alive', (MicDestroyCount = vD0) and SameScalars(vDst));
+  vDst.Free;
+  vSrc.Free;
+  Check('O1d both objects freed by their owner, exactly two destructors', MicDestroyCount = vD0 + 2);
+  { interface to interface }
+  vD0 := MicDestroyCount;
+  vSrc := TmcORMFIX.Create(nil);
+  vSrcI := vSrc;
+  vDst := TmcORMFIX.Create(nil);
+  vDstI := vDst;
+  Fill(vSrc);
+  vDstI.Assign(vSrcI);
+  Check('O2 interface to interface: copied', SameScalars(vDst) and (MicDestroyCount = vD0));
+  { interface receiver, object argument: the argument is converted to the interface, so it must be held by one }
+  vDst.ID := 1;
+  vDstI.Assign(vSrc);
+  Check('O3 interface to object (object held by an interface): copied, nothing freed', (vDst.ID = 77) and (MicDestroyCount = vD0));
+  { object receiver, interface argument }
+  vDst.ID := 2;
+  vDst.Assign(vSrcI);
+  Check('O4 object to interface parameter: copied, nothing freed', (vDst.ID = 77) and (MicDestroyCount = vD0));
+  { TPersistent reference: virtual dispatch to the class overload }
+  vDst.ID := 3;
+  vP := vDst;
+  vP.Assign(vSrc);
+  Check('O5 TPersistent reference: copied through the override, nothing freed', (vDst.ID = 77) and (MicDestroyCount = vD0));
+  { unrelated classes }
+  vHit := 0;
+  vList := TStringList.Create;
+  vOther := TmcPLAINFIX.Create(nil);
+  try
+    try
+      vDst.Assign(vList);
+    except
+      on E: EConvertError do
+        Inc(vHit);
+    end;
+    try
+      vDst.Assign(TPersistent(vOther));
+    except
+      on E: EConvertError do
+        Inc(vHit);
+    end;
+  finally
+    vOther.Free;
+    vList.Free;
+  end;
+  Check('O6 unrelated class (TStringList, another table object): EConvertError', vHit = 2);
+  Inc(vD0); { the TmcPLAINFIX of O6 was destroyed }
+  { nil: the literal and a nil TPersistent go to the class overload (EConvertError, as TPersistent.Assign(nil));
+    a nil interface reaches the copy code of the Imc overload and raises EAccessViolation (unchanged from AssignI) }
+  vHit := 0;
+  try
+    vDst.Assign(nil);
+  except
+    on E: EConvertError do
+      Inc(vHit);
+  end;
+  vNilP := nil;
+  try
+    vDst.Assign(vNilP);
+  except
+    on E: EConvertError do
+      Inc(vHit);
+  end;
+  Check('O7 literal nil and nil TPersistent: EConvertError from the class overload', vHit = 2);
+  vNilI := nil;
+  vHit := 0;
+  try
+    vDst.Assign(vNilI);
+  except
+    on E: EAccessViolation do
+      Inc(vHit);
+  end;
+  Check('O8 nil interface: EAccessViolation (the Imc overload reads Value), nothing freed', (vHit = 1) and (MicDestroyCount = vD0));
+  vDstI := nil;
+  vSrcI := nil;
+  Check('O9 releasing the interfaces frees both objects', MicDestroyCount = vD0 + 2);
+end;
 procedure TestForeign;
 var
   vDst: TmcORMFIX;
@@ -323,6 +570,9 @@ begin
     TestAssignTo;
     TestOwnedList;
     TestNotOwned;
+    TestAssignI;
+    TestOverloads;
+    TestStreamColumn;
     TestForeign;
     TestPlainAndEmpty;
     TestStream;
