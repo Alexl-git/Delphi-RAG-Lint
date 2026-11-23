@@ -391,6 +391,7 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.Schema.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbImport.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.TextBackup.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.ConstGen.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.SchemaSeed.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbTypes.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.CsvMemTable.pas"/>
@@ -407,6 +408,7 @@
         <DCCReference Include="DRagLint.CLI.Repo.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoParamArray.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoModel.pas"/>
+        <DCCReference Include="DRagLint.CLI.RepoConstGen.pas"/>
         <DCCReference Include="DRagLint.CLI.Explain.pas"/>
         <DCCReference Include="DRagLint.CLI.RuleScope.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.pas"/>

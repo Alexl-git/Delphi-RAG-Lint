@@ -222,6 +222,7 @@ uses
   DRagLint.FieldRepo.Schema in '..\sql\DRagLint.FieldRepo.Schema.pas',
   DRagLint.FieldRepo.FbImport in '..\sql\DRagLint.FieldRepo.FbImport.pas',
   DRagLint.FieldRepo.TextBackup in '..\sql\DRagLint.FieldRepo.TextBackup.pas',
+  DRagLint.FieldRepo.ConstGen in '..\sql\DRagLint.FieldRepo.ConstGen.pas',
   DRagLint.FieldRepo.SchemaSeed in '..\sql\DRagLint.FieldRepo.SchemaSeed.pas',
   DRagLint.FieldRepo.FbTypes in '..\sql\DRagLint.FieldRepo.FbTypes.pas',
   DRagLint.FieldRepo.CsvMemTable in '..\sql\DRagLint.FieldRepo.CsvMemTable.pas',
@@ -488,6 +489,7 @@ uses
   DRagLint.CLI.Repo in 'DRagLint.CLI.Repo.pas',
   DRagLint.CLI.RepoParamArray in 'DRagLint.CLI.RepoParamArray.pas',
   DRagLint.CLI.RepoModel in 'DRagLint.CLI.RepoModel.pas',
+  DRagLint.CLI.RepoConstGen in 'DRagLint.CLI.RepoConstGen.pas',
   DRagLint.CLI.Explain in 'DRagLint.CLI.Explain.pas',
   DRagLint.CLI.RuleScope in 'DRagLint.CLI.RuleScope.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';

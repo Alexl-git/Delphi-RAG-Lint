@@ -65,7 +65,8 @@ uses
   DRagLint.FieldRepo.OrmGen,
   DRagLint.FieldRepo.DataServiceGen,
   DRagLint.CLI.RepoParamArray,
-  DRagLint.CLI.RepoModel
+  DRagLint.CLI.RepoModel,
+  DRagLint.CLI.RepoConstGen
   ;
 
 const
@@ -85,7 +86,7 @@ const
   { positions in the --save-form value list of RepoOrmVerb }
   SAVE_FORM_LEGACY  = 0;
   SAVE_FORM_CURRENT = 1;
-  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check';
+  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check, gen-const';
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -480,6 +481,7 @@ begin
   if not ResolveRepoPath(pRepo, pProject, Path) then Exit;
   if MatchText(pSub, ['gen-orm', 'update-orm', 'gen-dataservice']) then Exit(RepoOrmVerb(pSub, Path));
   if IsRepoModelSub(pSub) then Exit(RunRepoModelVerb(pSub, Path, pJson)); // 1.53 FR-MODEL: migrate, check
+  if SameText(pSub, 'gen-const') then Exit(RunRepoGenConst(Path, pOutFile)); // 1.53 FR-CONSTGEN
   case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
@@ -493,7 +495,7 @@ end;
 function IsImplementedSub(const pSub: string): Boolean;
 begin
   Result:= MatchText(pSub, ['init', 'info', 'import-fb', 'seed-fb', 'refresh-schema', 'backup',
-    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice']) or IsRepoModelSub(pSub);
+    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'gen-const']) or IsRepoModelSub(pSub);
 end;
 
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de -- REVIEWED 2026-11-17 v152 TTE: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape)
