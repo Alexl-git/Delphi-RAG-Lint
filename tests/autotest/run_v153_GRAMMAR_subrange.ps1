@@ -114,7 +114,7 @@ print(json.dumps({
   'refs': [{'l': r[0], 'c': r[1], 'k': r[2], 'n': r[3]} for r in c.execute('SELECT start_line, start_col, kind, name_text FROM refs')],
   'syms': [{'l': r[0], 'k': r[1], 'n': r[2], 's': r[3], 'q': r[4]} for r in c.execute('SELECT start_line, kind, name, signature, qualified_name FROM symbols')]}))
 "@ | Set-Content $py -Encoding ascii
-$d = (& python -I $py $db) -join "`n" | ConvertFrom-Json
+$d = (& python -I $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'P -- the grammar parses every bound' -ForegroundColor Cyan
 Check 'P0 control: the fixture is indexed' (@($d.syms | Where-Object { $_.n -eq 'MAXCOLUMNCOUNT' }).Count -eq 1) "symbols=$(@($d.syms).Count)"

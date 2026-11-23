@@ -33,9 +33,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Write-Ascii([string]$Path, [string]$Body) {
   [IO.File]::WriteAllText($Path, ($Body -replace "`r`n", "`n" -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 }
-function Invoke-Dl([string[]]$Arguments) { (& $Exe @Arguments 2>&1 | ForEach-Object { "$_" }) -join "`n" }
+function Invoke-Dl([string[]]$Arguments) { (& { $ErrorActionPreference = 'Continue'; & $Exe @Arguments 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n" }
 function Get-Rows([string]$Db, [string]$Sql) {
-  $j = (& $Exe sql --query $Sql --db $Db --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Sql --db $Db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   return , @($j.rows | ForEach-Object { $_ -join '|' })
 }
 function New-Indexes([string]$Dir) {

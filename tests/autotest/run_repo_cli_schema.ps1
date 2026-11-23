@@ -32,14 +32,14 @@ $Exe = (Resolve-Path -LiteralPath $Exe).Path
 $work = Join-Path ([IO.Path]::GetTempPath()) ('dl-repo-schema-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($work) | Out-Null
 function Run([string[]]$a) {
-  $o = & $Exe @a 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }
   $out = ($o | ForEach-Object { "$_" }) -join "`n"
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
 }
 # stdout and stderr kept apart: --json must leave stdout as ONE JSON document
 function RunSplit([string[]]$a) {
   $ef = Join-Path $work ('e-' + [guid]::NewGuid().ToString('N') + '.txt')
-  $o = & $Exe @a 2>$ef
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$ef }
   $code = $LASTEXITCODE
   [pscustomobject]@{ Code = $code; Out = (($o | ForEach-Object { "$_" }) -join "`n"); Err = [IO.File]::ReadAllText($ef) }
 }
@@ -77,12 +77,12 @@ try {
   $r = Run @('repo', 'refresh-schema', '--ddl', $less, '--repo', $x, '--select', $sel)
   Check 'C6 --select with an unknown id -> exit 2 (v2 design: usage error), nothing written' (($r.Code -eq 2) -and ($h2 -eq (Get-FileHash -LiteralPath $x).Hash)) "exit=$($r.Code)`n$($r.Out)"
   $r = RunSplit @('repo', 'refresh-schema', '--ddl', $less, '--repo', $x, '--json')
-  $jd = $null; try { $jd = $r.Out | ConvertFrom-Json } catch { $null = $_ }
+  $jd = $null; try { $jd = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null = $_ }
   Check 'C6b --json: stdout is exactly one JSON document, the dry-run notice goes to stderr' (($r.Code -eq 0) -and $jd -and ($jd.direction -eq 'db-to-repo') -and ($r.Err -match 'dry run: nothing written') -and ($r.Out -notmatch 'dry run')) "exit=$($r.Code)`n$($r.Out)"
   $y = Join-Path $work 'y.dlrepo'
   $null = Run @('repo', 'init', '--repo', $y)
   $r = RunSplit @('repo', 'seed-fb', '--ddl', $ddl, '--repo', $y, '--apply', '--json')
-  $jd = $null; try { $jd = $r.Out | ConvertFrom-Json } catch { $null = $_ }
+  $jd = $null; try { $jd = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null = $_ }
   Check 'C6c --json with --apply: stdout is one JSON document, the applied lines go to stderr' (($r.Code -eq 0) -and $jd -and ($r.Err -match 'applied: \d+ changes') -and ($r.Out -notmatch 'applied:') -and ((Fields $y) -gt 0)) "exit=$($r.Code)`n$($r.Out)`n$($r.Err)"
   $r1 = Run @('repo', 'refresh-schema', '--repo', $x)
   $r2 = Run @('repo', 'refresh-schema', '--repo', $x, '--ddl', $ddl, '--connection', 'Database=localhost:nofile.fdb;User_Name=SYSDBA;Password=x')
@@ -116,7 +116,7 @@ try {
   [IO.Directory]::CreateDirectory($mw) | Out-Null
   Copy-Item -Path "$loc\*" -Destination $mw -Recurse -Force
   $r = Run @('resolve-dbs', '--project', (Join-Path $mw 'man\App.dproj'), '--config', (Join-Path $mw 'manifest.json'), '--json')
-  $j = $null; try { $j = ($r.Out -split "`n" | Where-Object { $_ -like "{*" }) | ConvertFrom-Json } catch { $null = $_ }
+  $j = $null; try { $j = ($r.Out -split "`n" | Where-Object { $_ -like "{*" }) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null = $_ }
   Check 'C9a resolve-dbs --project --json carries the manifest repository' (($r.Code -eq 0) -and $j -and ($j.repo -like '*man.dlrepo')) "exit=$($r.Code)`n$($r.Out)"
   $r = Run @('resolve-dbs', '--project', (Join-Path $mw 'none\App.dproj'), '--config', (Join-Path $mw 'manifest.json'))
   Check 'C9b resolve-dbs --project without a repository says `repo: none`' (($r.Code -eq 0) -and ($r.Out -match 'repo: none')) "exit=$($r.Code)`n$($r.Out)"

@@ -97,8 +97,13 @@ function Find-MigrateSites([string]$Path) {
   $lines = [IO.File]::ReadAllLines($Path)
   $cur   = '(before any routine)'
   $sites = @()
+  $inUses = $false
   for ($i = 0; $i -lt $lines.Count; $i++) {
     $l = $lines[$i]
+    # 1.53 FR-MODEL: a uses entry NAMES the unit DRagLint.FieldRepo.Migrate; it is not a call. Skip the
+    # uses clause (from the word uses to its terminating semicolon) so the unit name is not read as a site.
+    if ($l -match '^\s*uses\b') { $inUses = $true }
+    if ($inUses) { if ($l -match ';') { $inUses = $false }; continue }
     if ($l -match '^(function|procedure)\s+([A-Za-z_][A-Za-z0-9_.]*)') { $cur = $Matches[2] }
     # 1.52 DDFIX: a whole-line // or /// comment holds no code; the SELFLZ autodoc facts blocks name
     # ISymbolStore.Migrate in 'Calls:' lines ABOVE a routine, which attributed to the previous one.

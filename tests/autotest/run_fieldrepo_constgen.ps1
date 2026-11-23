@@ -84,25 +84,25 @@ try {
     $repoFile = Join-Path $d 'r.dlrepo'
     $unitFile = Join-Path $d 'uFieldRegistry.pas'
     $bk = Join-Path $d 'bk.txt'
-    $r = & $Exe repo restore --repo $repoFile --in (Join-Path $fix $c.f) 2>&1
+    $r = & { $ErrorActionPreference = 'Continue'; & $Exe repo restore --repo $repoFile --in (Join-Path $fix $c.f) 2>&1 | ForEach-Object { "$_" } }
     Check "B$k.1 $($c.n): restore into a temp repository" ($LASTEXITCODE -eq 0) "$r"
     $dmFile = Join-Path $d 'uRegistryDm.pas'
-    $r = & $Exe repo gen-const --repo $repoFile --unit uFieldRegistry --output $unitFile 2>&1
+    $r = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $repoFile --unit uFieldRegistry --output $unitFile 2>&1 | ForEach-Object { "$_" } }
     Check "B$k.2 $($c.n): gen-const writes the constant unit" (($LASTEXITCODE -eq 0) -and (Test-Path -LiteralPath $unitFile)) "$r"
-    $r = & $Exe repo gen-const --repo $repoFile --datamodule dmRegistry --output $dmFile 2>&1
+    $r = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $repoFile --datamodule dmRegistry --output $dmFile 2>&1 | ForEach-Object { "$_" } }
     $dmOk = ($LASTEXITCODE -eq 0) -and (Test-Path -LiteralPath $dmFile) -and (Test-Path -LiteralPath (Join-Path $d 'uRegistryDm.dfm'))
     Check "B$k.2d $($c.n): gen-const --datamodule writes the unit and the form" $dmOk "$r"
     if (-not $dmOk) { continue }
     $d2 = Join-Path $d 'again'
     New-Item -ItemType Directory -Path $d2 -Force | Out-Null
-    & $Exe repo gen-const --repo $repoFile --unit uFieldRegistry --output (Join-Path $d2 'uFieldRegistry.pas') *> $null
-    & $Exe repo gen-const --repo $repoFile --datamodule dmRegistry --output (Join-Path $d2 'uRegistryDm.pas') *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $repoFile --unit uFieldRegistry --output (Join-Path $d2 'uFieldRegistry.pas') *> $null }
+    & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $repoFile --datamodule dmRegistry --output (Join-Path $d2 'uRegistryDm.pas') *> $null }
     $same = $true
     foreach ($f in @('uFieldRegistry.pas', 'uRegistryDm.pas', 'uRegistryDm.dfm')) {
       if (-not [System.Linq.Enumerable]::SequenceEqual([IO.File]::ReadAllBytes((Join-Path $d $f)), [IO.File]::ReadAllBytes((Join-Path $d2 $f)))) { $same = $false }
     }
     Check "B$k.3 $($c.n): two runs give identical bytes (unit, module, form)" $same
-    $r = & $Exe repo backup --repo $repoFile --output $bk 2>&1
+    $r = & { $ErrorActionPreference = 'Continue'; & $Exe repo backup --repo $repoFile --output $bk 2>&1 | ForEach-Object { "$_" } }
     Check "B$k.4 $($c.n): backup of the same repository" ($LASTEXITCODE -eq 0) "$r"
     # compile the probe against the generated units, both platforms
     $sql = Join-Path $Repo 'src\sql'
@@ -134,36 +134,36 @@ try {
   $d = Join-Path $work 'cli'
   New-Item -ItemType Directory -Path $d -Force | Out-Null
   $rf = Join-Path $d 'r.dlrepo'
-  & $Exe repo restore --repo $rf --in (Join-Path $fix 'golden.dlrepo.txt') *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe repo restore --repo $rf --in (Join-Path $fix 'golden.dlrepo.txt') *> $null }
   $o = Join-Path $d 'o.pas'
-  $null = & $Exe repo gen-const --repo $rf --table NOPE --output $o 2>&1;                Check 'C1 unknown --table exits 2' ($LASTEXITCODE -eq 2)
-  $null = & $Exe repo gen-const --repo $rf --table DL_META --output $o 2>&1;            Check 'C2 DL_META in --table exits 2' ($LASTEXITCODE -eq 2)
-  $null = & $Exe repo gen-const --repo $rf --table DL_GENERATORS --output $o 2>&1;      Check 'C3 DL_GENERATORS in --table exits 2' ($LASTEXITCODE -eq 2)
-  $null = & $Exe repo gen-const --repo $rf --unit 1bad --output $o 2>&1;                Check 'C4 --unit not an identifier exits 2' ($LASTEXITCODE -eq 2)
-  $null = & $Exe repo gen-const --repo $rf 2>&1;                                        Check 'C5 no --output exits 2' ($LASTEXITCODE -eq 2)
-  $null = & $Exe repo gen-const --repo $rf --output (Join-Path $d 'nofolder\o.pas') 2>&1; Check 'C6 missing output folder exits 2' ($LASTEXITCODE -eq 2)
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --table NOPE --output $o 2>&1 | ForEach-Object { "$_" } };                Check 'C1 unknown --table exits 2' ($LASTEXITCODE -eq 2)
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --table DL_META --output $o 2>&1 | ForEach-Object { "$_" } };            Check 'C2 DL_META in --table exits 2' ($LASTEXITCODE -eq 2)
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --table DL_GENERATORS --output $o 2>&1 | ForEach-Object { "$_" } };      Check 'C3 DL_GENERATORS in --table exits 2' ($LASTEXITCODE -eq 2)
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --unit 1bad --output $o 2>&1 | ForEach-Object { "$_" } };                Check 'C4 --unit not an identifier exits 2' ($LASTEXITCODE -eq 2)
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf 2>&1 | ForEach-Object { "$_" } };                                        Check 'C5 no --output exits 2' ($LASTEXITCODE -eq 2)
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --output (Join-Path $d 'nofolder\o.pas') 2>&1 | ForEach-Object { "$_" } }; Check 'C6 missing output folder exits 2' ($LASTEXITCODE -eq 2)
   Check 'C7 no refused call wrote a file' (-not (Test-Path -LiteralPath $o))
-  $r = & $Exe repo gen-const --repo $rf --dry-run --output $o 2>&1
+  $r = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --dry-run --output $o 2>&1 | ForEach-Object { "$_" } }
   Check 'C8 --dry-run exits 0, prints counts, writes nothing' (($LASTEXITCODE -eq 0) -and (($r -join "`n") -match 'DL_FIELDS_INFO: 6 rows') -and (-not (Test-Path -LiteralPath $o)))
-  $null = & $Exe repo gen-const --repo $rf --table dl_enumvalues,DL_ERROR_MESSAGES --output $o 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --table dl_enumvalues,DL_ERROR_MESSAGES --output $o 2>&1 | ForEach-Object { "$_" } }
   $txt = if (Test-Path -LiteralPath $o) { Get-Content -LiteralPath $o -Raw } else { '' }
   Check 'C9 --table subset (case-insensitive, comma list) emits only those tables' (($LASTEXITCODE -eq 0) -and ($txt -match 'TDL_ENUMVALUESRow') -and ($txt -notmatch 'TDL_FIELDS_INFORow'))
 
-  $null = & $Exe repo gen-const --repo $rf --datamodule 1bad --output (Join-Path $d 'dm.pas') 2>&1; Check 'C10 --datamodule not an identifier exits 2' ($LASTEXITCODE -eq 2)
-  $null = & $Exe repo gen-const --repo $rf --datamodule dmReg --unit other --output (Join-Path $d 'dm.pas') 2>&1; Check 'C11 --datamodule with --unit other than the file name exits 2' ($LASTEXITCODE -eq 2)
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --datamodule 1bad --output (Join-Path $d 'dm.pas') 2>&1 | ForEach-Object { "$_" } }; Check 'C10 --datamodule not an identifier exits 2' ($LASTEXITCODE -eq 2)
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --datamodule dmReg --unit other --output (Join-Path $d 'dm.pas') 2>&1 | ForEach-Object { "$_" } }; Check 'C11 --datamodule with --unit other than the file name exits 2' ($LASTEXITCODE -eq 2)
   Check 'C12 no refused data module call wrote a file' (-not (Test-Path -LiteralPath (Join-Path $d 'dm.pas')))
 
   # ---- D. repo check-const ----
   $d = Join-Path $work 'stale'
   New-Item -ItemType Directory -Path $d -Force | Out-Null
   $rf = Join-Path $d 'r.dlrepo'
-  & $Exe repo restore --repo $rf --in (Join-Path $fix 'golden_v2.txt') *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe repo restore --repo $rf --in (Join-Path $fix 'golden_v2.txt') *> $null }
   $cu = Join-Path $d 'uFieldRegistry.pas'
   $du = Join-Path $d 'uRegistryDm.pas'
-  & $Exe repo gen-const --repo $rf --output $cu *> $null
-  & $Exe repo gen-const --repo $rf --datamodule dmRegistry --output $du *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --output $cu *> $null }
+  & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $rf --datamodule dmRegistry --output $du *> $null }
   function Invoke-CheckConst([string]$unit, [string]$repository = $rf) {
-    $script:out = (& $Exe repo check-const --repo $repository --unit-file $unit 2>&1) -join "`n"
+    $script:out = (& { $ErrorActionPreference = 'Continue'; & $Exe repo check-const --repo $repository --unit-file $unit 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     return $LASTEXITCODE
   }
   Check 'D1 current: both units exit 0' (((Invoke-CheckConst $cu) -eq 0) -and ((Invoke-CheckConst $du) -eq 0)) $script:out
@@ -175,7 +175,7 @@ try {
     $f = Join-Path $d "$name.txt"
     [IO.File]::WriteAllText($f, $txt.Substring(0, $i) + $to + $txt.Substring($i + $from.Length))
     $rp = Join-Path $d "$name.dlrepo"
-    $null = & $Exe repo restore --repo $rp --in $f 2>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo restore --repo $rp --in $f 2>&1 | ForEach-Object { "$_" } }
     if ($LASTEXITCODE -ne 0) { throw "variant $name : restore failed" }
     return $rp
   }
@@ -187,7 +187,7 @@ try {
     $x = Invoke-CheckConst $u $chg
     Check "D3 positive: one changed row = 1, names DL_FIELDS_INFO only ($(Split-Path -Leaf $u))" (($x -eq 1) -and ($script:out -match 'DL_FIELDS_INFO:') -and ($script:out -notmatch 'DL_DATASETS_INFO|DL_ENUMVALUES|DL_ERROR_MESSAGES')) "exit $x $($script:out)"
   }
-  & $Exe repo gen-const --repo $chg --datamodule dmRegistry --output $du *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-const --repo $chg --datamodule dmRegistry --output $du *> $null }
   Check 'D4 regenerated: current again' ((Invoke-CheckConst $du $chg) -eq 0) $script:out
   [IO.File]::AppendAllText((Join-Path $d 'uRegistryDm.dfm'), "`r`n")
   $x = Invoke-CheckConst $du $chg
@@ -196,8 +196,8 @@ try {
   $x = Invoke-CheckConst $cu (Join-Path $d 'nope.dlrepo');                 Check 'D7 missing repository = 2' ($x -eq 2) "exit $x"
   $x = Invoke-CheckConst (Join-Path $fix 'golden_v2.txt');                 Check 'D8 a file without a mark = 2' ($x -eq 2) "exit $x"
   $x = Invoke-CheckConst $cu (Join-Path $fix 'golden_v2.txt');             Check 'D9 a repository that cannot be read = 2' ($x -eq 2) "exit $x"
-  $null = & $Exe repo check-const --unit-file $cu 2>&1;                    Check 'D10 neither --repo nor --project = 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-  $null = & $Exe repo check-const --repo $rf 2>&1;                         Check 'D11 no --unit-file = 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo check-const --unit-file $cu 2>&1 | ForEach-Object { "$_" } };                    Check 'D10 neither --repo nor --project = 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe repo check-const --repo $rf 2>&1 | ForEach-Object { "$_" } };                         Check 'D11 no --unit-file = 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   $before = (Get-ChildItem -LiteralPath $d -File | Sort-Object Name | ForEach-Object { "$($_.Name) $((Get-FileHash -LiteralPath $_.FullName).Hash)" }) -join ';'
   $null = Invoke-CheckConst $cu
   $null = Invoke-CheckConst $cu $chg

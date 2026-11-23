@@ -78,7 +78,7 @@ try {
   $c5 = Invoke-Dl @('lint-all', '--db', $db5)
   Check 'C5 control: a config beside the copy wins' (($c5.Out -match 'scanned') -and ((Magic $c5.Out).Count -eq 0)) "exit=$($c5.Exit)"
   $c6 = Invoke-Dl @('lint-all', '--db', $db, '--json')
-  $j6 = @(); try { $j6 = @($c6.Out | ConvertFrom-Json) } catch { $j6 = @() }
+  $j6 = @(); try { $j6 = @($c6.Out | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $j6 = @() }
   Check 'C6 --json on the copy: parseable, the rule is there, no note' (($j6.Count -gt 0) -and ($c6.Out -match '"magic-literal"') -and ($c6.Err -notmatch $notePat)) "err=[$($c6.Err)] out=$($c6.Out.Substring(0, [Math]::Min(300, $c6.Out.Length)))"
 
   # A project whose folder no longer exists (an index from another machine / a deleted checkout).

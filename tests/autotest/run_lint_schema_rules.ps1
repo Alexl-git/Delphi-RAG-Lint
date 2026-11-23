@@ -93,7 +93,7 @@ function Get-SchemaFindings($Sc, [string[]]$Extra = @()) {
   $all = @()
   if (Test-Path $jsonFile) {
     $raw = [IO.File]::ReadAllText($jsonFile)
-    if ($raw.Trim() -ne '') { $all = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
+    if ($raw.Trim() -ne '') { $all = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   }
   $schema = @($all | Where-Object { $_.rule -like 'schema-*' })
   return [pscustomobject]@{ Findings = $schema; Lines = $lines; All = $all.Count }
@@ -199,7 +199,7 @@ try {
   $smErrLines = @(($sm.Err -split "`r?`n") | Where-Object { $_ -match 'dlrepo' })
   Check 'T10a missing repository: exactly one stderr line' ($smErrLines.Count -eq 1) "count=$($smErrLines.Count)"
   $smJsonOk = $true
-  try { $null = $sm.Out | ConvertFrom-Json } catch { $smJsonOk = $false }
+  try { $null = $sm.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $smJsonOk = $false }
   Check 'T10b missing repository: stdout has no notice and parses as JSON' (($sm.Out -notmatch 'dlrepo') -and $smJsonOk) "out=$($sm.Out.Substring(0, [Math]::Min(80, $sm.Out.Length)))"
   $sa = Invoke-EngineSplit @('lint-all', '--db', $miss.Db, '--project', $miss.Proj, '--json')
   Check 'T10c lint-all missing repository: one stderr line, none on stdout' ((@(($sa.Err -split "`r?`n") | Where-Object { $_ -match 'dlrepo' }).Count -eq 1) -and ($sa.Out -notmatch 'dlrepo'))
