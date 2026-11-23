@@ -78,3 +78,5 @@ drag-lint schema --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite --format json
 
 This would print `MyApp`'s index schema -- version, tables, columns, and row
 counts -- as JSON.
+
+See also [[Index-DB-Schema]]: the table-by-table reference of the index file (schema 27).
