@@ -167,6 +167,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.TaintRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.EnumOrdinalPersisted.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.SchemaRules.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.UsesInsert.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.MissingUses.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.UnusedEnumValue.pas"/>
@@ -412,6 +413,8 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbSchemaRead.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbDdl.pas"/>
         <DCCReference Include="DRagLint.CLI.CheckInit.pas"/>
+        <DCCReference Include="DRagLint.CLI.VerifyIndex.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.VerifyClient.pas"/>
         <DCCReference Include="DRagLint.CLI.Repo.pas"/>
         <DCCReference Include="DRagLint.CLI.Settings.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoParamArray.pas"/>
@@ -419,6 +422,7 @@
         <DCCReference Include="DRagLint.CLI.RepoConstGen.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoSchema.pas"/>
         <DCCReference Include="DRagLint.CLI.Explain.pas"/>
+        <DCCReference Include="DRagLint.CLI.ConfigAnchor.pas"/>
         <DCCReference Include="DRagLint.CLI.RuleScope.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Tolerance.pas"/>

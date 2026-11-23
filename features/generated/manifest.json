@@ -1,6 +1,6 @@
 {
-  "product": "1.52.3-alpha",
-  "extractor": "1.42.0-alpha",
+  "product": "1.53.0-alpha",
+  "extractor": "1.43.0-alpha",
   "resolver": "1.31.0-alpha",
   "schema": 27,
   "groups": [
@@ -338,6 +338,39 @@
         "by": "LSP",
         "build": "1.35.1-alpha",
         "surfaceHash": "e65d0306b6f45e6b574096a25c08b746aaeabba7aa3d2cc66ab0581d41574876"
+      }
+    },
+    {
+      "id": "index-db-schema",
+      "title": "Index DB schema reference",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.53.0-alpha",
+      "summary": "Table-by-table reference of the SQLite index file: every table, column, key, writer pass and schema version 23 to 27",
+      "intro": "Read this when you query an index with drag-lint sql or need to know which table holds a fact, which pass writes it and since which schema version. The page is checked against drag-lint schema on a live DB.",
+      "wikiPage": "Index-DB-Schema",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "schema"
+        },
+        {
+          "type": "cli",
+          "verb": "sql"
+        }
+      ],
+      "audience": "both",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-11-22",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-23",
+        "by": "ENGINE",
+        "build": "1.53.0-alpha",
+        "surfaceHash": "cab6d90e590158aacf44a70c64d70873a60b8f35d27e17238918625528c516c7"
       }
     },
     {
@@ -858,7 +891,7 @@
         {
           "type": "cli",
           "verb": "resolve-dbs",
-          "usage": "drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json] (print the consumer DB list query/lsp/serve would use)",
+          "usage": "drag-lint resolve-dbs [--platform win32|win64] [--repo <file>] [--config <path>] [--json] (print the consumer DB list query/lsp/serve would use)",
           "flags": [
             {
               "name": "--platform"
@@ -868,11 +901,15 @@
               "arg": "<path>"
             },
             {
+              "name": "--repo",
+              "arg": "<file>"
+            },
+            {
               "name": "--json"
             }
           ],
           "helpOrder": 97,
-          "help": ["  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)", "  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)", "                               exits 2 and names the sections when none or SEVERAL claim the project,", "                               rather than guessing: `index --rebuild` against a wrongly-picked db", "                               clears an index that was never meant to be touched.", "  drag-lint resolve-dbs --in <file.pas> [--project <file.dproj>] [--config <path>] [--json]", "                               the READ list (what hover / Find Usages / the LSP would open for that", "                               file): the ACTIVE PROJECT's db first, then the folder-matched db.", "                               Omit --project to model \"no project active\". Same resolution the IDE", "                               uses, so this is how it is verified without an IDE.", "                               No covering index: stdout empty ([] with --json), exit 0, a NOTE on stderr."]
+          "help": ["  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)", "  drag-lint resolve-dbs --project <file.dproj> [--repo <file>] [--config <path>] [--json]   (print the ONE db that owns this project -- the WRITE target; names the field repository it finds, or --repo <file> when given)", "                               exits 2 and names the sections when none or SEVERAL claim the project,", "                               rather than guessing: `index --rebuild` against a wrongly-picked db", "                               clears an index that was never meant to be touched.", "  drag-lint resolve-dbs --in <file.pas> [--project <file.dproj>] [--config <path>] [--json]", "                               the READ list (what hover / Find Usages / the LSP would open for that", "                               file): the ACTIVE PROJECT's db first, then the folder-matched db.", "                               Omit --project to model \"no project active\". Same resolution the IDE", "                               uses, so this is how it is verified without an IDE.", "                               No covering index: stdout empty ([] with --json), exit 0, a NOTE on stderr."]
         }
       ],
       "audience": "both",
@@ -888,10 +925,116 @@
         }
       ],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-23",
         "by": "ENGINE",
-        "build": "1.44.0-alpha",
+        "build": "1.53.0-alpha",
         "surfaceHash": "114b4503d5e5be415d7beb7ce0d7f897905e73234774f281a99b7ad8d555e784"
+      }
+    },
+    {
+      "id": "v153-symbol-id-reuse",
+      "title": "Stable symbol ids on an incremental index",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.53.0-alpha",
+      "summary": "An incremental index keeps the id of every unchanged symbol, so a body edit of a hub unit no longer rebinds every reference to its names",
+      "intro": "Read this when a one-file incremental index of a widely used unit is slow, or to see what the symbol-id reuse line of the calls stage means.",
+      "wikiPage": "symbol-id-reuse",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "index",
+          "example": "drag-lint index --project src\\cli\\drag-lint.dproj --db <project.sqlite>"
+        }
+      ],
+      "audience": "both",
+      "related": ["maintenance"],
+      "verified": {
+        "date": "2026-11-23",
+        "by": "ENGINE",
+        "build": "1.53.0-alpha",
+        "surfaceHash": "ef7035a4a4af9b1f2e8b73f5c2b7d6fd883fabb9660dd0fdf8621cf18cfd0b2e"
+      }
+    },
+    {
+      "id": "verify-index",
+      "title": "verify-index",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "1.53.0-alpha",
+      "summary": "Measures drag-lint resolution against DelphiLSP: samples resolved references and reports the mismatch rate and the rows",
+      "intro": "Internal measurement verb: takes a deterministic sample of resolved references from one project index, asks DelphiLSP where each name is declared, and reports how often the two disagree; read-only, needs a .delphilsp.json.",
+      "wikiPage": "verify-index",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "verify-index",
+          "usage": "drag-lint verify-index (--db <db> | --project <x.dproj>) [--delphi-lsp-config <file>] [--sample N] [--seed N] [--delphi-lsp <exe>] [--delphi-lsp-bits 32|64] [--timeout-ms N] [--warmup-ms N] [--trace <file>] [--dry-run] [--json] (internal: mismatch rate of the index vs DelphiLSP)",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "PATH"
+            },
+            {
+              "name": "--project",
+              "arg": "FILE"
+            },
+            {
+              "name": "--delphi-lsp-config",
+              "arg": "FILE"
+            },
+            {
+              "name": "--sample",
+              "arg": "N"
+            },
+            {
+              "name": "--seed",
+              "arg": "N"
+            },
+            {
+              "name": "--delphi-lsp",
+              "arg": "EXE"
+            },
+            {
+              "name": "--delphi-lsp-bits",
+              "arg": "32|64"
+            },
+            {
+              "name": "--timeout-ms",
+              "arg": "N"
+            },
+            {
+              "name": "--warmup-ms",
+              "arg": "N"
+            },
+            {
+              "name": "--trace",
+              "arg": "FILE"
+            },
+            {
+              "name": "--dry-run"
+            },
+            {
+              "name": "--json"
+            }
+          ]
+        }
+      ],
+      "audience": "agent",
+      "questions": [
+        {
+          "ask": "How often does the index resolve a name differently from the compiler?",
+          "command": "drag-lint verify-index --project <x.dproj> --db <copy.sqlite>"
+        }
+      ],
+      "notes": "internal: 1.53.0 slice of LSP1-VERIFY; read-only; needs a .delphilsp.json (RAD Studio writes it when the project is opened).",
+      "verified": {
+        "date": "2026-11-23",
+        "by": "ENGINE",
+        "build": "1.53.0-alpha",
+        "surfaceHash": "a1102cd17b96b78462236b8c99254e3274ce09eb080a37fc30a51c93e8125457"
       }
     },
     {
@@ -6040,6 +6183,31 @@
         "by": "ENGINE",
         "build": "1.50.0-alpha",
         "surfaceHash": "d462abbd3e60aa8afaa21419fc796baf0b809d5cc742f6eb8a88dc77dc7f8141"
+      }
+    },
+    {
+      "id": "schema-lint",
+      "title": "Schema-aware lint (lint rules)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.53.0-alpha",
+      "summary": "Default-on lint rules: MAXLEN constants, literals, Copy counts, Size and DFM string fields checked against the field repository's column lengths",
+      "intro": "Read this to see what schema-maxlen-drift and schema-length-bound report, where they get the column lengths (the field repository, never the index), which targets they resolve and why they stay silent without a repository.",
+      "wikiPage": "schema-lint",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --project <App.dproj> --rule schema-length-bound"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-23",
+        "by": "ENGINE",
+        "build": "1.53.0-alpha",
+        "surfaceHash": "563d6196bbf11d9e058857f5620b69f23c822d22ea12b0326457de84c8a42b71"
       }
     },
     {
@@ -13089,7 +13257,7 @@
             }
           ],
           "helpOrder": 91,
-          "help": ["  drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|Debug] [--db PATH] [--json]   (what the BUILD does: defines ON and what sets each, <Import>s, output paths, packages; flags a post-processor define with no build step imported)", "", "  Output/CI (lint, lint-all, check-ast):", "    --format sarif            emit SARIF 2.1.0 (in addition to text|json)", "    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info|hint (none: always 0).", "                              Without it ANY surviving finding exits 1 (= --fail-on hint); only a clean run exits 0.", "    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)", "    --enable id1,id2          re-include disabled / off-by-default rules", "    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)", "    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project's ProjectVersion (index --all: each section's own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)", "    --baseline <file>         report only findings absent from the baseline", "    --write-baseline <file>   record current findings as the baseline and exit 0"]
+          "help": ["  drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|Debug] [--db PATH] [--json]   (what the BUILD does: defines ON and what sets each, <Import>s, output paths, packages; flags a post-processor define with no build step imported)", "", "  Output/CI (lint, lint-all, check-ast):", "    --format sarif            emit SARIF 2.1.0 (in addition to text|json)", "    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info|hint (none: always 0).", "                              Without it ANY surviving finding exits 1 (= --fail-on hint); only a clean run exits 0.", "    --config <file>           drag-lint-lint.json (else the nearest one above --project / the file / the --db, then above the project the --db was indexed from, then the CWD)", "    --enable id1,id2          re-include disabled / off-by-default rules", "    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)", "    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project's ProjectVersion (index --all: each section's own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)", "    --baseline <file>         report only findings absent from the baseline", "    --write-baseline <file>   record current findings as the baseline and exit 0"]
         }
       ],
       "audience": "both",
@@ -13110,9 +13278,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-23",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
+        "build": "1.53.0-alpha",
         "surfaceHash": "5a2453d7609d4f43aa33d05dd123b4c8b6c0ea3c09911c36042f39b03c9fe3e1"
       }
     },
@@ -13218,7 +13386,7 @@
             }
           ],
           "helpOrder": 51,
-          "help": ["  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>"]
+          "help": ["  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>", "                               reads Delphi and SQL symbols from EVERY --db; rebuilds orm_links in the LAST --db only (its db-index columns are --db positions)"]
         }
       ],
       "audience": "both",
@@ -13235,9 +13403,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-23",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.53.0-alpha",
         "surfaceHash": "5fd258380950196939a5e77d666f95ccab96eb5486cffaee8411c68595d60bcc"
       }
     },
@@ -15495,6 +15663,26 @@
           "sub": "gen-dataservice"
         },
         {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "migrate"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "check"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "gen-const"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "check-const"
+        },
+        {
           "type": "ide-menu",
           "path": "drag-lint > Field Repository > Open Field Repository Editor...",
           "steps": ["Open a project that has a field repository (fieldRepository key or the default file)", "Choose drag-lint > Field Repository > Open Field Repository Editor...", "The grid editor dl-field-repo.exe opens on that repository"]
@@ -15527,7 +15715,7 @@
         {
           "type": "cli",
           "verb": "repo",
-          "usage": "drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice> (--repo <file> | --project <project file>) [--connection \"<Firebird connection string>\"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)",
+          "usage": "drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice|migrate|check|gen-const|check-const> (--repo <file> | --project <project file>) [--connection \"<Firebird connection string>\"] [--ddl <file.sql>[;...]] [--select <file>] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--apply] [--dry-run] [--json] [--unit <UnitName>] [--datamodule <Name>] [--unit-file <file.pas>]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)",
           "flags": [
             {
               "name": "--all"
@@ -15578,8 +15766,28 @@
               "arg": "<Name>"
             },
             {
+              "name": "--unit",
+              "arg": "<UnitName>"
+            },
+            {
+              "name": "--datamodule",
+              "arg": "<Name>"
+            },
+            {
+              "name": "--unit-file",
+              "arg": "<file.pas>"
+            },
+            {
               "name": "--connection",
               "arg": "<Firebird connection string>"
+            },
+            {
+              "name": "--ddl",
+              "arg": "<file.sql>[;...]"
+            },
+            {
+              "name": "--select",
+              "arg": "<id file>"
             },
             {
               "name": "--dry-run"
@@ -15631,7 +15839,7 @@
             }
           ],
           "helpOrder": 110,
-          "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)", "  drag-lint repo refresh-schema --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints \"line <n>: ...\" and exits 2, nothing changed)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)", "  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)", "  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)", "  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)", "  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)"]
+          "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (fill an EMPTY repository from the Firebird schema or a DDL script; prints the change set and writes nothing unless --apply or --select; read-only on Firebird)", "  drag-lint repo refresh-schema (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (re-read the schema into a filled repository as a change set: new and changed values are checked, vanished ones are unchecked deletes; hand-edited columns are never touched; no --apply = dry run; --select <id file> writes exactly the listed ids)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints \"line <n>: ...\" and exits 2, nothing changed)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)", "  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)", "  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)", "  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)", "  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)", "  drag-lint repo migrate        (--repo <file> | --project <project file>) [--apply]   (schema 1 -> 2: adds DL_FIELDS_INFO.CALC_BODY, DL_LAYOUT_EVENTS, DL_EXCEPTIONS and FIELD_KIND 2 for ISCALCULATED rows; no --apply = dry run that changes no byte; --apply writes <repo>.before-migrate-<yyyymmdd-hhnnss>.txt first; a schema-2 file prints already at schema 2)", "  drag-lint repo check          (--repo <file> | --project <project file>) [--json]   (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc macros and dependency cycles, layout-event rows; exit 0 clean, 1 findings)", "  drag-lint repo gen-const      (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run]   (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)", "  drag-lint repo check-const    (--repo <file> | --project <project file>) --unit-file <file.pas>   (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)"]
         }
       ],
       "audience": "both",
@@ -15645,8 +15853,24 @@
           "command": "drag-lint repo backup --repo <file> --output <file.txt>"
         },
         {
+          "ask": "How do I replace the FIB$ registry tables with one read-only unit for SERVER and CLIENT?",
+          "command": "drag-lint repo gen-const --repo <file> --unit uFieldRegistry --output <file.pas>"
+        },
+        {
+          "ask": "How do I get the registry rows as pre-filled FireDAC memory tables?",
+          "command": "drag-lint repo gen-const --repo <file> --datamodule dmFieldRegistry --output <uFieldRegistryDm.pas>"
+        },
+        {
+          "ask": "How do I stop a build when the generated registry units are older than the repository?",
+          "command": "drag-lint repo check-const --project <project file> --unit-file <file.pas>"
+        },
+        {
           "ask": "How do I get the FireDAC Array-DML loop for a unit?",
           "command": "drag-lint repo gen-param-array --in <unit.pas> --plan"
+        },
+        {
+          "ask": "How do I refresh the repository schema from a DDL script, without a database connection?",
+          "command": "drag-lint repo refresh-schema --ddl <schema.sql> --repo <file>"
         },
         {
           "ask": "How do I see what is in it?",
@@ -15658,10 +15882,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-18",
+        "date": "2026-11-23",
         "by": "ENGINE",
-        "build": "1.52.0-alpha",
-        "surfaceHash": "e9e282867877c04802e5fa8e6d52cd5f69bbfcd8af9f71a8792ed1b359aa1ee8"
+        "build": "1.53.0-alpha",
+        "surfaceHash": "1ccd71c33da088671b0b1421781f350df06190693487a43739e6810f5e5d0488"
       }
     },
     {
@@ -15919,6 +16143,76 @@
         "by": "ENGINE",
         "build": "1.35.1-alpha",
         "surfaceHash": "0b00ecdb1d821ab35463d3bab7d64bb3749f7cac8abb0285ab0f7ba244578614"
+      }
+    },
+    {
+      "id": "project-settings",
+      "title": "Project settings",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.53.0-alpha",
+      "summary": "Per-project settings store: drag-lint settings list|get|set|unset over _D-RAG\\drag-lint-project.json and a local overlay",
+      "intro": "Read this when you want to see or change a per-project switch without hand-editing JSON: which lint config and profile a project uses, whether GetEnvironmentVariable counts as a taint source, and the existing project keys. drag-lint settings list shows every key with its value and where it comes from; set and unset write _D-RAG\\drag-lint-project.json, or a per-machine .local.json overlay with --local.",
+      "wikiPage": "project-settings",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "settings",
+          "sub": "list"
+        },
+        {
+          "type": "cli",
+          "verb": "settings",
+          "sub": "get"
+        },
+        {
+          "type": "cli",
+          "verb": "settings",
+          "sub": "set"
+        },
+        {
+          "type": "cli",
+          "verb": "settings",
+          "sub": "unset"
+        },
+        {
+          "type": "cli",
+          "verb": "settings",
+          "usage": "drag-lint settings list|get|set|unset [<key> [<value>]] [--local] [--project <.dproj> | --db <db> | --in <file>] [--json|--format json]   (per-project settings in _D-RAG\\drag-lint-project.json; --local = this machine only, _D-RAG\\drag-lint-project.local.json; exit 0 done, 1 nothing to do, 2 refused)",
+          "flags": [
+            {
+              "name": "--local"
+            },
+            {
+              "name": "--project",
+              "arg": "<.dproj>"
+            },
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--in",
+              "arg": "<file>"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "help": ["  drag-lint settings list|get|set|unset [<key> [<value>]] [--local] [--project <.dproj> | --db <db> | --in <file>] [--json|--format json]   (per-project settings in _D-RAG\\drag-lint-project.json; --local = this machine only, _D-RAG\\drag-lint-project.local.json; exit 0 done, 1 nothing to do, 2 refused)"]
+        },
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\project-settings.md"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-23",
+        "by": "ENGINE",
+        "build": "1.53.0-alpha",
+        "surfaceHash": "f5b392dcb2f257173ade9969193d88097e5be5e23a9a9678988891d289e07f7c"
       }
     },
     {
@@ -22922,6 +23216,46 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "rule-skipped-budget"
+      },
+      {
+        "id": "rule.schema-length-bound",
+        "title": "schema-length-bound",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Copy(x, i, N) assigned to a resolved column target, or .Size / .MaxLength := N on a resolved field, where N exceeds the column's char... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule schema-length-bound"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "schema-length-bound"
+      },
+      {
+        "id": "rule.schema-maxlen-drift",
+        "title": "schema-maxlen-drift",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A <TABLE>_<FIELD>_MAXLEN constant differs from the column's char length in the field repository, or a string literal longer than the... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule schema-maxlen-drift"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "schema-maxlen-drift"
       },
       {
         "id": "rule.self-as-interface-in-constructor",

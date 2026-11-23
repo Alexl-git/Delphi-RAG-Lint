@@ -2440,7 +2440,8 @@ begin
     Token:= FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);
     FStore.RecordFileSize(AFilePath, Length(Source)); { in the file's transaction: the bytes just hashed }
     // v0.16: clear stale doc rows for this file before emitting fresh ones
-    // (OpenFileTx already cleared symbols and refs).
+    // (OpenFileTx already cleared refs; symbols are deleted, or under 1.53.0
+    // symbol-id reuse rewritten in place -- UpsertSymbol may return an OLD id).
     FStore.DeleteFileDocs(Token.FileId);
     if IsCtxInc then FStore.PutIncVariants(Token, IncVariantRows(IncVars)); { 1.52 EXTINC }
     Inc(GProfOpenTx, ProfNow - TProf);
@@ -2605,11 +2606,11 @@ begin
         // place, just before calling Analyze, so Analyze/AnalyzeReadsWrites no
         // longer re-resolve identity via 3 DB round-trips per routine; no
         // fact-computation logic changed -- see the comment at the mutation
-        // site below.) Invalidation is automatic: OpenFileTx (above) already
-        // DELETEd this file's OLD symbol rows, and symbol_facts.symbol_id
-        // REFERENCES symbols(id) ON DELETE CASCADE with FK enforcement ON
-        // (see TSQLiteSymbolStore.Create), so a stale facts row can never
-        // outlive its symbol.
+        // site below.) Invalidation: OpenFileTx (above) either DELETEd this
+        // file's OLD symbol rows (symbol_facts.symbol_id is ON DELETE CASCADE)
+        // or, under 1.53.0 symbol-id reuse, cleared the facts of every old id
+        // it may hand back (ClearEmitOwnedSymbolRows), so a stale facts row
+        // can never outlive its emission.
         { SourceLines was split once, right after SourceText was decoded. }
         Inc(GProfLiterals, ProfNow - TProf);
         TProf:= ProfNow;

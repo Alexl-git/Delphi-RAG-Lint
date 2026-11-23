@@ -4,7 +4,7 @@
   "group": "maintenance",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.52.3-alpha",
+  "since": "1.53.0-alpha",
   "summary": "Per-project settings store: drag-lint settings list|get|set|unset over _D-RAG\\drag-lint-project.json and a local overlay",
   "intro": "Read this when you want to see or change a per-project switch without hand-editing JSON: which lint config and profile a project uses, whether GetEnvironmentVariable counts as a taint source, and the existing project keys. drag-lint settings list shows every key with its value and where it comes from; set and unset write _D-RAG\\drag-lint-project.json, or a per-machine .local.json overlay with --local.",
   "wikiPage": "project-settings",
@@ -54,13 +54,17 @@
         }
       ],
       "help": ["  drag-lint settings list|get|set|unset [<key> [<value>]] [--local] [--project <.dproj> | --db <db> | --in <file>] [--json|--format json]   (per-project settings in _D-RAG\\drag-lint-project.json; --local = this machine only, _D-RAG\\drag-lint-project.local.json; exit 0 done, 1 nothing to do, 2 refused)"]
+    },
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\project-settings.md"
     }
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-22",
+    "date": "2026-11-23",
     "by": "ENGINE",
-    "build": "1.52.3-alpha",
-    "surfaceHash": "d0a38ceca4784fa0ba3b2d6bf7f061933a6e75beae7607a95198dda17c709033"
+    "build": "1.53.0-alpha",
+    "surfaceHash": "f5b392dcb2f257173ade9969193d88097e5be5e23a9a9678988891d289e07f7c"
   }
 }

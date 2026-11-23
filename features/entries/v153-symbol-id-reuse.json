@@ -1,0 +1,26 @@
+{
+  "id": "v153-symbol-id-reuse",
+  "title": "Stable symbol ids on an incremental index",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.53.0-alpha",
+  "summary": "An incremental index keeps the id of every unchanged symbol, so a body edit of a hub unit no longer rebinds every reference to its names",
+  "intro": "Read this when a one-file incremental index of a widely used unit is slow, or to see what the symbol-id reuse line of the calls stage means.",
+  "wikiPage": "symbol-id-reuse",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "index",
+      "example": "drag-lint index --project src\\cli\\drag-lint.dproj --db <project.sqlite>"
+    }
+  ],
+  "audience": "both",
+  "related": ["maintenance"],
+  "verified": {
+    "date": "2026-11-23",
+    "by": "ENGINE",
+    "build": "1.53.0-alpha",
+    "surfaceHash": "ef7035a4a4af9b1f2e8b73f5c2b7d6fd883fabb9660dd0fdf8621cf18cfd0b2e"
+  }
+}

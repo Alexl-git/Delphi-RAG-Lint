@@ -3,6 +3,24 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.53.0-alpha -- 2026-11-23
+
+In integration (lane/v153-int2). One re-parse for 1.53.0: extractor 1.42.0 -> 1.43.0-alpha (GRAMMAR); resolver stays 1.31.0-alpha. VS Code extension 1.6.12.
+
+Merged lanes (git log 2323d07a9..HEAD):
+
+- DOCS-SCHEMA: the Index-DB-Schema wiki page is brought to schema 27 (history 24-27, the 15 tables it missed, columns); own registry entry index-db-schema.
+- FR-MODEL: field repository schema v2 (CALC_BODY, DL_LAYOUT_EVENTS, DL_EXCEPTIONS), field kinds and macros, `repo migrate` / `repo check`, change sets, exceptions; `#DLREPO 2`.
+- SETTINGS-CORE: per-project settings store and the `settings list|get|set|unset` verb; `lint.config`, `lint.profile` and `taint.envSource` are read by lint. No settings file = the 1.52.3 result (S 32/32, L 15/15).
+- FR-CONSTGEN + FR-PRELOAD: `repo gen-const` generates registry constants; `--datamodule` generates a pre-filled data module (TFDMemTables with FireDAC binary Content) and replaces `--memtable` / Fill, which are gone. Measured on the real registry: data module load 12.7 ms (Win32) / 12.3 ms (Win64) against 31.7 / 35.9 ms for const + Fill (2.5-2.9x). The repository is the master: it carries a changed mark and `repo check-const` reports a generated file that is stale.
+- FR-SCHEMA: `repo seed-fb` and `repo refresh-schema` work as a change set (dry run by default, `--apply`, `--select`, `--ddl`); schema facts (domains, constraints, generators, char length) live in the repository; `resolve-dbs` lists the repository; the IDE Refresh Schema is dry run, confirm, apply.
+- FR-LINT: two schema rules, schema-maxlen-drift and schema-length-bound, default on. They fire only with a field repository; a project without one is silent, a configured but missing repository gives one stderr line. Rule count 435 -> 437.
+- GRAMMAR: tree-sitter-delphi13 grammar v1.4.15; extractor 1.43.0-alpha reads the bound of a subrange-typed global and the const / element / index types of a local array, set, subrange or string[N] type (+94 refs, 0 removed, 0 symbol differences in the lane A/B). One re-parse.
+- SETTINGS-VSCODE: VS Code command "drag-lint: Project Settings..." over the settings verb (extension 1.6.12; the value of a key is never logged).
+- BUGS: `lint-all` on a copied index finds the lint config and project settings of the indexed project (ConfigAnchor); `link-orm` keys class fields by index + id so several `--db` no longer mix fields of classes sharing a local id (orm_links are written to the last `--db`, which it now prints); featuregen resolves sub-verbs compared through named string constants (`repo migrate`, `repo check`).
+- GH18-SYMID: an incremental `index` keeps the id of every symbol whose declaration did not change (GitHub #18); foreign rows (references, call edges, member access, resolved types) stay bound and the call-target pass re-resolves only what the edit touched, by reference instead of by name. Own CLI project: a blank line in a hub unit 13,186 -> 1,009 call sites (44.0 s -> 4.0 s); 3 large units edited 75,296 -> 48,408 sites. Reuse equals a fresh index on all 26 edits of the test fixture; `DRAGLINT_NO_SYMBOL_ID_REUSE=1` writes the 1.52 way. Wiki: symbol-id-reuse.
+- LSP1-VERB: `verify-index` (internal): compares the index with DelphiLSP answers; guard 36/0; a live smoke on a plugin DB copy matched 199 of 200 positions.
+- Docs / specs: Field Repository v2 spec and lane plans (owner rulings of 2026-11-22 folded in).
 ## v1.52.3-alpha -- 2026-11-22
 
 In integration (lane/v153-int). One re-parse for 1.52.3: resolver 1.30.0 -> 1.31.0-alpha (EXT-RES-TAILS: default indexer on an ancestor). Extractor stays 1.42.0-alpha -- hash-only baseline re-pins, proven by an extraction A/B (symbols / refs / unit_uses / call_edges / files byte-identical on the fixtures and the self project, engines 1096e368f vs the INT build). VS Code extension 1.6.11.

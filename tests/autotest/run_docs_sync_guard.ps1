@@ -221,6 +221,7 @@ Write-Host '-- check 1: verbs' -ForegroundColor Cyan
 # ASSERTED below, both directions: an entry that is no longer accepted is stale
 # and must be deleted, and an entry that HAS since been documented is stale too.
 $UndocumentedOnPurpose = [ordered]@{
+  'verify-index'        = '1.53.0 LSP1-VERIFY: internal measurement verb (index vs DelphiLSP); registry status internal, not advertised until 1.53.1.'
   'shutdown'            = '1.52 Q15: hidden alias of stop-now (the autonomy guard matches the old name); accepted, not advertised.'
   'selftest'            = 'umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\. Not a user verb.'
   'contrast-selftest'   = 'self-test for the hover contrast computation; driven by a runner under tests\.'
@@ -1177,6 +1178,10 @@ function Get-FlagSet([string]$Text, [string]$Rx) {
 $FlagUndocumentedOnPurpose = [ordered]@{
   '--expr'            = '(a) dump-pp-eval expression; that verb is itself exempt'
   '--from-block'      = '(a) convert-reemit input; that verb is itself exempt'
+  '--delphi-lsp-config'= '(a) verify-index flag; that verb is itself exempt'
+  '--sample'          = '(a) verify-index flag; that verb is itself exempt'
+  '--seed'            = '(a) verify-index flag; that verb is itself exempt'
+  '--warmup-ms'       = '(a) verify-index flag; that verb is itself exempt'
   '--selftest-fts5'   = '(c) pre-dispatch self-test (Run, ParamStr(1)), driven by a runner under tests\'
   '--selftest-schema' = '(c) pre-dispatch self-test, same'
   # 2026-10-25: --use-ignore, --dir and --out left this table -- 7143cdd8 (END-D2 flag audit) documents all

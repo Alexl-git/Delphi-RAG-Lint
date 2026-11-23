@@ -278,8 +278,7 @@ begin
   if pProject <> '' then
   begin
     Full:= ExpandFileName(StringReplace(pProject, '/', '\', [rfReplaceAll]));
-    if TDirectory.Exists(Full) then Result:= ExcludeTrailingPathDelimiter(Full)
-    else Result:= ExtractFileDir(Full);
+    Result:= if TDirectory.Exists(Full) then ExcludeTrailingPathDelimiter(Full) else ExtractFileDir(Full);
     if TDirectory.Exists(Result) then Exit;
     Result:= '';
   end;
@@ -311,7 +310,7 @@ begin
   Cur:= pRoot;
   for S in Segs do
   begin
-    if not (Cur is TJSONObject) then Exit;
+    if Cur is not TJSONObject then Exit;
     P:= FindPair(TJSONObject(Cur), S);
     if P = nil then Exit;
     Cur:= P.JsonValue;
@@ -403,7 +402,7 @@ var
 begin
   if not TFile.Exists(pFile) then Exit(TJSONObject.Create);
   V:= TJSONObject.ParseJSONValue(TFile.ReadAllText(pFile, TEncoding.UTF8));
-  if not (V is TJSONObject) then
+  if V is not TJSONObject then
   begin
     V.Free;
     raise ESettingsError.CreateFmt('%s: not a JSON object', [pFile]);
@@ -430,12 +429,12 @@ end;
 
 function TProjectSettings.RootFor(pLocal: Boolean): TJSONObject;
 begin
-  if pLocal then Result:= FLocalRoot else Result:= FProjRoot;
+  Result:= if pLocal then FLocalRoot else FProjRoot;
 end;
 
 function TProjectSettings.FileFor(pLocal: Boolean): string;
 begin
-  if pLocal then Result:= FLocalFile else Result:= FProjectFile;
+  Result:= if pLocal then FLocalFile else FProjectFile;
 end;
 
 function TProjectSettings.Get(const pKey: string): TSettingValue;
@@ -490,7 +489,7 @@ begin
       pOut:= pOut + [pTag + ':' + Name];
       Continue;
     end;
-    if not (pRoot.Pairs[I].JsonValue is TJSONObject) then
+    if pRoot.Pairs[I].JsonValue is not TJSONObject then
     begin
       pOut:= pOut + [pTag + ':' + Name];
       Continue;
@@ -526,12 +525,12 @@ begin
     begin
       Parsed:= TJSONObject.ParseJSONValue(pText);
       try
-        if not (Parsed is TJSONArray) then
+        if Parsed is not TJSONArray then
           raise ESettingsError.CreateFmt('%s: expected a JSON array of strings', [pKey]);
         Src:= TJSONArray(Parsed);
         for I:= 0 to Src.Count - 1 do
         begin
-          if (not (Src.Items[I] is TJSONString)) or (Src.Items[I] is TJSONNumber) then
+          if (Src.Items[I] is not TJSONString) or (Src.Items[I] is TJSONNumber) then
             raise ESettingsError.CreateFmt('%s: expected a JSON array of strings', [pKey]);
           S:= Src.Items[I].Value;
           CheckPlainText(pKey, S);
@@ -617,7 +616,7 @@ begin
     pObj.RemovePair(pSegs[pIdx]).Free;
     Exit(True);
   end;
-  if not (P.JsonValue is TJSONObject) then Exit;
+  if P.JsonValue is not TJSONObject then Exit;
   Child:= TJSONObject(P.JsonValue);
   Result:= RemovePath(Child, pSegs, pIdx + 1);
   if Result and (Child.Count = 0) then pObj.RemovePair(pSegs[pIdx]).Free;
@@ -699,7 +698,7 @@ begin
   Result:= '';
   V:= TJSONObject.ParseJSONValue(Get(pKey).ValueJson);
   try
-    if (V is TJSONString) and not (V is TJSONNumber) then Result:= TJSONString(V).Value;
+    if (V is TJSONString) and (V is not TJSONNumber) then Result:= TJSONString(V).Value;
   finally
     V.Free;
   end;

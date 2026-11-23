@@ -103,21 +103,27 @@ end;
 function EscapeValue(const pValue: string): string;
 var
   VC: Char;
+  VB: TStringBuilder;
 begin
-  Result := '';
-  for VC in pValue do
-    if VC = '\' then
-      Result := Result + '\\'
-    else if VC = #9 then
-      Result := Result + '\t'
-    else if VC = #10 then
-      Result := Result + '\n'
-    else if VC = #13 then
-      Result := Result + '\r'
-    else if (Ord(VC) < ASCII_FIRST) or (Ord(VC) > ASCII_LAST) then
-      Result := Result + '\u' + IntToHex(Ord(VC), HEX_DIGITS)
-    else
-      Result := Result + VC;
+  VB := TStringBuilder.Create;
+  try
+    for VC in pValue do
+      if VC = '\' then
+        VB.Append('\\')
+      else if VC = #9 then
+        VB.Append('\t')
+      else if VC = #10 then
+        VB.Append('\n')
+      else if VC = #13 then
+        VB.Append('\r')
+      else if (Ord(VC) < ASCII_FIRST) or (Ord(VC) > ASCII_LAST) then
+        VB.Append('\u').Append(IntToHex(Ord(VC), HEX_DIGITS))
+      else
+        VB.Append(VC);
+    Result := VB.ToString;
+  finally
+    VB.Free;
+  end;
 end;
 
 function BlockedCount(const pSet: TFrChangeSet): Integer;
@@ -198,6 +204,7 @@ var
   VChange: TFrChange;
 begin
   Result := False;
+  pChange := Default(TFrChange);
   for VChange in pSet.Changes do
     if VChange.Id = pId then
     begin

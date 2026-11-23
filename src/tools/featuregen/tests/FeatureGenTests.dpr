@@ -1950,6 +1950,58 @@ begin
   end;
 end;
 
+{ 1.53 BUGS: a sub-verb compared through a NAMED constant (repo migrate / check: MatchText(pSub,
+  [SUB_MIGRATE, SUB_CHECK])) is harvested. The constant is the nearest one declared above the
+  comparison's end in the SAME unit. Negative controls: a constant with the same name in another unit
+  (either side), a constant that is not a sub-verb word, a variable operand, an undeclared name, and a
+  constant the sub is never compared with contribute nothing. }
+procedure TestHarvestSubConstants;
+const
+  SRC =
+    'unit Hub;'#13#10 +
+    'const'#13#10 +
+    '  SUB_ONE = ''hub-one'';'#13#10 +
+    'function RunCommand: Integer;'#13#10 +
+    'begin'#13#10 +
+    '  if Args.Command = ''zed'' then Result:= RunZed(Args.SubCommand, Args.InFile);'#13#10 +
+    'end;'#13#10 +
+    'unit Zed;'#13#10 +
+    'const'#13#10 +
+    '  SUB_ONE = ''one'';'#13#10 +
+    '  SUB_TWO  =  ''two-b'';'#13#10 +
+    '  SUB_THREE: string = ''three'';'#13#10 +
+    '  SUB_FOUR = ''four'';'#13#10 +
+    '  NOT_USED = ''unused'';'#13#10 +
+    '  A_TITLE = ''Two words'';'#13#10 +
+    'function IsZed(const pSub: string): Boolean;'#13#10 +
+    'begin'#13#10 +
+    '  Result:= MatchText(pSub, [SUB_ONE, SUB_TWO, ''five'', A_TITLE, UNDECLARED]);'#13#10 +
+    'end;'#13#10 +
+    'function RunZed(const pSub, pIn: string): Integer;'#13#10 +
+    'begin'#13#10 +
+    '  if IsZed(pSub) then Exit(1);'#13#10 +
+    '  if SameText(pSub, SUB_THREE) or (pSub = SUB_FOUR) or (pSub = pIn) then Exit(2);'#13#10 +
+    '  Result:= Length(NOT_USED);'#13#10 +
+    'end;'#13#10 +
+    'unit Late;'#13#10 +
+    'const'#13#10 +
+    '  SUB_ONE = ''late-one'';'#13#10 +
+    '  UNDECLARED = ''late-undeclared'';'#13#10;
+var
+  lMap: TDictionary<string, TArray<string>>;
+  lZed: TArray<string>;
+begin
+  lMap := TDictionary<string, TArray<string>>.Create;
+  try
+    HarvestSubcommandMap(SRC, lMap);
+    lZed := nil;
+    lMap.TryGetValue('zed', lZed);
+    Check('Live.SubConst.NamedConstants', string.Join(',', lZed) = 'five,four,one,three,two-b', string.Join(',', lZed));
+  finally
+    lMap.Free;
+  end;
+end;
+
 { Health of the LIVE surface (not a golden comparison): '' when every kind of the real repo is
   non-empty, else a detail naming the cause. A harvest that raises (e.g. a stale plugin DB: menu-tree
   exits 3) yields the exception text, never an access violation. }
@@ -3917,6 +3969,7 @@ begin
       TestLiveSkipPositiveControl;
       TestHarvestRaisesOnEmptySubMap(lRepo);
       TestHarvestSubParamRoutines;
+      TestHarvestSubConstants;
       TestLiveHarvestParity(lRepo);
       lGold := GoldenRepo(lRepo);
       TestCheckParity(lRepo, lGold, 'WellFormed', clWellFormed, 'WellFormed', 0, 0, 0, 0, GOLDEN_PROSE_A, 0);

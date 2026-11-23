@@ -200,7 +200,7 @@ begin
   begin
     Tag:= Copy(U, 1, Pos(':', U) - 1);
     Key:= Copy(U, Pos(':', U) + 1, MaxInt);
-    if Tag = 'local' then FileName:= pSet.LocalFile else FileName:= pSet.ProjectFile;
+    FileName:= if Tag = 'local' then pSet.LocalFile else pSet.ProjectFile;
     Writeln('unknown: ', Key, ' (', FileName, ')');
   end;
   Result:= EXIT_OK;
@@ -230,7 +230,7 @@ var
   FileName, Msg: string;
   O: TJSONObject;
 begin
-  if pLocal then FileName:= pSet.LocalFile else FileName:= pSet.ProjectFile;
+  FileName:= if pLocal then pSet.LocalFile else pSet.ProjectFile;
   if pChanged then Msg:= pVerb + ' ' + pKey + ' in ' + FileName
   else if pVerb = 'set' then Msg:= 'unchanged: ' + pKey + ' already has that value in ' + FileName
   else Msg:= pKey + ' is not set in ' + FileName;
@@ -249,7 +249,7 @@ begin
     end;
   end
   else Writeln(Msg);
-  if pChanged then Result:= EXIT_OK else Result:= EXIT_NOOP;
+  Result:= if pChanged then EXIT_OK else EXIT_NOOP;
   if pChanged and pSet.LocalFileCreated then
     Writeln(ErrOutput, 'drag-lint settings: created ', pSet.LocalFile, ' -- add _D-RAG/*.local.json to your ignore file');
 end;

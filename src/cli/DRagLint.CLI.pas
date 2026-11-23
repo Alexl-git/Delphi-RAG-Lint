@@ -173,6 +173,7 @@ uses
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
+  , DRagLint.Lint.SchemaRules       { 1.53 FR-LINT }
   , DRagLint.Lint   .SharedUnit
   , DRagLint.Lint.Bookmarks { bookmarks verb: dl:bk comment anchors (E-BOOKMARKS) }
   , DRagLint.CLI.Bookmarks { bookmarks-strip / bookmarks-restore (E-BOOKMARKS phase 2) }
@@ -280,11 +281,13 @@ uses
   , DRagLint.CLI.Convert { proptree / convert-validate / -reemit / -scaffold / glyph-vacuum verbs (v1511 SPLIT) }
   , DRagLint.CLI.ConvertApply { convert-apply verb (v1511 SPLIT) }
   , DRagLint.CLI.CheckInit { check-init verb (1.52 FRAME; lane HBSKEL) }
+, DRagLint.CLI.VerifyIndex { verify-index verb (1.53.0 LSP1-VERB) }
   , DRagLint.CLI.Repo { repo verb family (1.52 FRAME; lane TTE) }
   , DRagLint.CLI.Settings { settings verb (1.53 SETTINGS-CORE) }
   , DRagLint.Project.Settings
   , DRagLint.FieldRepo.Locate { LocateFieldRepository: the repo line of resolve-dbs --project (1.53 FR-SCHEMA) }
   , DRagLint.CLI.Explain { explain verb (1.52 FRAME; lane EXPLAIN) }
+  , DRagLint.CLI.ConfigAnchor { 1.53 BUGS: the lint config of the project an index was built from }
   , DRagLint.CLI.RuleScope { rules disable / enable (1.52 FRAME; lane DISRULE) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
   , DRagLint.CLI.MigrateDbs { migrate-dbs verb + the manifest pair rule (v1511 SPLIT) }
@@ -318,7 +321,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..95] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..97] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -366,6 +369,7 @@ const
     (Name: 'DRAGLINT_NO_SCOPED_PURITY';               Purpose: 'any value makes the purity stage re-derive every routine, also after a scoped resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
+    (Name: 'DRAGLINT_NO_SYMBOL_ID_REUSE';             Purpose: '1|on|yes|true: index writes a re-parsed file the 1.52 way, delete + insert, new symbol ids (A/B)'),
     (Name: 'DRAGLINT_PEER_TRACE';                     Purpose: 'path of a file that receives a trace of every sibling remap (unset = no trace)'),
     (Name: 'DRAGLINT_PLUGIN_LOG_DIR';                 Purpose: 'IDE plugin: redirects every plugin log to this folder (test drivers)'),
     (Name: 'DRAGLINT_PP_TABLE';                      Purpose: '0 = ifdef-undefined ignores the stored directive table'),
@@ -405,6 +409,7 @@ const
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
     (Name: 'DRAGLINT_TEST_SCOPE_NO_NAMES';            Purpose: 'test hook: the scoped resolve pass re-resolves the changed files only (a wrong scope)'),
     (Name: 'DRAGLINT_TEST_STREAM_COUNT_DELAY_MS';     Purpose: 'test hook: delay in the stream count'),
+    (Name: 'DRAGLINT_TEST_SYMID_NO_FP';               Purpose: 'test hook: every claimed symbol reads as unchanged (positive control of run_v153_GH18_SYMID)'),
     (Name: 'DRAGLINT_TEST_WARM_DELAY_MS';             Purpose: 'test hook: delay in the rule-cache warm'),
     (Name: 'DRAGLINT_TEST_WARM_HOLD_MS';              Purpose: 'test hook: hold in the rule-cache warm'),
     (Name: 'DRAGLINT_UNWITH_TEST_SKIP_PREFIX';        Purpose: 'test hook: unwith skips this prefix'),
@@ -1695,6 +1700,11 @@ begin
     { repo gen-param-array: DRagLint.CLI.RepoParamArray reads these values from ParamStr. One branch per flag: they are
       four different options, and an OR-group reads as an alias group to run_flag_verb_map.ps1 (features\flag-aliases.json). }
     else if (A = '--dfm') and (i < ParamCount) then Inc(i)
+    { 1.53.0 LSP1-VERB: verify-index's own flags; DRagLint.CLI.VerifyIndex reads their values from ParamStr }
+    else if (A = '--sample') and (i < ParamCount) then Inc(i)
+    else if (A = '--seed') and (i < ParamCount) then Inc(i)
+    else if (A = '--warmup-ms') and (i < ParamCount) then Inc(i)
+    else if (A = '--delphi-lsp-config') and (i < ParamCount) then Inc(i)
     else if (A = '--ddl') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: DRagLint.CLI.RepoSchema reads it from ParamStr
     else if (A = '--select') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: the change-set id file, read from ParamStr
     else if (A = '--table') and (i < ParamCount) then Inc(i)
@@ -11573,6 +11583,9 @@ begin
   Path:= AArgs.ConfigPath;
   { 1.53 SETTINGS: lint.config / lint.profile / taint.envSource from <anchor>\_D-RAG\drag-lint-project(.local).json }
   SetAnchor:= TProjectSettings.ResolveAnchor(AArgs.ProjectPath, IfThen(AArgs.StandInFor <> '', AArgs.StandInFor, IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile)), AArgs.DbPath, '');
+  { 1.53 BUGS: only the --db names this run, and the DB may be a copy away from its project: ask the index itself }
+  var AnchorDb: string:= DbWhenNoFile(AArgs.DbPath, AArgs.StandInFor + AArgs.Path + AArgs.InFile);
+  SetAnchor:= SettingsAnchorOr(SetAnchor, AnchorDb);
   ProjSettings:= LoadSettingsOrWarn(SetAnchor);
   try
   if (Path = '') and (ProjSettings <> nil) and (ProjSettings.AsString('lint.config') <> '') then Path:= TPath.Combine(SetAnchor, ProjSettings.AsString('lint.config'));
@@ -11682,7 +11695,9 @@ begin
     end;
   end;
 
+  Path:= ConfigPathOr(Path, AArgs.ProjectPath, AnchorDb);
   if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
+  NoteNoLintConfig(Path, AArgs.ProjectPath, AnchorDb);
   Result:= TLintConfig.Load(Path, Profile);
   if IsComplianceProfile(Profile) and not Result.UserProfileFound then
     ApplyComplianceProfile(Result, Profile, AArgs.RulesDir);
@@ -14583,6 +14598,7 @@ function LintUnjudgedMarkerRules(const AArgs: TArgs; AStoreSeen: Boolean): TArra
 begin
   Result:= nil;
   AddAll(['duplicate-code', 'interface-reference-cycle']);
+  AddAll([SCHEMA_MAXLEN_DRIFT_RULE, SCHEMA_LENGTH_BOUND_RULE]);   { 1.53 FR-LINT: silent without a field repository }
   if not (AStoreSeen and AArgs.ProjectRules) then
   begin
     AddAll(LINT_GATE_DOC_DRIFT);
@@ -16201,6 +16217,13 @@ begin
             TraceLintChecker('taint');
             Findings:= Findings + RunTaintRules(FlowStore, FlowLibStore, [FlowFid], Cfg, NarrowRule, MyPath);
           end;
+          if LintRuleWants(NarrowRule, [SCHEMA_MAXLEN_DRIFT_RULE, SCHEMA_LENGTH_BOUND_RULE]) then   { 1.53 FR-LINT: field repository facts }
+          begin
+            var SchemaRun: TSchemaLintResult:= RunSchemaRules(FlowStore, LocateFieldRepository(IfdefProjectFile(AArgs, FlowDb), ''), FlowFid);
+            ReportSchemaRun(SchemaRun, AArgs.Quiet);
+            for F in SchemaRun.Findings do
+              if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then Findings:= Findings + [F];
+          end;
         finally
           SibKeep .Free;
           SibOwned.Free;
@@ -16672,7 +16695,8 @@ begin
   try
     Stats:= TOrmLinker.Run(AArgs.DbPaths);
     Writeln(Format(
-        'link-orm: %d class_to_table, %d iface_to_table, %d field_to_column (across %d DBs)', [Stats.ClassLinks, Stats.IfaceLinks, Stats.FieldLinks, Length(AArgs.DbPaths)]));
+        'link-orm: %d class_to_table, %d iface_to_table, %d field_to_column (across %d DBs) -- written to %s',
+        [Stats.ClassLinks, Stats.IfaceLinks, Stats.FieldLinks, Length(AArgs.DbPaths), AArgs.DbPaths[High(AArgs.DbPaths)]]));
     Result:= 0;
   except
     on E: Exception do begin Writeln(ErrOutput, 'link-orm FAILED: ', E.ClassName, ': ', E.Message); Result:= 3; end;
@@ -21295,6 +21319,14 @@ begin
   LintPhase('missing-doc');
   if LintRuleWants(Nr, ['missing-doc']) then
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
+  { 1.53 FR-LINT: schema rules read the FIELD REPOSITORY (FR-3); the banner is printed once per run. }
+  LintPhase('schema');
+  if LintRuleWants(Nr, [SCHEMA_MAXLEN_DRIFT_RULE, SCHEMA_LENGTH_BOUND_RULE]) then
+  begin
+    var SchemaRun: TSchemaLintResult:= RunSchemaRules(Store, LocateFieldRepository(IfdefProjectFile(AArgs, ProjectDb), ''), 0);
+    ReportSchemaRun(SchemaRun, AArgs.Quiet);
+    Findings:= Findings + SchemaRun.Findings;
+  end;
   { ADF Task 8: doc-drift -- store-backed (needs the doc graph + Raises facts);
     ON by default. Its --fix subset is applied in FinalizeAndOutput (Store passed). }
   { The seealso flag MUST match what `document` wrote the managed blocks under,
@@ -29637,6 +29669,7 @@ begin
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
     else if (Args.Command = 'rules') and MatchText(Args.SubCommand, ['disable', 'enable']) then Result:= RunRuleScope(LowerCase(Args.SubCommand), Args.Rule, Args.RuleScope, Args.InFile, Args.RefLine, Args.Reason, Args.ProjectPath, Args.ConfigPath, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.RuleScope }
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
+    else if Args.Command = 'verify-index'      then Result:= if NoDbResolved(Args.DbPath, 'verify-index') then 2 else RunVerifyIndexVerb(Args) { 1.53.0 LSP1-VERB: DRagLint.CLI.VerifyIndex }
     else if Args.Command = 'check-init'        then Result:= RunCheckInit(if Args.SubCommand <> '' then Args.SubCommand else Args.QName, Args.At, Args.DbPath, Args.ProjectPath, Args.AsJson or SameText(Args.Format, 'json'), Args.HbExplain, Args.MaxRoutines, Args.MaxSeconds) { 1.52 FRAME: DRagLint.CLI.CheckInit; v152 HBFIX --max-seconds }
     else if Args.Command = 'repo'              then Result:= RunRepoVerb(Args.SubCommand, Args.RepoPath, Args.ProjectPath, Args.FbConnection, Args.InFile, Args.Output, Args.Replace, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Repo }
     else if Args.Command = 'settings'          then Result:= RunSettingsVerb(Args.SubCommand, IfThen(Args.ProjectFromConfig, '', Args.ProjectPath), IfThen(Args.DbFromConfig, '', Args.DbPath), Args.InFile, Args.AsJson or SameText(Args.Format, 'json')) { 1.53 SETTINGS-CORE: DRagLint.CLI.Settings }

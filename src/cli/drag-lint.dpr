@@ -127,6 +127,7 @@ uses
   DRagLint.Lint.ProjectRules in '..\lint\DRagLint.Lint.ProjectRules.pas',
   DRagLint.Lint.TaintRules in '..\lint\DRagLint.Lint.TaintRules.pas',
   DRagLint.Lint.EnumOrdinalPersisted in '..\lint\DRagLint.Lint.EnumOrdinalPersisted.pas',
+  DRagLint.Lint.SchemaRules in '..\lint\DRagLint.Lint.SchemaRules.pas',
   DRagLint.Core.UsesInsert in '..\core\DRagLint.Core.UsesInsert.pas',
   DRagLint.Lint.MissingUses in '..\lint\DRagLint.Lint.MissingUses.pas',
   DRagLint.Lint.UnusedEnumValue in '..\lint\DRagLint.Lint.UnusedEnumValue.pas',
@@ -493,6 +494,8 @@ uses
   DRagLint.CLI.ConvertApplyJson in 'DRagLint.CLI.ConvertApplyJson.pas',
   DRagLint.CLI.ConvertApply in 'DRagLint.CLI.ConvertApply.pas',
   DRagLint.CLI.CheckInit in 'DRagLint.CLI.CheckInit.pas',
+  DRagLint.CLI.VerifyIndex in 'DRagLint.CLI.VerifyIndex.pas',
+  DRagLint.LSP.VerifyClient in '..\lsp\DRagLint.LSP.VerifyClient.pas',
   DRagLint.CLI.Repo in 'DRagLint.CLI.Repo.pas',
   DRagLint.CLI.Settings in 'DRagLint.CLI.Settings.pas',
   DRagLint.CLI.RepoParamArray in 'DRagLint.CLI.RepoParamArray.pas',
@@ -500,6 +503,7 @@ uses
   DRagLint.CLI.RepoConstGen in 'DRagLint.CLI.RepoConstGen.pas',
   DRagLint.CLI.RepoSchema in 'DRagLint.CLI.RepoSchema.pas',
   DRagLint.CLI.Explain in 'DRagLint.CLI.Explain.pas',
+  DRagLint.CLI.ConfigAnchor in 'DRagLint.CLI.ConfigAnchor.pas',
   DRagLint.CLI.RuleScope in 'DRagLint.CLI.RuleScope.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 

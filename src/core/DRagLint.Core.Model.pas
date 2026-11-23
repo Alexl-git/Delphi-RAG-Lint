@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.52.3-alpha';
+  DRAGLINT_VERSION = '1.53.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -304,7 +304,12 @@ const
     * SRC: the deferred extractor surface patch (slz-SRC) in Parser.Delphi13, Parser.DocComments, Preprocess,
       Index.Plan, Index.DataFlowFacts, Index.DispatchResolver, Analysis.Flow.Lattices, Core.Indexer.
     * grammar: tree-sitter-delphi13 v1.4.14 (6cbc96c; a line comment excludes its trailing CR). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.42.0-alpha';
+  { 1.42.0 -> 1.43.0 (2026-11-22, 1.53, lane/v153-grammar -- ONE bump for 1.53):
+    * grammar: tree-sitter-delphi13 v1.4.15 (2d7ed53; a subrange bound is a constant expression:
+      "set of 1 .. N * 2", shl / and / or / xor / div / mod, parentheses, "0 .. High(Byte) - 1").
+    * refs: the const in the bound of a subrange-typed global ("G: 0..CMax"), and the consts and the
+      element / index types of a classic local's array / set / subrange / string[N] type (no ref until now). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.43.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>

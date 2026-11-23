@@ -557,7 +557,7 @@ begin
   Result.DefaultVal:= ADefault;
 end;
 
-class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;  // dl:ok method-too-long@b13f -- REVIEWED 2026-11-21 SLZ-S05: 444 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;  // dl:ok method-too-long@8fe6 -- REVIEWED 2026-11-22 FR-LINT: 469 lines measured 2026-11-23 at INT (lines 560-1028; FR-LINT added two catalog rows); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   L: TList<TRuleInfo>;
   procedure B(const AId, ACat, ASev, ATitle: string; AEnabled: Boolean = True;  // dl:ok too-many-parameters@2c1c -- REVIEWED 2026-11-21 SLZ-S05: 8 parameters; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
@@ -862,6 +862,12 @@ begin
     B('unused-enum-value', 'project-wide', 'hint', 'An enum value nothing in the project names, in an enum type with no implicit use (Low/High, Succ/Pred, casts, Ord, RTTI, a streamed property) -- one finding per value, the decision per type. A filler value named for its own ordinal (Dummy0 at 0) is exempt; one dl:ok on the TYPE line reviews every value'); { ON by default (ENUMRULES 2026-10-28, owner): B-ENUM measured 0 on ORM3 CLIENT and the engine tree (every candidate type has a real implicit use); filler padding and type-level dl:ok keep the owner's DB-ordinal enums silent }
     { --- owner request #5b (1.40 lane flow) --- }
     B('read-never-assigned', 'project-wide', 'warning', 'A field or global variable is read but nothing in the project assigns or creates it -- every read sees 0 / nil / empty. Writes through a hard cast T(X).F, an out / var argument, SetLength / Inc, a property write accessor, with, @, an initialiser, absolute or an initialization section count; published, default-section (DFM-streamed) and record fields and typed constants are never reported'); { ON by default (1.40 lane flow, 2026-11-01): 0 findings on the engine src\cli, DataCopy, Loader2025, YADF, MigrationAssistant and TableTools indexes -- the raw candidates are all DFM-streamed, initialised or written through TInterlocked / an indexer }
+    { --- lane FR-LINT (1.53, spec 2026-11-22-field-repository-v2-design.md section 6) --- ON by default
+      (owner Q23 D). Schema facts come from the FIELD REPOSITORY (FR-3), never the index; without a
+      repository, or with one that holds no schema facts, both are silent. Emitted by
+      DRagLint.Lint.SchemaRules.RunSchemaRules; DL_EXCEPTIONS rows suppress findings. }
+    B('schema-maxlen-drift', 'project-wide', 'warning', 'A <TABLE>_<FIELD>_MAXLEN constant differs from the column''s char length in the field repository, or a string literal longer than the char length is assigned to a resolved column target (link-orm field / property, DFM persistent field, FieldByName on a dataset whose table the .dfm names)');
+    B('schema-length-bound', 'project-wide', 'warning', 'Copy(x, i, N) assigned to a resolved column target, or .Size / .MaxLength := N on a resolved field, where N exceeds the column''s char length in the field repository; or a DFM TStringField / TWideStringField whose Size (default 20) differs from it');
 
     { --- purity v2 (spec 2026-09-15 section 14) --- BOTH OFF BY DEFAULT until
       the corpus counts are audited. They read the `purity` resolve stage's

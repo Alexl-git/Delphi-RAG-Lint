@@ -347,6 +347,7 @@ begin
   Writeln('                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
+  Writeln('                               reads Delphi and SQL symbols from EVERY --db; rebuilds orm_links in the LAST --db only (its db-index columns are --db positions)');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate; --apply reads a library only with an explicit --library-db (never the manifest library)');
   Writeln('  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--db <db>] [--json|--plan|--apply|--no-backup] [--project <X.dproj>]  - routine-local rename (param/var autofix)');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)');
@@ -457,7 +458,7 @@ begin
   Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
   Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info|hint (none: always 0).');
   Writeln('                              Without it ANY surviving finding exits 1 (= --fail-on hint); only a clean run exits 0.');
-  Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
+  Writeln('    --config <file>           drag-lint-lint.json (else the nearest one above --project / the file / the --db, then above the project the --db was indexed from, then the CWD)');
   Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
   Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
   Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion (index --all: each section''s own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
@@ -469,7 +470,7 @@ begin
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)');
   Writeln('  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
-  Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');
+  Writeln('  drag-lint resolve-dbs --project <file.dproj> [--repo <file>] [--config <path>] [--json]   (print the ONE db that owns this project -- the WRITE target; names the field repository it finds, or --repo <file> when given)');
   Writeln('                               exits 2 and names the sections when none or SEVERAL claim the project,');
   Writeln('                               rather than guessing: `index --rebuild` against a wrongly-picked db');
   Writeln('                               clears an index that was never meant to be touched.');
@@ -503,8 +504,8 @@ begin
   Writeln('  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)');
   Writeln('  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)');
   Writeln('  drag-lint repo import-fb      --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)');
-  Writeln('  drag-lint repo seed-fb        --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)');
-  Writeln('  drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)');
+  Writeln('  drag-lint repo seed-fb        (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (fill an EMPTY repository from the Firebird schema or a DDL script; prints the change set and writes nothing unless --apply or --select; read-only on Firebird)');
+  Writeln('  drag-lint repo refresh-schema (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (re-read the schema into a filled repository as a change set: new and changed values are checked, vanished ones are unchecked deletes; hand-edited columns are never touched; no --apply = dry run; --select <id file> writes exactly the listed ids)');
   Writeln('  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)');
   Writeln('  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)');
   Writeln('  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)');
@@ -513,6 +514,10 @@ begin
   Writeln('  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)');
   Writeln('  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)');
   Writeln('  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)');
+  Writeln('  drag-lint repo migrate        (--repo <file> | --project <project file>) [--apply]   (schema 1 -> 2: adds DL_FIELDS_INFO.CALC_BODY, DL_LAYOUT_EVENTS, DL_EXCEPTIONS and FIELD_KIND 2 for ISCALCULATED rows; no --apply = dry run that changes no byte; --apply writes <repo>.before-migrate-<yyyymmdd-hhnnss>.txt first; a schema-2 file prints already at schema 2)');
+  Writeln('  drag-lint repo check          (--repo <file> | --project <project file>) [--json]   (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc macros and dependency cycles, layout-event rows; exit 0 clean, 1 findings)');
+  Writeln('  drag-lint repo gen-const      (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run]   (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)');
+  Writeln('  drag-lint repo check-const    (--repo <file> | --project <project file>) --unit-file <file.pas>   (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)');
   Writeln('  drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)');
   Writeln('       see wiki page: bookmarks');
   Writeln('  drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json|--format json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)');
@@ -622,6 +627,8 @@ begin
   Writeln('       see wiki page: query-text-near');
   Writeln('  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason "<text>" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)');
   Writeln('       see wiki page: v152-disable-rule');
+  Writeln('  drag-lint settings list|get|set|unset [<key> [<value>]] [--local] [--project <.dproj> | --db <db> | --in <file>] [--json|--format json]   (per-project settings in _D-RAG\drag-lint-project.json; --local = this machine only, _D-RAG\drag-lint-project.local.json; exit 0 done, 1 nothing to do, 2 refused)');
+  Writeln('       see wiki page: project-settings');
   Writeln('  drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
   Writeln('       see wiki page: Find-Usages-context');
 end;
@@ -1159,6 +1166,7 @@ begin
   if pVerb = 'link-orm' then
   begin
     Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
+    Writeln('                               reads Delphi and SQL symbols from EVERY --db; rebuilds orm_links in the LAST --db only (its db-index columns are --db positions)');
     Exit;
   end;
   if pVerb = 'rename' then
@@ -1437,7 +1445,7 @@ begin
     Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
     Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info|hint (none: always 0).');
     Writeln('                              Without it ANY surviving finding exits 1 (= --fail-on hint); only a clean run exits 0.');
-    Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
+    Writeln('    --config <file>           drag-lint-lint.json (else the nearest one above --project / the file / the --db, then above the project the --db was indexed from, then the CWD)');
     Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
     Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
     Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion (index --all: each section''s own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
@@ -1465,7 +1473,7 @@ begin
   if pVerb = 'resolve-dbs' then
   begin
     Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
-    Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');
+    Writeln('  drag-lint resolve-dbs --project <file.dproj> [--repo <file>] [--config <path>] [--json]   (print the ONE db that owns this project -- the WRITE target; names the field repository it finds, or --repo <file> when given)');
     Writeln('                               exits 2 and names the sections when none or SEVERAL claim the project,');
     Writeln('                               rather than guessing: `index --rebuild` against a wrongly-picked db');
     Writeln('                               clears an index that was never meant to be touched.');
@@ -1535,8 +1543,8 @@ begin
     Writeln('  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)');
     Writeln('  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)');
     Writeln('  drag-lint repo import-fb      --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)');
-    Writeln('  drag-lint repo seed-fb        --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)');
-    Writeln('  drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)');
+    Writeln('  drag-lint repo seed-fb        (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (fill an EMPTY repository from the Firebird schema or a DDL script; prints the change set and writes nothing unless --apply or --select; read-only on Firebird)');
+    Writeln('  drag-lint repo refresh-schema (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (re-read the schema into a filled repository as a change set: new and changed values are checked, vanished ones are unchecked deletes; hand-edited columns are never touched; no --apply = dry run; --select <id file> writes exactly the listed ids)');
     Writeln('  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)');
     Writeln('  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)');
     Writeln('  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)');
@@ -1545,6 +1553,10 @@ begin
     Writeln('  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)');
     Writeln('  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)');
     Writeln('  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)');
+    Writeln('  drag-lint repo migrate        (--repo <file> | --project <project file>) [--apply]   (schema 1 -> 2: adds DL_FIELDS_INFO.CALC_BODY, DL_LAYOUT_EVENTS, DL_EXCEPTIONS and FIELD_KIND 2 for ISCALCULATED rows; no --apply = dry run that changes no byte; --apply writes <repo>.before-migrate-<yyyymmdd-hhnnss>.txt first; a schema-2 file prints already at schema 2)');
+    Writeln('  drag-lint repo check          (--repo <file> | --project <project file>) [--json]   (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc macros and dependency cycles, layout-event rows; exit 0 clean, 1 findings)');
+    Writeln('  drag-lint repo gen-const      (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run]   (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)');
+    Writeln('  drag-lint repo check-const    (--repo <file> | --project <project file>) --unit-file <file.pas>   (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)');
     Exit;
   end;
   Result := False;

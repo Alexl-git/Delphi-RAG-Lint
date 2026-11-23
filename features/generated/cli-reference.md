@@ -1117,6 +1117,7 @@ Described in:
 * [Library bindings for bare reads, paren-less calls and function-result receivers](../../docs/wiki/library-first-resolve.md)
 * [Resolver fixes in 1.52](../../docs/wiki/library-first-resolve.md)
 * [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
+* [Stable symbol ids on an incremental index](../../docs/wiki/symbol-id-reuse.md)
 
 ### info
 
@@ -1345,6 +1346,7 @@ Described in:
 * [Lint rules on the static type of a reference](../../docs/wiki/ref-type-rules.md)
 * [RTTI unavailable (lint rule)](../../docs/wiki/rtti-unavailable.md)
 * [Run Lint All (Full Report)](../../docs/wiki/Run-Lint-All-Full-Report.md)
+* [Schema-aware lint (lint rules)](../../docs/wiki/schema-lint.md)
 * [Stream buffer used after free (lint rule)](../../docs/wiki/stream-buffer-after-free.md)
 * [Taint analysis (SQL, command, path)](../../docs/wiki/taint-analysis.md)
 * [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)
@@ -1865,12 +1867,12 @@ Described in [Rename Symbol](../../docs/wiki/Rename-Symbol.md).
 Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
 
 ```text
-drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
+drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice|migrate|check|gen-const|check-const> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--ddl <file.sql>[;...]] [--select <file>] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--apply] [--dry-run] [--json] [--unit <UnitName>] [--datamodule <Name>] [--unit-file <file.pas>]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
 drag-lint repo init (--repo <file> | --project <project file>) (create an empty field repository; exit 1 when the file exists)
 drag-lint repo info (--repo <file> | --project <project file>) [--json|--format json] (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)
 drag-lint repo import-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace] (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)
-drag-lint repo seed-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run] (fill an EMPTY repository from the Firebird schema; read-only on Firebird)
-drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run] (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)
+drag-lint repo seed-fb (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json] (fill an EMPTY repository from the Firebird schema or a DDL script; prints the change set and writes nothing unless --apply or --select; read-only on Firebird)
+drag-lint repo refresh-schema (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json] (re-read the schema into a filled repository as a change set: new and changed values are checked, vanished ones are unchecked deletes; hand-edited columns are never touched; no --apply = dry run; --select <id file> writes exactly the listed ids)
 drag-lint repo backup (--repo <file> | --project <project file>) [--output <file>] (write the diffable text backup; default <repo>.txt)
 drag-lint repo restore --in <backup file> (--repo <file> | --project <project file>) [--replace] (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)
 drag-lint repo gen-memtable --in <csv file> [--name <Name>] [--output <file>] (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)
@@ -1878,6 +1880,10 @@ drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dp
 drag-lint repo gen-orm (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]] (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)
 drag-lint repo update-orm (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]] (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)
 drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]] (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)
+drag-lint repo migrate (--repo <file> | --project <project file>) [--apply] (schema 1 -> 2: adds DL_FIELDS_INFO.CALC_BODY, DL_LAYOUT_EVENTS, DL_EXCEPTIONS and FIELD_KIND 2 for ISCALCULATED rows; no --apply = dry run that changes no byte; --apply writes <repo>.before-migrate-<yyyymmdd-hhnnss>.txt first; a schema-2 file prints already at schema 2)
+drag-lint repo check (--repo <file> | --project <project file>) [--json] (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc macros and dependency cycles, layout-event rows; exit 0 clean, 1 findings)
+drag-lint repo gen-const (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run] (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)
+drag-lint repo check-const (--repo <file> | --project <project file>) --unit-file <file.pas> (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1895,7 +1901,12 @@ drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --serv
 | `--rsvars` | `<bat>` |  |  |
 | `--step-size` | `<n>` |  |  |
 | `--table` | `<Name>` |  |  |
+| `--unit` | `<UnitName>` |  |  |
+| `--datamodule` | `<Name>` |  |  |
+| `--unit-file` | `<file.pas>` |  |  |
 | `--connection` | `<Firebird connection string>` |  |  |
+| `--ddl` | `<file.sql>[;...]` |  |  |
+| `--select` | `<id file>` |  |  |
 | `--dry-run` |  |  |  |
 | `--in` | `<backup file>` |  |  |
 | `--json` |  |  |  |
@@ -1917,13 +1928,14 @@ Described in [Field repository](../../docs/wiki/field-repository.md).
 Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query.
 
 ```text
-drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json] (print the consumer DB list query/lsp/serve would use)
+drag-lint resolve-dbs [--platform win32|win64] [--repo <file>] [--config <path>] [--json] (print the consumer DB list query/lsp/serve would use)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--platform` |  |  |  |
 | `--config` | `<path>` |  |  |
+| `--repo` | `<file>` |  |  |
 | `--json` |  |  |  |
 
 Described in [Show Resolved DBs (debug)](../../docs/wiki/Show-Resolved-DBs-debug.md).
@@ -2007,7 +2019,7 @@ Described in [safe-delete](../../docs/wiki/safe-delete.md).
 
 ### schema
 
-Prints the live schema of an index database: schemaversion, every table and column, and row counts.
+Table-by-table reference of the SQLite index file: every table, column, key, writer pass and schema version 23 to 27.
 
 ```text
 drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>] (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)
@@ -2019,7 +2031,10 @@ drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>] (self
 | `--format` |  |  |  |
 | `--output` | `<file>` |  |  |
 
-Described in [schema](../../docs/wiki/schema.md).
+Described in:
+
+* [Index DB schema reference](../../docs/wiki/Index-DB-Schema.md)
+* [schema](../../docs/wiki/schema.md)
 
 ### serve
 
@@ -2034,6 +2049,24 @@ drag-lint serve --db <file.sqlite> [--json] (MCP stdio server)
 | `--db` | `<file.sqlite>` |  |  |
 
 Described in [serve](../../docs/wiki/serve.md).
+
+### settings
+
+Per-project settings store: drag-lint settings list|get|set|unset over _D-RAG\drag-lint-project.json and a local overlay.
+
+```text
+drag-lint settings list|get|set|unset [<key> [<value>]] [--local] [--project <.dproj> | --db <db> | --in <file>] [--json|--format json]   (per-project settings in _D-RAG\drag-lint-project.json; --local = this machine only, _D-RAG\drag-lint-project.local.json; exit 0 done, 1 nothing to do, 2 refused)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--local` |  |  |  |
+| `--project` | `<.dproj>` |  |  |
+| `--db` | `<db>` |  |  |
+| `--in` | `<file>` |  |  |
+| `--json` |  |  |  |
+
+Described in [Project settings](../../docs/wiki/project-settings.md).
 
 ### shared-unit
 
@@ -2070,7 +2103,7 @@ Described in [Symbol Slice](../../docs/wiki/Symbol-Slice.md).
 
 ### sql
 
-Chooses the bytes verbs write to stdout, stderr and --output files: ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; lossy ascii warns once.
+Table-by-table reference of the SQLite index file: every table, column, key, writer pass and schema version 23 to 27.
 
 ```text
 drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 (none with --output unless --limit is given; --limit 0 = every row; JSON says truncated + total_rows) and time cap 10000 ms; ask `schema --format json` for the columns)
@@ -2089,6 +2122,7 @@ drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format t
 
 Described in:
 
+* [Index DB schema reference](../../docs/wiki/Index-DB-Schema.md)
 * [Output encoding (--output-encoding)](../../docs/wiki/output-encoding.md)
 * [sql](../../docs/wiki/sql.md)
 * [Custom attributes in the index](../../docs/wiki/Index-DB-Schema.md)

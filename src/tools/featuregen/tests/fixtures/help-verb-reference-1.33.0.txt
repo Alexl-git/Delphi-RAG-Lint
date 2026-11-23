@@ -302,7 +302,7 @@
   Output/CI (lint, lint-all, check-ast):
     --format sarif            emit SARIF 2.1.0 (in addition to text|json)
     --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info|hint (none: always 0).
-    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)
+    --config <file>           drag-lint-lint.json (else the nearest one above --project / the file / the --db, then above the project the --db was indexed from, then the CWD)
     --enable id1,id2          re-include disabled / off-by-default rules
     --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)
     --baseline <file>         report only findings absent from the baseline
@@ -313,7 +313,7 @@
   drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)
   drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)
   drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)
-  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)
+  drag-lint resolve-dbs --project <file.dproj> [--repo <file>] [--config <path>] [--json]   (print the ONE db that owns this project -- the WRITE target; names the field repository it finds, or --repo <file> when given)
                                exits 2 and names the sections when none or SEVERAL claim the project,
                                rather than guessing: `index --rebuild` against a wrongly-picked db
                                clears an index that was never meant to be touched.

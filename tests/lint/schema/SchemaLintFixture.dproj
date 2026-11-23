@@ -1,0 +1,12 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>SchemaLintFixture.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="uMaxLen.pas"/>
+    <DCCReference Include="uBounds.pas"/>
+    <DCCReference Include="uLimits.pas"/>
+    <DCCReference Include="uShadow.pas"/>
+    <DCCReference Include="fMain.pas"><Form>frmMain</Form><FormType>dfm</FormType></DCCReference>
+  </ItemGroup>
+</Project>

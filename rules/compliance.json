@@ -333,6 +333,8 @@
   "review-marker-unused": {},
   "rtti-unavailable": {},
   "rule-skipped-budget": {},
+  "schema-length-bound": {},
+  "schema-maxlen-drift": {},
   "self-as-interface-in-constructor": {"cwe": ["CWE-416"], "weak": ["CWE-416"]},
   "self-assignment": {"cwe": ["CWE-1164"], "weak": ["CWE-1164"]},
   "self-free-in-event-handler": {"cwe": ["CWE-416"]},
