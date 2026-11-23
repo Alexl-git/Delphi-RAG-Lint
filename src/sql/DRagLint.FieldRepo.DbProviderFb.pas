@@ -15,8 +15,8 @@ function FirebirdDialect: IFrDbDialect;
 /// <summary>Opens a Firebird connection for planning and (through DRagLint.FieldRepo.AlterApply) applying.</summary>
 /// <param name="pConnection">FireDAC-style 'Database=..;User_Name=..;Password=..'.</param>
 /// <returns>An open provider; it closes with its last reference.</returns>
-/// <exception cref="EFrDbProviderError">The string names OpenMode, CreateDatabase, DropDatabase or a connection definition, or the
-/// database is SQL dialect 1.</exception>
+/// <exception cref="EFbConnStringError">The string names OpenMode, CreateDatabase, DropDatabase or a connection definition, or holds a line break (DRagLint.Sql.FbConnString).</exception>
+/// <exception cref="EFrDbProviderError">The database is SQL dialect 1.</exception>
 /// <remarks>One attachment. Reads run in read-only transactions; nothing is written before BeginWrite.
 /// Not thread-safe.</remarks>
 function OpenFirebirdProvider(const pConnection: string): IFrDbProvider;
@@ -25,12 +25,12 @@ implementation
 
 uses
   System.SysUtils,
-  System.StrUtils,
   System.Classes,
   System.Generics.Collections,
   Data.DB,
   FireDAC.Stan.Option,
   FireDAC.Comp.Client,
+  DRagLint.Sql.FbConnString,
   DRagLint.FieldRepo.FbImport;
 
 const
@@ -59,8 +59,6 @@ const
   PRECISION_BIGINT = 18;
   PRECISION_INT128 = 38;
   SQL_DIALECT_3 = 3;
-  { FireDAC parameters that create or drop a database, or pull in a definition that could }
-  FORBIDDEN_KEYS: array[0..4] of string = ('OpenMode', 'CreateDatabase', 'DropDatabase', 'ConnectionDef', 'ConnectionDefName');
 
 type
   TFrFirebirdDialect = class(TInterfacedObject, IFrDbDialect)
@@ -333,16 +331,9 @@ begin
 end;
 
 constructor TFrFirebirdProvider.Create(const pConnection: string);
-var
-  VPair, VKey: string;
 begin
   inherited Create;
-  for VPair in pConnection.Split([';'], TStringSplitOptions.ExcludeEmpty) do
-  begin
-    VKey := Trim(Copy(VPair, 1, Pos('=', VPair + '=') - 1));
-    if MatchText(VKey, FORBIDDEN_KEYS) then
-      raise EFrDbProviderError.CreateFmt('%s is not allowed in --connection: alter-table never creates or drops a database', [VKey]);
-  end;
+  RequireFbConnectionSafe(pConnection);
   FDialect := TFrFirebirdDialect.Create;
   FSession := TGUID.NewGuid.ToString;
   FConn := OpenSourceConnection(pConnection, FDatabase);

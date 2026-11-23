@@ -16146,6 +16146,98 @@
       }
     },
     {
+      "id": "repo-alter-table",
+      "title": "Per-table ALTER from the field repository",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.54.0-alpha",
+      "summary": "Makes one Firebird table match the field repository: exact DDL, refused or lossy changes blocked before anything runs, dry run by default",
+      "intro": "Read this when a column changed in the field repository and the Firebird table must follow. drag-lint repo alter-table prints the exact DDL for ONE table, blocks what Firebird would refuse or would accept and lose data on, and writes only with --apply, after its own pre-checks on the same connection. An opt-in safe path (add, copy, compare, swap) does the changes Firebird refuses.",
+      "wikiPage": "repo-alter-table",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "alter-table",
+          "usage": "drag-lint repo alter-table --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--json]",
+          "flags": [
+            {
+              "name": "--table",
+              "arg": "<T>"
+            },
+            {
+              "name": "--direction",
+              "arg": "repo-to-db"
+            },
+            {
+              "name": "--connection",
+              "arg": "<Firebird connection string>"
+            },
+            {
+              "name": "--repo",
+              "arg": "<file>"
+            },
+            {
+              "name": "--project",
+              "arg": "<project file>"
+            },
+            {
+              "name": "--safe-path"
+            },
+            {
+              "name": "--rename",
+              "arg": "<OLD=NEW[,...]>"
+            },
+            {
+              "name": "--order",
+              "arg": "<A,B,...>"
+            },
+            {
+              "name": "--hook",
+              "arg": "<name>"
+            },
+            {
+              "name": "--select",
+              "arg": "<id file>"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--dry-run"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "helpOrder": 111,
+          "help": ["  drag-lint repo alter-table    --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--json]   (make ONE Firebird table match the repository; prints the change set with the exact DDL and writes NOTHING without --apply; a change Firebird refuses, or accepts and loses data on, is BLOCKED; drops, DROP NOT NULL and safe-path changes are unchecked: name their ids in --select; --safe-path offers add-copy-compare-swap for refused type changes; --hook micronite = the Micronite rules; exit 0 ok, 1 bad arguments or a refused or failed apply)"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "What would change in the database if I applied my repository edits to one table?",
+          "command": "drag-lint repo alter-table --table <T> --direction repo-to-db --connection \"Database=host:db;User=..;Password=..\" --repo <file> --json"
+        },
+        {
+          "ask": "How do I widen a column in Firebird from the field repository?",
+          "command": "drag-lint repo alter-table --table <T> --direction repo-to-db --connection \"...\" --repo <file> --apply"
+        },
+        {
+          "ask": "How do I make a text column numeric when Firebird refuses?",
+          "command": "drag-lint repo alter-table --table <T> --direction repo-to-db --connection \"...\" --repo <file> --safe-path --select <ids.txt> --apply"
+        }
+      ],
+      "verified": {
+        "date": "2026-11-23",
+        "by": "ENGINE",
+        "build": "1.53.0-alpha",
+        "surfaceHash": "ea3f708f8246dc8ecd5c99b89eeda15dcc19b701b232397d0bea4375bd6ada9e"
+      }
+    },
+    {
       "id": "project-settings",
       "title": "Project settings",
       "group": "maintenance",

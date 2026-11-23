@@ -146,6 +146,12 @@ COMMIT;
   $r2 = Alter @()
   $cs = $cs0
   Check 'L8 OpenMode / DropDatabase in --connection -> exit 1, the database is still there' (($r.Code -eq 1) -and ($r2.Code -eq 1) -and ((Q 'SELECT COUNT(*) FROM T') -eq '2')) "$($r.Out)`n$($r2.Out)"
+  $cs = "$cs0;  dropdatabase = Yes"
+  $r = Alter @()
+  $cs = "$cs0`nFoo=1"
+  $r2 = Alter @()
+  $cs = $cs0
+  Check 'L9 spaced lower-case DropDatabase and a line break in --connection -> exit 1 (shared FbConnString), the database is still there' (($r.Code -eq 1) -and ($r.Out -match 'DropDatabase is not allowed in --connection') -and ($r2.Code -eq 1) -and ($r2.Out -match 'line break is not allowed in --connection') -and ((Q 'SELECT COUNT(*) FROM T') -eq '2')) "$($r.Out)`n$($r2.Out)"
 } finally {
   $env:FIREBIRD = $saved
   try { [IO.Directory]::Delete($work, $true) } catch { Write-Host "note: scratch folder kept: $work" }

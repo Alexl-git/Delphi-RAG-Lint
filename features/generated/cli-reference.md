@@ -1884,6 +1884,7 @@ drag-lint repo migrate (--repo <file> | --project <project file>) [--apply] (sch
 drag-lint repo check (--repo <file> | --project <project file>) [--json] (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc macros and dependency cycles, layout-event rows; exit 0 clean, 1 findings)
 drag-lint repo gen-const (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run] (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)
 drag-lint repo check-const (--repo <file> | --project <project file>) --unit-file <file.pas> (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)
+drag-lint repo alter-table --table <T> --direction repo-to-db --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1920,8 +1921,16 @@ drag-lint repo check-const (--repo <file> | --project <project file>) --unit-fil
 | `--server-dir` | `<folder>` |  |  |
 | `--client-dir` | `<folder>` |  |  |
 | `--save-form` | `<legacy\|current>` |  |  |
+| `--direction` | `repo-to-db` |  |  |
+| `--safe-path` |  |  |  |
+| `--rename` | `<OLD=NEW[,...]>` |  |  |
+| `--order` | `<A,B,...>` |  |  |
+| `--hook` | `<name>` |  |  |
 
-Described in [Field repository](../../docs/wiki/field-repository.md).
+Described in:
+
+* [Field repository](../../docs/wiki/field-repository.md)
+* [Per-table ALTER from the field repository](../../docs/wiki/repo-alter-table.md)
 
 ### resolve-dbs
 

@@ -1381,7 +1381,7 @@ begin
   Check('F45 OpenMode is refused: no database is created', Raises(procedure begin OpenFirebirdProvider(ScratchConn(TPath.Combine(GDir, 'never.fdb')) + ';OpenMode=Create') end, 'OpenMode')
     and not TFile.Exists(TPath.Combine(GDir, 'never.fdb')));
   Check('F45b CreateDatabase and DropDatabase are refused', Raises(procedure begin OpenFirebirdProvider(ScratchConn(TPath.Combine(GDir, 'never.fdb')) + ';CreateDatabase=Yes') end, 'CreateDatabase')
-    and Raises(procedure begin OpenFirebirdProvider(pConnText + '; dropdatabase = Yes') end, 'dropdatabase'));
+    and Raises(procedure begin OpenFirebirdProvider(pConnText + '; dropdatabase = Yes') end, 'DropDatabase'));
   Check('F46 a write outside a write transaction is refused', Raises(procedure begin pProvider.Execute('DELETE FROM D') end, 'no write transaction'));
 end;
 

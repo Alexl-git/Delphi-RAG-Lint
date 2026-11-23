@@ -3,6 +3,13 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.54.0-alpha -- unreleased
+
+Lane TT-ALTER (lane/v154-tt-alter):
+
+- NEW `drag-lint repo alter-table` (Table Tools): plans and, with `--apply`, runs the ALTER TABLE that brings a Firebird table in line with a field-repository column; see wiki page repo-alter-table.
+- `repo alter-table` now refuses a --connection string through the shared `DRagLint.Sql.FbConnString` (OpenMode, CreateDatabase, DropDatabase, ConnectionDef, ConnectionDefName, and a line break) instead of a private copy of the key list; test L9 in run_repo_cli_alter.ps1.
+
 ## v1.53.0-alpha -- 2026-11-23
 
 In integration (lane/v153-int2). One re-parse for 1.53.0: extractor 1.42.0 -> 1.43.0-alpha (GRAMMAR); resolver stays 1.31.0-alpha. VS Code extension 1.6.12.

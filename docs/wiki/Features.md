@@ -467,6 +467,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
 | [manifest where / migrate (installed layout v2)](installed-layout-v2) | `manifest where`; `manifest migrate` |  |
 | [Open Plugin Log](Open-Plugin-Log) | About window: Open Plugin Log |  |
+| [Per-table ALTER from the field repository](repo-alter-table) | `repo alter-table` |  |
 | [Project settings](project-settings) | `settings list`; `settings get`; `settings set`; `settings unset`; `settings`; procedure: `docs\wiki\project-settings.md` |  |
 | [resolve-uses](Maintenance) | `resolve-uses` | internal |
 | [selftest](Maintenance) | `selftest` | internal |
