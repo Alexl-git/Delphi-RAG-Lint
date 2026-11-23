@@ -61,6 +61,11 @@
         "category": "drag-lint"
       },
       {
+        "command": "dragLint.projectSettings",
+        "title": "Project Settings...",
+        "category": "drag-lint"
+      },
+      {
         "command": "dragLint.fixFinding",
         "title": "Fix with drag-lint",
         "category": "drag-lint"
