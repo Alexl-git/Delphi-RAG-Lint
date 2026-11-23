@@ -857,13 +857,15 @@ function PlanUpdateOrm(pRepo: TFDConnection; const pCodeDir, pServerDir, pClient
 
 /// <summary>Plans repo upgrade-orm-headers: the u&lt;T&gt;.PAS units of pCodeDir with the generated
 /// Assign / AssignTo / Reader headers of TableTools replaced by their 1.54 form
-/// (UpgradeOrmHeaderText). Regions and everything else stay byte for byte.</summary>
+/// (UpgradeOrmHeaderText), and the generated AssignI of each i&lt;T&gt;.PAS / u&lt;T&gt;.PAS pair replaced by the
+/// overloaded Assign (UpgradeOrmAssignPair: both units or neither). Regions and everything else stay byte for byte.
+/// Every remaining call of AssignI in a unit under pCodeDir is listed in pSkipped as file(line); the calls are never edited.</summary>
 /// <param name="pRepo">Open repository (the table list).</param>
 /// <param name="pCodeDir">Folder of the u units (COMMON\OBJECTS).</param>
 /// <param name="pTables">Tables; empty = every repository table.</param>
 /// <param name="pSkipped">Receives one line per missing unit and per header left alone because it
 /// is not in the generated form; not cleared.</param>
-/// <returns>One entry per existing unit, in table order.</returns>
+/// <returns>One entry per existing u unit and per existing i unit, in table order.</returns>
 /// <exception cref="EOrmGenError">A named table is not in the repository.</exception>
 function PlanUpgradeOrmHeaders(pRepo: TFDConnection; const pCodeDir: string; const pTables: TArray<string>;
   pSkipped: TStrings): TArray<TOrmFileChange>;
@@ -1837,7 +1839,7 @@ begin
       InterfaceObject.Add('    function GetCurrentFieldName: string;');
       InterfaceObject.Add(Format('    function Setup(const ATable, AField: string): Imc%s;', [TableId]));
     end;
-    InterfaceObject.Add(Format('    procedure AssignI(const IValue: Imc%s);', [TableId]));
+    InterfaceObject.Add(Format('    procedure Assign(const IValue: Imc%s);', [TableId]));
 
     PasObject.Add(Format('unit %s%s;', [ORM_PAS_PREFIX, TableId]));
     PasObject.Add('                     	'    );
@@ -1881,12 +1883,15 @@ begin
     PasObject.Add       ('{$ENDREGION ''DB-RAD 12''}');
 
     PasObject.Add('     destructor Destroy; override;'                   );
-    PasObject.Add('     procedure Assign(Source: TPersistent); override;');
+    PasObject.Add('     procedure Assign(Source: TPersistent); overload; override;');
     PasObject.Add('     procedure Initialize; override;'                                        );
     PasObject.Add('     function __GetClassName:string;                                        ');
     PasObject.Add('     function Writer(AStream: TABZMemoryStream): boolean; override;');
     PasObject.Add('     function Reader(AStream: TABZMemoryStream): boolean; override;');
-    PasObject.Add(Format('     procedure AssignI(const Value: Imc%s);', [TableId]));
+    { only one of a set of overloaded methods can be published (E2266): Assign(Source) stays published, Assign(Imc) is public }
+    PasObject.Add('  public');
+    PasObject.Add(Format('     procedure Assign(const Value: Imc%s); reintroduce; overload;', [TableId]));
+    PasObject.Add('  published');
     if TableId = 'FIB_FIELDS_INFO' then
     begin
       PasObject.Add('   function GetCurrentFieldName: string;'                            );
@@ -2001,6 +2006,9 @@ begin
     PasObject.Add('end;');
     PasObject.Add(' '   );
 
+    { Assign(Source: TPersistent) copies only when 'Source is Tmc<T>'. It must NOT reach the Assign(Imc<T>) overload
+      through Supports(Source, Imc<T>, I): TMicObjectBase (ORM3 COMMON/uMicObjectBase.pas) counts references from 0, so the
+      temporary interface of an object held only by an object reference goes 0 -> 1 -> 0 and frees it. }
     PasObject.Add(Format('procedure Tmc%s.Assign(Source: TPersistent);', [TableId]));
     PasObject.Add('begin');
     PasObject.Add(Format('  if Source is not Tmc%s then', [TableId]));
@@ -2020,7 +2028,7 @@ begin
     PasObject.Add('end;');
     PasObject.Add(' '   );
 
-    PasObject.Add(Format('procedure Tmc%s.AssignI(const Value: Imc%s);', [TableId, TableId]));
+    PasObject.Add(Format('procedure Tmc%s.Assign(const Value: Imc%s);', [TableId, TableId]));
     PasObject.Add('begin');
 
     PasObject.Add('{$REGION ''DB-RAD 5''}');
@@ -3613,7 +3621,9 @@ var
   Gen: TOrmGenerator;
   L: TList<TOrmFileChange>;
   Notes: TStringList;
-  T, Ident, FileName, Note, OldL: string;
+  T, Ident, FileName, IntfName, Note, OldL, HdrL, NewL, OldI, NewI, CallFile: string;
+  HasIntf: Boolean;
+  Line: Integer;
 begin
   L:= TList<TOrmFileChange>.Create;
   Gen:= TOrmGenerator.Create(pRepo);
@@ -3630,10 +3640,21 @@ begin
       end;
       Notes.Clear;
       OldL:= ReadUnitText(FileName);
-      L.Add(ChangeOf(FileName, OldL, UpgradeOrmHeaderText(OldL, Ident, Notes), True));
+      HdrL:= UpgradeOrmHeaderText(OldL, Ident, Notes);
+      IntfName:= TPath.Combine(pCodeDir, ORM_INTF_PREFIX + Ident + ORM_FILE_EXT);
+      HasIntf:= TFile.Exists(IntfName);
+      OldI:= if HasIntf then ReadUnitText(IntfName) else '';
+      UpgradeOrmAssignPair(OldI, HdrL, Ident, HasIntf, Notes, NewI, NewL);
+      L.Add(ChangeOf(FileName, OldL, NewL, True));
+      if HasIntf then
+        L.Add(ChangeOf(IntfName, OldI, NewI, True));
       for Note in Notes do
         pSkipped.Add(FileName + ': ' + Note);
     end;
+    { calls of AssignI in hand code are only listed: the verb never edits code it did not generate }
+    for CallFile in TDirectory.GetFiles(pCodeDir, '*' + ORM_FILE_EXT, TSearchOption.soAllDirectories) do
+      for Line in FindAssignICalls(ReadUnitText(CallFile)) do
+        pSkipped.Add(Format('%s(%d): a call of AssignI stays (hand code); change it to Assign', [CallFile, Line]));
     Result:= L.ToArray;
   finally
     Notes.Free;

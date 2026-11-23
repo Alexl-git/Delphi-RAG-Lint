@@ -60,7 +60,7 @@ Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then
 |---|---|---|
 | `gen-orm` | `--code-dir` | new `i<T>.PAS` + `u<T>.PAS` per table (`--table T,...`; empty = every table) |
 | `update-orm` | `--code-dir` [`--server-dir`] [`--client-dir`] | ONLY the lines inside the `{$REGION 'DB-RAD <id>'}` regions of the existing units; every other byte, line ends included, is kept. A missing file or a table without `FIELD_KIND = 1` rows is skipped and named |
-| `upgrade-orm-headers` | `--code-dir` | one time (1.54): in the existing `u<T>.PAS`, the generated text AROUND regions 4 / 6 (`if not (Source is T) then inherited else with Source as T do`) becomes `if Source is not T then inherited else`, and the `StreamSize` / `ByteTemp` locals of `Reader` go when nothing uses them. Only the exact generated shape is recognised, in any layout; a hand-edited header is listed as `skipped` and left alone |
+| `upgrade-orm-headers` | `--code-dir` | one time (1.54): in the existing `u<T>.PAS`, the generated text AROUND regions 4 / 6 (`if not (Source is T) then inherited else with Source as T do`) becomes `if Source is not T then inherited else`, and the `StreamSize` / `ByteTemp` locals of `Reader` go when nothing uses them; in each `i<T>.PAS` + `u<T>.PAS` pair the generated `AssignI` becomes the overloaded `Assign` (below), both units or neither. Only the exact generated shape is recognised, in any layout; a hand-edited header or pair is listed as `skipped` and left alone, and every remaining call of `AssignI` in the units under `--code-dir` is listed as `file(line)` and never edited |
 | `gen-dataservice` | `--server-dir` `--client-dir` | new `u<T>_SERVER.PAS` + `u<T>_CLIENT.PAS` and the two DI container units; prints `add to project:` per new file |
 
 **Assign / AssignTo (1.54).** TableTools wrote `fX:= X` inside `with Source as T do` and `X:= fX` inside
@@ -68,11 +68,36 @@ Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then
 both objects (`var LSource:= TmcT(Source); Self.fX:= LSource.X;`), which is right inside the old `with` header and
 without it. A list or stream the generator creates and frees itself (regions 14 / 15: `TStringList`, the stream type) is
 copied by content into the receiver's own object (nil source empties it, nil destination or `Source = Self` is skipped); a
-class column it does not own (`TPicture`) is copied by reference. `AssignI` follows the same rule (an aliased list is
+class column it does not own (`TPicture`) is copied by reference. `Assign(const Value: Imc<T>)` (formerly `AssignI`) follows the same rule (an aliased list is
 skipped, a nil `Value` raises as before); a stream source keeps its Position and the copy ends at Position 0. Only the
 property setters still share an object. Order for existing
-units: `update-orm`, build, then `upgrade-orm-headers`; commit both. A table with a column named `SOURCE` / `DEST`
+units: `update-orm`, build, then `upgrade-orm-headers`; commit both. `update-orm` on a unit that has not been upgraded yet\nstill compiles: it only rewrites the regions, and the regions are valid under the old headers and under `AssignI`. A table with a column named `SOURCE` / `DEST`
 needs `upgrade-orm-headers` first (`update-orm` skips such a unit and says so).
+
+**AssignI is now an overload of Assign (1.54).** `i<T>.PAS` declares `procedure Assign(const IValue: Imc<T>);` and
+`u<T>.PAS` declares `procedure Assign(Source: TPersistent); overload; override;` and (in a `public` section: only one
+overload of a set can be published, E2266) `procedure Assign(const Value: Imc<T>); reintroduce; overload;`. The body
+of the second one is region 5, unchanged. `A.Assign(B)` picks the version by the static type of `B`: an object copies
+with the class overload (region 4), an interface with region 5; `P.Assign(B)` through a `TPersistent` reference
+reaches the class overload by virtual dispatch. An unrelated class raises `EConvertError`. `nil`: the literal
+`Assign(nil)` and a nil `TPersistent` variable go to the class overload and raise `EConvertError` (as
+`TPersistent.Assign(nil)`); a nil interface variable reaches region 5 and raises `EAccessViolation` (as `AssignI(nil)`).
+
+> **The class overload must not use `Supports(Source, Imc<T>, I)`.** `TMicObjectBase` (ORM3 `COMMON\uMicObjectBase.pas`)
+> counts references from 0 and frees the object when `_Release` brings the count back to 0. A temporary interface
+> obtained from an object held only by an object reference would go 0 -> 1 -> 0 and destroy it. The generated class
+> overload therefore keeps `Source is Tmc<T>` and the class copy. The same hazard remains for an object passed to an
+> `Imc<T>` parameter of an INTERFACE receiver (`I.Assign(Obj)`, the only overload an interface has): hold the object by
+> an interface too, or give it a component owner.
+
+`upgrade-orm-headers` converts the exact generated shape: the `i` declaration, the `u` declaration (it adds
+`overload` to the `Assign(Source)` declaration and puts the new declaration into a `public` section) and the
+implementation header. The `i` and `u` unit of a table are converted as a pair or not at all (half of it does not
+compile); a pair with a hand-edited side stays and is listed. Comment lines (`//`, `///`) are not code, so the
+autodoc blocks that name `AssignI` do not matter, but their `cref` / `seealso` text keeps the old name until the next
+autodoc run. Calls of `AssignI` in hand code are listed as `file(line)` and are yours to change to `Assign`.
+Measured on a copy of ORM3 `COMMON\OBJECTS` (132 repository tables): 264 units (132 pairs) converted; the three calls of `AssignI` in `uPLANLIST` are listed;
+8 notes are the unrelated `Reader` ones; a second run writes nothing.
 
 Other 1.54 changes of the generated text: a placeholder summary (`Summary here`) becomes `DOCUMENTATION`, or a text
 built from the row (`Column CAUSLIST.NAME ("Cause").`), and `Remarks here` is dropped; a column `NAME` gets
