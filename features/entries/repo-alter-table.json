@@ -65,7 +65,7 @@
         }
       ],
       "helpOrder": 111,
-      "help": ["  drag-lint repo alter-table    --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--json]   (make ONE Firebird table match the repository; prints the change set with the exact DDL and writes NOTHING without --apply; a change Firebird refuses, or accepts and loses data on, is BLOCKED; drops, DROP NOT NULL and safe-path changes are unchecked: name their ids in --select; --safe-path offers add-copy-compare-swap for refused type changes; --hook micronite = the Micronite rules; exit 0 ok, 1 bad arguments or a refused or failed apply)"]
+      "help": ["  drag-lint repo alter-table    --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--json]   (make ONE Firebird table match the repository; prints the change set with the exact DDL and writes NOTHING without --apply; a change Firebird refuses, or accepts and loses data on, is BLOCKED; drops, DROP NOT NULL and safe-path changes are unchecked: name their ids, after the plan line of the dry run, in --select; --safe-path offers add-copy-compare-swap for refused type changes; --hook micronite = the Micronite rules; exit 0 ok, 1 bad arguments or a refused or failed apply)"]
     }
   ],
   "audience": "both",
@@ -87,6 +87,6 @@
     "date": "2026-11-23",
     "by": "ENGINE",
     "build": "1.53.0-alpha",
-    "surfaceHash": "ea3f708f8246dc8ecd5c99b89eeda15dcc19b701b232397d0bea4375bd6ada9e"
+    "surfaceHash": "0ce42b0869fc99a1f4fba3636969cd19867303b8292c3a460d16d43fa9d96d6e"
   }
 }

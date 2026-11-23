@@ -16,8 +16,10 @@ function FirebirdDialect: IFrDbDialect;
 /// <param name="pConnection">FireDAC-style 'Database=..;User_Name=..;Password=..'.</param>
 /// <returns>An open provider; it closes with its last reference.</returns>
 /// <exception cref="EFbConnStringError">The string names OpenMode, CreateDatabase, DropDatabase or a connection definition, or holds a line break (DRagLint.Sql.FbConnString).</exception>
-/// <exception cref="EFrDbProviderError">The database is SQL dialect 1.</exception>
-/// <remarks>One attachment. Reads run in read-only transactions; nothing is written before BeginWrite.
+/// <exception cref="EFrDbProviderError">The string names another driver than FB (it could create a file), or the database is
+/// SQL dialect 1.</exception>
+/// <remarks>One attachment. Reads run in read-only transactions; nothing is written before BeginWrite. A write transaction
+/// with a reserved table is READ COMMITTED, so it sees all that was committed before it got the lock; the others are SNAPSHOT.
 /// Not thread-safe.</remarks>
 function OpenFirebirdProvider(const pConnection: string): IFrDbProvider;
 
@@ -169,13 +171,24 @@ begin
   Result := Format('%s(%d,%d)', [if pType.SubType = SUB_DECIMAL then 'DECIMAL' else 'NUMERIC', VPrecision, -pType.Scale]);
 end;
 
+{ '' counts as plain (no name given) }
+function IsPlainName(const pName: string): Boolean;
+var
+  VChar: Char;
+begin
+  Result := True;
+  for VChar in pName do
+    Result := Result and CharInSet(VChar, ['A'..'Z', 'a'..'z', '0'..'9', '_', '$']);
+end;
+
 function CharClause(const pType: TFrTypeFacts; pWithCharset: Boolean): string;
 var
   VLength: Integer;
 begin
   Result := '';
   VLength := if pType.CharLength > 0 then pType.CharLength else pType.ByteLength;
-  if VLength <= 0 then
+  { the character set of a repository domain goes into DDL as it is: anything but a plain name is refused }
+  if (VLength <= 0) or (pWithCharset and not IsPlainName(pType.Charset)) then
     Exit;
   Result := Format('%s(%d)', [if pType.FieldType = FB_CHAR then 'CHAR' else 'VARCHAR', VLength]);
   if pType.SubType = SUB_OCTETS then
@@ -284,16 +297,18 @@ begin
   Result := Format('SELECT COUNT(%s) FROM %s', [QuoteIdent(pColumn), QuoteIdent(pTable)]);
 end;
 
-{ The condition "the new value is not the old value", for a CAST that succeeded. }
+{ The condition "the new value is not the old value", for a CAST that succeeded. Text to number also counts leading zeros
+  (007), text to date the words that mean another value tomorrow. }
 function TFrFirebirdDialect.LossTest(const pOldExpr, pNewExpr: string; const pOld, pNew: TFrTypeFacts): string;
 begin
   if IsChar(pOld) and IsChar(pNew) then
     Exit(Format('(%0:s IS DISTINCT FROM %1:s OR CHAR_LENGTH(%0:s) IS DISTINCT FROM CHAR_LENGTH(%1:s))',
       [pOldExpr, pNewExpr]));
   if IsChar(pOld) and IsNumeric(pNew) then
-    Exit(Format('(CAST(%s AS DECFLOAT(34)) IS DISTINCT FROM CAST(%s AS DECFLOAT(34)))', [pOldExpr, pNewExpr]));
+    Exit(Format('(CAST(%0:s AS DECFLOAT(34)) IS DISTINCT FROM CAST(%1:s AS DECFLOAT(34)) OR ' +
+      'TRIM(REPLACE(REPLACE(%0:s, ''-'', ''''), ''+'', '''')) SIMILAR TO ''0[0-9]%%'')', [pOldExpr, pNewExpr]));
   if IsChar(pOld) then
-    Exit('(1 = 0)');
+    Exit(Format('(UPPER(TRIM(%s)) IN (''NOW'', ''TODAY'', ''TOMORROW'', ''YESTERDAY''))', [pOldExpr]));
   Result := Format('(%s IS DISTINCT FROM %s)', [pOldExpr, Cast(pNewExpr, pOld)]);
 end;
 
@@ -304,11 +319,12 @@ begin
     [QuoteIdent(pTable), QuoteIdent(pColumn), TypeClause(pNew, True), Cast(':S', pNew)]);
 end;
 
+{ K = 1: the cast succeeded; a value whose comparison then fails counts as changed. Cast failures are CountCastFailures' }
 function TFrFirebirdDialect.CountLosses(const pTable, pColumn: string; const pOld, pNew: TFrTypeFacts): string;
 begin
-  Result := Format('EXECUTE BLOCK RETURNS (N BIGINT) AS DECLARE S TYPE OF COLUMN %0:s.%1:s; DECLARE V %2:s; BEGIN ' +
-    'N = 0; FOR SELECT %1:s FROM %0:s INTO :S DO BEGIN V = %3:s; IF (%4:s) THEN N = N + 1; ' +
-    'WHEN ANY DO BEGIN END END SUSPEND; END', [QuoteIdent(pTable), QuoteIdent(pColumn), TypeClause(pNew, True),
+  Result := Format('EXECUTE BLOCK RETURNS (N BIGINT) AS DECLARE S TYPE OF COLUMN %0:s.%1:s; DECLARE V %2:s; DECLARE K SMALLINT; BEGIN ' +
+    'N = 0; FOR SELECT %1:s FROM %0:s INTO :S DO BEGIN K = 0; V = %3:s; K = 1; IF (%4:s) THEN N = N + 1; ' +
+    'WHEN ANY DO IF (K = 1) THEN N = N + 1; END SUSPEND; END', [QuoteIdent(pTable), QuoteIdent(pColumn), TypeClause(pNew, True),
     Cast(':S', pNew), LossTest(':S', ':V', pOld, pNew)]);
 end;
 
@@ -330,10 +346,28 @@ begin
   pTx.Options.DisconnectAction := xdRollback;
 end;
 
+{ Another FireDAC driver would open, and some create, whatever Database names. }
+procedure RequireFbDriver(const pConnection: string);
+const
+  KEY_DRIVER = 'DriverID';
+  DRIVER_FB = 'FB';
+var
+  VPair, VValue: string;
+begin
+  for VPair in pConnection.Split([';'], TStringSplitOptions.ExcludeEmpty) do
+    if SameText(Trim(Copy(VPair, 1, Pos('=', VPair + '=') - 1)), KEY_DRIVER) then
+    begin
+      VValue := Trim(Copy(VPair, Pos('=', VPair + '=') + 1, MaxInt));
+      if not SameText(VValue, DRIVER_FB) then
+        raise EFrDbProviderError.CreateFmt('%s=%s is not allowed in --connection: only %s is', [KEY_DRIVER, VValue, DRIVER_FB]);
+    end;
+end;
+
 constructor TFrFirebirdProvider.Create(const pConnection: string);
 begin
   inherited Create;
   RequireFbConnectionSafe(pConnection);
+  RequireFbDriver(pConnection);
   FDialect := TFrFirebirdDialect.Create;
   FSession := TGUID.NewGuid.ToString;
   FConn := OpenSourceConnection(pConnection, FDatabase);
@@ -413,13 +447,14 @@ function TFrFirebirdProvider.ScalarIn(pTx: TFDTransaction; const pSql: string): 
 var
   VQuery: TFDQuery;
 begin
-  Result := 0;
   VQuery := TFDQuery.Create(nil);
   try
     PrepareQuery(VQuery, pTx);
     VQuery.Open(pSql);
-    if not VQuery.Eof then
-      Result := VQuery.Fields[0].AsLargeInt;
+    { a check without an answer must not read as "0 problems" }
+    if VQuery.Eof or VQuery.Fields[0].IsNull then
+      raise EFrDbProviderError.Create('the query returned no value: ' + pSql);
+    Result := VQuery.Fields[0].AsLargeInt;
   finally
     VQuery.Free;
   end;
@@ -747,8 +782,10 @@ begin
     raise EFrDbProviderError.Create('a write transaction is already open');
   EndRead;
   FWrite.Options.Params.Clear;
+  FWrite.Options.Isolation := xiSnapshot;
   if pLockTable <> '' then
   begin
+    FWrite.Options.Isolation := xiReadCommitted;
     FWrite.Options.Params.Add('lock_write=' + pLockTable);
     FWrite.Options.Params.Add('protected');
   end;
@@ -788,6 +825,8 @@ end;
 
 procedure TFrFirebirdProvider.Rollback;
 begin
+  if not FConn.Connected then
+    raise EFrDbProviderError.Create('the connection is lost');
   if FWrite.Active then
     FWrite.Rollback;
 end;

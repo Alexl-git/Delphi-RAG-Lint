@@ -55,4 +55,10 @@ control). 3. Provider + apply against a scratch embedded database, mid-sequence 
   FLOAT -> DOUBLE); everything else is blocked or safe path even where Firebird would accept it.
 * D9 the safe path's UPDATE fires triggers: active UPDATE triggers block it.
 * D10 `OpenMode`, `CreateDatabase`, `DropDatabase` and connection definitions in `--connection` are refused
-  (FireDAC could create or drop a database).
+  (FireDAC could create or drop a database); so is another `DriverID` (SQLite creates the file).
+* D11 drops run in their own group after the safe changes: a drop before a safe column moved it one position to the right
+  (F72), and a failed copy must not cost a column.
+* D12 `--select` with `--apply` needs the `plan <hash>` line of the dry run: ids are positions.
+* D13 the swap transaction is READ COMMITTED with a PROTECTED WRITE reservation: a SNAPSHOT is older than its lock.
+* D14 leading zeros and TODAY / NOW / TOMORROW / YESTERDAY count as `value-loss`; a value the scan cannot compare counts too.
+* D15 a domain change keeps the NOT NULL the old domain gave (SET NOT NULL in the same transaction).

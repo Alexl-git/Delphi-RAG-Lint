@@ -194,8 +194,11 @@ const
   FB_DATE = 12;
   FB_TIMESTAMP = 35;
   FB_VARCHAR = 37;
+  FB_TIME_TZ = 28;
+  FB_TIMESTAMP_TZ = 29;
   FB_BLOB = 261;
   SUB_OCTETS = 1;
+  CHARSET_OCTETS = 'OCTETS';
   { width order of the exact numeric types; 0 = not exact }
   RANK_SMALLINT = 1;
   RANK_INTEGER = 2;
@@ -241,7 +244,8 @@ type
       const pDomain: TFrDomainFacts; pVerdict: TFrTypeVerdict);
     procedure PlanSafeType(const pCol: TFrRepoColumn; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts;
       const pDomain: TFrDomainFacts; const pHard: TArray<string>);
-    function SafeReasons(const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts; const pDomain: TFrDomainFacts): TArray<string>;
+    function SafeReasons(const pColumn: string; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts;
+      const pDomain: TFrDomainFacts): TArray<string>;
     function BuildSafeSteps(const pCol: TFrRepoColumn; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts): TFrSafeSteps;
     procedure PlanNullability;
     procedure PlanAdds;
@@ -298,9 +302,29 @@ begin
   Result := if pType.CharLength > 0 then pType.CharLength else pType.ByteLength;
 end;
 
+{ Firebird 4 marks a binary column by its character set; the sub type stays 0 }
 function IsOctets(const pType: TFrTypeFacts): Boolean;
 begin
-  Result := IsChar(pType) and (pType.SubType = SUB_OCTETS);
+  Result := IsChar(pType) and ((pType.SubType = SUB_OCTETS) or SameText(pType.Charset, CHARSET_OCTETS));
+end;
+
+{ False when one side does not say: the repository holds no character set for a column without a domain }
+function OctetsDiffer(const pLeft, pRight: TFrTypeFacts): Boolean;
+begin
+  Result := (IsOctets(pLeft) <> IsOctets(pRight)) and ((pLeft.Charset <> '') or (pLeft.SubType <> 0)) and
+    ((pRight.Charset <> '') or (pRight.SubType <> 0));
+end;
+
+{ characters are compared with characters and bytes with bytes }
+function SameLength(const pLeft, pRight: TFrTypeFacts): Boolean;
+begin
+  Result := if (pLeft.CharLength > 0) and (pRight.CharLength > 0) then pLeft.CharLength = pRight.CharLength
+    else pLeft.ByteLength = pRight.ByteLength;
+end;
+
+function IsZoned(const pType: TFrTypeFacts): Boolean;
+begin
+  Result := (pType.FieldType = FB_TIME_TZ) or (pType.FieldType = FB_TIMESTAMP_TZ);
 end;
 
 function SameType(const pLeft, pRight: TFrTypeFacts): Boolean;
@@ -309,7 +333,7 @@ begin
   if not Result then
     Exit;
   if IsChar(pLeft) then
-    Result := (CharsOf(pLeft) = CharsOf(pRight)) and (IsOctets(pLeft) = IsOctets(pRight))
+    Result := SameLength(pLeft, pRight) and not OctetsDiffer(pLeft, pRight)
   else if pLeft.FieldType = FB_BLOB then
     Result := pLeft.SubType = pRight.SubType
   else
@@ -331,7 +355,8 @@ function TypeVerdict(const pOld, pNew: TFrTypeFacts): TFrTypeVerdict;
 begin
   if SameType(pOld, pNew) then
     Exit(tvSame);
-  if (pOld.FieldType = FB_BLOB) or (pNew.FieldType = FB_BLOB) or (IsOctets(pOld) <> IsOctets(pNew)) then
+  { a comparison of two zoned values ignores the zone, so no scan could see that it is lost }
+  if (pOld.FieldType = FB_BLOB) or (pNew.FieldType = FB_BLOB) or IsOctets(pOld) or IsOctets(pNew) or IsZoned(pOld) or IsZoned(pNew) then
     Exit(tvUnsupported);
   if IsChar(pOld) and (pOld.FieldType = pNew.FieldType) then
     Exit(if CharsOf(pNew) > CharsOf(pOld) then tvWiden else tvShrink);
@@ -550,6 +575,10 @@ begin
     raise EFrAlterError.CreateFmt('the database has no table %s (alter-table never creates one)', [FRepo.TableName]);
   if FLive.NotPlainTable <> '' then
     raise EFrAlterError.CreateFmt('%s is %s: only a plain table can be altered', [FRepo.TableName, FLive.NotPlainTable]);
+  { names are matched without case, so a delimited lower-case name could be taken for its upper-case twin }
+  for VCol in FLive.Columns do
+    if VCol.Name <> VCol.Name.ToUpper then
+      raise EFrAlterError.CreateFmt('column "%s" has a delimited mixed-case name: the table is not handled', [VCol.Name]);
   for VRename in FOptions.Renames do
   begin
     if not FLive.FindColumn(VRename.OldName, VCol) then
@@ -619,6 +648,13 @@ begin
   Result := pReason = '';
 end;
 
+{ A character column whose length the repository knows in bytes only: a DDL length is in characters. }
+function LengthReason(const pCol: TFrRepoColumn): string;
+begin
+  Result := if (pCol.DomainName = '') and IsChar(pCol.DataType) and (pCol.DataType.CharLength <= 0) then
+    Reason(BLOCK_INCONSISTENT, 'the row holds no character length (CHAR_LENGTH, STRING_SIZE)') else '';
+end;
+
 { What hangs on a column: every type change and every drop of such a column is blocked. }
 function TAlterPlanner.ObjectReasons(const pColumn: string): TArray<string>;
 var
@@ -656,7 +692,7 @@ begin
       VChange := NewChange(fakCreateDomain, fcoInsert, VCol.DomainName, '', '', TypeText(VDomain.DataType, ''));
       VChange.Change.Target := 'domain ' + VCol.DomainName;
       VChange.Ddl := [FDialect.CreateDomain(VDomain)];
-      if FDialect.TypeClause(VDomain.DataType, False) = '' then
+      if FDialect.TypeClause(VDomain.DataType, True) = '' then
         VChange.Change.Blocked := Reason(BLOCK_UNSUPPORTED, 'the domain type cannot be written as DDL');
       AddChange(VChange);
     end;
@@ -752,6 +788,8 @@ begin
   if IsChar(VDomain.DataType) and (VDomain.DataType.Charset <> '') and (pLive.DataType.Charset <> '') and
     not SameText(VDomain.DataType.Charset, pLive.DataType.Charset) then
     VHard := VHard + [Reason(BLOCK_CHARSET, Format('%s to %s', [pLive.DataType.Charset, VDomain.DataType.Charset]))];
+  if (VVerdict <> tvSame) and (LengthReason(pCol) <> '') then
+    VHard := VHard + [LengthReason(pCol)];
   if FDialect.TypeClause(VTarget, False) = '' then
     VHard := VHard + [Reason(BLOCK_UNSUPPORTED, 'the type cannot be written as DDL')];
   if VVerdict = tvUnsupported then
@@ -767,7 +805,7 @@ begin
     if VVerdict in [tvShrink, tvLossy, tvConvert] then
     begin
       VHard := [VerdictReason(VVerdict, TypeText(pLive.DataType, ''), TypeText(VTarget, ''))] + VHard;
-      if (Length(VHard) = 1) and (Length(SafeReasons(pLive, VTarget, VDomain)) = 0) then
+      if (Length(VHard) = 1) and (Length(SafeReasons(pCol.Name, pLive, VTarget, VDomain)) = 0) then
         VHard[0] := VHard[0] + SAFE_HINT;
     end;
     VChange.Change.Blocked := string.Join('; ', VHard);
@@ -788,6 +826,13 @@ begin
   VText := if pCol.DomainName <> '' then FDialect.QuoteIdent(pCol.DomainName) else FDialect.TypeClause(pTarget, False);
   VChange.Ddl := [FDialect.AlterType(FRepo.TableName, pCol.Name, VText)];
   VChange.ExpectType := pTarget;
+  { a NOT NULL only the old domain gave goes away with it; dropping a NOT NULL is never a side effect }
+  if pLive.DomainNotNull and not pLive.ColumnNotNull and not pDomain.NotNull then
+  begin
+    VChange.Ddl := VChange.Ddl + [FDialect.SetNotNull(FRepo.TableName, pCol.Name, True)];
+    if fdcSetNotNull not in FDialect.Capabilities then
+      VChange.Change.Blocked := Reason(BLOCK_DIALECT, FDialect.Name + ' cannot keep the NOT NULL of domain ' + pLive.DomainName);
+  end;
   if pDomain.NotNull and not pLive.NotNull then
     VChange.Prechecks := [Precheck(FDialect.CountNulls(FRepo.TableName, pLive.Name), BLOCK_NULLS,
       '%d row(s) are NULL and the domain is NOT NULL')];
@@ -799,22 +844,27 @@ begin
   AddChange(VChange);
 end;
 
-function TAlterPlanner.SafeReasons(const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts;
+{ pColumn = the column's name after the changes: the temporary name is made from it }
+function TAlterPlanner.SafeReasons(const pColumn: string; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts;
   const pDomain: TFrDomainFacts): TArray<string>;
 var
   VOther: TFrColumnFacts;
+  VTemp: string;
 begin
   Result := nil;
+  VTemp := pColumn + TEMP_SUFFIX;
   if fdcSafePath not in FDialect.Capabilities then
     Result := Result + [Reason(BLOCK_DIALECT, FDialect.Name + ' has no safe path')];
   if pLive.HasColumnGrants then
     Result := Result + [Reason(BLOCK_GRANTS, 'the column has its own GRANTs; they would be lost')];
   if Length(FLive.UpdateTriggers) > 0 then
     Result := Result + [Reason(BLOCK_TRIGGERS, 'the copy would fire ' + string.Join(', ', FLive.UpdateTriggers))];
-  if FLive.FindColumn(pLive.Name + TEMP_SUFFIX, VOther) then
-    Result := Result + [Reason(BLOCK_TEMP_NAME, pLive.Name + TEMP_SUFFIX + ' already exists (left by an interrupted run?)')];
-  if Length(pLive.Name + TEMP_SUFFIX) > FDialect.MaxIdentifier then
-    Result := Result + [Reason(BLOCK_TEMP_NAME, pLive.Name + TEMP_SUFFIX + ' is longer than an identifier may be')];
+  if FLive.FindColumn(VTemp, VOther) then
+    Result := Result + [Reason(BLOCK_TEMP_NAME, VTemp + ' already exists (left by an interrupted run?)')]
+  else if HasText(FinalNames, VTemp) then
+    Result := Result + [Reason(BLOCK_TEMP_NAME, VTemp + ' is a column of the planned table')];
+  if Length(VTemp) > FDialect.MaxIdentifier then
+    Result := Result + [Reason(BLOCK_TEMP_NAME, VTemp + ' is longer than an identifier may be')];
   if (pLive.DefaultSource <> '') and not ((IsChar(pLive.DataType) and IsChar(pTarget)) or
     (IsNumber(pLive.DataType) and IsNumber(pTarget))) then
     Result := Result + [Reason(BLOCK_DEFAULT, 'the column has ' + pLive.DefaultSource + ', which may not fit the new type')];
@@ -822,28 +872,33 @@ begin
     Result := Result + [Reason(BLOCK_DOMAIN, Format('domain %s is NOT NULL: the copy cannot start empty', [pDomain.Name]))];
 end;
 
+{ The type the copy gets: text keeps the character set and collation of the old column. }
+function CopyType(const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts): TFrTypeFacts;
+begin
+  Result := pTarget;
+  if IsChar(pTarget) and IsChar(pLive.DataType) then
+  begin
+    Result.Charset := pLive.DataType.Charset;
+    Result.Collation := pLive.DataType.Collation;
+  end;
+end;
+
+{ pTarget = the CopyType }
 function TAlterPlanner.BuildSafeSteps(const pCol: TFrRepoColumn; const pLive: TFrColumnFacts;
   const pTarget: TFrTypeFacts): TFrSafeSteps;
 var
   VTable, VDefinition: string;
-  VTarget: TFrTypeFacts;
 begin
   VTable := FRepo.TableName;
   Result := Default(TFrSafeSteps);
   Result.Column := pCol.Name;
   Result.TempColumn := pCol.Name + TEMP_SUFFIX;
-  VTarget := pTarget;
-  if IsChar(pTarget) and IsChar(pLive.DataType) then
-  begin
-    VTarget.Charset := pLive.DataType.Charset;
-    VTarget.Collation := pLive.DataType.Collation;
-  end;
-  VDefinition := if pCol.DomainName <> '' then FDialect.QuoteIdent(pCol.DomainName) else FDialect.TypeClause(VTarget, True);
-  if (pCol.DomainName = '') and (VTarget.Collation <> '') then
-    VDefinition := VDefinition + ' COLLATE ' + VTarget.Collation;
+  VDefinition := if pCol.DomainName <> '' then FDialect.QuoteIdent(pCol.DomainName) else FDialect.TypeClause(pTarget, True);
+  if (pCol.DomainName = '') and (pTarget.Collation <> '') then
+    VDefinition := VDefinition + ' COLLATE ' + FDialect.QuoteIdent(pTarget.Collation);
   Result.AddSql := FDialect.AddColumn(VTable, Result.TempColumn, VDefinition);
-  Result.CopySql := FDialect.CopyColumn(VTable, pCol.Name, Result.TempColumn, VTarget);
-  Result.MismatchSql := FDialect.CountMismatches(VTable, pCol.Name, Result.TempColumn, pLive.DataType, VTarget);
+  Result.CopySql := FDialect.CopyColumn(VTable, pCol.Name, Result.TempColumn, pTarget);
+  Result.MismatchSql := FDialect.CountMismatches(VTable, pCol.Name, Result.TempColumn, pLive.DataType, pTarget);
   Result.CleanupSql := FDialect.DropColumn(VTable, Result.TempColumn);
   Result.SwapSql := [FDialect.DropColumn(VTable, pCol.Name), FDialect.RenameColumn(VTable, Result.TempColumn, pCol.Name)];
   if fdcColumnPosition in FDialect.Capabilities then
@@ -861,23 +916,25 @@ procedure TAlterPlanner.PlanSafeType(const pCol: TFrRepoColumn; const pLive: TFr
 var
   VChange: TFrAlterChange;
   VReasons: TArray<string>;
+  VCopy: TFrTypeFacts;
   VDependency: Integer;
 begin
   VChange := NewChange(fakSafeType, fcoUpdate, pCol.Name, 'TYPE', TypeText(pLive.DataType, pLive.DomainName),
     TypeText(pTarget, pCol.DomainName));
   VChange.Change.Checked := False;
   VChange.ExpectType := pTarget;
-  VReasons := pHard + SafeReasons(pLive, pTarget, pDomain);
+  VReasons := pHard + SafeReasons(pCol.Name, pLive, pTarget, pDomain);
   if Length(VReasons) > 0 then
     VChange.Change.Blocked := string.Join('; ', VReasons)
   else
   begin
-    VChange.Safe := BuildSafeSteps(pCol, pLive, pTarget);
+    VCopy := CopyType(pLive, pTarget);
+    VChange.Safe := BuildSafeSteps(pCol, pLive, VCopy);
     VChange.Notes := ['safe path: ADD, COPY and SWAP are three separate transactions; the old column is dropped only ' +
       'after every row was compared'];
     VChange.Prechecks := [
-      Precheck(FDialect.CountCastFailures(FRepo.TableName, pLive.Name, pTarget), BLOCK_CAST, '%d value(s) do not fit the new type'),
-      Precheck(FDialect.CountLosses(FRepo.TableName, pLive.Name, pLive.DataType, pTarget), BLOCK_LOSS, '%d value(s) would change')];
+      Precheck(FDialect.CountCastFailures(FRepo.TableName, pLive.Name, VCopy), BLOCK_CAST, '%d value(s) do not fit the new type'),
+      Precheck(FDialect.CountLosses(FRepo.TableName, pLive.Name, pLive.DataType, VCopy), BLOCK_LOSS, '%d value(s) would change')];
     for VDependency in [IdOf(fakCreateDomain, pCol.DomainName), IdOf(fakRename, pCol.Name)] do
       if VDependency > 0 then
         VChange.DependsOn := VChange.DependsOn + [VDependency];
@@ -948,6 +1005,8 @@ begin
     if (VCol.DomainName <> '') and (VReason = '') then
       DomainOf(VCol, VDomain, VInLive, VReason);
     VDefinition := if VCol.DomainName <> '' then FDialect.QuoteIdent(VCol.DomainName) else FDialect.TypeClause(VCol.DataType, True);
+    if VReason = '' then
+      VReason := LengthReason(VCol);
     if (VReason = '') and (FDialect.TypeClause(VCol.DataType, False) = '') then
       VReason := Reason(BLOCK_UNSUPPORTED, 'the type cannot be written as DDL');
     VHasDefault := VDomain.DefaultSource <> '';

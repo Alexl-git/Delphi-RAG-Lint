@@ -9,6 +9,7 @@ Lane TT-ALTER (lane/v154-tt-alter):
 
 - NEW `drag-lint repo alter-table` (Table Tools): plans and, with `--apply`, runs the ALTER TABLE that brings a Firebird table in line with a field-repository column; see wiki page repo-alter-table.
 - `repo alter-table` now refuses a --connection string through the shared `DRagLint.Sql.FbConnString` (OpenMode, CreateDatabase, DropDatabase, ConnectionDef, ConnectionDefName, and a line break) instead of a private copy of the key list; test L9 in run_repo_cli_alter.ps1.
+- `repo alter-table` review: `--select` with `--apply` needs the `plan <hash>` line of its dry run; drops run last, after the safe changes; leading zeros, TODAY / NOW words and values the scan cannot compare are value losses; OCTETS, WITH TIME ZONE and delimited mixed-case names are refused; a domain change keeps NOT NULL; another DriverID than FB is refused; the swap is READ COMMITTED under its table lock; a lost connection is reported as `unknown`; `not applied` names what an apply left out.
 
 ## v1.53.0-alpha -- 2026-11-23
 

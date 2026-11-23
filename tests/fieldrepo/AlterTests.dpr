@@ -59,6 +59,7 @@ const
   T_BIG = 16;
   T_DOUBLE = 27;
   T_TS = 35;
+  T_TSTZ = 29;
   T_VARCHAR = 37;
   T_BLOB = 261;
 
@@ -576,6 +577,13 @@ begin
   Check('A65 a bad --rename is refused', Raises(procedure begin ParseRenames('AB') end, 'OLD=NEW'));
 end;
 
+function ReportOf(const pPlan: TFrAlterPlan): TFrAlterReport;
+begin
+  Result := Default(TFrAlterReport);
+  Result.Plan := pPlan;
+  Result.DryRun := True;
+end;
+
 procedure TestSafeSteps;
 var
   vLive: TFrTableFacts;
@@ -588,7 +596,7 @@ begin
   vLive.Columns[1].Description := 'it''s';
   vPlan := Plan(Repo([RCol('ID', Ty(T_INT)), RCol('A', Ty(T_VARCHAR, 5), '', True)]), vLive, Opt(True));
   vSafe := One(vPlan).Safe;
-  Check('A70 ADD keeps charset and collation', vSafe.AddSql = 'ALTER TABLE "T" ADD "A_NEW" VARCHAR(5) CHARACTER SET WIN1252 COLLATE WIN_PTBR', vSafe.AddSql);
+  Check('A70 ADD keeps charset and collation', vSafe.AddSql = 'ALTER TABLE "T" ADD "A_NEW" VARCHAR(5) CHARACTER SET WIN1252 COLLATE "WIN_PTBR"', vSafe.AddSql);
   Check('A71 COPY casts', vSafe.CopySql = 'UPDATE "T" SET "A_NEW" = CAST("A" AS VARCHAR(5) CHARACTER SET WIN1252)', vSafe.CopySql);
   Check('A72 SWAP: drop, rename, position, NOT NULL, description', string.Join('|', vSafe.SwapSql) =
     'ALTER TABLE "T" DROP "A"|ALTER TABLE "T" ALTER COLUMN "A_NEW" TO "A"|ALTER TABLE "T" ALTER COLUMN "A" POSITION 2|' +
@@ -596,6 +604,79 @@ begin
   Check('A73 clean-up drops the copy only', vSafe.CleanupSql = 'ALTER TABLE "T" DROP "A_NEW"');
   Check('A74 the pre-scans look at cast failures and at changed values', (One(vPlan).Prechecks[0].Code = BLOCK_CAST) and
     (One(vPlan).Prechecks[1].Code = BLOCK_LOSS));
+end;
+
+{ ---- A80: the 2026-11-23 review (data loss, silent drift) ---- }
+
+procedure TestReviewPlan;
+var
+  vLive: TFrTableFacts;
+  vRepo: TFrRepoTable;
+  vOpt: TFrAlterOptions;
+  vPlan: TFrAlterPlan;
+  vHash: string;
+begin
+  { the temporary name }
+  vOpt := Opt(True);
+  vOpt.Renames := ParseRenames('OLD=A');
+  vRepo := Repo([RCol('A', Ty(T_VARCHAR, 5)), RCol('A_NEW', Ty(T_INT))]);
+  vPlan := Plan(vRepo, Live([LCol('OLD', Ty(T_VARCHAR, 10)), LCol('A_NEW', Ty(T_INT))]), vOpt);
+  Check('A80 the temporary name is made from the NEW name after a rename', Text(vPlan).Contains('BLOCKED: temp-name'), Text(vPlan));
+  vPlan := Plan(vRepo, Live([LCol('A', Ty(T_VARCHAR, 10))]), Opt(True));
+  Check('A80b a column the plan adds takes the temporary name too', Text(vPlan).Contains('BLOCKED: temp-name'), Text(vPlan));
+  { the pre-scans cast to the type the copy will have }
+  vLive := Live([LCol('A', Ty(T_VARCHAR, 20))]);
+  vLive.Columns[0].DataType.Charset := 'WIN1252';
+  vPlan := Plan(Repo([RCol('A', Ty(T_VARCHAR, 5))]), vLive, Opt(True));
+  Check('A81 the pre-scans cast to the character set of the copy', One(vPlan).Prechecks[0].Sql.Contains('AS VARCHAR(5) CHARACTER SET WIN1252)') and
+    One(vPlan).Prechecks[1].Sql.Contains('AS VARCHAR(5) CHARACTER SET WIN1252)'), One(vPlan).Prechecks[0].Sql);
+  { a NOT NULL that only the old domain gave }
+  vRepo := Repo([RCol('A', Ty(T_INT), 'DFREE', True)]);
+  vRepo.Domains := [Dom('DFREE', Ty(T_INT))];
+  vLive := Live([LCol('A', Ty(T_INT), 'DNN')]);
+  vLive.Columns[0].DomainNotNull := True;
+  vLive.Domains := [Dom('DNN', Ty(T_INT)), Dom('DFREE', Ty(T_INT))];
+  vPlan := Plan(vRepo, vLive, Opt);
+  Check('A82 a domain change keeps the NOT NULL the old domain gave', Free1(vPlan) and (Length(One(vPlan).Ddl) = 2) and
+    (One(vPlan).Ddl[High(One(vPlan).Ddl)] = 'ALTER TABLE "T" ALTER COLUMN "A" SET NOT NULL'), Text(vPlan));
+  Check('A82b a dialect without SET NOT NULL blocks it', Blocked(PlanAlter(vRepo, vLive, Opt, TPoorDialect.Create), BLOCK_DIALECT));
+  vLive.Columns[0].DomainNotNull := False;
+  vRepo.Columns[0].NotNull := False;
+  Check('A82c control: no NOT NULL, one statement', Length(One(Plan(vRepo, vLive, Opt)).Ddl) = 1);
+  { names that differ by case only }
+  Check('A83 a quoted mixed-case column is refused, not mistaken for its upper-case twin', Raises(procedure begin
+    Plan(Repo([RCol('A', Ty(T_BIG))]), Live([LCol('a', Ty(T_INT)), LCol('A', Ty(T_INT))]), Opt) end, 'mixed-case'));
+  { a character column without a character length }
+  vRepo := Repo([RCol('A', Ty(T_VARCHAR))]);
+  vRepo.Columns[0].DataType.ByteLength := 40;
+  vLive := Live([LCol('A', Ty(T_VARCHAR, 10))]);
+  vLive.Columns[0].DataType.ByteLength := 40;
+  Check('A84 bytes are not characters: 40 bytes of a 10 character column = no change', Length(Plan(vRepo, vLive, Opt).Changes) = 0, Text(Plan(vRepo, vLive, Opt)));
+  vLive.Columns[0].DataType.ByteLength := 20;
+  Check('A84b another byte length without a character length: BLOCKED repo-inconsistent', Blocked(Plan(vRepo, vLive, Opt), BLOCK_INCONSISTENT), Text(Plan(vRepo, vLive, Opt)));
+  vRepo.Columns := vRepo.Columns + [RCol('B', Ty(T_INT))];
+  vLive := Live([LCol('B', Ty(T_INT))]);
+  Check('A84c ADD of such a column: BLOCKED repo-inconsistent', Blocked(Plan(vRepo, vLive, Opt), BLOCK_INCONSISTENT), Text(Plan(vRepo, vLive, Opt)));
+  { OCTETS is a character set in Firebird 4 (sub type 0); a time zone does not survive a conversion }
+  vLive := Live([LCol('A', Ty(T_VARCHAR, 10))]);
+  vLive.Columns[0].DataType.Charset := 'OCTETS';
+  Check('A85 OCTETS by character set: BLOCKED unsupported-type', Blocked(Plan(Repo([RCol('A', Ty(T_VARCHAR, 20))]), vLive, Opt), BLOCK_UNSUPPORTED) and
+    Blocked(Plan(Repo([RCol('A', Ty(T_VARCHAR, 5))]), vLive, Opt(True)), BLOCK_UNSUPPORTED));
+  Check('A85c control: the same OCTETS column is no change', Length(Plan(Repo([RCol('A', Ty(T_VARCHAR, 10))]), vLive, Opt).Changes) = 0);
+  Check('A86 TIMESTAMP WITH TIME ZONE to TIMESTAMP loses the zone: BLOCKED unsupported-type',
+    Blocked(Plan(Repo([RCol('A', Ty(T_TS))]), Live([LCol('A', Ty(T_TSTZ))]), Opt(True)), BLOCK_UNSUPPORTED));
+  { a repository domain's character set is not free text }
+  vRepo := Repo([RCol('A', Ty(T_INT)), RCol('B', Ty(T_VARCHAR, 5), 'DX')]);
+  vRepo.Domains := [Dom('DX', Ty(T_VARCHAR, 5))];
+  vRepo.Domains[0].DataType.Charset := 'UTF8 CHECK (1 = 0)';
+  vPlan := Plan(vRepo, Live([LCol('A', Ty(T_INT))]), Opt);
+  Check('A87 a character set that is not a name never reaches DDL', One(vPlan).Change.Blocked.StartsWith(BLOCK_UNSUPPORTED), Text(vPlan));
+  vRepo.Domains[0].DataType.Charset := 'UTF8';
+  Check('A87c control: a plain character set does', One(Plan(vRepo, Live([LCol('A', Ty(T_INT))]), Opt)).Change.Checked);
+  { the report names the plan, so --select ids cannot be used on another one }
+  vHash := vPlan.Hash;
+  Check('A88 text and JSON carry the plan hash', string.Join('|', RenderAlterText(ReportOf(vPlan))).Contains('|plan ' + vHash) and
+    RenderAlterJson(ReportOf(vPlan)).Contains('"plan_hash":"' + vHash + '"'));
 end;
 
 { ---- B: pre-checks and apply on a fake provider ---- }
@@ -609,6 +690,7 @@ type
     FOpen: Boolean;
     FCounts: TStringList;
     FFailOn: string;
+    FFailRollback: Boolean;
     FCommits: Integer;
     constructor Create(const pLive: TFrTableFacts);
     destructor Destroy; override;
@@ -699,6 +781,8 @@ end;
 
 procedure TFakeProvider.Rollback;
 begin
+  if FFailRollback then
+    raise EFrDbProviderError.Create('connection lost');
   if FOpen then
     FLog.Add('rollback');
   FOpen := False;
@@ -796,6 +880,7 @@ var
   vProvider: IFrDbProvider;
   vOutcome: TFrAlterOutcome;
   vOpt: TFrAlterOptions;
+  vReport: TFrAlterReport;
 
   procedure Start(const pFail: string);
   begin
@@ -854,6 +939,59 @@ begin
   vFake.FFailOn := ' DROP "A';
   vOutcome := ApplyAlterPlan(vProvider, vPlan, RunPrechecks(vProvider, vPlan), [2]);
   Check('B27 a failing clean-up is named as a leftover', (States = 'safe A=leftover') and vOutcome.Groups[0].Error.Contains('A_NEW is left'), States);
+  { a drop comes last: a failing safe change leaves it undone, and it cannot move the safe column's position }
+  vLive := Live([LCol('X', Ty(T_INT)), LCol('A', Ty(T_VARCHAR, 10)), LCol('B', Ty(T_INT))]);
+  vPlan := Plan(Repo([RCol('A', Ty(T_VARCHAR, 5)), RCol('B', Ty(T_INT))]), vLive, Opt(True));
+  vFake := TFakeProvider.Create(vLive);
+  vProvider := vFake;
+  vFake.FAfter := Live([LCol('A', Ty(T_VARCHAR, 5)), LCol('B', Ty(T_INT))]);
+  vOutcome := ApplyAlterPlan(vProvider, vPlan, RunPrechecks(vProvider, vPlan), [1, 2]);
+  Check('B29 drops run after the safe changes, in their own group', States = 'safe A=committed drop=committed', States);
+  vFake := TFakeProvider.Create(vLive);
+  vProvider := vFake;
+  vFake.FFailOn := 'UPDATE "T"';
+  vOutcome := ApplyAlterPlan(vProvider, vPlan, RunPrechecks(vProvider, vPlan), [1, 2]);
+  Check('B29b a failing safe change: nothing was dropped', (States = 'safe A=compensated drop=not-run') and not vFake.FLog.Text.Contains('exec ALTER TABLE "T" DROP "X"'), States);
+  { a rollback that fails too: the state is not known and not claimed }
+  vFake := TFakeProvider.Create(vLive);
+  vProvider := vFake;
+  vFake.FFailOn := 'DROP "X"';
+  vFake.FFailRollback := True;
+  vOutcome := ApplyAlterPlan(vProvider, vPlan, RunPrechecks(vProvider, vPlan), [1]);
+  Check('B29d a failing rollback is reported as unknown', (States = 'drop=unknown') and not vOutcome.Success, States);
+  vFake := TFakeProvider.Create(vLive);
+  vProvider := vFake;
+  vFake.FFailOn := '"A_NEW" TO "A"';
+  vFake.FFailRollback := True;
+  vOutcome := ApplyAlterPlan(vProvider, vPlan, RunPrechecks(vProvider, vPlan), [2]);
+  Check('B29e also in a safe group, and then nothing is cleaned up', (States = 'safe A=unknown') and not vFake.FLog.Text.Contains('exec ALTER TABLE "T" DROP "A_NEW"'), States);
+  { the order is verified }
+  vLive := Live([LCol('A', Ty(T_INT)), LCol('B', Ty(T_INT))]);
+  vOpt := Opt;
+  vOpt.Order := ['B'];
+  vPlan := Plan(Repo([RCol('A', Ty(T_INT)), RCol('B', Ty(T_INT))]), vLive, vOpt);
+  vFake := TFakeProvider.Create(vLive);
+  vProvider := vFake;
+  vFake.FAfter := vLive;
+  vOutcome := ApplyAlterPlan(vProvider, vPlan, RunPrechecks(vProvider, vPlan), [1]);
+  Check('B30 an order that did not take is a problem', not vOutcome.Success and (Length(vOutcome.Problems) = 1));
+  vFake := TFakeProvider.Create(vLive);
+  vProvider := vFake;
+  vFake.FAfter := Live([LCol('B', Ty(T_INT)), LCol('A', Ty(T_INT))]);
+  vOutcome := ApplyAlterPlan(vProvider, vPlan, RunPrechecks(vProvider, vPlan), [1]);
+  Check('B30c control: the wanted order is a success', vOutcome.Success, States);
+  { what an apply left out is named }
+  vLive := Live([LCol('A', Ty(T_VARCHAR, 10)), LCol('B', Ty(T_INT))]);
+  vPlan := Plan(Repo([RCol('A', Ty(T_VARCHAR, 20))]), vLive, Opt);
+  vFake := TFakeProvider.Create(vLive);
+  vProvider := vFake;
+  vFake.FAfter := Live([LCol('A', Ty(T_VARCHAR, 20)), LCol('B', Ty(T_INT))]);
+  vReport := ReportOf(vPlan);
+  vReport.DryRun := False;
+  vReport.HasOutcome := True;
+  vReport.Outcome := ApplyAlterPlan(vProvider, vPlan, RunPrechecks(vProvider, vPlan), [1]);
+  Check('B31 a successful apply names what it left out', vReport.Outcome.Success and string.Join('|', RenderAlterText(vReport)).Contains('not applied: 2') and
+    RenderAlterJson(vReport).Contains('"not_applied":[2]'), string.Join('|', RenderAlterText(vReport)));
   { prerequisites }
   vOpt := Opt;
   vOpt.Renames := ParseRenames('B=C');
@@ -1287,6 +1425,7 @@ begin
   vLive := pProvider.ReadTable('S');
   vRepo := RepoOf(vLive);
   SetCol(vRepo, 'BADNUM', Ty(T_INT));
+  SetCol(vRepo, 'ZEROS', Ty(T_INT));
   SetCol(vRepo, 'LOSSNUM', Ty(T_INT));
   SetCol(vRepo, 'LONGTXT', Ty(T_VARCHAR, 3));
   SetCol(vRepo, 'TRAIL', Ty(T_VARCHAR, 3));
@@ -1297,8 +1436,8 @@ begin
   vPlan := PlanAlter(vRepo, vLive, Opt(True), pProvider.Dialect);
   vTicket := RunPrechecks(pProvider, vPlan);
   Check('F33 cast failure found ("abc" to INTEGER)', Text(vPlan).Contains('BLOCKED: cast-failures: 1 value'), Text(vPlan));
-  Check('F34 six columns blocked by the data, two free', (Length(vPlan.Changes) = 8) and Text(vPlan).Contains('8 changes, 6 blocked, 2 unchecked'), Text(vPlan));
-  Check('F35 losses found: 1.5 to INTEGER, trailing blanks, fewer decimals, time of day', (Length(Text(vPlan).Split(['value-loss: 1 '])) = 5), Text(vPlan));
+  Check('F34 seven columns blocked by the data, two free', (Length(vPlan.Changes) = 9) and Text(vPlan).Contains('9 changes, 7 blocked, 2 unchecked'), Text(vPlan));
+  Check('F35 losses found: 1.5 to INTEGER, leading zeros, trailing blanks, fewer decimals, time of day', (Length(Text(vPlan).Split(['value-loss: 1 '])) = 6), Text(vPlan));
   { safe path: failures leave the old column }
   vBefore := Cols(pProvider, 'S');
   vFailing := TFailingProvider.Create(pProvider, 'UPDATE "S"');
@@ -1307,7 +1446,7 @@ begin
   vFailing := TFailingProvider.Create(pProvider, 'POSITION');
   vOutcome := ApplyAlterPlan(vFailing, vPlan, vTicket, [1]);
   Check('F37 the swap fails AFTER the DROP statement ran: rolled back, compensated, values intact', States(vOutcome).Contains('=compensated') and
-    (Cols(pProvider, 'S') = vBefore) and (Scalar(pProvider, 'SELECT COUNT(*) FROM S WHERE GOODNUM = ''007''') = 1), States(vOutcome) + Cols(pProvider, 'S'));
+    (Cols(pProvider, 'S') = vBefore) and (Scalar(pProvider, 'SELECT COUNT(*) FROM S WHERE GOODNUM = ''7''') = 1), States(vOutcome) + Cols(pProvider, 'S'));
   { another session writes between the copy and the swap }
   vOther := TFDConnection.Create(nil);
   try
@@ -1318,7 +1457,7 @@ begin
     vOutcome := ApplyAlterPlan(vFailing, vPlan, vTicket, [1]);
     Check('F38 a concurrent update between copy and swap is found: no drop, compensated', States(vOutcome).Contains('=compensated') and
       States(vOutcome).Contains('differ') and (Cols(pProvider, 'S') = vBefore) and (Scalar(pProvider, 'SELECT COUNT(*) FROM S WHERE GOODNUM = ''8''') = 1), States(vOutcome));
-    vOther.ExecSQL('UPDATE S SET GOODNUM = ''007'' WHERE ID = 1');
+    vOther.ExecSQL('UPDATE S SET GOODNUM = ''7'' WHERE ID = 1');
     vLocked := '';
     vSwap := TFailingProvider.Create(pProvider, 'POSITION');
     vSwap.InSwap := procedure
@@ -1393,6 +1532,62 @@ begin
   Check('F50b and nothing was deleted', Scalar(pProvider, 'SELECT COUNT(*) FROM M') = 2);
 end;
 
+procedure TestReviewLive(const pProvider: IFrDbProvider);
+var
+  vLive: TFrTableFacts;
+  vRepo: TFrRepoTable;
+  vPlan: TFrAlterPlan;
+  vOutcome: TFrAlterOutcome;
+  vFile: string;
+  vCount, vMode: Int64;
+begin
+  vCount := Scalar(pProvider, pProvider.Dialect.CountLosses('Z', 'T', Ty(T_VARCHAR, 20), Ty(T_INT)));
+  Check('F70 a value the loss scan cannot compare counts, leading zeros count, a plain number does not', vCount = 3, IntToStr(vCount));
+  vCount := Scalar(pProvider, pProvider.Dialect.CountLosses('Z', 'T', Ty(T_VARCHAR, 20), Ty(T_DATE)));
+  Check('F71 the word TODAY is not a date value, 2024-01-02 is', vCount = 1, IntToStr(vCount));
+  { drop + safe change in one apply: the safe column keeps its place between its neighbours }
+  vLive := pProvider.ReadTable('P');
+  vRepo := RepoOf(vLive);
+  vRepo.Columns := Copy(vRepo.Columns, 1, 2);
+  SetCol(vRepo, 'A', Ty(T_INT));
+  vPlan := PlanAlter(vRepo, vLive, Opt(True), pProvider.Dialect);
+  vOutcome := ApplyAlterPlan(pProvider, vPlan, RunPrechecks(pProvider, vPlan), [1, 2]);
+  Check('F72 dropping a column before it does not move a safe-path column', vOutcome.Success and (Cols(pProvider, 'P') = 'A:INTEGER B:INTEGER'), States(vOutcome) + Cols(pProvider, 'P'));
+  { NOT NULL of the old domain }
+  vLive := pProvider.ReadTable('N');
+  vRepo := RepoOf(vLive);
+  vRepo.Columns[1].DomainName := 'DFREE';
+  vPlan := PlanAlter(vRepo, vLive, Opt, pProvider.Dialect);
+  vOutcome := ApplyAlterPlan(pProvider, vPlan, RunPrechecks(pProvider, vPlan), [1]);
+  Check('F73 a domain change keeps NOT NULL', vOutcome.Success and (Cols(pProvider, 'N') = 'ID:INTEGER A:INTEGER!'), States(vOutcome) + Cols(pProvider, 'N'));
+  { the swap compares what is committed when the lock is held, not an older snapshot }
+  pProvider.BeginWrite('P');
+  try
+    vMode := pProvider.WriteScalar('SELECT MON$ISOLATION_MODE FROM MON$TRANSACTIONS WHERE MON$TRANSACTION_ID = CURRENT_TRANSACTION');
+  finally
+    pProvider.Rollback;
+  end;
+  Check('F74 the swap transaction is READ COMMITTED', vMode in [2, 3, 4], IntToStr(vMode));
+  pProvider.BeginWrite('');
+  try
+    vMode := pProvider.WriteScalar('SELECT MON$ISOLATION_MODE FROM MON$TRANSACTIONS WHERE MON$TRANSACTION_ID = CURRENT_TRANSACTION');
+  finally
+    pProvider.Rollback;
+  end;
+  Check('F74c control: the other write transactions stay SNAPSHOT', vMode = 1, IntToStr(vMode));
+  Check('F75 a check that returns no row or NULL is an error, not zero', Raises(procedure begin Scalar(pProvider, 'SELECT 1 FROM RDB$DATABASE WHERE 1 = 0') end, 'no value') and
+    Raises(procedure begin Scalar(pProvider, 'SELECT CAST(NULL AS INTEGER) FROM RDB$DATABASE') end, 'no value'));
+  vFile := TPath.Combine(GDir, 'never.sqlite');
+  Check('F76 another FireDAC driver is refused before it creates a file', Raises(procedure begin
+    OpenFirebirdProvider('DriverID=SQLite;Database=' + vFile) end, 'DriverID') and not TFile.Exists(vFile), BoolToStr(TFile.Exists(vFile), True));
+  vLive := pProvider.ReadTable('O');
+  vRepo := RepoOf(vLive);
+  Check('F77 an unchanged OCTETS column is no change', Length(PlanAlter(vRepo, vLive, Opt, pProvider.Dialect).Changes) = 0);
+  SetCol(vRepo, 'U', Ty(T_VARCHAR, 5));
+  vPlan := PlanAlter(vRepo, vLive, Opt(True), pProvider.Dialect);
+  Check('F77b a changed OCTETS column: BLOCKED unsupported-type', Blocked(vPlan, BLOCK_UNSUPPORTED), Text(vPlan));
+end;
+
 procedure TestLive;
 var
   vEmbed, vConnText: string;
@@ -1429,9 +1624,14 @@ begin
       'INSERT INTO D (ID, A, S, R) VALUES (1, ''abc'', 1, 4)',
       'CREATE TABLE IR (A INTEGER, C INTEGER)', 'CREATE INDEX IR_IX ON IR (A)',
       'CREATE TABLE S (ID INTEGER NOT NULL PRIMARY KEY, GOODNUM VARCHAR(10) NOT NULL, GOODTXT VARCHAR(10) CHARACTER SET WIN1252 DEFAULT ''x'' COLLATE WIN_PTBR, ' +
-        'BADNUM VARCHAR(10), LOSSNUM VARCHAR(10), LONGTXT VARCHAR(10), TRAIL VARCHAR(10), NUM2 NUMERIC(9,2), TS TIMESTAMP, LAST_COL INTEGER)',
-      'INSERT INTO S VALUES (1, ''007'', ''abc'', ''abc'', ''1.5'', ''abcd'', ''ab  '', 1.25, ''2020-01-01 10:00'', 5)',
-      'INSERT INTO S VALUES (2, ''12'', NULL, ''1'', ''2'', ''abc'', ''abc'', 2.5, ''2020-01-01'', NULL)']);
+        'BADNUM VARCHAR(10), LOSSNUM VARCHAR(10), LONGTXT VARCHAR(10), TRAIL VARCHAR(10), NUM2 NUMERIC(9,2), TS TIMESTAMP, ZEROS VARCHAR(10), LAST_COL INTEGER)',
+      'INSERT INTO S VALUES (1, ''7'', ''abc'', ''abc'', ''1.5'', ''abcd'', ''ab  '', 1.25, ''2020-01-01 10:00'', ''007'', 5)',
+      'INSERT INTO S VALUES (2, ''12'', NULL, ''1'', ''2'', ''abc'', ''abc'', 2.5, ''2020-01-01'', ''12'', NULL)',
+      'CREATE TABLE Z (ID INTEGER, T VARCHAR(20))', 'INSERT INTO Z VALUES (1, ''0x1F'')', 'INSERT INTO Z VALUES (2, ''TODAY'')',
+      'INSERT INTO Z VALUES (3, ''007'')', 'INSERT INTO Z VALUES (4, ''5'')', 'INSERT INTO Z VALUES (5, ''2024-01-02'')', 'INSERT INTO Z VALUES (6, ''-05'')',
+      'CREATE TABLE P (X INTEGER, A VARCHAR(10), B INTEGER)', 'INSERT INTO P VALUES (1, ''12'', 3)',
+      'CREATE DOMAIN DFREE AS INTEGER', 'CREATE TABLE N (ID INTEGER, A DNN)', 'INSERT INTO N VALUES (1, 2)',
+      'CREATE TABLE O (ID INTEGER, U CHAR(16) CHARACTER SET OCTETS)']);
     vConn.ExecSQL('COMMENT ON COLUMN S.GOODTXT IS ''it''''s''');
     vConn.Close;
   finally
@@ -1447,6 +1647,7 @@ begin
   vProvider.Commit;
   TestLiveApply(vProvider, vConnText);
   TestReadOnly(vProvider);
+  TestReviewLive(vProvider);
   Check('F60 the report of a live plan names the database, never the password', vProvider.DatabaseName.EndsWith('scratch.fdb') and not vProvider.DatabaseName.Contains('unused'));
 end;
 
@@ -1462,6 +1663,7 @@ begin
       TestColumnBlocks;
       TestRequests;
       TestSafeSteps;
+      TestReviewPlan;
       TestApplyGate;
       TestApplySequence;
       TestHooks;

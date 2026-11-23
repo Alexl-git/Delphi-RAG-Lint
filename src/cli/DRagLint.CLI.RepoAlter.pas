@@ -6,18 +6,15 @@ unit DRagLint.CLI.RepoAlter;
 
 interface
 
-const
-  /// <summary>The sub-verb.</summary>
-  SUB_ALTER_TABLE = 'alter-table';
-
 /// <summary>Runs `repo alter-table --table T --direction repo-to-db --connection "..."`.</summary>
 /// <param name="pPath">The repository file (already resolved from --repo / --project); opened read-only.</param>
 /// <param name="pConnection">--connection.</param>
 /// <param name="pJson">--json: one JSON object on stdout.</param>
 /// <returns>0 = ok (a dry run included, and an apply with nothing to do); 1 = bad arguments, no such table, a refused or
 /// failed apply (the report is still printed when groups ran).</returns>
-/// <remarks>DRY RUN unless --apply is on the command line; --select &lt;file&gt; only chooses, it does not write;
-/// --dry-run wins over --apply. The pre-checks run in the same call, on the same connection, before any write. A
+/// <remarks>DRY RUN unless --apply is on the command line; --select &lt;file&gt; only chooses, it does not write (with --apply
+/// it must hold the "plan &lt;hash&gt;" line of the dry run its ids come from; another plan is refused);
+/// --dry-run wins over --apply. The --connection keys are checked before anything is opened. The pre-checks run in the same call, on the same connection, before any write. A
 /// password of the connection string is masked in every message. Other flags: --safe-path, --rename OLD=NEW[,..],
 /// --order A,B, --hook NAME.</remarks>
 function RunRepoAlterTable(const pPath, pConnection: string; pJson: Boolean): Integer;
@@ -29,6 +26,7 @@ uses
   System.IOUtils,
   System.StrUtils,
   FireDAC.Comp.Client,
+  DRagLint.Sql.FbConnString,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.ChangeSet,
   DRagLint.FieldRepo.DbProvider,
@@ -137,7 +135,26 @@ begin
   end;
 end;
 
-function ChosenIds(const pPlan: TFrAlterPlan; const pSelectFile: string): TArray<Integer>;
+{ Ids are positions in one plan: a file written for another one could name a drop instead of an add. So the file says
+  which plan it means. Returns the remaining lines. }
+function SelectLines(const pPlan: TFrAlterPlan; const pSelectFile: string; pApply: Boolean): TArray<string>;
+var
+  VLine, VPlan: string;
+begin
+  Result := nil;
+  VPlan := '';
+  for VLine in TFile.ReadAllLines(pSelectFile) do
+    if VLine.TrimLeft.StartsWith(PLAN_PREFIX, True) then
+      VPlan := Trim(Copy(VLine.TrimLeft, Length(PLAN_PREFIX) + 1, MaxInt))
+    else
+      Result := Result + [VLine];
+  if pApply and (VPlan = '') then
+    raise EFrAlterRefused.Create('the --select file needs the line "plan <hash>" the dry run printed: nothing applied');
+  if (VPlan <> '') and not SameText(VPlan, pPlan.Hash) then
+    raise EFrAlterRefused.Create('the plan changed since the --select file was written: nothing applied, make a new dry run');
+end;
+
+function ChosenIds(const pPlan: TFrAlterPlan; const pSelectFile: string; pApply: Boolean): TArray<Integer>;
 var
   VChange: TFrChange;
   VSet: TFrChangeSet;
@@ -145,7 +162,7 @@ begin
   Result := nil;
   VSet := pPlan.ChangeSet;
   if pSelectFile <> '' then
-    for VChange in SelectChanges(VSet, TFile.ReadAllLines(pSelectFile)) do
+    for VChange in SelectChanges(VSet, SelectLines(pPlan, pSelectFile, pApply)) do
       Result := Result + [VChange.Id]
   else
     for VChange in VSet.Changes do
@@ -200,7 +217,7 @@ begin
   if not SameText(VRepo.SchemaDatabase, VReport.Plan.DatabaseName) then
     VReport.Plan.Notes := VReport.Plan.Notes + [Format('the repository schema was read from another database: %s', [VRepo.SchemaDatabase])];
   { the selection is resolved in a dry run too: a bad --select file must not wait for --apply to be found }
-  VIds := ChosenIds(VReport.Plan, pArgs.SelectFile);
+  VIds := ChosenIds(VReport.Plan, pArgs.SelectFile, pArgs.Apply);
   if pArgs.Apply then
   begin
     VReport.Outcome := ApplyAlterPlan(VProvider, VReport.Plan, VTicket, VIds);
@@ -223,7 +240,10 @@ begin
     if VProblem <> '' then
       Writeln(ErrOutput, 'repo alter-table: ', VProblem)
     else
+    begin
+      RequireFbConnectionSafe(pConnection);
       Result := AlterTable(VArgs, pPath, pConnection, pJson);
+    end;
   except
     on E: Exception do
       Writeln(ErrOutput, 'repo alter-table: ', ScrubSecrets(E.Message, pConnection));

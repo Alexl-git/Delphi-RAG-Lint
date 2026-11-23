@@ -5,7 +5,8 @@ unit DRagLint.FieldRepo.AlterApply;
   Firebird commits DDL per transaction and a column added in a transaction cannot be filled in the same one, so a
   plan is NOT atomic as a whole. It is atomic per group: hook-before, direct (one transaction), one group per
   safe-path change (ADD tx, COPY tx, verify + SWAP tx; a failure before the swap commits drops the copy again),
-  order, hook-after. The first failing group stops the run; the outcome names the state of every group. }
+  drop, order, hook-after. The first failing group stops the run; the outcome names the state of every group.
+  Drops come after everything that could fail or that counts column positions. }
 
 interface
 
@@ -28,8 +29,9 @@ type
 
   /// <summary>How a group ended.</summary>
   /// <remarks>fgsLeftover = the group failed AND its clean-up failed: the temporary column is still there (the old
-  /// column is intact).</remarks>
-  TFrGroupState = (fgsNotRun, fgsCommitted, fgsRolledBack, fgsCompensated, fgsLeftover);
+  /// column is intact). fgsUnknown = the rollback failed (the connection is gone): look at the table before anything
+  /// else.</remarks>
+  TFrGroupState = (fgsNotRun, fgsCommitted, fgsRolledBack, fgsCompensated, fgsLeftover, fgsUnknown);
 
   /// <summary>One executed (or skipped) group.</summary>
   TFrGroupOutcome = record
@@ -54,7 +56,7 @@ type
 
 const
   /// <summary>Names of TFrGroupState in reports.</summary>
-  GROUP_STATE_NAMES: array[TFrGroupState] of string = ('not-run', 'committed', 'rolled-back', 'compensated', 'leftover');
+  GROUP_STATE_NAMES: array[TFrGroupState] of string = ('not-run', 'committed', 'rolled-back', 'compensated', 'leftover', 'unknown');
 
 /// <summary>Runs every pre-check of the plan (read only) and blocks the changes that fail one.</summary>
 /// <param name="pProvider">The connection the apply will use.</param>
@@ -84,6 +86,7 @@ const
   GROUP_BEFORE = 'hook-before';
   GROUP_DIRECT = 'direct';
   GROUP_SAFE = 'safe';
+  GROUP_DROP = 'drop';
   GROUP_ORDER = 'order';
   GROUP_AFTER = 'hook-after';
 
@@ -180,13 +183,14 @@ end;
 
 function BuildGroups(const pPlan: TFrAlterPlan; const pIds: TArray<Integer>): TArray<TGroup>;
 var
-  VBefore, VDirect, VOrder, VAfter, VSafe: TGroup;
+  VBefore, VDirect, VDrop, VOrder, VAfter, VSafe: TGroup;
   VSafes, VAll: TArray<TGroup>;
   VGroup: TGroup;
   VChange: TFrAlterChange;
 begin
   VBefore := PlainGroup(GROUP_BEFORE);
   VDirect := PlainGroup(GROUP_DIRECT);
+  VDrop := PlainGroup(GROUP_DROP);
   VOrder := PlainGroup(GROUP_ORDER);
   VAfter := PlainGroup(GROUP_AFTER);
   VSafes := nil;
@@ -201,6 +205,11 @@ begin
             VSafe.Safe := VChange.Safe;
             VSafes := VSafes + [VSafe];
           end;
+        fakDrop:
+          begin
+            VDrop.Outcome.ChangeIds := VDrop.Outcome.ChangeIds + [VChange.Change.Id];
+            VDrop.Outcome.Statements := VDrop.Outcome.Statements + VChange.Ddl;
+          end;
         fakOrder:
           begin
             VOrder.Outcome.ChangeIds := [VChange.Change.Id];
@@ -212,7 +221,7 @@ begin
       end;
   VBefore.Outcome.Statements := pPlan.HookBefore;
   VAfter.Outcome.Statements := pPlan.HookAfter;
-  VAll := [VBefore, VDirect] + VSafes + [VOrder, VAfter];
+  VAll := [VBefore, VDirect] + VSafes + [VDrop, VOrder, VAfter];
   Result := nil;
   for VGroup in VAll do
     if Length(VGroup.Outcome.Statements) > 0 then
@@ -220,14 +229,17 @@ begin
 end;
 
 { Rolls back whatever is open; a rollback that fails itself (lost connection) must not hide the first error. }
-function TryRollback(const pProvider: IFrDbProvider): string;
+procedure TryRollback(const pProvider: IFrDbProvider; var pOutcome: TFrGroupOutcome);
 begin
-  Result := '';
   try
     pProvider.Rollback;
+    pOutcome.State := fgsRolledBack;
   except
     on E: Exception do
-      Result := ' (rollback: ' + E.Message + ')';
+    begin
+      pOutcome.State := fgsUnknown;
+      pOutcome.Error := pOutcome.Error + ' (rollback: ' + E.Message + ')';
+    end;
   end;
 end;
 
@@ -244,8 +256,8 @@ begin
   except
     on E: Exception do
     begin
-      pOutcome.Error := E.Message + TryRollback(pProvider);
-      pOutcome.State := fgsRolledBack;
+      pOutcome.Error := E.Message;
+      TryRollback(pProvider, pOutcome);
     end;
   end;
 end;
@@ -280,18 +292,20 @@ begin
   except
     on E: Exception do
     begin
-      pGroup.Outcome.Error := E.Message + TryRollback(pProvider);
-      pGroup.Outcome.State := fgsRolledBack;
-      if VAdded then
+      pGroup.Outcome.Error := E.Message;
+      TryRollback(pProvider, pGroup.Outcome);
+      if VAdded and (pGroup.Outcome.State = fgsRolledBack) then
         try
           RunOne(pProvider, pGroup.Safe.CleanupSql);
           pGroup.Outcome.State := fgsCompensated;
         except
           on F: Exception do
           begin
-            pGroup.Outcome.State := fgsLeftover;
             pGroup.Outcome.Error := pGroup.Outcome.Error + Format('; the clean-up failed too, column %s is left: ',
-              [pGroup.Safe.TempColumn]) + F.Message + TryRollback(pProvider);
+              [pGroup.Safe.TempColumn]) + F.Message;
+            TryRollback(pProvider, pGroup.Outcome);
+            if pGroup.Outcome.State = fgsRolledBack then
+              pGroup.Outcome.State := fgsLeftover;
           end;
         end;
     end;
@@ -309,6 +323,19 @@ begin
     Result := Format('change %d: column %s has not the planned type', [pChange.Change.Id, pChange.Column])
   else if (pChange.Kind = fakNullability) and (VCol.NotNull <> (pChange.Change.NewValue = 'NOT NULL')) then
     Result := Format('change %d: column %s has not the planned nullability', [pChange.Change.Id, pChange.Column]);
+end;
+
+{ The listed columns (one POSITION statement each) must be the first ones of the table. }
+function VerifyOrder(const pLive: TFrTableFacts; const pChange: TFrAlterChange): string;
+var
+  VWanted: TArray<string>;
+  i: Integer;
+begin
+  Result := '';
+  VWanted := pChange.Change.NewValue.Split([',']);
+  for i := 0 to High(pChange.Ddl) do
+    if (i > High(pLive.Columns)) or (i > High(VWanted)) or not SameText(pLive.Columns[i].Name, VWanted[i]) then
+      Exit(Format('change %d: the columns are not in the planned order', [pChange.Change.Id]));
 end;
 
 function Verify(const pProvider: IFrDbProvider; const pPlan: TFrAlterPlan; const pIds: TArray<Integer>): TArray<string>;
@@ -333,7 +360,7 @@ begin
       fakDrop:
         if VLive.FindColumn(VChange.Column, VCol) then
           VProblem := Format('change %d: column %s is still there', [VChange.Change.Id, VChange.Column]);
-      fakOrder: VProblem := '';
+      fakOrder: VProblem := VerifyOrder(VLive, VChange);
     else
       VProblem := VerifyColumn(VLive, VChange);
     end;

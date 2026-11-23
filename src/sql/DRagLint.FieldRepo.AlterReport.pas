@@ -9,6 +9,10 @@ uses
   DRagLint.FieldRepo.Alter,
   DRagLint.FieldRepo.AlterApply;
 
+const
+  /// <summary>Starts the line of a report (and of a --select file) that holds the plan hash.</summary>
+  PLAN_PREFIX = 'plan ';
+
 type
   /// <summary>What the report says beside the plan.</summary>
   TFrAlterReport = record
@@ -33,7 +37,8 @@ function RenderAlterText(const pReport: TFrAlterReport): TArray<string>;
 /// <param name="pReport">The report.</param>
 /// <returns>direction, table, database, dialect, hook, repository, dry_run, count, blocked, changes[id, op, kind,
 /// target, prop, old, new, checked, blocked, depends_on[], ddl[], safe{}, prechecks[], notes[]], hook_before[],
-/// hook_after[], notes[], outcome{success, groups[], problems[]}.</returns>
+/// hook_after[], notes[], plan_hash, outcome{success, groups[], problems[], not_applied[]}. plan_hash is what a --select
+/// file names in its "plan" line.</returns>
 function RenderAlterJson(const pReport: TFrAlterReport): string;
 
 implementation
@@ -41,6 +46,7 @@ implementation
 uses
   System.SysUtils,
   System.JSON,
+  System.Generics.Collections,
   DRagLint.FieldRepo.ChangeSet;
 
 const
@@ -114,6 +120,24 @@ begin
   Result.AddPair('notes', JsonStrings(pChange.Notes));
 end;
 
+{ Ids of the plan that no committed group holds: not chosen, blocked, or in a group that failed or did not run. }
+function NotApplied(const pReport: TFrAlterReport): TArray<Integer>;
+var
+  VChange: TFrAlterChange;
+  VGroup: TFrGroupOutcome;
+  VDone: Boolean;
+begin
+  Result := nil;
+  for VChange in pReport.Plan.Changes do
+  begin
+    VDone := False;
+    for VGroup in pReport.Outcome.Groups do
+      VDone := VDone or ((VGroup.State = fgsCommitted) and TArray.Contains<Integer>(VGroup.ChangeIds, VChange.Change.Id));
+    if not VDone then
+      Result := Result + [VChange.Change.Id];
+  end;
+end;
+
 function JsonOutcome(const pOutcome: TFrAlterOutcome): TJSONObject;
 var
   VGroup: TFrGroupOutcome;
@@ -139,7 +163,7 @@ end;
 
 function RenderAlterJson(const pReport: TFrAlterReport): string;
 var
-  VRoot: TJSONObject;
+  VRoot, VOutcome: TJSONObject;
   VList: TJSONArray;
   VChange: TFrAlterChange;
   VBlocked: Integer;
@@ -169,8 +193,13 @@ begin
     VRoot.AddPair('hook_before', JsonStrings(pReport.Plan.HookBefore));
     VRoot.AddPair('hook_after', JsonStrings(pReport.Plan.HookAfter));
     VRoot.AddPair('notes', JsonStrings(pReport.Plan.Notes));
+    VRoot.AddPair('plan_hash', pReport.Plan.Hash);
     if pReport.HasOutcome then
-      VRoot.AddPair('outcome', JsonOutcome(pReport.Outcome));
+    begin
+      VOutcome := JsonOutcome(pReport.Outcome);
+      VOutcome.AddPair('not_applied', JsonInts(NotApplied(pReport)));
+      VRoot.AddPair('outcome', VOutcome);
+    end;
     Result := VRoot.ToJSON;
   finally
     VRoot.Free;
@@ -196,6 +225,15 @@ begin
       Result := Result + [INDENT + 'pre-check: ' + Format(VCheck.Text, [VCheck.Count])];
 end;
 
+function IdText(const pIds: TArray<Integer>): string;
+var
+  VId: Integer;
+begin
+  Result := '';
+  for VId in pIds do
+    Result := Result + (if Result = '' then '' else ', ') + IntToStr(VId);
+end;
+
 function OutcomeLines(const pOutcome: TFrAlterOutcome): TArray<string>;
 var
   VGroup: TFrGroupOutcome;
@@ -213,6 +251,7 @@ end;
 function RenderAlterText(const pReport: TFrAlterReport): TArray<string>;
 var
   VChange: TFrAlterChange;
+  VLeft: TArray<Integer>;
 begin
   Result := [Format('table %s, database %s (%s), hook %s', [pReport.Plan.TableName, pReport.Plan.DatabaseName,
     pReport.Plan.DialectName, pReport.HookName])] + RenderChangeSetText(pReport.Plan.ChangeSet);
@@ -225,9 +264,14 @@ begin
       Result := Result + PrecheckLines(VChange) + Prefixed(INDENT + 'note: ', VChange.Notes);
     end;
   Result := Result + Prefixed('hook before: ', pReport.Plan.HookBefore) + Prefixed('hook after: ', pReport.Plan.HookAfter) +
-    Prefixed('note: ', pReport.Plan.Notes);
+    Prefixed('note: ', pReport.Plan.Notes) + [PLAN_PREFIX + pReport.Plan.Hash];
   if pReport.HasOutcome then
+  begin
     Result := Result + OutcomeLines(pReport.Outcome);
+    VLeft := NotApplied(pReport);
+    if Length(VLeft) > 0 then
+      Result := Result + ['not applied: ' + IdText(VLeft)];
+  end;
   if pReport.DryRun then
     Result := Result + ['dry run: nothing written (add --apply to write)'];
 end;

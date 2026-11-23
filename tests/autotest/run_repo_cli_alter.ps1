@@ -13,8 +13,10 @@
     L3  --json: one object, direction, ddl, blocked; no password in it
     L4  --apply: the checked change is applied, exit 0; a second dry run no longer lists it
     L5  --apply --select with a blocked id -> exit 1, nothing written
-    L6  --safe-path: unchecked; --apply --select applies it and the data survive; --order moves a column
+    L6  --safe-path: unchecked; --apply --select (with the plan line of the dry run) applies it and the data survive; --order moves a column
     L7  --hook micronite adds its notes; an unknown hook -> exit 1
+    L10 an empty or missing value of --select / --hook / --order -> refused; an apply names what it left out
+    A3  the --connection keys are checked before the repository is opened
     L8  OpenMode / DropDatabase in --connection -> exit 1, the database is still there
   Run: pwsh -File tests\autotest\run_repo_cli_alter.ps1 [-Exe <drag-lint.exe>]
 #>
@@ -57,6 +59,8 @@ try {
   $r = Run @('repo', 'alter-table', '--repo', $repo, '--table', 'T', '--direction', 'repo-to-db')
   Check 'A1d no --connection -> exit 1' (($r.Code -eq 1) -and ($r.Out -match 'give --connection')) $r.Out
   $r = Run @('repo', 'alter-table', '--repo', (Join-Path $work 'none.dlrepo'), '--table', 'T', '--direction', 'repo-to-db', '--connection', $cs)
+  $r2 = Run @('repo', 'alter-table', '--repo', $repo, '--table', 'T', '--direction', 'repo-to-db', '--connection', "$cs;DropDatabase=Yes")
+  Check 'A3 the --connection keys are checked before anything is opened, the repository included' (($r2.Code -eq 1) -and ($r2.Out -match 'DropDatabase is not allowed')) $r2.Out
   Check 'A1e no repository -> exit 1' (($r.Code -eq 1) -and ($r.Out -match 'does not exist')) $r.Out
   $embed = New-FirebirdEmbed (Join-Path $work 'fb')
   if (-not $embed) { Write-Host 'SKIP L no Firebird 4 on this machine'; if ($script:Failed) { exit 1 } else { exit 0 } }
@@ -71,7 +75,7 @@ CREATE DATABASE '$fdb' USER 'SYSDBA' PAGE_SIZE 8192 DEFAULT CHARACTER SET UTF8;
 CREATE TABLE T (ID INTEGER NOT NULL PRIMARY KEY, A VARCHAR(10), N VARCHAR(10), U VARCHAR(10), X INTEGER);
 CREATE VIEW V AS SELECT U FROM T;
 COMMIT;
-INSERT INTO T VALUES (1, 'abc', '007', 'u', 1);
+INSERT INTO T VALUES (1, 'abc', '7', 'u', 1);
 INSERT INTO T VALUES (2, 'def', '12', 'u', 2);
 COMMIT;
 "@)
@@ -118,7 +122,7 @@ COMMIT;
     ($a[0].ddl[0] -eq 'ALTER TABLE "T" ALTER COLUMN "A" TYPE VARCHAR(20)') -and ($j.database -eq $fdb) -and ($r.Out -notmatch $pw)) $r.Out
   $bid = @($j.changes | Where-Object { $_.target -eq 'T.U' })[0].id
   $sel = Join-Path $work 'sel.txt'
-  [IO.File]::WriteAllText($sel, "$bid`r`n")
+  [IO.File]::WriteAllText($sel, "plan $($j.plan_hash)`r`n$bid`r`n")
   $r = Alter @('--apply', '--select', $sel)
   Check 'L5 a blocked id is refused, nothing written' (($r.Code -eq 1) -and ($r.Out -match 'is blocked') -and ((Shape) -eq $shape0)) $r.Out
   $r = Alter @('--apply')
@@ -133,12 +137,30 @@ COMMIT;
   Check 'L6b --apply alone does not take it' (($r.Code -eq 0) -and ((Shape) -match 'N:37:10')) $r.Out
   [IO.File]::WriteAllText($sel, "$($n.id)`r`n")
   $r = Alter @('--safe-path', '--apply', '--select', $sel)
+  Check 'L6e --apply --select without the plan line of the dry run -> exit 1, nothing written' (($r.Code -eq 1) -and ($r.Out -match 'plan <hash>') -and ((Shape) -match 'N:37:10')) $r.Out
+  [IO.File]::WriteAllText($sel, "plan 0123abcd`r`n$($n.id)`r`n")
+  $r = Alter @('--safe-path', '--apply', '--select', $sel)
+  Check 'L6f the plan line of another plan -> exit 1, nothing written' (($r.Code -eq 1) -and ($r.Out -match 'plan changed') -and ((Shape) -match 'N:37:10')) $r.Out
+  [IO.File]::WriteAllText($sel, "plan $($j.plan_hash)`r`n$($n.id)`r`n")
+  $r = Alter @('--safe-path', '--apply', '--select', $sel)
   Check 'L6c --apply --select converts it, position and values kept' (($r.Code -eq 0) -and ((Shape) -eq 'ID:8:0,A:37:20,N:8:0,U:37:10,X:8:0') -and ((Q 'SELECT ID || N FROM T ORDER BY ID') -eq '17,212')) "$(Shape) $(Q 'SELECT ID || N FROM T ORDER BY ID')`n$($r.Out)"
   $r = Alter @('--order', 'ID,X', '--apply')
   Check 'L6d --order moves the column' (($r.Code -eq 0) -and ((Shape) -eq 'ID:8:0,X:8:0,A:37:20,N:8:0,U:37:10')) "$(Shape)`n$($r.Out)"
   $r = Alter @('--hook', 'micronite')
   $r2 = Alter @('--hook', 'nope')
   Check 'L7 --hook micronite adds its notes; an unknown hook -> exit 1' (($r.Code -eq 0) -and ($r.Out -match 'update-orm --table T') -and ($r2.Code -eq 1) -and ($r2.Out -match 'generic, micronite')) "$($r.Out)`n$($r2.Out)"
+  # an empty or missing value must not fall back to the default selection or to the generic hook
+  [IO.File]::WriteAllText($ddl, "CREATE TABLE T (ID INTEGER NOT NULL, A VARCHAR(40), N INTEGER, U VARCHAR(30), X INTEGER, CONSTRAINT PK_T PRIMARY KEY (ID));`r`n")
+  $r = Run @('repo', 'refresh-schema', '--ddl', $ddl, '--repo', $repo, '--apply')
+  $shape1 = Shape
+  $r = Alter @('--apply', '--select', '')
+  Check 'L10 an empty --select -> refused, nothing written' (($r.Code -ne 0) -and ((Shape) -eq $shape1)) "$(Shape)`n$($r.Out)"
+  $r = Alter @('--hook', '', '--apply')
+  Check 'L10b an empty --hook -> exit 1, nothing written' (($r.Code -eq 1) -and ((Shape) -eq $shape1)) "$(Shape)`n$($r.Out)"
+  $r = Alter @('--order', '--apply')
+  Check 'L10c a flag in the place of a value -> exit 1' (($r.Code -eq 1) -and ((Shape) -eq $shape1)) "$(Shape)`n$($r.Out)"
+  $r = Alter @('--apply')
+  Check 'L10d positive control: the change was there to apply; what was left out is named' (($r.Code -eq 0) -and ((Shape) -match 'A:37:40') -and ($r.Out -match 'not applied: ')) "$(Shape)`n$($r.Out)"
   $cs0 = $cs
   $cs = "$cs0;OpenMode=OpenOrCreate"
   $r = Alter @()
