@@ -384,7 +384,7 @@ type
     function GrowsOnly(const N: TTSNode; const AArr: string): Boolean;
     function ShrunkIn(const AArr: string; AFrom, ATo: Cardinal): Boolean;
     function SideKept(const AX: string; AFrom: Cardinal; const AAt: TTSNode; ALower: Boolean): Boolean;
-    function SplitName(const N0: TTSNode; const AX: string; out AK: Integer; out ASlack: TTSNode): Boolean;
+    function SplitName(const ANode: TTSNode; const AX: string; out AK: Integer; out ASlack: TTSNode): Boolean;
     function FactSide(const C: TTSNode; const AX: string; ANegate: Boolean; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
     function PredicateSide(const ACall: TTSNode; const AX: string; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
     function GuardHolds(const ACond: TTSNode; ANegate: Boolean; AFrom: Cardinal; const AX: string; const AAt: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
@@ -404,7 +404,7 @@ type
     function ReadCap(const ARhs: TTSNode; const AQ: TSideQ): Integer;
     function ClampOf(const W: TTSNode; const AX: string; ALower: Boolean): Boolean;
     function LastOfAppended(const W: TTSNode; const AQ: TSideQ): Boolean;
-    function EventSide(const W: TTSNode; const AX: string; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
+    function EventSide(const W: TTSNode; const AX: string; const AAt: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
     function ResizedSide(const W, AAt: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
     function WritesSide(const AX: string; const AAt: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
     function SideLocal(const AX: string): Boolean;
@@ -1701,7 +1701,7 @@ begin
         begin
           Head:= LowerCase(Trim(Part));
           for I:= 0 to Length(Copy(Head, 1, Pos(':', Head + ':') - 1).Split([','])) - 1 do
-            One:= One + (if TRegEx.IsMatch(Head, '^(\[[^\]]*\]\s*)?(var|out)\b') then 'r' else 'v');
+            One:= One + (if TRegEx.IsMatch(Head, '^(\[[^\]]*\]\s*)?(var|out)\b') then 'r' else 'v');  // dl:ok concat-in-loop@4e89 -- REVIEWED 2026-11-23 SLZ-IDXFP: one letter per parameter of one routine, cached per name
         end;
       Modes:= if Have and (Modes <> One) then '?' else One;
       Have:= True;
@@ -2799,7 +2799,7 @@ var
       R:= A.NamedChild(0);
     end;
     Result:= BareIdent(R);
-    if (Result = '') or (Result = Cur) or not (IsOwnLocal(Result) and Lookup(Result, I2) and (I2.Kind in [dkDynArray, dkOther]) and not I2.IsParam) then Result:= '';
+    if (Result = '') or (Result = Cur) or not (IsOwnLocal(Result) and Lookup(Result, I2) and (I2.Kind in [dkDynArray, dkOther]) and not I2.IsParam) then Result:= '';  // dl:ok boolean-expression-complexity@0f8d -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
   end;
 
   function CopyOfParam(const ARhs: TTSNode; out AS1: TSym): Boolean;
@@ -5628,7 +5628,7 @@ begin
 end;
 
 { W only lowers AX: `Dec(AX)`, `Dec(AX, k)` or `AX := AX - k` with a constant k >= 0. }
-function TBnRun.IsStepDown(const W: TTSNode; const AX: string): Boolean;
+function TBnRun.IsStepDown(const W: TTSNode; const AX: string): Boolean;  // dl:ok duplicate-code@91cd -- REVIEWED 2026-11-23 SLZ-IDXFP: two node collectors over one body, different node tests; a shared walk needs a callback per node
 var
   Args, R: TTSNode;
   K: Integer;
@@ -5806,16 +5806,16 @@ begin
   end;
 end;
 
-{ N0 is AX + AK: the name itself, AX +/- a constant, a constant + AX; or AX + something never negative
+{ ANode is AX + AK: the name itself, AX +/- a constant, a constant + AX; or AX + something never negative
   (ASlack: that something), which only an upper fact may use. }
-function TBnRun.SplitName(const N0: TTSNode; const AX: string; out AK: Integer; out ASlack: TTSNode): Boolean;
+function TBnRun.SplitName(const ANode: TTSNode; const AX: string; out AK: Integer; out ASlack: TTSNode): Boolean;  // dl:ok too-many-exit-points@df61 -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   N, L, R: TTSNode;
   Op: string;
 begin
   AK:= 0;
   ASlack:= Default(TTSNode);
-  N:= ValuePeeled(N0);
+  N:= ValuePeeled(ANode);
   if N.IsNull then Exit(False);
   if N.NodeType = 'identifier' then Exit(LowerCase(Txt(N)) = AX);
   if N.NodeType <> 'exprBinary' then Exit(False);
@@ -5840,7 +5840,7 @@ begin
 end;
 
 { Condition C (ANegate: `not C`) puts AX + AOff on the side AQ asks for. }
-function TBnRun.FactSide(const C: TTSNode; const AX: string; ANegate: Boolean; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
+function TBnRun.FactSide(const C: TTSNode; const AX: string; ANegate: Boolean; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@01f6, cyclomatic-complexity@0ee7 -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification; REVIEWED 2026-11-23 SLZ-IDXFP: one branch per condition form, in one place
 const
   INRANGE_ARGS = 3;
 var
@@ -5908,17 +5908,17 @@ begin
   end
   else if AQ.Lower and Slack.IsNull and ((Op = 'kGt') or (Op = 'kGte')) then
     Result:= SideOf(Other, AQ, AOff - K + Strict, ADepth + 1)
-  else if AQ.Lower and Slack.IsNull and (Op = 'kNeq') and (K = 0) and EvalIndex(Other, V) and (V + 1 + AOff >= Lo) then
+  else if AQ.Lower and Slack.IsNull and (Op = 'kNeq') and (K = 0) and EvalIndex(Other, V) and (V + 1 + AOff >= Lo) then  // dl:ok boolean-expression-complexity@69ae -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
     { AX <> V and AX >= V }
     Result:= ((V = 0) and Lookup(AX, Info) and Info.Unsigned) or IdentSide(AX, E, AQ, Lo - V, ADepth + 1)
-  else if (not AQ.Lower) and Slack.IsNull and (Op = 'kNeq') and (K = 0) and (AOff = 0) and IsArrayFn(Other, FN_LENGTH, AQ.Arr) then
+  else if (not AQ.Lower) and Slack.IsNull and (Op = 'kNeq') and (K = 0) and (AOff = 0) and IsArrayFn(Other, FN_LENGTH, AQ.Arr) then  // dl:ok boolean-expression-complexity@cdd8 -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
     { AX <> Length(A) and AX <= Length(A) }
     Result:= IdentSide(AX, E, AQ, -1, ADepth + 1);
 end;
 
 { `if IsName(AX) then`: a Boolean function of this file whose body is one `Result := e` on the parameter
   AX is passed for (CallResolver:11969). }
-function TBnRun.PredicateSide(const ACall: TTSNode; const AX: string; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
+function TBnRun.PredicateSide(const ACall: TTSNode; const AX: string; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@f611 -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   Def, Args, OldAccess: TTSNode;
   Evs: TArray<TTSNode>;
@@ -5962,10 +5962,10 @@ begin
 end;
 
 { One guard (ACond, ANegate: its failure) read at byte AFrom proves AX + AOff at AAt. }
-function TBnRun.GuardHolds(const ACond: TTSNode; ANegate: Boolean; AFrom: Cardinal; const AX: string; const AAt: TTSNode;
+function TBnRun.GuardHolds(const ACond: TTSNode; ANegate: Boolean; AFrom: Cardinal; const AX: string; const AAt: TTSNode;  // dl:ok too-many-parameters@c1d1 -- REVIEWED 2026-11-23 SLZ-IDXFP: the question (AX, AQ, AOff, ADepth) plus the guard it is asked of; a record would be built per call
   const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
 begin
-  Result:= (not ACond.IsNull) and Mentions(ACond, AX) and SideKept(AX, AFrom, AAt, AQ.Lower)
+  Result:= (not ACond.IsNull) and Mentions(ACond, AX) and SideKept(AX, AFrom, AAt, AQ.Lower)  // dl:ok boolean-expression-complexity@d472 -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
     and not ((not AQ.Lower) and ShrunkIn(AQ.Arr, AFrom, AAt.StartByte))
     and FactSide(ACond, AX, ANegate, AQ, AOff, ADepth + 1);
 end;
@@ -6002,7 +6002,7 @@ begin
         { the branch's one write, or a leave guard the branch ends in (XCONST:770) }
         if (Length(Evs) = 1) and RunsInBlock(Evs[0], ThenN) then
         begin
-          if not EventSide(Evs[0], AX, AQ, AOff, ADepth + 1) then Exit;
+          if not EventSide(Evs[0], AX, AAt, AQ, AOff, ADepth + 1) then Exit;
         end
         else if Last.IsNull or (Last.NodeType <> 'if') or (not IsLeaveStmt(Last.ChildByField('then')))
           or not FactSide(Last.ChildByField('condition'), AX, True, AQ, AOff, ADepth + 1) then Exit;
@@ -6022,7 +6022,7 @@ var
   P: TTSNode;
 begin
   P:= N;
-  while (not P.IsNull) and not (P = AThen) do
+  while (not P.IsNull) and not (P = AThen) do  // dl:ok nonminimal-bool@a068 -- REVIEWED 2026-11-23 SLZ-IDXFP: TTSNode declares Equal but no NotEqual; <> does not compile
   begin
     if IndexStr(P.NodeType, CONTROL_NODES) >= 0 then Exit(False);
     P:= P.Parent;
@@ -6050,7 +6050,7 @@ begin
       if P.ChildByField('then') = C then Result:= GuardHolds(Cond, False, Cond.EndByte, AX, AAt, AQ, AOff, ADepth)
       else if P.ChildByField('else') = C then Result:= GuardHolds(Cond, True, Cond.EndByte, AX, AAt, AQ, AOff, ADepth);
     end
-    else if (T = 'exprIf') and not (Cond = C) then  // dl:ok nonminimal-bool -- TTSNode declares Equal but no NotEqual; <> does not compile
+    else if (T = 'exprIf') and not (Cond = C) then  // dl:ok nonminimal-bool@fff6 -- REVIEWED 2026-11-23 SLZ-IDXFP: TTSNode declares Equal but no NotEqual; <> does not compile
     begin
       ElseAt:= P.EndByte;
       for I:= 0 to P.ChildCount - 1 do
@@ -6084,7 +6084,7 @@ end;
 
 { N is evaluated on every path that reaches AAt after it: no branch, short-circuit right side, case or
   try around N lies between N and the point. }
-function TBnRun.RunsBefore(const N, AAt: TTSNode): Boolean;
+function TBnRun.RunsBefore(const N, AAt: TTSNode): Boolean;  // dl:ok too-many-exit-points@4123 -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   C, P: TTSNode;
   T, Op: string;
@@ -6098,7 +6098,7 @@ begin
     P:= C.Parent;
     if P.IsNull then Exit;
     T:= P.NodeType;
-    if (T = 'defProc') or (T = 'lambda') or (T = 'caseCase') or (T = 'exceptionHandler') or (T = 'try') or (T = 'case') then Exit;
+    if (T = 'defProc') or (T = 'lambda') or (T = 'caseCase') or (T = 'exceptionHandler') or (T = 'try') or (T = 'case') then Exit;  // dl:ok boolean-expression-complexity@44ac -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
     Last:= NodeWithin(AAt, P);
     IsCond:= P.ChildByField('condition') = C;
     if MatchStr(T, ['if', 'ifElse', 'while', 'exprIf']) and not IsCond then Exit;
@@ -6226,7 +6226,7 @@ end;
   bounds it on the OTHER side (`while (P >= 0) and (A[P] ..) do Dec(P)`), which also holds at AAt: AX only
   moved away from the side asked for since, so G held for S too and S was evaluated (one finding for one
   start value). }
-function TBnRun.GuardedBefore(const S: TTSNode; const AX: string; const AAt: TTSNode; ALower: Boolean): Boolean;
+function TBnRun.GuardedBefore(const S: TTSNode; const AX: string; const AAt: TTSNode; ALower: Boolean): Boolean;  // dl:ok too-many-exit-points@c569 -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   C, P, Top: TTSNode;
   Want, Here: TList<string>;
@@ -6418,8 +6418,8 @@ begin
     if StartsStr('setlength(' + B + ',length(' + B + ')+', T) or StartsStr(B + ':=' + B + '+[', T) then Exit(True);
   end;
 end;
-{ Write W leaves AX + AOff on the side AQ asks for. }
-function TBnRun.EventSide(const W: TTSNode; const AX: string; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
+{ Write W leaves AX + AOff on the side AQ asks for, as AX is read at AAt. }
+function TBnRun.EventSide(const W: TTSNode; const AX: string; const AAt: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@c9cf -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   Args, Rhs, S: TTSNode;
   K: Integer;
@@ -6453,12 +6453,12 @@ begin
   if SideOf(Rhs, AQ, AOff, ADepth + 1) then Exit(True);
   if ClampOf(W, AX, AQ.Lower) and IdentSide(AX, W, AQ, AOff, ADepth + 1) then Exit(True);
   if ((AOff = 0) and GrownAfter(W, AX, AQ)) or (AOff < ReadCap(Peeled(Rhs), AQ)) or ((AOff >= 0) and LastOfAppended(W, AQ)) then Exit(True);
-  { a guard right after it: `x := f(..); if x < 0 then Exit` }
+  { a guard right after it: `x := f(..); if x < 0 then Exit` -- for a point past that guard (AAt), not one inside it }
   S:= ListStatement(W);
   if S.IsNull or not RunsInBlock(W, S) then Exit;
   S:= S.NextNamedSibling;
   while (not S.IsNull) and IsTrivia(S) do S:= S.NextNamedSibling;
-  Result:= (not S.IsNull) and (S.NodeType = 'if') and IsLeaveStmt(S.ChildByField('then'))
+  Result:= (not S.IsNull) and (S.NodeType = 'if') and IsLeaveStmt(S.ChildByField('then')) and ((AAt.StartByte >= S.EndByte) or (AAt.EndByte <= W.StartByte))
     and FactSide(S.ChildByField('condition'), AX, True, AQ, AOff, ADepth + 1);
 end;
 
@@ -6500,8 +6500,7 @@ begin
   for W in EventsOf(AX) do
   begin
     { a for-in loop around AAt gives AX its value on every trip }
-    if W.NodeType = 'foreach' then Sets:= NodeWithin(AAt, W.ChildByField('body'))
-    else Sets:= (W.NodeType <> 'for') and StmtDominates(W, AAt);
+    Sets:= if W.NodeType = 'foreach' then NodeWithin(AAt, W.ChildByField('body')) else (W.NodeType <> 'for') and StmtDominates(W, AAt);
     if Sets and (D.IsNull or (W.StartByte > D.StartByte)) then D:= W;
   end;
   Any:= False;
@@ -6514,11 +6513,9 @@ begin
       for L in Loops do
         if Common.IsNull and NodeWithin(W, L) then Common:= L;
       { a write in a loop around AAt reaches it unless the dominating write of that loop comes after it }
-      if Common.IsNull then
-        Reaches:= (W.EndByte <= AAt.StartByte) and (D.IsNull or (W.StartByte >= D.StartByte))
-          and not LeavesBefore(W, AAt, 0, False) and not ExclusiveBranches(W, AAt)
-      else
-        Reaches:= (Common = W) or D.IsNull or (D = W) or not NodeWithin(D, Common)
+      Reaches:= if Common.IsNull then (W.EndByte <= AAt.StartByte) and (D.IsNull or (W.StartByte >= D.StartByte))
+          and not (LeavesBefore(W, AAt, 0, False) or ExclusiveBranches(W, AAt))
+        else (Common = W) or D.IsNull or (D = W) or not NodeWithin(D, Common)  // dl:ok boolean-expression-complexity@b562 -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
           or ((D.StartByte < W.StartByte) and (W.StartByte < AAt.StartByte));
       if not Reaches then Continue;
       if (not AQ.Lower) and (W.NodeType = 'assignment') and (W.EndByte <= AAt.StartByte) and ShrunkIn(AQ.Arr, W.EndByte, AAt.StartByte)
@@ -6526,7 +6523,7 @@ begin
       Any:= True;
       Inc(FSideWrites);
       try
-        if not EventSide(W, AX, AQ, AOff, ADepth + 1) then Exit;
+        if not EventSide(W, AX, AAt, AQ, AOff, ADepth + 1) then Exit;
       finally
         Dec(FSideWrites);
       end;
@@ -6565,7 +6562,7 @@ begin
 end;
 
 { The local AX, read at AAt, plus AOff is on the side AQ asks for. }
-function TBnRun.IdentSide(const AX: string; const AAt: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
+function TBnRun.IdentSide(const AX: string; const AAt: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@8ef6 -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   Key: string;
   F: TTSNode;
@@ -6639,7 +6636,7 @@ var
   end;
 
   { one mention of AColl }
-  function UseOk(const AId: TTSNode): Boolean;
+  function UseOk(const AId: TTSNode): Boolean;  // dl:ok too-many-exit-points@372d -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
   var
     P, G, Args: TTSNode;
     T, Mem: string;
@@ -6649,7 +6646,7 @@ var
     T:= P.NodeType;
     if T = 'exprSubscript' then
     begin
-      if not (P.ChildByField('entity') = AId) then Exit(True);  // dl:ok nonminimal-bool -- TTSNode declares Equal but no NotEqual; <> does not compile
+      if not (P.ChildByField('entity') = AId) then Exit(True);  // dl:ok nonminimal-bool@160b -- REVIEWED 2026-11-23 SLZ-IDXFP: TTSNode declares Equal but no NotEqual; <> does not compile
       if (G.NodeType = 'assignment') and (G.ChildByField('lhs') = P) then
       begin
         Inc(Stores);
@@ -6659,7 +6656,7 @@ var
     end;
     if T = 'exprDot' then
     begin
-      if not (P.ChildByField('lhs') = AId) then Exit(True);  // dl:ok nonminimal-bool -- TTSNode declares Equal but no NotEqual; <> does not compile
+      if not (P.ChildByField('lhs') = AId) then Exit(True);  // dl:ok nonminimal-bool@76b2 -- REVIEWED 2026-11-23 SLZ-IDXFP: TTSNode declares Equal but no NotEqual; <> does not compile
       Mem:= LowerCase(Trim(Txt(P.ChildByField('rhs'))));
       if MatchStr(Mem, READS) then Exit(True);
       if (not MatchStr(Mem, ADDS)) or (G.NodeType <> 'exprCall') then Exit(False);
@@ -6720,7 +6717,7 @@ begin
   if not ContainsStr(Nm, '.') then Exit(False);
   Nm:= Copy(Nm, LastDelimiter('.', Nm) + 1, MaxInt);
   { the two mentions that are no call: the class's declaration and the body's header }
-  Result:= FDefCount.TryGetValue(Nm, Cnt) and (Cnt = 1) and FPrivDecls.TryGetValue(Nm, Cnt) and (Cnt = 1)
+  Result:= FDefCount.TryGetValue(Nm, Cnt) and (Cnt = 1) and FPrivDecls.TryGetValue(Nm, Cnt) and (Cnt = 1)  // dl:ok boolean-expression-complexity@0a4a -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
     and FCallSites.TryGetValue(Nm, ASites) and FIdentCnt.TryGetValue(Nm, Ids) and (Ids = ASites.Count + 2);
 end;
 
@@ -6763,7 +6760,7 @@ end;
 
 { Every caller of the current routine passes an argument for its parameter AX that, plus AOff, is on
   the side AQ asks for. }
-function TBnRun.CallersSide(const AX: string; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
+function TBnRun.CallersSide(const AX: string; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@058c -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   Sites: TList<TTSNode>;
   Site, Args, Caller, Proc, OldAccess, RetT: TTSNode;
@@ -6827,7 +6824,7 @@ end;
 
 { Every value the local routine ACall names can return (AOutArg -1: each `Result := e` and `Exit(e)` of
   its one body) or leave in its argument number AOutArg, plus AOff, is on the side AQ asks for. }
-function TBnRun.CalleeSide(const ACall: TTSNode; const AQ: TSideQ; AOff, ADepth, AOutArg: Integer): Boolean;
+function TBnRun.CalleeSide(const ACall: TTSNode; const AQ: TSideQ; AOff, ADepth, AOutArg: Integer): Boolean;  // dl:ok too-many-exit-points@14af -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   Def, Args, Ent, OldAccess: TTSNode;
   Nm, Key, Target: string;
@@ -6964,13 +6961,13 @@ begin
   Lo:= if AQ.Info.Kind = dkArray then AQ.Info.Lo else 0;
   S:= SymOf(N);
   if AQ.Lower then
-    Exit((S.Ok and ((S.Base = '') or IsCountBase(S.Base)) and (S.Off + AOff >= Lo)) or ((AOff >= Lo) and NonNegOf(N)));
+    Exit((S.Ok and ((S.Base = '') or IsCountBase(S.Base)) and (S.Off + AOff >= Lo)) or ((AOff >= Lo) and NonNegOf(N)));  // dl:ok boolean-expression-complexity@45c1 -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
   if S.Ok and UpperWithin(MkSym(S.Base, S.Off + AOff), AQ.Arr, AQ.Info) then Exit(True);
   if UpperConstOf(N, 0, V) and UpperWithin(MkSym('', V + AOff), AQ.Arr, AQ.Info) then Exit(True);
   if AQ.Info.Kind = dkArray then Exit;
   if LengthNamed(N, B, K) and (K + AOff <= -1) and ((B = AQ.Arr) or LenAtLeast(AQ.Arr, B)) then Exit(True);
   H:= HighSym(AQ.Arr, AQ.Info);
-  Result:= S.Ok and H.Ok and StartsText(LEN_BASE, S.Base) and StartsText(LEN_BASE, H.Base) and (S.Off + AOff <= H.Off)
+  Result:= S.Ok and H.Ok and StartsText(LEN_BASE, S.Base) and StartsText(LEN_BASE, H.Base) and (S.Off + AOff <= H.Off)  // dl:ok boolean-expression-complexity@0fd1 -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
     and EqualLenGuard(Copy(S.Base, Length(LEN_BASE) + 1, MaxInt), Copy(H.Base, Length(LEN_BASE) + 1, MaxInt));
 end;
 
@@ -6983,7 +6980,7 @@ begin
 end;
 
 { E + AOff is on the side AQ asks for (its lower side: at least Low; upper: at most High). }
-function TBnRun.SideOf(const E: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;
+function TBnRun.SideOf(const E: TTSNode; const AQ: TSideQ; AOff, ADepth: Integer): Boolean;  // dl:ok cyclomatic-complexity@6129, too-many-exit-points@f0ae -- REVIEWED 2026-11-23 SLZ-IDXFP: one branch per condition form, in one place; REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   N, L, R: TTSNode;
   V, K: Integer;
@@ -7018,7 +7015,7 @@ begin
   begin
     if EvalIndex(ValuePeeled(R), K) then Exit(SideOf(L, AQ, AOff + K, ADepth + 1));
     if EvalIndex(ValuePeeled(L), K) then Exit(SideOf(R, AQ, AOff + K, ADepth + 1));
-    Result:= AQ.Lower and ((AQ.Info.Kind <> dkArray) or (AQ.Info.Lo <= 0))
+    Result:= AQ.Lower and ((AQ.Info.Kind <> dkArray) or (AQ.Info.Lo <= 0))  // dl:ok boolean-expression-complexity@1f6d -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
       and SideOf(L, AQ, AOff, ADepth + 1) and (NonNegOf(R) or SideOf(R, ZeroBased(AQ), 0, ADepth + 1));
   end
   else if Op = 'kSub' then
@@ -7172,7 +7169,7 @@ end;
 
 { What a size change does, in words that match for two arrays changed alike: 'nil', 'app<n>',
   'set:<size>', 'del:<args>', 'txt:<rhs>' -- the array's own name read as @. }
-function TBnRun.SizeKey(const W: TTSNode; const AName: string): string;
+function TBnRun.SizeKey(const W: TTSNode; const AName: string): string;  // dl:ok too-many-exit-points@ed1a -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   T, Own: string;
   M: TMatch;
@@ -7214,7 +7211,7 @@ var
 begin
   SX:= ListStatement(X);
   SY:= ListStatement(Y);
-  if SX.IsNull or SY.IsNull or not (SX.Parent = SY.Parent) then Exit(False);  // dl:ok nonminimal-bool -- TTSNode declares Equal but no NotEqual; <> does not compile
+  if SX.IsNull or SY.IsNull or not (SX.Parent = SY.Parent) then Exit(False);  // dl:ok nonminimal-bool@9435 -- REVIEWED 2026-11-23 SLZ-IDXFP: TTSNode declares Equal but no NotEqual; <> does not compile
   if SY.StartByte < SX.StartByte then
   begin
     T:= SX;
@@ -7248,7 +7245,15 @@ begin
   begin
     if T.StartByte >= From then
       for M in TRegEx.Matches(Copy(AKey, Pos(':', AKey) + 1, MaxInt), '[a-z_]\w*') do
-        if (M.Value <> FN_LENGTH) and Mentions(T, M.Value) and not StartsStr(FN_SETLENGTH + '(', TightText(Txt(T))) then Exit(True);
+      begin
+        if M.Value = FN_LENGTH then Continue;
+        { a length (or a whole array) changes only with a size change; any other name with any mention }
+        if ContainsStr(AKey, FN_LENGTH + '(' + M.Value + ')') or (AKey = KEY_TEXT + M.Value) then
+        begin
+          if Length(SizeEvents(M.Value, T)) > 0 then Exit(True);
+        end
+        else if Mentions(T, M.Value) and not StartsStr(FN_SETLENGTH + '(', TightText(Txt(T))) then Exit(True);
+      end;
     T:= T.NextNamedSibling;
   end;
 end;
@@ -7281,7 +7286,7 @@ end;
   has the same change of A (or `SetLength(A, Length(B))` / `SetLength(B, Length(A))`) in the same
   statement list, and what is left of A only grows. Both are locals of one routine, or both fields /
   globals of this file. }
-function TBnRun.TwinArrays(const A, B: string; ADepth: Integer): Boolean;
+function TBnRun.TwinArrays(const A, B: string; ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@ca50 -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   EvA, EvB: TArray<TTSNode>;
   Scope, OA, OB, W: TTSNode;
@@ -7291,24 +7296,30 @@ var
 
   function Matches(const X, Y: TTSNode): Boolean;
   var
-    KX, KY: string;
+    KX, KY, Src: string;
+    Same: Boolean;
   begin
     KX:= SizeKey(X, A);
     KY:= SizeKey(Y, B);
-    Result:= ((KX = KY) or ((KX = 'set:length(' + B + ')') and (X.StartByte > Y.StartByte))
-      or ((KY = 'set:length(' + A + ')') and (Y.StartByte > X.StartByte))
+    if (SizePrefix(X, A) <> SizePrefix(Y, B)) or not SizedTogether(X, Y) then Exit(False);
+    Same:= KX = KY;
+    if KX = 'set:length(' + B + ')' then Same:= X.StartByte > Y.StartByte
+    else if KY = 'set:length(' + A + ')' then Same:= Y.StartByte > X.StartByte
+    else if (not Same) and TRegEx.IsMatch(KY, '^txt:\w+$') then
+    begin
       { `B := E; SetLength(A, Length(E) [+ k])`, `A := KeptA; B := KeptB` }
-      or (TRegEx.IsMatch(KY, '^txt:\w+$') and TRegEx.IsMatch(KX, '^set:length\(' + Copy(KY, Length(KEY_TEXT) + 1, MaxInt) + '\)(\+\d+)?$'))
-      or (TRegEx.IsMatch(KY, '^txt:\w+$') and TRegEx.IsMatch(KX, '^txt:\w+$') and (ADepth = 0)
-        and TwinArrays(Copy(KX, Length(KEY_TEXT) + 1, MaxInt), Copy(KY, Length(KEY_TEXT) + 1, MaxInt), 1)))
-      and (SizePrefix(X, A) = SizePrefix(Y, B)) and SizedTogether(X, Y) and not SizeReadChanged(X, Y, KY);
+      Src:= Copy(KY, Length(KEY_TEXT) + 1, MaxInt);
+      Same:= TRegEx.IsMatch(KX, '^set:length\(' + Src + '\)(\+\d+)?$')
+        or (TRegEx.IsMatch(KX, '^txt:\w+$') and (ADepth = 0) and TwinArrays(Copy(KX, Length(KEY_TEXT) + 1, MaxInt), Src, 1));
+    end;
+    Result:= Same and not SizeReadChanged(X, Y, KY);
   end;
 
 begin
   Result:= False;
   OA:= ArrayOwner(FCurProc, A);
   OB:= ArrayOwner(FCurProc, B);
-  if (OA.IsNull <> OB.IsNull) or ((not OA.IsNull) and not (OA = OB)) then Exit;  // dl:ok nonminimal-bool -- TTSNode declares Equal but no NotEqual; <> does not compile
+  if (OA.IsNull <> OB.IsNull) or ((not OA.IsNull) and not (OA = OB)) then Exit;  // dl:ok nonminimal-bool@431d -- REVIEWED 2026-11-23 SLZ-IDXFP: TTSNode declares Equal but no NotEqual; <> does not compile
   Scope:= if OA.IsNull then FRoot else OA;
   if (not OA.IsNull) and ((IndexStr(A, ParamNames(OA)) >= 0) or (IndexStr(B, ParamNames(OA)) >= 0)) then Exit;
   EvA:= SizeEvents(A, Scope);
@@ -7442,12 +7453,12 @@ end;
 
 { The local A is filled by one append per trip of a loop over B (`for x in B do begin ..; A := A + [e] end`,
   no Continue / Break in it), the access is after that loop and B keeps its size from the loop on. }
-function TBnRun.MappedArray(const A, B: string): Boolean;
+function TBnRun.MappedArray(const A, B: string): Boolean;  // dl:ok too-many-exit-points@bd59 -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   W, App, F, St: TTSNode;
 begin
   Result:= False;
-  if not (ArrayOwner(FCurProc, A) = FCurProc) or (IndexStr(A, ParamNames(FCurProc)) >= 0) then Exit;  // dl:ok nonminimal-bool -- TTSNode declares Equal but no NotEqual; <> does not compile
+  if not (ArrayOwner(FCurProc, A) = FCurProc) or (IndexStr(A, ParamNames(FCurProc)) >= 0) then Exit;  // dl:ok nonminimal-bool@3b32 -- REVIEWED 2026-11-23 SLZ-IDXFP: TTSNode declares Equal but no NotEqual; <> does not compile
   App:= Default(TTSNode);
   for W in SizeEvents(A, FCurProc) do
     if SizeKey(W, A) = KEY_APPEND + '1' then
@@ -7474,7 +7485,7 @@ begin
 end;
 
 { Length(A) >= Length(B) at the access under analysis. }
-function TBnRun.LenAtLeast(const A, B: string): Boolean;
+function TBnRun.LenAtLeast(const A, B: string): Boolean;  // dl:ok too-many-exit-points@c88b -- REVIEWED 2026-11-23 SLZ-IDXFP: guard clauses per syntax shape; each early exit is a classification
 var
   Dom, C, P, S, W, D: TTSNode;
 begin
@@ -7495,7 +7506,7 @@ begin
   P:= C.Parent;
   while (not P.IsNull) and (P.NodeType <> 'defProc') and (P.NodeType <> 'lambda') do
   begin
-    if ((P.NodeType = 'if') or (P.NodeType = 'ifElse')) and ((P.ChildByField('then') = C) or (P.ChildByField('else') = C))
+    if ((P.NodeType = 'if') or (P.NodeType = 'ifElse')) and ((P.ChildByField('then') = C) or (P.ChildByField('else') = C))  // dl:ok boolean-expression-complexity@fda6 -- REVIEWED 2026-11-23 SLZ-IDXFP: one syntax-shape test, split it and the shape is lost
       and LengthCond(P.ChildByField('condition'), P.ChildByField('else') = C, A, B)
       and SizesKept(A, B, P.ChildByField('condition').EndByte) then Exit(True);
     if (P.NodeType = 'block') or (P.NodeType = 'statements') then
