@@ -66,17 +66,17 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?</para>
-      /// <para>Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate, StripPrefix, UpperCase</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 244 lines (full implementation)</para>
+      /// <para>Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.ClassKey, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate, StripPrefix, UpperCase</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 245 lines (full implementation)</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <para>SQL: writes ORM_LINKS</para>
       /// <para>Transaction: starts, commits, rolls back</para>
       /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Sql.OrmLinker.ClassKey"/>
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink"/>
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Run(const ADbPaths: TArray<string>): TOrmLinkerStats; static;
