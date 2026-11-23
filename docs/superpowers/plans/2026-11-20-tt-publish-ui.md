@@ -1,5 +1,7 @@
 # Plan TT-PUBLISH-UI -- editor "Publish to Firebird..." + IDE row (W4)
 
+> **SUPERSEDED 2026-11-22** by `docs\superpowers\specs\2026-11-22-field-repository-v2-design.md` (section 11: publish-fb dropped, column triage dropped, FIB$ reader inventory deferred to 1.54). Do not execute.
+
 Spec: `docs\superpowers\specs\2026-11-20-tabletools-publish-triage-design.md` section 5 (U1-U3). Depends on
 TT-PUBLISH (unit `DRagLint.FieldRepo.FbPublish`, verb `repo publish-fb`) AND TT-TRIAGE (Form.pas one-liner)
 being merged into `lane/v153-int` first -- if either is not merged at W4 dispatch, this lane rolls over.
