@@ -397,6 +397,7 @@ begin
 
   NamObj.AddPair('hungarian_prefixes', ArrayToJsonArr(N.HungarianPrefixes));
   NamObj.AddPair('param_prefixes', ArrayToJsonArr(N.ParamPrefixes));
+  NamObj.AddPair('param_exempt', ArrayToJsonArr(N.ParamExempt));
   NamObj.AddPair('param_hungarian', N.ParamHungarian);
 
   Result.AddPair('naming', NamObj);
