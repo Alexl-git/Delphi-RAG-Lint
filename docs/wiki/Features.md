@@ -78,6 +78,7 @@ Build and maintain the per-project and library indexes.
 | [Custom attributes in the index](Index-DB-Schema) | `sql` |  |
 | [Include-file indexing and IF evaluation](inc-indexing) | `index` |  |
 | [Index a project against its active build config](index-build-config) | `index` |  |
+| [Index DB schema reference](Index-DB-Schema) | `schema`; `sql` |  |
 | [Library bindings for bare reads, paren-less calls and function-result receivers](library-first-resolve) | `usages`; `index` |  |
 | [Library path of the project's Delphi](target-bds-library-path) | `index`; `reconcile-project` |  |
 | [migrate-dbs](migrate-dbs) | `migrate-dbs`; drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG... |  |
@@ -90,6 +91,7 @@ Build and maintain the per-project and library indexes.
 | [Resolver fixes in 1.52](library-first-resolve) | `index` |  |
 | [schema](schema) | `schema` |  |
 | [Show Resolved DBs (debug)](Show-Resolved-DBs-debug) | drag-lint > Index & Maintenance > Show Resolved DBs (debug)...; `resolve-dbs` |  |
+| [verify-index](verify-index) | `verify-index` | internal |
 
 ## Search and navigation
 
@@ -140,7 +142,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**435 rules. 131 have an auto-fix. 356 are on by default.** 322 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**437 rules. 131 have an auto-fix. 358 are on by default.** 324 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -156,13 +158,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | other | 17 | 4 |
 | platform | 16 | 4 |
 | policy | 6 | - |
-| project-wide | 53 | 9 |
+| project-wide | 55 | 9 |
 | refactoring | 27 | 11 |
 | resource-lifetime | 22 | 9 |
 | review-markers | 6 | 2 |
 | security | 27 | 2 |
 | structure | 18 | 9 |
-| **Total** | **435** | **131** |
+| **Total** | **437** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -209,7 +211,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
 | [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
-| [Lint rules](rules) | 435 rules, 131 fixable; `rules` |  |
+| [Lint rules](rules) | 437 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |
@@ -230,6 +232,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
+| [Schema-aware lint (lint rules)](schema-lint) | `lint-all` |  |
 | [Stream buffer used after free (lint rule)](stream-buffer-after-free) | `lint-all` |  |
 | [Style, loop and ordering rules](v151-style-loop-rules) | `lint` |  |
 | [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
@@ -457,12 +460,13 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](dump-refs) | `dump-refs` |  |
 | [Feature registry](Feature-Registry) | `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [featuregen](featuregen) | `featuregen.exe`; `build\_build_featuregen_local.bat builds featuregen.exe from this checkout`; `tools\featuregen-gate.ps1 -Repo -Full`; procedure: `docs\wiki\featuregen.md` | internal |
-| [Field repository](field-repository) | `dl-field-repo.exe`; `dl-field-repo-std.exe`; `repo init`; `repo info`; `repo import-fb`; `repo seed-fb`; `repo refresh-schema`; `repo backup`; `repo restore`; `repo gen-memtable`; `repo gen-param-array`; `repo gen-orm`; `repo update-orm`; `repo gen-dataservice`; drag-lint > Field Repository > Open Field Repository Editor...; drag-lint > Field Repository > Refresh Schema from Database...; drag-lint > Field Repository > FDMemTable from CSV...; drag-lint > Field Repository > Generate / Update ORM Source...; drag-lint > Field Repository > Generate DataService Units...; drag-lint > Field Repository > Param Array Assistant...; `repo` |  |
+| [Field repository](field-repository) | `dl-field-repo.exe`; `dl-field-repo-std.exe`; `repo init`; `repo info`; `repo import-fb`; `repo seed-fb`; `repo refresh-schema`; `repo backup`; `repo restore`; `repo gen-memtable`; `repo gen-param-array`; `repo gen-orm`; `repo update-orm`; `repo gen-dataservice`; `repo migrate`; `repo check`; `repo gen-const`; `repo check-const`; drag-lint > Field Repository > Open Field Repository Editor...; drag-lint > Field Repository > Refresh Schema from Database...; drag-lint > Field Repository > FDMemTable from CSV...; drag-lint > Field Repository > Generate / Update ORM Source...; drag-lint > Field Repository > Generate DataService Units...; drag-lint > Field Repository > Param Array Assistant...; `repo` |  |
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
 | [manifest where / migrate (installed layout v2)](installed-layout-v2) | `manifest where`; `manifest migrate` |  |
 | [Open Plugin Log](Open-Plugin-Log) | About window: Open Plugin Log |  |
+| [Project settings](project-settings) | `settings list`; `settings get`; `settings set`; `settings unset`; `settings`; procedure: `docs\wiki\project-settings.md` |  |
 | [resolve-uses](Maintenance) | `resolve-uses` | internal |
 | [selftest](Maintenance) | `selftest` | internal |
 | [sql](sql) | `sql` |  |

@@ -382,6 +382,10 @@ $KnownNoField = [ordered]@{
   '--ddl'              = 'repo seed-fb / refresh-schema: CLI.RepoSchema reads ParamStr'
   '--select'           = 'repo seed-fb / refresh-schema: CLI.RepoSchema reads ParamStr'
   '--local'            = 'settings: CLI.Settings reads ParamStr'
+  '--sample'           = 'verify-index: CLI.VerifyIndex reads ParamStr'
+  '--seed'             = 'verify-index: CLI.VerifyIndex reads ParamStr'
+  '--warmup-ms'        = 'verify-index: CLI.VerifyIndex reads ParamStr'
+  '--delphi-lsp-config' = 'verify-index: CLI.VerifyIndex reads ParamStr'
 }
 $nfUnlisted = @($map.NoField | Where-Object { -not $KnownNoField.Contains($_) })
 $nfStale    = @($KnownNoField.Keys | Where-Object { $map.NoField -notcontains $_ })

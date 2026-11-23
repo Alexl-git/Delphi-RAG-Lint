@@ -297,9 +297,9 @@
     }
   ],
   "verified": {
-    "date": "2026-11-22",
+    "date": "2026-11-23",
     "by": "ENGINE",
-    "build": "1.52.3-alpha",
-    "surfaceHash": "87ea6096c451986eb0d3a585c838fd0e242fe954270540e46f3e0077c3cba456"
+    "build": "1.53.0-alpha",
+    "surfaceHash": "1ccd71c33da088671b0b1421781f350df06190693487a43739e6810f5e5d0488"
   }
 }

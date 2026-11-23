@@ -160,7 +160,7 @@ drag-lint repo migrate (--repo <file> | --project <project file>) [--apply]
 ```
 
 Without `--apply` it prints `v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, create
-DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, FIELD_KIND 2 for <n> ISCALCULATED rows, user_version 2` and changes no byte. With
+DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, FIELD_KIND 2 for N ISCALCULATED rows, user_version 2` and changes no byte. With
 `--apply` it first writes `<repo>.before-migrate-<yyyymmdd-hhnnss>.txt` (the schema-1 text backup), then
 runs one transaction; `FIELD_KIND` becomes 2 for the `ISCALCULATED` rows whose kind is NULL or 1. A
 schema-2 file prints `already at schema 2` (exit 0).
