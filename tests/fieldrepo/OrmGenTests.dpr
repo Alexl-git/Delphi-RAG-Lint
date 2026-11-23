@@ -246,6 +246,11 @@ begin
     Check('C5 region 6: same for AssignTo, then Modified (an owned column has no setter call)',
       vBody.Contains('      if (LDest.MEMO <> nil) and (LDest <> Self) then'#13#10'        if Self.fMEMO <> nil then'#13#10 +
         '          LDest.MEMO.Assign(Self.fMEMO)'#13#10'        else'#13#10'          LDest.MEMO.Clear;'#13#10) and vBody.EndsWith('      LDest.Modified:= True;'#13#10) and not vBody.Contains('LDest.MEMO:='), vBody);
+    vBody := RegionBody(vGen.UpdateRegions(Region('5', ''), 'LINE$ITEM', False, vCount), '5');
+    Check('C7 region 5 (AssignI): the content is copied, the alias test is by instance, the getter is read once',
+      vBody.Contains('    var LMEMO:= Value.MEMO;'#13#10'    if (Self.fMEMO <> nil) and (Self.fMEMO <> LMEMO) then'#13#10 +
+        '      if LMEMO <> nil then'#13#10'        Self.fMEMO.Assign(LMEMO)'#13#10'      else'#13#10'        Self.fMEMO.Clear;'#13#10) and
+      not vBody.Contains('fMEMO' + Sp(20) + ':=') and not vBody.Contains('Self <>'), vBody);
     Check('C6 the owned test is the one regions 14 / 15 use',
       RegionBody(vGen.UpdateRegions(Region('14', ''), 'LINE$ITEM', False, vCount), '14').Contains('fMEMO:= TStringList.Create;') and
       RegionBody(vGen.UpdateRegions(Region('15', ''), 'LINE$ITEM', False, vCount), '15').Contains('fMEMO.Free;') and
@@ -617,6 +622,8 @@ begin
   vSynth := False;
   if pId = '4' then
     pBody := TRegEx.Replace(pBody, '(?m)^      if \(Self\.f(\w+) <> nil\) and \(LSource <> Self\) then\r?\n(?:(?:        [^\r\n]*|      begin|      end;)\r?\n)+', '      f$1:= $1;'#13#10)
+  else if pId = '5' then
+    pBody := TRegEx.Replace(pBody, '(?m)^    var (\w+):= Value\.(\w+);\r?\n    if \(Self\.f\2 <> nil\)[^\r\n]*\r?\n(?:(?:      [^\r\n]*|    begin|    end;)\r?\n)+', '    f$2:= Value.$2;'#13#10)
   else if pId = '6' then
   begin
     pBody := TRegEx.Replace(pBody, '(?m)^      if \(LDest\.(\w+) <> nil\) and \(LDest <> Self\) then\r?\n(?:(?:        [^\r\n]*|      begin|      end;)\r?\n)+', '      $1:= f$1;'#13#10);
@@ -845,6 +852,7 @@ begin
   AddRow(pRepo, 'ORMFIX', 'RAW', 'TBytes', 'AsBytes', False, '');
   AddRow(pRepo, 'ORMFIX', 'MEMO', 'TStringList', 'AsString', False, '', False, '', False, 1, 'Free text of the row');
   AddRow(pRepo, 'ORMFIX', 'PIC', 'TPicture', 'AsBlob', False, '');
+  AddRow(pRepo, 'ORMFIX', 'STRM', 'TABZMemoryStream', 'AsBlob', False, '');
   AddRow(pRepo, 'ORMFIX', 'BCD', 'TBcd', 'AsBCD', False, '');
   AddRow(pRepo, 'ORMFIX', 'CALCF', 'string', 'AsString', False, '', False, '', True);
   AddRow(pRepo, 'ORMFIX', 'INTERNALF', 'string', 'AsString', False, '', False, '', False, 2);

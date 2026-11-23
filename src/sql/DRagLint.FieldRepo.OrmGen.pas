@@ -231,8 +231,10 @@ type
     /// <param name="pField">The column; a stream (STPicture) is copied with CopyFrom, a list with Assign / Clear.</param>
     /// <param name="pDest">Full expression of the object that takes the content (nil: nothing is copied).</param>
     /// <param name="pSource">Full expression of the object copied from (nil: the destination is emptied).</param>
-    /// <param name="pOther">The typed local; the copy is skipped when it is Self (self-assignment).</param>
-    procedure EmitOwnedCopy(pCode: TStringList; const pField: TOrmField; const pDest, pSource, pOther: string);
+    /// <param name="pIndent">Indent of the emitted lines (6 blanks in regions 4 / 6, 4 in region 5).</param>
+    /// <param name="pGuard">Condition that must hold besides pDest being assigned: not self-assignment (regions 4 / 6) or not the same list instance (region 5).</param>
+    /// <remarks>A stream source keeps its Position (saved and restored); the copy ends at Position 0.</remarks>
+    procedure EmitOwnedCopy(pCode: TStringList; const pField: TOrmField; const pIndent, pDest, pSource, pGuard: string);
     /// <param name="InterfaceObject"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -3009,28 +3011,33 @@ begin
     SectionCode.Add(Format('      var LSource:= Tmc%s(Source);', [GetFieldName(FLoadedTable)]));
   for CurField in FFieldList do
     if IsVarTypeCreatable(CurField.VAR_TYPE) then
-      EmitOwnedCopy(SectionCode, CurField, 'Self.f' + CurField.GetCurrentFieldName, 'LSource.' + CurField.GetCurrentFieldName, 'LSource')
+      EmitOwnedCopy(SectionCode, CurField, '      ', 'Self.f' + CurField.GetCurrentFieldName, 'LSource.' + CurField.GetCurrentFieldName, 'LSource <> Self')
     else
       SectionCode.Add(Format('      Self.f%s:= LSource.%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
 end;
 
-procedure TOrmGenerator.EmitOwnedCopy(pCode: TStringList; const pField: TOrmField; const pDest, pSource, pOther: string);
+procedure TOrmGenerator.EmitOwnedCopy(pCode: TStringList; const pField: TOrmField; const pIndent, pDest, pSource, pGuard: string);
 begin
-  pCode.Add(Format('      if (%s <> nil) and (%s <> Self) then', [pDest, pOther]));
+  pCode.Add(Format('%sif (%s <> nil) and (%s) then', [pIndent, pDest, pGuard]));
   if SameText(pField.VAR_TYPE, STPicture) then
   begin
-    pCode.Add('      begin');
-    pCode.Add(Format('        %s.Size:= 0;', [pDest]));
-    pCode.Add(Format('        if %s <> nil then', [pSource]));
-    pCode.Add(Format('          %s.CopyFrom(%s, 0);', [pDest, pSource]));
-    pCode.Add('      end;');
+    pCode.Add(pIndent + 'begin');
+    pCode.Add(Format('%s  %s.Size:= 0;', [pIndent, pDest]));
+    pCode.Add(Format('%s  if %s <> nil then', [pIndent, pSource]));
+    pCode.Add(pIndent + '  begin');
+    pCode.Add(Format('%s    var LPos:= %s.Position;', [pIndent, pSource]));
+    pCode.Add(Format('%s    %s.CopyFrom(%s, 0);', [pIndent, pDest, pSource]));
+    pCode.Add(Format('%s    %s.Position:= LPos;', [pIndent, pSource]));
+    pCode.Add(Format('%s    %s.Position:= 0;', [pIndent, pDest]));
+    pCode.Add(pIndent + '  end;');
+    pCode.Add(pIndent + 'end;');
   end
   else
   begin
-    pCode.Add(Format('        if %s <> nil then', [pSource]));
-    pCode.Add(Format('          %s.Assign(%s)', [pDest, pSource]));
-    pCode.Add('        else');
-    pCode.Add(Format('          %s.Clear;', [pDest]));
+    pCode.Add(Format('%s  if %s <> nil then', [pIndent, pSource]));
+    pCode.Add(Format('%s    %s.Assign(%s)', [pIndent, pDest, pSource]));
+    pCode.Add(pIndent + '  else');
+    pCode.Add(Format('%s    %s.Clear;', [pIndent, pDest]));
   end;
 end;
 
@@ -3038,7 +3045,15 @@ procedure TOrmGenerator.GenerateSection5(SectionCode: TStringList);  // dl:ok pa
 var
   CurField: TOrmField;
 begin
-  for CurField in FFieldList do SectionCode.Add(Format('    f%s:= Value.%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
+  { an owned column: the content, not the other object's list; Value is an interface, so the alias test is by instance }
+  for CurField in FFieldList do
+    if IsVarTypeCreatable(CurField.VAR_TYPE) then
+    begin
+      SectionCode.Add(Format('    var L%s:= Value.%s;', [CurField.GetCurrentFieldName, CurField.GetCurrentFieldName]));
+      EmitOwnedCopy(SectionCode, CurField, '    ', 'Self.f' + CurField.GetCurrentFieldName, 'L' + CurField.GetCurrentFieldName, Format('Self.f%s <> L%s', [CurField.GetCurrentFieldName, CurField.GetCurrentFieldName]));
+    end
+    else
+      SectionCode.Add(Format('    f%s:= Value.%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
 end;
 
 procedure TOrmGenerator.GenerateSection6(SectionCode: TStringList);  // dl:ok param-name-prefix@76a5 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -3054,7 +3069,7 @@ begin
     if IsVarTypeCreatable(CurField.VAR_TYPE) then
     begin
       HasOwned:= True;
-      EmitOwnedCopy(SectionCode, CurField, 'LDest.' + CurField.GetCurrentFieldName, 'Self.f' + CurField.GetCurrentFieldName, 'LDest');
+      EmitOwnedCopy(SectionCode, CurField, '      ', 'LDest.' + CurField.GetCurrentFieldName, 'Self.f' + CurField.GetCurrentFieldName, 'LDest <> Self');
     end
     else
       SectionCode.Add(Format('      LDest.%s:= Self.f%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));

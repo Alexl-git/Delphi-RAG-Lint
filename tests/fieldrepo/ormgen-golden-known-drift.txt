@@ -14,6 +14,7 @@ uSTATIONS_SERVER.PAS                 region 9 hand-edited (Year > 0 guard, AsMem
 @region 1A  1.54 TT-GENFIX: SetZNAME/GetZNAME -> SetNAME (reintroduce) / GetNAME (property-accessor-name)
 @region 2   1.54 TT-GENFIX: 'Summary here' + 'Remarks here' -> a summary built from the row; NAME accessors
 @region 4   1.54 TT-GENFIX: 'fX:= X' -> 'var LSource' + 'Self.fX:= LSource.X' (Assign copied nothing)
+@region 5   1.54 TT-GENFIX: fX:= Value.X -> var LX:= Value.X + a content copy of an owned list / stream (AssignI took over the list)
 @region 6   1.54 TT-GENFIX: 'X:= fX' -> 'var LDest' + 'LDest.X:= Self.fX' (AssignTo copied nothing)
 @region 7   1.54 TT-GENFIX: GetZNAME/SetZNAME -> GetNAME/SetNAME
 @region 11  1.54 TT-GENFIX: ByteTemp of the method header -> 'var EnumByte' of the region (unused-local)

@@ -69,12 +69,6 @@ begin
     (pA.WHENAT = EncodeDate(2025, 1, 2)) and (Length(pA.RAW) = 3) and (BcdToInteger(pA.BCD) = 42);
 end;
 
-{ the reference semantics of AssignI leave two owners: hand the copy its own list back before Free }
-procedure Detach(pObj: TmcORMFIX);
-begin
-  pObj.MEMO := nil;
-end;
-
 { bytes the memory manager holds allocated now }
 function HeapUsed: NativeUInt;
 var
@@ -115,8 +109,7 @@ begin
     Check('A3 Assign does not set Modified (fields, like AssignI)', not vDst.Modified);
     vByI.AssignI(vSrc);
     Check('A4 owned list: same text, own instance', (vDst.MEMO <> vSrc.MEMO) and (vDst.MEMO.Text = vSrc.MEMO.Text));
-    Check('A4b AssignI still shares the list (unchanged)', vByI.MEMO = vSrc.MEMO);
-    Detach(vByI);
+    Check('A4b AssignI: own instance, same text (owner ruling 2026-11-23)', (vByI.MEMO <> vSrc.MEMO) and (vByI.MEMO.Text = vSrc.MEMO.Text));
     vChild.Assign(vSrc);
     Check('A5 descendant receives the copy', SameScalars(vChild));
   finally
@@ -240,6 +233,157 @@ begin
   end;
 end;
 
+{ the stream column STRM: pMode 0 = Assign, 1 = AssignTo, 2 = AssignI }
+procedure CopyBy(pMode: Integer; pSrc, pDst: TmcORMFIX);
+begin
+  case pMode of
+    0: pDst.Assign(pSrc);
+    1: TFixAccess(pSrc).AssignTo(pDst);
+  else
+    pDst.AssignI(pSrc);
+  end;
+end;
+
+procedure FillStrm(pObj: TmcORMFIX);
+var
+  vB: TBytes;
+begin
+  vB := TBytes.Create(9, 8, 7);
+  pObj.STRM.Size := 0;
+  pObj.STRM.WriteBuffer(vB[0], 3);
+  pObj.STRM.Position := 1;
+end;
+
+function SameBytes(pA, pB: TStream): Boolean;
+begin
+  Result := (pA.Size = pB.Size) and CompareMem(TMemoryStream(pA).Memory, TMemoryStream(pB).Memory, pA.Size);
+end;
+
+procedure DropStrm(pObj: TmcORMFIX);
+var
+  vOld: TABZMemoryStream;
+begin
+  vOld := pObj.STRM;
+  pObj.STRM := nil;
+  vOld.Free;
+end;
+
+procedure TestStreamColumn;
+const
+  CNames: array [0 .. 2] of string = ('Assign', 'AssignTo', 'AssignI');
+var
+  vSrc, vDst: TmcORMFIX;
+  vMode: Integer;
+  vHit: Integer;
+begin
+  for vMode := 0 to 2 do
+  begin
+    vSrc := TmcORMFIX.Create(nil);
+    vDst := TmcORMFIX.Create(nil);
+    try
+      FillStrm(vSrc);
+      vDst.STRM.WriteBuffer(vSrc.STRM.Memory^, 1);
+      CopyBy(vMode, vSrc, vDst);
+      Check('M' + IntToStr(vMode) + 'a ' + CNames[vMode] + ' stream: own instance, same bytes, old bytes gone',
+        (vDst.STRM <> vSrc.STRM) and SameBytes(vSrc.STRM, vDst.STRM));
+      Check('M' + IntToStr(vMode) + 'b ' + CNames[vMode] + ' stream: source Position kept (1), copy at Position 0',
+        (vSrc.STRM.Position = 1) and (vDst.STRM.Position = 0));
+      vSrc.STRM.Size := 0;
+      Check('M' + IntToStr(vMode) + 'c emptying the source leaves the copy', vDst.STRM.Size = 3);
+      { nil source stream: the copy is emptied }
+      DropStrm(vSrc);
+      CopyBy(vMode, vSrc, vDst);
+      Check('M' + IntToStr(vMode) + 'd nil source stream empties the copy', (vDst.STRM <> nil) and (vDst.STRM.Size = 0));
+      { nil destination stream: skipped }
+      vSrc.STRM := TABZMemoryStream.Create;
+      FillStrm(vSrc);
+      DropStrm(vDst);
+      vHit := 0;
+      try
+        CopyBy(vMode, vSrc, vDst);
+      except
+        Inc(vHit);
+      end;
+      Check('M' + IntToStr(vMode) + 'e nil destination stream: no exception, nothing created', (vHit = 0) and (vDst.STRM = nil));
+      { self }
+      CopyBy(vMode, vSrc, vSrc);
+      Check('M' + IntToStr(vMode) + 'f self: stream kept', (vSrc.STRM.Size = 3) and (vSrc.STRM.Position = 1));
+    finally
+      vDst.Free;
+      vSrc.Free;
+    end;
+  end;
+end;
+
+procedure TestAssignI;
+var
+  vSrc, vDst: TmcORMFIX;
+  vBefore: NativeUInt;
+  vHit, I: Integer;
+  vShared: TStringList;
+begin
+  vSrc := TmcORMFIX.Create(nil);
+  vDst := TmcORMFIX.Create(nil);
+  try
+    Fill(vSrc);
+    vDst.AssignI(vSrc);
+    Check('I1 AssignI: own instance, same text', (vDst.MEMO <> vSrc.MEMO) and (vDst.MEMO.Text = 'note'#13#10));
+    vSrc.MEMO.Text := 'changed';
+    Check('I2 changing the source does not change the copy', vDst.MEMO.Text = 'note'#13#10);
+    DropMemo(vSrc);
+    vDst.AssignI(vSrc);
+    Check('I3 nil source list empties the copy', (vDst.MEMO <> nil) and (vDst.MEMO.Count = 0));
+    vSrc.MEMO := TStringList.Create;
+    vSrc.MEMO.Text := 'kept';
+    DropMemo(vDst);
+    vHit := 0;
+    try
+      vDst.AssignI(vSrc);
+    except
+      Inc(vHit);
+    end;
+    Check('I4 nil destination list: no exception, nothing created', (vHit = 0) and (vDst.MEMO = nil));
+    { both objects hold one list instance (the setter shares it) }
+    vShared := vSrc.MEMO;
+    vDst.MEMO := vShared;
+    vHit := 0;
+    try
+      vDst.AssignI(vSrc);
+    except
+      Inc(vHit);
+    end;
+    Check('I5 aliased list: skipped, content intact', (vHit = 0) and (vShared.Text = 'kept'#13#10));
+    vDst.MEMO := nil;
+    vSrc.AssignI(vSrc);
+    Check('I6 AssignI from an interface of Self keeps the list', vSrc.MEMO.Text = 'kept'#13#10);
+    vHit := 0;
+    try
+      vDst.AssignI(nil);
+    except
+      Inc(vHit);
+    end;
+    Check('I7 nil Value raises, as before', vHit = 1);
+  finally
+    vDst.Free;
+    vSrc.Free;
+  end;
+  vHit := 0;
+  vBefore := HeapUsed;
+  for I := 1 to 200 do
+  try
+    vSrc := TmcORMFIX.Create(nil);
+    vDst := TmcORMFIX.Create(nil);
+    Fill(vSrc);
+    vDst.AssignI(vSrc);
+    vDst.Free;
+    vSrc.Free;
+  except
+    Inc(vHit);
+  end;
+  Check('I8 freeing both raises nothing', vHit = 0);
+  Check('I9 no leak over 200 AssignI / Free rounds', HeapUsed <= vBefore + 4096);
+end;
+
 procedure TestForeign;
 var
   vDst: TmcORMFIX;
@@ -323,6 +467,8 @@ begin
     TestAssignTo;
     TestOwnedList;
     TestNotOwned;
+    TestAssignI;
+    TestStreamColumn;
     TestForeign;
     TestPlainAndEmpty;
     TestStream;

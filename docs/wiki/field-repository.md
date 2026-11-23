@@ -68,8 +68,9 @@ Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then
 both objects (`var LSource:= TmcT(Source); Self.fX:= LSource.X;`), which is right inside the old `with` header and
 without it. A list or stream the generator creates and frees itself (regions 14 / 15: `TStringList`, the stream type) is
 copied by content into the receiver's own object (nil source empties it, nil destination or `Source = Self` is skipped); a
-class column it does not own (`TPicture`) is copied by reference. `AssignI` and the property setters still
-share the list (`AssignI` is unchanged). Order for existing
+class column it does not own (`TPicture`) is copied by reference. `AssignI` follows the same rule (an aliased list is
+skipped, a nil `Value` raises as before); a stream source keeps its Position and the copy ends at Position 0. Only the
+property setters still share an object. Order for existing
 units: `update-orm`, build, then `upgrade-orm-headers`; commit both. A table with a column named `SOURCE` / `DEST`
 needs `upgrade-orm-headers` first (`update-orm` skips such a unit and says so).
 

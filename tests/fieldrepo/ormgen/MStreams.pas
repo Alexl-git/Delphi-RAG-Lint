@@ -43,6 +43,8 @@ type
     function Read(var ADouble: Double): Boolean; overload;
     function Read(var ADT: TDateTime): Boolean; overload;
     function Read(var APic: TPicture): Boolean; overload;
+    function WriteStream(const AName: string; AStream: TStream; ASize: Int64): Boolean;
+    function ReadStream(const AName: string; AStream: TStream; var ALen: Integer): Boolean;
   end;
 
 function Get1Byte(AField: TField): Byte;
@@ -69,6 +71,8 @@ function TABZMemoryStream.WriteB(const ADouble: Double): Boolean; begin Result :
 function TABZMemoryStream.WriteB(const ADT: TDateTime): Boolean; begin Result := True; end;
 function TABZMemoryStream.WriteB(const APic: TPicture): Boolean; begin Result := True; end;
 function TABZMemoryStream.Read(var ABytes: TBytes; const ACount: Longint): Boolean; begin Result := True; end;
+function TABZMemoryStream.WriteStream(const AName: string; AStream: TStream; ASize: Int64): Boolean; begin Result := True; end;
+function TABZMemoryStream.ReadStream(const AName: string; AStream: TStream; var ALen: Integer): Boolean; begin Result := True; end;
 function TABZMemoryStream.Read(var S: string): Boolean; begin Result := True; end;
 function TABZMemoryStream.Read(var S: TStringList): Boolean; begin Result := True; end;
 function TABZMemoryStream.Read(var ABool: Boolean): Boolean; begin Result := True; end;
