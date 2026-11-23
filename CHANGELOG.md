@@ -3,6 +3,10 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.54.0-alpha -- unreleased
+
+- SEARCHFAST: the `search` index stage no longer slows down with the size of the index. The one ANALYZE runs on an empty database and recorded every FTS5 data table as two rows, so SQLite scanned the whole table for each segment FTS5 dropped; the writer now corrects that statistic (existing indexes heal on their next write), and a run that has to fill a large share of the table rebuilds `symbol_search_fts` in one pass inside the stage's transaction. library-Win64 in place: 7,135 s -> 49 s for 1.45 M rows. No re-parse.
+
 ## v1.53.0-alpha -- 2026-11-23
 
 In integration (lane/v153-int2). One re-parse for 1.53.0: extractor 1.42.0 -> 1.43.0-alpha (GRAMMAR); resolver stays 1.31.0-alpha. VS Code extension 1.6.12.
