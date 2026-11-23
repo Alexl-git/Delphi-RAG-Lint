@@ -100,7 +100,8 @@ const
 
 function IsEditableTable(const pTable: TRepoTable): Boolean;
 begin
-  Result := not SameText(pTable.Name, REPO_META_TABLE);
+  Result := not (SameText(pTable.Name, REPO_META_TABLE) or SameText(pTable.Name, REPO_TABLE_LAYOUT_EVENTS)
+    or SameText(pTable.Name, REPO_TABLE_EXCEPTIONS)); { schema-2 tables are edited through repo verbs, not as tabs }
 end;
 
 constructor TRepoEditorForm.CreateEditor(pOwner: TComponent);
@@ -205,7 +206,7 @@ begin
   FreeAndNil(FConnection);
   FConnection := Fresh;
   FFileName := pFileName;
-  for Table in RepoTables do
+  for Table in RepoTablesFor(RepoSchemaVersion(FConnection)) do
     if IsEditableTable(Table) then
       AddTab(Table);
   Caption := CAPTION_TEXT + ' - ' + pFileName;

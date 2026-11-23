@@ -9,7 +9,8 @@ unit DRagLint.CLI.Repo;
 interface
 
 /// <summary>Runs `drag-lint repo &lt;sub-verb&gt; ...`: init, info, import-fb, seed-fb,
-/// refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice (PLAN D11;
+/// refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice,
+/// migrate, check (the last two: DRagLint.CLI.RepoModel, 1.53) (PLAN D11;
 /// gen-param-array is DRagLint.CLI.RepoParamArray and needs no repository; the generator verbs take
 /// --code-dir / --server-dir / --client-dir / --table, print a dry-run diff and write only with --apply,
 /// --no-backup skips the .BCKn copy).</summary>
@@ -63,7 +64,8 @@ uses
   DRagLint.FieldRepo.CsvMemTable,
   DRagLint.FieldRepo.OrmGen,
   DRagLint.FieldRepo.DataServiceGen,
-  DRagLint.CLI.RepoParamArray
+  DRagLint.CLI.RepoParamArray,
+  DRagLint.CLI.RepoModel
   ;
 
 const
@@ -83,7 +85,7 @@ const
   { positions in the --save-form value list of RepoOrmVerb }
   SAVE_FORM_LEGACY  = 0;
   SAVE_FORM_CURRENT = 1;
-  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice';
+  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check';
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -167,6 +169,7 @@ var
   Query: TFDQuery;
   Table: TRepoTable;
   Root, Tables, Meta: TJSONObject;
+  Version: Integer;
 begin
   if not TFile.Exists(pPath) then
   begin
@@ -175,6 +178,7 @@ begin
   end;
   Conn:= OpenRepository(pPath, True);
   try
+    Version:= RepoSchemaVersion(Conn);
     Query:= TFDQuery.Create(nil);
     try
       Query.Connection:= Conn;
@@ -185,10 +189,10 @@ begin
         Root:= TJSONObject.Create;
         try
           Root.AddPair('path', pPath);
-          Root.AddPair('schema_version', TJSONNumber.Create(REPO_SCHEMA_VERSION));
+          Root.AddPair('schema_version', TJSONNumber.Create(Version));
           Tables:= TJSONObject.Create;
           Root.AddPair('tables', Tables);
-          for Table in RepoTables do
+          for Table in RepoTablesFor(Version) do
             Tables.AddPair(Table.Name, TJSONNumber.Create(RepoRowCount(Conn, Table.Name)));
           Meta:= TJSONObject.Create;
           Root.AddPair('meta', Meta);
@@ -205,8 +209,8 @@ begin
       else
       begin
         Writeln('repository: ', pPath);
-        Writeln('schema_version: ', REPO_SCHEMA_VERSION);
-        for Table in RepoTables do
+        Writeln('schema_version: ', Version);
+        for Table in RepoTablesFor(Version) do
           Writeln(Table.Name, ': ', RepoRowCount(Conn, Table.Name), ' rows');
         while not Query.Eof do
         begin
@@ -356,6 +360,7 @@ var
   Conn: TFDConnection;
   Work: string;
   Fresh: Boolean;
+  FileVersion: Integer;
 begin
   if pInFile = '' then
   begin
@@ -374,7 +379,8 @@ begin
   if Fresh then
   begin
     RemoveFile(Work);
-    CreateRepository(Work);
+    FileVersion:= BackupFileVersion(ExpandFileName(pInFile)); { a missing repository gets the backup's own schema version }
+    CreateRepository(Work, if FileVersion = 0 then REPO_SCHEMA_VERSION else FileVersion);
   end;
   try
     Conn:= OpenRepository(Work, False);
@@ -473,6 +479,7 @@ begin
   if SameText(pSub, 'gen-memtable') then Exit(GenMemTable(pInFile, pOutFile));
   if not ResolveRepoPath(pRepo, pProject, Path) then Exit;
   if MatchText(pSub, ['gen-orm', 'update-orm', 'gen-dataservice']) then Exit(RepoOrmVerb(pSub, Path));
+  if IsRepoModelSub(pSub) then Exit(RunRepoModelVerb(pSub, Path, pJson)); // 1.53 FR-MODEL: migrate, check
   case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
@@ -486,7 +493,7 @@ end;
 function IsImplementedSub(const pSub: string): Boolean;
 begin
   Result:= MatchText(pSub, ['init', 'info', 'import-fb', 'seed-fb', 'refresh-schema', 'backup',
-    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice']);
+    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice']) or IsRepoModelSub(pSub);
 end;
 
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de -- REVIEWED 2026-11-17 v152 TTE: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape)

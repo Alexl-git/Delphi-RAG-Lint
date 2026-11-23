@@ -113,11 +113,11 @@ var
   vI: Integer;
   vOk: Boolean;
 begin
-  vTabs := RepoTables;
+  vTabs := RepoTablesFor(1);
   vNames[0] := 'DL_META'; vNames[1] := 'DL_FIELDS_INFO'; vNames[2] := 'DL_DATASETS_INFO';
   vNames[3] := 'DL_ENUMVALUES'; vNames[4] := 'DL_ERROR_MESSAGES';
   vCounts[0] := 2; vCounts[1] := 40; vCounts[2] := 12; vCounts[3] := 6; vCounts[4] := 3;
-  Check('1a RepoTables has 5 tables', Length(vTabs) = 5);
+  Check('1a RepoTablesFor(1) has 5 tables', Length(vTabs) = 5);
   vOk := Length(vTabs) = 5;
   if vOk then
     for vI := 0 to 4 do
@@ -131,7 +131,7 @@ begin
   Check('1d FindRepoTable case-insensitive', FindRepoTable('dl_fields_info', vTab) and (vTab.Name = 'DL_FIELDS_INFO'));
   Check('1e FindRepoTable unknown name is False (control)', not FindRepoTable('NOPE', vTab));
 
-  FindRepoTable('DL_FIELDS_INFO', vTab);
+  vTab := vTabs[1];
   Check('2a TABLE_NAME string 68 not null pk1',
     vTab.FindColumn('TABLE_NAME', vCol) and (vCol.Kind = rckString) and (vCol.MaxLen = 68)
     and vCol.NotNull and (vCol.PkOrder = 1));
@@ -141,7 +141,7 @@ begin
   Check('2d DOC_SUMMARY text default Summary here',
     vTab.FindColumn('DOC_SUMMARY', vCol) and (vCol.Kind = rckText) and (vCol.DefaultSql = '''Summary here'''));
   Check('2e FIB$VERSION is absent (ruling A4)', not vTab.FindColumn('FIB$VERSION', vCol));
-  Check('2e2 UI_TAG is the last FIELDS_INFO column', vTab.Columns[High(vTab.Columns)].Name = 'UI_TAG');
+  Check('2e2 UI_TAG is the last v1 FIELDS_INFO column', vTab.Columns[High(vTab.Columns)].Name = 'UI_TAG');
   Check('2f PkColumns of FIELDS_INFO in order',
     (Length(vTab.PkColumns) = 2) and (vTab.PkColumns[0].Name = 'TABLE_NAME') and (vTab.PkColumns[1].Name = 'FIELD_NAME'));
   FindRepoTable('DL_DATASETS_INFO', vTab);
@@ -164,6 +164,100 @@ begin
     (Pos('CHECK (length("TABLE_NAME") <= 68)', RepoTableDdl(RepoTables[1])) > 0));
   Check('2o RepoTableDdl byte CHECK',
     (Pos('CHECK ("EVALUE" BETWEEN 0 AND 255)', RepoTableDdl(RepoTables[3])) > 0));
+end;
+
+{ FR-MODEL task 2: schema version 2 next to the still-valid version 1. }
+procedure TestV2;
+var
+  vTabs: TArray<TRepoTable>;
+  vV1, vV2, vRaw: TFDConnection;
+  vFile, vFileV1, vCls: string;
+  vCol: TRepoColumn;
+  vTab: TRepoTable;
+begin
+  vTabs := RepoTables;
+  Check('12a REPO_SCHEMA_VERSION is 2 and RepoTables is the v2 set', (REPO_SCHEMA_VERSION = 2) and (Length(vTabs) = 7));
+  Check('12b v2 order ends DL_LAYOUT_EVENTS, DL_EXCEPTIONS',
+    (vTabs[5].Name = 'DL_LAYOUT_EVENTS') and (vTabs[6].Name = 'DL_EXCEPTIONS'));
+  Check('12c v2 DL_FIELDS_INFO has 41 columns, CALC_BODY LAST (TEXT)',
+    (Length(vTabs[1].Columns) = 41) and (vTabs[1].Columns[40].Name = 'CALC_BODY') and (vTabs[1].Columns[40].Kind = rckText));
+  Check('12d layout events table: 5 columns, 4-part key, EVENT_CODE text',
+    (Length(vTabs[5].Columns) = 5) and (Length(vTabs[5].PkColumns) = 4)
+    and vTabs[5].FindColumn('EVENT_CODE', vCol) and (vCol.Kind = rckText) and (vCol.PkOrder = 0));
+  Check('12e exceptions table: 6 columns, 5-part key, REASON not null',
+    (Length(vTabs[6].Columns) = 6) and (Length(vTabs[6].PkColumns) = 5)
+    and vTabs[6].FindColumn('REASON', vCol) and vCol.NotNull and (vCol.PkOrder = 0));
+  Check('12f RepoTablesFor(1) keeps 40 columns without CALC_BODY (positive control against 12c)',
+    (Length(RepoTablesFor(1)[1].Columns) = 40) and not RepoTablesFor(1)[1].FindColumn('CALC_BODY', vCol));
+  Check('12g RepoTablesFor(3) raises ERepoError', RaisedClass(procedure begin RepoTablesFor(3); end) = 'ERepoError');
+  Check('12h FindRepoTable finds a schema-2 table', FindRepoTable('dl_exceptions', vTab));
+
+  vFile := NewPath('v2new');
+  CreateRepository(vFile);
+  vV2 := OpenRepository(vFile, True);
+  try
+    Check('13a new repository is user_version 2 and RepoSchemaVersion reads it',
+      (ScalarInt(vV2, 'PRAGMA user_version') = 2) and (RepoSchemaVersion(vV2) = 2));
+    Check('13b DL_META schema_version is 2', GetRepoMeta(vV2, 'schema_version') = '2');
+    Check('13c RepoRowCount works on a schema-2 table', RepoRowCount(vV2, 'DL_EXCEPTIONS') = 0);
+  finally
+    vV2.Free;
+  end;
+
+  vFileV1 := NewPath('v1new');
+  CreateRepository(vFileV1, 1);
+  vV1 := OpenRepository(vFileV1, True);
+  try
+    Check('14a explicit v1 repository opens and validates as v1', RepoSchemaVersion(vV1) = 1);
+    Check('14b DL_META schema_version is 1', GetRepoMeta(vV1, 'schema_version') = '1');
+    Check('14c v1 file has no DL_EXCEPTIONS table',
+      ScalarInt(vV1, 'SELECT COUNT(*) FROM sqlite_master WHERE name = ''DL_EXCEPTIONS''') = 0);
+    Check('14d v1 file is empty (RepoIsEmpty)', RepoIsEmpty(vV1));
+  finally
+    vV1.Free;
+  end;
+  Check('14e CreateRepository version 3 raises ERepoError',
+    RaisedClass(procedure begin CreateRepository(NewPath('v3'), 3); end) = 'ERepoError');
+
+  vRaw := RawConn(vFile, 'ReadWrite');
+  try
+    vRaw.ExecSQL('PRAGMA user_version = 3');
+  finally
+    vRaw.Free;
+  end;
+  vCls := RaisedClass(procedure begin OpenRepository(vFile, True).Free; end);
+  Check('15 user_version 3 raises ERepoSchemaError', vCls = 'ERepoSchemaError', vCls);
+
+  vFile := NewPath('v2keys');
+  CreateRepository(vFile);
+  vV2 := OpenRepository(vFile, False);
+  try
+    vV2.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" ("TABLE_NAME","FIELD_NAME","LAYOUT_TYPE","EVENT_NAME") VALUES (''T'',''F'',''TcxGridCardView'',''OnGetText'')');
+    Check('16a duplicate layout-event PK fails',
+      RaisedClass(procedure begin
+        vV2.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" ("TABLE_NAME","FIELD_NAME","LAYOUT_TYPE","EVENT_NAME") VALUES (''T'',''F'',''TcxGridCardView'',''OnGetText'')');
+      end) <> '');
+    Check('16b the same field with another layout type or event is a distinct row',
+      RaisedClass(procedure begin
+        vV2.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" ("TABLE_NAME","FIELD_NAME","LAYOUT_TYPE","EVENT_NAME") VALUES (''T'',''F'',''TdxTreeList'',''OnGetText'')');
+      end) = '');
+    Check('16c RepoIsEmpty ignores the two schema-2 tables', RepoIsEmpty(vV2));
+    vV2.ExecSQL('INSERT INTO "DL_EXCEPTIONS" ("RULE_ID","REASON") VALUES (''r1'',''because'')');
+    Check('16d DL_EXCEPTIONS key columns default to empty string',
+      ScalarStr(vV2, 'SELECT "DATASET_KEY" || "TABLE_NAME" || "FIELD_NAME" || "PROP" FROM "DL_EXCEPTIONS"') = '');
+    Check('16e duplicate exception PK fails',
+      RaisedClass(procedure begin
+        vV2.ExecSQL('INSERT INTO "DL_EXCEPTIONS" ("RULE_ID","REASON") VALUES (''r1'',''again'')');
+      end) <> '');
+    Check('16f DL_EXCEPTIONS without REASON fails',
+      RaisedClass(procedure begin vV2.ExecSQL('INSERT INTO "DL_EXCEPTIONS" ("RULE_ID") VALUES (''r2'')'); end) <> '');
+    Check('16g positive control: with REASON it inserts',
+      RaisedClass(procedure begin
+        vV2.ExecSQL('INSERT INTO "DL_EXCEPTIONS" ("RULE_ID","REASON") VALUES (''r2'',''x'')');
+      end) = '');
+  finally
+    vV2.Free;
+  end;
 end;
 
 procedure TestCreateOpen;
@@ -420,6 +514,7 @@ begin
   TDirectory.CreateDirectory(GDir);
   try
     TestContract;
+    TestV2;
     TestCreateOpen;
     TestStructural;
     TestRows;

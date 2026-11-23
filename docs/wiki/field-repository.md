@@ -118,6 +118,71 @@ of the repository; the binary `.dlrepo` is not committed.
 `CharacterSet=UTF8` are added when missing. The password is never printed or stored; the
 repository keeps only the `Database` value (`source_database`).
 
+## Field kinds, schema 2 and `repo migrate` / `repo check` (1.53)
+
+A repository created by 1.53 is **schema 2**; a 1.52 file (schema 1) still opens and is handled as
+schema 1 until you run `repo migrate`. Schema 2 adds `DL_FIELDS_INFO.CALC_BODY` (the last column),
+`DL_LAYOUT_EVENTS` and `DL_EXCEPTIONS`; nothing is dropped or renamed.
+
+### Field kinds
+
+`DL_FIELDS_INFO.FIELD_KIND` says what a row is (NULL reads as data):
+
+| Code | Kind | Meaning |
+|---|---|---|
+| NULL / 1 | data | a real table column |
+| 2 | calc | calculated; the Pascal body is in `CALC_BODY` |
+| 3 | lookup | `SOURCEKEY` = key field(s) here, `DESTTABLE` = lookup table, `DESTKEY` = its key (empty = its primary key), `DESTVALUE` = result field |
+| 4 | internal-calc | stored like calc |
+| 5 | aggregate | the expression is in `CALC_BODY` |
+| 10 | graphical | no data field: a grid column drawn by events |
+
+`ISCALCULATED` must equal "kind is 2 or 4" and `ISLOOKUP` must equal "kind is 3". A calc body names
+other fields of the same table with `{{FIELD}}` macros: `{{TOTAL}} := {{QTY}} * {{PRICE}};`
+(`{{TABLE.FIELD}}` is reserved and an error; there are no escapes). The dependencies of a calc field are
+every macro except its own assignment target.
+
+The per-dataset field selection is NOT stored in the repository: the persistent fields on the dataset
+(the DFM) are the selection. Event code of a graphical column on the common `TcxGridDBTableView` layout
+stays in the field row; for any other layout type the code lives in `DL_LAYOUT_EVENTS`, keyed by
+(`TABLE_NAME`, `FIELD_NAME`, `LAYOUT_TYPE`, `EVENT_NAME`) with the code in `EVENT_CODE`. A field row
+"claims" the field; a layout-event row without a field row is a `repo check` finding.
+
+### `repo migrate`
+
+```
+drag-lint repo migrate (--repo <file> | --project <project file>) [--apply]
+```
+
+Without `--apply` it prints `v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, create DL_LAYOUT_EVENTS, create
+DL_EXCEPTIONS, FIELD_KIND 2 for <n> ISCALCULATED rows, user_version 2` and changes no byte. With
+`--apply` it first writes `<repo>.before-migrate-<yyyymmdd-hhnnss>.txt` (the schema-1 text backup), then
+runs one transaction; `FIELD_KIND` becomes 2 for the `ISCALCULATED` rows whose kind is NULL or 1. A
+schema-2 file prints `already at schema 2` (exit 0).
+
+### `repo check`
+
+```
+drag-lint repo check (--repo <file> | --project <project file>) [--json]
+```
+
+Read-only. Reports kind/flag mismatches, lookup wiring that is incomplete or points at an unknown table
+or field (a `DESTKEY` that is not the lookup table's primary key is a warning), calc macros that name an
+unknown field, calc dependency cycles (named once, `A -> B -> A`) and layout-event rows for an unknown
+field. Exit 0 when clean, 1 when there are findings.
+
+### Text backup versions
+
+A schema-2 repository writes `#DLREPO 2` (the two new tables last); a schema-1 file writes `#DLREPO 1`
+byte for byte as before. Restoring `#DLREPO 1` into a schema-2 repository is accepted (new tables empty,
+`CALC_BODY` NULL); restoring `#DLREPO 2` into a schema-1 file is refused with exit 2 ("migrate first");
+restoring into a missing file creates the file at the backup's own version.
+
+### Lint exceptions
+
+`DL_EXCEPTIONS` (rule id or `*`, dataset, table, field, property, reason) lets the schema lint accept a
+known deviation; a finding is silenced when every non-empty key column of some row matches it.
+
 ## Known limits
 
 * Firebird is read only; writing the repository back to Firebird (`repo publish-fb`) is not in
