@@ -1,0 +1,25 @@
+{
+  "id": "schema-lint",
+  "title": "Schema-aware lint (lint rules)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.3-alpha",
+  "summary": "Default-on lint rules: MAXLEN constants, literals, Copy counts, Size and DFM string fields checked against the field repository's column lengths",
+  "intro": "Read this to see what schema-maxlen-drift and schema-length-bound report, where they get the column lengths (the field repository, never the index), which targets they resolve and why they stay silent without a repository.",
+  "wikiPage": "schema-lint",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --project <App.dproj> --rule schema-length-bound"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-22",
+    "by": "ENGINE",
+    "build": "1.52.3-alpha",
+    "surfaceHash": "563d6196bbf11d9e058857f5620b69f23c822d22ea12b0326457de84c8a42b71"
+  }
+}

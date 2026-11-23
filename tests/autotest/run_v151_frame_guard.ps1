@@ -13,9 +13,9 @@
 # declared in a lane Catalog in a scratch build makes check 1 fail with 318.
 param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe",
-  [int]$ExpectTotal = 435,   # 1.52 (was 423 at 1.51.0)
+  [int]$ExpectTotal = 437,   # 1.53 FR-LINT: +2 schema-maxlen-drift, schema-length-bound (ON);   # 1.52 (was 423 at 1.51.0)
   [int]$ExpectFixable = 131,   # live at 1.52 BATTERY152 (125 at 1.51.0-alpha; +6 = fixable-ids.txt)
-  [int]$ExpectOn = 356     # 1.52.2: +1 param-name-prefix ON (owner Q7); 1.52 was 355 (341 at 1.51.0)
+  [int]$ExpectOn = 358   # 1.53 FR-LINT: +2 schema rules ON (owner Q23 D).     # 1.52.2: +1 param-name-prefix ON (owner Q7); 1.52 was 355 (341 at 1.51.0)
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
