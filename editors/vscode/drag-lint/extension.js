@@ -757,7 +757,8 @@ async function projectSettings() {
   }
   const argv = value === projectsettings.RESET ? projectsettings.buildUnsetArgs({ key: row.key, local, project })
     : projectsettings.buildSetArgs({ key: row.key, value, local, project });
-  log('project settings: ' + argv.join(' '));
+  // key + scope only: a value may be a secret and the log is a plain-text output channel
+  log('project settings: ' + argv[1] + ' ' + row.key + (local ? ' (local)' : ''));
   const { out, code } = await run(argv);
   const r = projectsettings.describeResult(out, code);
   if (!r.ok) { window.showErrorMessage('drag-lint: ' + r.message); return; }

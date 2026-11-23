@@ -77,7 +77,7 @@ Not part of this release (scheduled for 1.53.1): the IDE Project Manager menu ov
 
 ## VS Code
 
-The VS Code extension (drag-lint 1.6.11 and later) has the same list as a picker: Command Palette >
+The VS Code extension (drag-lint 1.6.12 and later) has the same list as a picker: Command Palette >
 "drag-lint: Project Settings..." > pick a key > type or pick the value > for a key that may be local,
 pick "This project (shared, committed)" or "This machine only (local file)".
 
