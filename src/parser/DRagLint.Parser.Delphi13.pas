@@ -1532,6 +1532,10 @@ begin
         array bound / subrange via range   (range (literalNumber) (identifier))
         string [N]                         (declString (kString) (identifier))
         subrange type decl                 (subrangeType (identifier))
+    A subrangeType is FLAT (grammar v1.4.15): the terms of BOTH bounds are its direct
+    children, with named kAnd / kOr / kXor / kShl / kShr / kDiv / kMod between them, so one
+    direct-identifier pass reads every name of either bound. To tell the bounds apart, split
+    on the anonymous `..` child -- never first / last named child.
     An EXPRESSION bound -- `array [1..CA*CB]` -- is (range .. (exprBinary ..)),
     which needs nothing here: the exprBinary arm above already reads lhs/rhs once
     Walk reaches it, which is what member B2's recursion arranges. }
@@ -3373,7 +3377,27 @@ end;
   sharing the one `type` child (parallel to params). }
 procedure EmitRoutineLocals(const ADefProcNode: TTSNode; const AState: TWalkState; ARoutineIdx: Integer; const ARoutineQualifiedName: string);
 
-  procedure EmitDeclVar(const ADeclVar: TTSNode);
+  { 1.53 GRAMMAR: the refs of a CLASSIC local's structured type -- `array[0..CMax] of TFoo`,
+    `set of 1 .. CMax * 2`, `0..CMax`, `string[CMax]`. Nothing walks a routine's declVars, so the
+    const in a bound and the element type had no ref (member B2, the routine-local half).
+    Only these shapes: an inline record, enum or routine type declares names, and walking it here
+    would emit them as symbols. Inline `var` statements are reached by the body walk.
+    Guard: run_v153_GRAMMAR_subrange.ps1. }
+  procedure WalkLocalTypeRefs(const AType: TTSNode);
+  var
+    k : Integer;
+    NT: string ;
+  begin
+    NT:= AType.NodeType;
+    if (NT = 'typeref') or (NT = 'range') or (NT = 'subrangeType') or (NT = 'declString') then
+      Walk(AType, AState, ARoutineIdx, ARoutineQualifiedName)
+    else if (NT = 'type') or (NT = 'declSet') or (NT = 'declArray') then
+      for k:= 0 to AType.NamedChildCount - 1 do
+        if AType.NamedChild(k).NodeType = 'identifier' then EmitTypeExprRefs(AType.NamedChild(k), AState, 0) // `array[TEnum]`
+        else WalkLocalTypeRefs(AType.NamedChild(k));
+  end;
+
+  procedure EmitDeclVar(const ADeclVar: TTSNode; AClassic: Boolean);
   var
     TypeText: string ;
     VarName : string ;
@@ -3390,7 +3414,8 @@ procedure EmitRoutineLocals(const ADefProcNode: TTSNode; const AState: TWalkStat
     if not LTypeField.IsNull then
     begin
       var LTyperef:= FindNamedChildOfType(LTypeField, 'typeref');
-      if not LTyperef.IsNull then EmitTypeUseReference(LTyperef, AState);
+      if not LTyperef.IsNull then EmitTypeUseReference(LTyperef, AState)
+      else if AClassic then WalkLocalTypeRefs(LTypeField);
     end;
     // One skLocalVar per direct 'identifier' child (the var names). The type
     // lives under a 'type' child, so only the name identifiers match.
@@ -3444,7 +3469,7 @@ procedure EmitRoutineLocals(const ADefProcNode: TTSNode; const AState: TWalkStat
     if ANode.NodeType = 'lambda' then EmitRoutineParams(ANode, AState, ARoutineIdx, ARoutineQualifiedName);
     if IsInlineDecl(ANode.NodeType) or (ANode.NodeType = 'declVar') then
     begin
-      EmitDeclVar(ANode);
+      EmitDeclVar(ANode, False); // the body walk emits the type refs
       Exit;
     end;
     for i:= 0 to ANode.NamedChildCount - 1 do
@@ -3465,7 +3490,7 @@ begin
     if Section.NodeType <> 'declVars' then Continue;
     // Each declVars holds a `kVar` token plus one+ declVar entries.
     for j:= 0 to Section.NamedChildCount - 1 do
-      if Section.NamedChild(j).NodeType = 'declVar' then EmitDeclVar(Section.NamedChild(j));
+      if Section.NamedChild(j).NodeType = 'declVar' then EmitDeclVar(Section.NamedChild(j), True);
   end;
   var Body:= ADefProcNode.ChildByField('body');
   if not Body.IsNull then WalkBodyForInlineDecls(Body, 0);
@@ -3954,9 +3979,10 @@ begin
 
           The `else` is load-bearing: for a plain `X: TFoo` the branch above
           already emitted, and walking as well would emit a SECOND type_use at
-          the identical span. }
-        for i:= 0 to VTypeField.NamedChildCount - 1 do
-          Walk(VTypeField.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
+          the identical span. The FIELD is walked, not its children: in
+          `G: 0..CMax` the field itself is the subrangeType (no `type` wrapper),
+          and its handler is what reads the bounds (1.53 GRAMMAR). }
+        Walk(VTypeField, AState, AParentSymbolIdx, AParentQualifiedName);
     end;
     for i:= 0 to ANode.NamedChildCount - 1 do
     begin
