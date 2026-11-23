@@ -109,6 +109,7 @@ try {
   foreach ($x in $f) { Write-Host ("    {0} {1}:{2} {3}" -f $x.rule, (Split-Path $x.file_path -Leaf), $x.start_line, $x.message) }
 
   # T1 constants
+  # positive-control: schema-maxlen-drift
   Check 'T1a DIMABBR_MAXLEN 35 vs domain 10 fires'  (Has $f 'schema-maxlen-drift' 'uMaxLen.pas' (LineOf 'uMaxLen.pas' 'MSCLIST_DIMABBR_MAXLEN = 35'))
   Check 'T1b DIMNAME_MAXLEN 35 = 35 silent'         (-not (Has $f 'schema-maxlen-drift' 'uMaxLen.pas' (LineOf 'uMaxLen.pas' 'MSCLIST_DIMNAME_MAXLEN = 35')))
   Check 'T1c NOPE_MAXLEN silent'                    (-not (Has $f 'schema-maxlen-drift' 'uMaxLen.pas' (LineOf 'uMaxLen.pas' 'MSCLIST_NOPE_MAXLEN')))
@@ -119,6 +120,7 @@ try {
   Check 'T2a 21-char literal into NOTE fires'       (Has $f 'schema-maxlen-drift' 'uBounds.pas' (LineOf 'uBounds.pas' "'123456789012345678901'"))
   Check 'T2b 20-char literal silent'                (-not (Has $f 'schema-maxlen-drift' 'uBounds.pas' (LineOf 'uBounds.pas' "'12345678901234567890';")))
   # T3 rule 2
+  # positive-control: schema-length-bound
   Check 'T3a Copy(.., DIMNAME_MAXLEN) into DIMABBR fires' (Has $f 'schema-length-bound' 'uBounds.pas' (LineOf 'uBounds.pas' 'pList.DIMABBR := Copy(pText, 1, MSCLIST_DIMNAME_MAXLEN)'))
   Check 'T3b Copy(.., 10) into DIMABBR silent'      (-not (Has $f 'schema-length-bound' 'uBounds.pas' (LineOf 'uBounds.pas' 'pList.DIMABBR := Copy(pText, 1, 10)')))
   Check 'T3c Copy(.., 35) into DIMNAME silent'      (-not (Has $f 'schema-length-bound' 'uBounds.pas' (LineOf 'uBounds.pas' 'pList.DIMNAME := Copy(pText, 1, MSCLIST_DIMNAME_MAXLEN)')))
