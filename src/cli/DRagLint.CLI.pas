@@ -173,6 +173,8 @@ uses
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
+  , DRagLint.Lint.SchemaRules       { 1.53 FR-LINT }
+  , DRagLint.FieldRepo.Locate
   , DRagLint.Lint   .SharedUnit
   , DRagLint.Lint.Bookmarks { bookmarks verb: dl:bk comment anchors (E-BOOKMARKS) }
   , DRagLint.CLI.Bookmarks { bookmarks-strip / bookmarks-restore (E-BOOKMARKS phase 2) }
@@ -14583,6 +14585,7 @@ function LintUnjudgedMarkerRules(const AArgs: TArgs; AStoreSeen: Boolean): TArra
 begin
   Result:= nil;
   AddAll(['duplicate-code', 'interface-reference-cycle']);
+  AddAll([SCHEMA_MAXLEN_DRIFT_RULE, SCHEMA_LENGTH_BOUND_RULE]);   { 1.53 FR-LINT: silent without a field repository }
   if not (AStoreSeen and AArgs.ProjectRules) then
   begin
     AddAll(LINT_GATE_DOC_DRIFT);
@@ -16200,6 +16203,13 @@ begin
           begin
             TraceLintChecker('taint');
             Findings:= Findings + RunTaintRules(FlowStore, FlowLibStore, [FlowFid], Cfg, NarrowRule, MyPath);
+          end;
+          if LintRuleWants(NarrowRule, [SCHEMA_MAXLEN_DRIFT_RULE, SCHEMA_LENGTH_BOUND_RULE]) then   { 1.53 FR-LINT: field repository facts }
+          begin
+            var SchemaRun: TSchemaLintResult:= RunSchemaRules(FlowStore, LocateFieldRepository(IfdefProjectFile(AArgs, FlowDb), ''), FlowFid);
+            ReportSchemaRun(SchemaRun, AArgs.Quiet);
+            for F in SchemaRun.Findings do
+              if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then Findings:= Findings + [F];
           end;
         finally
           SibKeep .Free;
@@ -21295,6 +21305,14 @@ begin
   LintPhase('missing-doc');
   if LintRuleWants(Nr, ['missing-doc']) then
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc(Store);
+  { 1.53 FR-LINT: schema rules read the FIELD REPOSITORY (FR-3); the banner is printed once per run. }
+  LintPhase('schema');
+  if LintRuleWants(Nr, [SCHEMA_MAXLEN_DRIFT_RULE, SCHEMA_LENGTH_BOUND_RULE]) then
+  begin
+    var SchemaRun: TSchemaLintResult:= RunSchemaRules(Store, LocateFieldRepository(IfdefProjectFile(AArgs, ProjectDb), ''), 0);
+    ReportSchemaRun(SchemaRun, AArgs.Quiet);
+    Findings:= Findings + SchemaRun.Findings;
+  end;
   { ADF Task 8: doc-drift -- store-backed (needs the doc graph + Raises facts);
     ON by default. Its --fix subset is applied in FinalizeAndOutput (Store passed). }
   { The seealso flag MUST match what `document` wrote the managed blocks under,

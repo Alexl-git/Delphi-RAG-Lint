@@ -1070,7 +1070,7 @@ Win64 build.
 
 #### Lint
 
-**435 rules across 18 categories -- 322 built-in + 113 external `.scm`, 356
+**437 rules across 18 categories -- 324 built-in + 113 external `.scm`, 358
 enabled by default, 131 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -1343,11 +1343,11 @@ CLI-only verbs).
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 | `check_init` | Is a unit variable or field set before it is used: SET, NEVER-SET or MAY-BE-UNSET (scaffold answer in 1.52 until the happens-before solver lands) |
 
-### Lint rule pack (435 rules)
+### Lint rule pack (437 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.52.0-alpha: **435 rules across 18 categories -- 322
-built-in and 113 external `.scm`, 356 enabled by default, and 131 with an
+external `.scm`). As of v1.52.0-alpha: **437 rules across 18 categories -- 324
+built-in and 113 external `.scm`, 358 enabled by default, and 131 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |
