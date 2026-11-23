@@ -1,5 +1,7 @@
 # Plan TT-TRIAGE -- column triage: usage report + schema v2 migration (spec phase 9)
 
+> **SUPERSEDED 2026-11-22** by `docs\superpowers\specs\2026-11-22-field-repository-v2-design.md` (section 11: publish-fb dropped, column triage dropped, FIB$ reader inventory deferred to 1.54). Do not execute.
+
 Spec: `docs\superpowers\specs\2026-11-20-tabletools-publish-triage-design.md` section 3 (criteria T1-T8, fate table 3.2,
 schema 3.3), section 0 (D2-D4). Lane rules: `C:\TEMP\claude\lanes\v1522\COMMON-BRIEF.md` + `v1523\PLAN.md` section 1.
 Wave W3, 1.53.0. Model: Opus recommended (Schema.pas is read by every TT feature; the v1 path must stay

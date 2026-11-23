@@ -1,5 +1,7 @@
 # TableTools remainder -- publish-fb, column triage, FIB$ removal inventory (design)
 
+> **SUPERSEDED 2026-11-22** by `docs\superpowers\specs\2026-11-22-field-repository-v2-design.md` (section 11: publish-fb dropped, column triage dropped, FIB$ reader inventory deferred to 1.54). Do not execute.
+
 Date: 2026-11-20. Lane SPEC-TT of the v1523 run (unattended; owner away until Sat 2026-11-21 ~19:00).
 Status: DESIGN (controller reviews). Covers TableTools migration step M17 (`repo publish-fb`), spec phase 9
 (column triage) and the FIB$ run-time reader inventory. Product code: none in this lane.
