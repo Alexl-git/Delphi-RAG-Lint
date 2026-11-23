@@ -256,7 +256,7 @@ end;
 
 function V154RoutineParams(const AStore: ISymbolStore; const ARoutine: TSymbol): TV154ParamList;
 begin
-  if not (ARoutine.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then
+  if ARoutine.Kind not in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then
     Exit(Refuse('not a routine'));
   var F: TSymbolFacts:= Default(TSymbolFacts);
   if AStore <> nil then F:= AStore.GetSymbolFacts(ARoutine.Id);
