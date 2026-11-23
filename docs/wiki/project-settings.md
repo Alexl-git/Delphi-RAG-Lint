@@ -74,3 +74,19 @@ own config discovery is not changed in this release: it spawns `lint <file>`, wh
 but a path the LSP discovers itself does not see `lint.config`.
 
 Not part of this release (scheduled for 1.53.1): the IDE Project Manager menu over the same store, and `reportsDir` / `fieldRepository` in the local overlay.
+
+## VS Code
+
+The VS Code extension (drag-lint 1.6.11 and later) has the same list as a picker: Command Palette >
+"drag-lint: Project Settings..." > pick a key > type or pick the value > for a key that may be local,
+pick "This project (shared, committed)" or "This machine only (local file)".
+
+- It runs `settings list --project <P> --json` for the rows and `settings set|unset ... --json` for the
+  write; the extension never edits the settings files itself.
+- The project is the one set with "drag-lint: Select Project" (or `dragLint.project`); without a
+  .dproj the command says so and does nothing.
+- Read-only rows (`popupForms`, `checkInit`) are listed with "(read-only)" and cannot be edited there.
+- A bool key offers `true`, `false` and "reset to default" (an `unset`). A value whose key looks like a
+  secret (secret, token, password) is shown as `********` and the input box is masked.
+- After a `lint.*` or `taint.*` change the extension refreshes the Problems list.
+- "Nothing to do" (exit 1, for example an unset of a key that is not set) is reported as information, not an error.
