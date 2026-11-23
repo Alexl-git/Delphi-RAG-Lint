@@ -11575,8 +11575,8 @@ begin
   { 1.53 SETTINGS: lint.config / lint.profile / taint.envSource from <anchor>\_D-RAG\drag-lint-project(.local).json }
   SetAnchor:= TProjectSettings.ResolveAnchor(AArgs.ProjectPath, IfThen(AArgs.StandInFor <> '', AArgs.StandInFor, IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile)), AArgs.DbPath, '');
   { 1.53 BUGS: only the --db names this run, and the DB may be a copy away from its project: ask the index itself }
-  var DbOnly: Boolean:= (AArgs.DbPath <> '') and (AArgs.StandInFor = '') and (AArgs.Path = '') and (AArgs.InFile = '');
-  if DbOnly and (SetAnchor = '') then SetAnchor:= TProjectSettings.ResolveAnchor('', IndexedProjectFile(AArgs.DbPath), '', '');
+  var AnchorDb: string:= DbWhenNoFile(AArgs.DbPath, AArgs.StandInFor + AArgs.Path + AArgs.InFile);
+  SetAnchor:= SettingsAnchorOr(SetAnchor, AnchorDb);
   ProjSettings:= LoadSettingsOrWarn(SetAnchor);
   try
   if (Path = '') and (ProjSettings <> nil) and (ProjSettings.AsString('lint.config') <> '') then Path:= TPath.Combine(SetAnchor, ProjSettings.AsString('lint.config'));
@@ -11686,9 +11686,9 @@ begin
     end;
   end;
 
-  if DbOnly and (Path = '') then Path:= ConfigAboveProject(AArgs.ProjectPath, AArgs.DbPath);
+  Path:= ConfigPathOr(Path, AArgs.ProjectPath, AnchorDb);
   if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
-  if DbOnly and (Path = '') and (AArgs.ProjectPath = '') and not TManifestIO.QuietNoManifest then NoteNoLintConfig(AArgs.DbPath);
+  NoteNoLintConfig(Path, AArgs.ProjectPath, AnchorDb);
   Result:= TLintConfig.Load(Path, Profile);
   if IsComplianceProfile(Profile) and not Result.UserProfileFound then
     ApplyComplianceProfile(Result, Profile, AArgs.RulesDir);
