@@ -10608,7 +10608,7 @@ begin
       'UNION SELECT r.enclosing_symbol_id FROM call_edges ce JOIN refs r ON r.id = ce.ref_id ' +
       'WHERE ce.target_symbol_id IN (SELECT id FROM temp.dl_symid_ids)';
     if HasMemberAccesses then
-      Q.SQL.Add('UNION SELECT r.enclosing_symbol_id FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id ' +  // dl:ok taint-sql-injection@7c21 -- REVIEWED 2026-11-23 GH18-FIN: literal SQL only
+      Q.SQL.Add('UNION SELECT r.enclosing_symbol_id FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id ' +
                 'WHERE ma.member_symbol_id IN (SELECT id FROM temp.dl_symid_ids)');
     Q.Open;
     while not Q.Eof do
