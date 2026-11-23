@@ -1,5 +1,7 @@
 # Plan TT-PUBLISH -- `drag-lint repo publish-fb` (M17)
 
+> **SUPERSEDED 2026-11-22** by `docs\superpowers\specs\2026-11-22-field-repository-v2-design.md` (section 11: publish-fb dropped, column triage dropped, FIB$ reader inventory deferred to 1.54). Do not execute.
+
 Spec: `docs\superpowers\specs\2026-11-20-tabletools-publish-triage-design.md` section 2 (criteria P1-P13), section 0
 (rulings). Lane rules: `C:\TEMP\claude\lanes\v1522\COMMON-BRIEF.md` + `C:\TEMP\claude\lanes\v1523\PLAN.md` section 1.
 Wave W3, 1.53.0. Model: sonnet (fully specified) -- escalate to Opus if task 4 (SQL sink on the SQLite stand-in)

@@ -69,6 +69,15 @@ procedure CheckSourceColumns(pSource: TDataSet; const pTable: TRepoTable;  // dl
 function ImportTableFromDataSet(pSource: TDataSet; pTarget: TFDConnection;  // dl:ok unused-public-symbol@7726 -- public API; callers arrive with lane TTE (repo import-fb)
   const pTable: TRepoTable): Integer;
 
+/// <summary>Copies one Firebird registry (FIB$) dataset into the repository table of the same name.</summary>
+/// <param name="pSource">The FIB$ dataset (v1 column shape; FIB$VERSION ignored).</param>
+/// <param name="pTarget">An open, writable repository of any schema version.</param>
+/// <param name="pTargetName">Repository table name, e.g. DL_FIELDS_INFO.</param>
+/// <returns>Rows copied.</returns>
+/// <exception cref="ERepoError">The source columns do not match the table, or the table is unknown.</exception>
+/// <remarks>The Firebird registry has the schema-1 columns only: the source is compared against the schema-1 column
+/// list whatever the target version is, and columns a newer schema added (CALC_BODY, DOMAIN_NAME, ...) stay NULL.</remarks>
+function ImportSourceDataSet(pSource: TDataSet; pTarget: TFDConnection; const pTargetName: string): Integer;
 /// <summary>Imports the FIB$ registry tables of a Firebird database into a repository.</summary>
 /// <param name="pConnectionString">FireDAC-style 'Database=..;User=..;Password=..' list separated by ';'.</param>
 /// <param name="pTarget">An open read-write repository connection.</param>
@@ -271,6 +280,18 @@ begin
   end;
 end;
 
+function ImportSourceDataSet(pSource: TDataSet; pTarget: TFDConnection; const pTargetName: string): Integer;
+var
+  Table: TRepoTable;
+begin
+  { the source shape is the schema-1 table; its columns are a subset of every later schema's, so the INSERT works
+    on a v2 target and leaves the v2-only columns NULL }
+  for Table in RepoTablesFor(REPO_SCHEMA_MIN_VERSION) do
+    if SameText(Table.Name, pTargetName) then
+      Exit(ImportTableFromDataSet(pSource, pTarget, Table));
+  raise ERepoError.CreateFmt('Not a repository table: %s', [pTargetName]);
+end;
+
 function OpenSourceConnection(const pConnectionString: string; out pDatabase: string): TFDConnection;
 var
   Params: TStringList;
@@ -325,7 +346,7 @@ begin
     Query.Connection := pSource;
     Query.FormatOptions.StrsTrim := False;
     Query.Open('SELECT * FROM ' + QuoteRepoIdent(pTable.SourceName));  // dl:ok path-traversal@83c8 -- SQL text; identifier quoted
-    Result.CopiedRows := ImportTableFromDataSet(Query, pTarget, pTable);
+    Result.CopiedRows := ImportSourceDataSet(Query, pTarget, pTable.Name);
     Result.SourceRows := Result.CopiedRows;
   finally
     Query.Free;

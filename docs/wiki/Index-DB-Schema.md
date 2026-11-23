@@ -1,4 +1,4 @@
-# Index DB Schema (schema 24)
+# Index DB Schema (schema 27)
 
 Reference for the SQLite file drag-lint builds: `<project folder>\_D-RAG\<base>.sqlite`
 (project DB) and `library-Win32|Win64.sqlite` (platform library). Everything here was
@@ -13,14 +13,14 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
 
 ## 1. Overview
 
-* **Schema version** `schema_meta.schema_version` = `24` (wave 150: 23 -> 24 with a read-compat range, `SCHEMA_READ_MIN` = 23 -- a v24 engine reads a v23 index, its additive tables probed; the 1.35 / wave-150 tables `file_includes`, `dfm_objects`, `pp_regions`, `project_settings`, `pp_directives`, `dfm_nav_nodes`, `dfm_nav_props` are additive and probed). It is stamped LAST by `Migrate`
+* **Schema version** `schema_meta.schema_version` = `27`, `SCHEMA_READ_MIN` = 23: a v27 engine reads a v23 / v24 / v25 / v26 index with full function, additive tables probed. History (each bump stamped by `Migrate`): 23 -> 24 (wave 150: `file_includes`, `dfm_objects`, `pp_regions`, `project_settings`, `pp_directives`, `dfm_nav_nodes`, `dfm_nav_props`; the read-compat range was introduced with it), 24 -> 25 (151: `dfm_properties`, `comment_facts`), 25 -> 26 (1.51.1 INC2: `ref_host_bindings`), 26 -> 27 (1.52 EXTINC: `inc_variants`, `symbols.inc_variant`, `refs.inc_variant`). Every table or column of 24..27 is ADDITIVE: created / ALTERed by `Migrate` and probed by its reader, so none raised `SCHEMA_READ_MIN`. It is stamped LAST by `Migrate`
   (the commit point of a migration), so an interrupted upgrade keeps the old number and
   the next writable open heals it.
 * **Two kinds of change.** A change that alters what the indexer WRITES bumps
   `SCHEMA_VERSION` (and the fingerprint, which forces a re-parse). An *additive* table or
   column (`member_accesses`, `dispatch_edges`, `classref_args`, `data_flows`,
   `refs.receiver_text`, `refs.external_target`, `refs.receiver_type_text`,
-  `files.indexed_at_fingerprint`) is created by `Migrate` on every WRITABLE open with no
+  `files.indexed_at_fingerprint`, `symbols.is_class_method`, `ref_types`, `ref_element_types`, `ref_receivers`, `attributes`, `init_deps`, `closure_cache`, `symbol_search`) is created by `Migrate` on every WRITABLE open with no
   version bump and is probed for by every reader. A read-only open never migrates, so an
   older DB simply lacks those tables/columns until the next `index`.
 * **Read-compat range (150 SC).** An engine READS an index whose stored schema is in
@@ -34,15 +34,15 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
   table or column added after `SCHEMA_READ_MIN` is additive and probed; a change that cannot
   be raises `SCHEMA_READ_MIN`. Spec `docs\superpowers\specs\2026-11-09-schema-read-compat.md`,
   guard `tests\autotest\run_schema_read_compat.ps1`.
-* **Table count.** 27 ordinary tables + 2 FTS5 virtual tables (`string_fts`,
-  `string_fts_tri`, each with its own shadow tables `*_data`, `*_idx`, `*_docsize`,
+* **Table count.** 42 ordinary tables + 3 FTS5 virtual tables (`string_fts`,
+  `string_fts_tri`, `symbol_search_fts`, each with its own shadow tables `*_data`, `*_idx`, `*_docsize`,
   `*_config`, ignored below). Tables by group:
-  * identity: `schema_meta`, `files`
+  * identity: `schema_meta`, `files`, `closure_cache` (1.52.1 cache of the compile-closure walk; not index data)
   * declarations: `symbols`, `symbol_trigrams`, `symbol_docs`, `symbol_facts`,
-    `type_ancestors`, `type_helpers`
+    `type_ancestors`, `type_helpers`, `symbol_search` (+ FTS5 `symbol_search_fts`, concept search)
   * usage and calls: `refs`, `call_edges`, `member_accesses`, `dispatch_edges`,
-    `classref_args`, `data_flows`
-  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150 Y2: the .dfm navigation tree of forms-csv / menu-tree -- blocks and collection items, parent by ordinal, and the Caption / Action / Item / ItemName / ToolbarName / BeginGroup / IsMainMenu / OldName / On* properties as `DRagLint.Parser.DfmNav.ScanDfmNav` reads them), `dfm_properties` / `comment_facts` (151, additive), `attributes` (1.52, additive)
+    `classref_args`, `data_flows`, `ref_types`, `ref_element_types`, `ref_receivers`, `ref_host_bindings` (26), `init_deps` (1.52.1)
+  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150), `inc_variants` (27), `dfm_nav_nodes` / `dfm_nav_props` (150 Y2: the .dfm navigation tree of forms-csv / menu-tree -- blocks and collection items, parent by ordinal, and the Caption / Action / Item / ItemName / ToolbarName / BeginGroup / IsMainMenu / OldName / On* properties as `DRagLint.Parser.DfmNav.ScanDfmNav` reads them), `dfm_properties` / `comment_facts` (151, additive), `attributes` (1.52, additive)
   * text: `string_literals` (+ FTS5)
   * external feeds: `compiler_findings`, `fb_relations`, `fb_columns`, `fb_field_info`,
     `fb_datasets`, `fb_enum_values`, `orm_links`
@@ -79,6 +79,16 @@ erDiagram
   symbols ||--o{ type_ancestors : "symbol_id"
   symbols ||--o{ type_helpers : "helper_symbol_id"
   symbols ||--o{ data_flows : "symbol_id"
+  refs ||--o| ref_types : "ref_id (PK, cascade)"
+  refs ||--o| ref_element_types : "ref_id (PK, cascade)"
+  refs ||--o| ref_receivers : "ref_id (PK) / receiver_ref_id (cascade)"
+  symbols ||--o{ ref_types : "type_symbol_id (set null)"
+  refs ||--o{ ref_host_bindings : "ref_id (cascade)"
+  files ||--o{ ref_host_bindings : "host_file_id (cascade)"
+  symbols ||--o{ ref_host_bindings : "symbol_id (set null)"
+  files ||--o{ inc_variants : "file_id / host_file_id (cascade)"
+  symbols ||--o{ init_deps : "unit_symbol_id (cascade)"
+  symbols ||--o| symbol_search : "symbol_id (PK, cascade)"
   refs ||--o| call_edges : "ref_id (PK)"
   refs ||--o| member_accesses : "ref_id (PK)"
   refs ||--o{ classref_args : "ref_id"
@@ -97,8 +107,9 @@ erDiagram
 
 | Pass | Verb / stage | Writes |
 |---|---|---|
-| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150, for a `.dfm`), `dfm_properties` (151, for a `.dfm`), `comment_facts` (151), `attributes` (1.52), `symbol_trigrams` |
-| **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `unit_uses.target_file_id` |
+| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `inc_variants` (27), `dfm_nav_nodes` / `dfm_nav_props` (150, for a `.dfm`), `dfm_properties` (151, for a `.dfm`), `comment_facts` (151), `attributes` (1.52), `symbol_trigrams` |
+| **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `ref_types`, `ref_element_types`, `ref_receivers`, `ref_host_bindings` (26, calls pass), `inc_variants` and the `inc_variant` tags (27, indexer), `init_deps` (calls pass, rebuilt whole), `unit_uses.target_file_id` |
+| **search / cache** | concept-search stage; `index --project` closure walk | `symbol_search` (+ FTS5 via triggers; synced with `symbols`), `closure_cache` (what the compile-closure walk read out of each unit; used only while the unit and its includes still carry their stamps and `schema_meta.closure_cache_fp` is unchanged) |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
 | **library** | `index` of a platform library | same tables as a project DB; `schema_meta.scan_type = library` |
@@ -155,6 +166,8 @@ Indexes: `idx_symbols_name`, `_qname`, `_file`, `_parent`, plus `COLLATE NOCASE`
 | directives | TEXT | all routine directives, lowercase, declaration order, space-joined (`virtual overload stdcall`); '' none; NULL = pre-v22 row |
 | vis_explicit | INTEGER | 1 when a visibility keyword was written for the member's section, 0 for the unlabelled leading section; NULL (read as 1) on pre-v22 rows |
 | generic_params | TEXT | generic parameter list as written, brackets stripped; NULL = not generic (v23) |
+| is_class_method | INTEGER | 1 for a routine declared with `class` (1.40, additive ALTER); NULL / 0 on a pre-1.40 row until its re-parse |
+| inc_variant | INTEGER NOT NULL DEFAULT 0 | (27, additive) 0 = the row exists in every define context of its include; k = in context k only (see `inc_variants`) |
 
 ### refs
 One row per identifier use. Raw at extraction; `symbol_id` and the resolve columns are
@@ -173,6 +186,7 @@ filled by the resolve pass. Indexes: `idx_refs_file`, `idx_refs_symbol`,
 | receiver_text | TEXT | receiver expression left of the dot, verbatim; '' for bare/`inherited`; written by resolve |
 | external_target | TEXT | qualified name of a call target in ANOTHER DB (library); NULL = resolved locally or not at all. A ref never has both a local `call_edges` row and this |
 | receiver_type_text | TEXT | receiver's declared type text as the resolver reached it; NULL = never resolved by a 1.16+ engine, '' = bare/untypable (added by `Migrate`, no version bump; absent on older DBs) |
+| inc_variant | INTEGER NOT NULL DEFAULT 0 | (27, additive) as `symbols.inc_variant`: 0 = every context of the include, k = context k only |
 | external_kind | TEXT | what `external_target` names when it is NOT a routine: `indirect` = an event property / procedural field the call fires (the handler is chosen at run time), `intrinsic` = a compiler intrinsic bound to the synthetic `System.@intrinsic.DynArray.Create`; NULL = a routine or no external target (added by `Migrate`, no version bump; absent on older DBs) |
 
 ### call_edges
@@ -349,7 +363,7 @@ to stderr.
 One row per property assignment of a text `.dfm`, written inside the file transaction and
 replaced on its every parse. Producer `DRagLint.Parser.DFMProps.ExtractDfmPropertyRows`
 (column image of `TDfmPropertyRow`). A superset of `dfm_nav_props`, which stays. Additive and
-probed on its own (`HasDfmProperties`): a schema 23 / 24 DB without the table is read through
+probed on its own (`HasDfmProperties`): an index below schema 25 (no table) is read through
 the `.dfm` text; a file with no rows is "not recorded" for that file. Indexes
 `(file_id, ordinal)`, `(file_id, object_ordinal)`, `(name COLLATE NOCASE)`. Spec
 `docs\superpowers\specs\2026-11-11-dfm-props-and-comment-facts.md`.
@@ -371,7 +385,7 @@ One row per comment of a source file, written inside the file transaction and re
 every parse. Producer `DRagLint.Index.CommentFacts.ExtractCommentFacts` (column image of
 `TCommentFactRow`). A directive (`{$..}` / `(*$..*)`) is not a comment and has no row; a `//`
 inside a string literal is not one either. Additive and probed on its own (`HasCommentFacts`):
-a schema 23 / 24 DB without the table is read by scanning the text. Indexes
+an index below schema 25 (no table) is read by scanning the text. Indexes
 `(file_id, ordinal)`, `anchor_symbol_id`.
 
 | column | type | meaning |
@@ -402,6 +416,31 @@ Additive and probed (`HasAttributes`), no schema bump; filled by a re-parse. Ind
 | arg_text | TEXT | the text between its parentheses as written; '' for a bare attribute |
 | line, col | INTEGER | 1-based position of the attribute name |
 
+### dfm_nav_nodes / dfm_nav_props (150)
+The `.dfm` navigation tree of forms-csv / menu-tree, written per `.dfm` by the indexer. Additive, probed together (`HasDfmNav`).
+`dfm_nav_nodes(file_id FK files cascade, ordinal, parent, line, name, comp_class, is_item, coll_prop)`: one row per object block or collection item, `ordinal` from 0 in source order, `parent` = the parent's ordinal (-1 at the root), `name` the component name, `comp_class` its class text, `is_item` 1 for a collection item (`item ... end`), `coll_prop` the collection property that holds an item (`Items`, `Columns`, ...; '' for a block).
+`dfm_nav_props(file_id FK files cascade, ordinal, node, name, value)`: the properties the navigation verbs read (Caption, Action, Item, ItemName, ToolbarName, BeginGroup, IsMainMenu, OldName, On*); `node` = the owning `dfm_nav_nodes.ordinal`, `value` the value text as scanned.
+
+### ref_types, ref_element_types, ref_receivers (additive resolve-pass facts)
+Written by the resolve pass; probed by their readers (`typeat`, rename's proof); all keyed by `ref_id` with `refs(id) ON DELETE CASCADE`. Full semantics: [[schema]].
+* `ref_types(ref_id PK, type_symbol_id FK symbols set null, type_qname TEXT NOT NULL, via TEXT NOT NULL)`: static type of a reference (1.44). Index on `type_symbol_id`.
+* `ref_element_types(ref_id PK, type_symbol_id FK symbols set null, type_qname TEXT NOT NULL)`: static type of a subscripted receiver `A[i]` in `A[i].X` (wave 146). Index on `type_symbol_id`.
+* `ref_receivers(ref_id PK, receiver_ref_id NOT NULL FK refs cascade)`: the ref of a member access's receiver (lane 144). Index on `receiver_ref_id`.
+
+### ref_host_bindings (26, 1.51.1)
+`ref_id FK refs (cascade)`, `host_file_id FK files (cascade)`, `symbol_id FK symbols (set null)`; PK `(ref_id, host_file_id)`. One binding PER HOST for a ref inside a code include that several units include (`refs.symbol_id` holds one target, so it stays NULL where hosts differ). `symbol_id` NULL = that host gave no certain answer. Written by the calls pass only for refs unbound on the ref that at least one host binds; probed by `HasRefHostBindings`. Indexes on `symbol_id` and `host_file_id`. See [[inc-indexing]].
+
+### inc_variants (27, 1.52 EXTINC)
+`file_id FK files (cascade)` (the include), `host_file_id FK files (cascade)`, `variant INTEGER` (1..N), `ctx_sha TEXT` (SHA-256 of the define-context bytes); PK `(file_id, host_file_id, variant)`; index on `host_file_id`. An include is parsed once per DISTINCT define context of its inclusions; this table names the hosts of each context, and `symbols.inc_variant` / `refs.inc_variant` tag the rows (0 = every context). Probed by `HasIncVariants`; empty unless some include is parsed in two or more contexts.
+
+### init_deps (1.52.1)
+`unit_symbol_id FK symbols (cascade)`, `target_unit TEXT`, `via_name TEXT`; PK `(unit_symbol_id, target_unit)`. One row per (unit, other unit its initialization section reaches); `target_unit` = `?` marks an unbound reached ref (facts incomplete). Rebuilt whole by the calls pass, stamped by `schema_meta.init_deps_format` = `1`; absent stamp = no facts.
+
+### symbol_search (+ symbol_search_fts)
+Concept-search tables, derived data (filled by the search-index stage, no version bump): `symbol_search(symbol_id INTEGER PK FK symbols cascade, tokens TEXT NOT NULL, summary TEXT, remarks TEXT)`; `symbol_search_fts` is an external-content FTS5 table (`porter unicode61`) over it, kept in sync by triggers `symbol_search_ai/_ad/_au`. Without FTS5 the triggers are dropped and only `symbol_search` exists.
+
+### closure_cache (1.52.1)
+`path TEXT PK`, `mtime INTEGER`, `size INTEGER`, `uses TEXT`, `includes TEXT`, `deps TEXT` (nullable; added by ALTER). What the compile-closure walk of `index --project` read out of each unit; a cache, not index data. A row is used only while the unit AND every include it read (`deps`) carry their stamps and `schema_meta.closure_cache_fp` is unchanged; rows with `deps` NULL are never loaded.
 ### symbol_trigrams
 `trigram TEXT`, `symbol_id INTEGER FK symbols (cascade)`; PK `(trigram, symbol_id)`,
 `WITHOUT ROWID`. Fuzzy-name index, populated lazily on first fuzzy query for a DB lacking it.
@@ -447,9 +486,9 @@ comparison. `fb_relations(id, name, sql_table_symbol_id FK symbols set null, own
 system_flag, description, snapshot_at)`; `fb_columns(id, relation_id FK fb_relations cascade,
 name, position, field_source, field_type, field_length, field_scale, field_precision,
 nullable, default_value, sql_column_symbol_id FK symbols set null, description, snapshot_at)`;
-`fb_field_info` (display label/format, visible, read_only, triggered, display_width, per
-`field_name`/`table_name`); `fb_datasets` (the five SQL strings of a FIB dataset, key field,
-update table); `fb_enum_values(enum_name, value_code, value_label)`. Empty in an ordinary
+`fb_field_info(id, field_name, table_name, display_label, display_format, edit_format, visible, read_only, triggered, display_width, fib_version, snapshot_at)`;
+`fb_datasets(id, ds_id, description, select_sql, update_sql, insert_sql, delete_sql, refresh_sql, name_generator, key_field, update_table_name, update_only_modified_fields, conditions, fib_version, snapshot_at)`;
+`fb_enum_values(id, enum_name, value_code, value_label, fib_version, snapshot_at)`. Empty in an ordinary
 project DB.
 
 ### orm_links
@@ -499,14 +538,14 @@ variable passed at position `src_index` of an earlier call).
 
 All three live in `schema_meta` and drive "is this index current".
 
-* **schema** `schema_version` (= `SCHEMA_VERSION`, 24; read range from `SCHEMA_READ_MIN` = 23): structural generation of the file.
-* **indexer** `indexer_fingerprint`, e.g. `v=1.25.0-alpha;schema=23;pp=1;plat=win64;cfg=debug;defs=42819f5f`:
+* **schema** `schema_version` (= `SCHEMA_VERSION`, 27; read range from `SCHEMA_READ_MIN` = 23): structural generation of the file.
+* **indexer** `indexer_fingerprint`, e.g. `v=1.42.0-alpha;schema=27;pp=1;plat=win64;cfg=debug;defs=42819f5f`:
   product/extractor version, schema, preprocessing on, platform, config, hash of the defines.
   A mismatch means rows were produced by a different extractor: re-parse. The extractor
   constant `DRAGLINT_EXTRACTOR_VERSION` changes only when extraction changes. Per file the
   same string is kept in `files.indexed_at_fingerprint`, so an interrupted run resumes
   instead of restarting.
-* **resolver** `resolver_fingerprint`, e.g. `r=1.15.0-alpha;schema=23`: the resolve-pass
+* **resolver** `resolver_fingerprint`, e.g. `r=1.31.0-alpha;schema=27`: the resolve-pass
   generation. A mismatch re-runs resolve (without re-parsing) so `refs.symbol_id`,
   `call_edges`, `member_accesses` etc. are rebuilt.
 * `indexed_at_unix` is the freshness stamp; a non-empty `rebuild_in_progress`, `library_resolve_state` means a

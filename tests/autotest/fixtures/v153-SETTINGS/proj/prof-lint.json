@@ -1,0 +1,7 @@
+{
+  "enabled": ["magic-literal"],
+  "profiles": {
+    "quiet": { "enabled": [] },
+    "loud": { "enabled": ["magic-literal"] }
+  }
+}

@@ -1,5 +1,7 @@
 # Plan TT-FIBREMOVE -- FIB$ run-time reader inventory + removal plan (DL side only)
 
+> **SUPERSEDED 2026-11-22** by `docs\superpowers\specs\2026-11-22-field-repository-v2-design.md` (section 11: publish-fb dropped, column triage dropped, FIB$ reader inventory deferred to 1.54). Do not execute.
+
 Spec: `docs\superpowers\specs\2026-11-20-tabletools-publish-triage-design.md` section 4 (criteria R1-R4), section 0
 (Q9, D5). Lane rules: `C:\TEMP\claude\lanes\v1522\COMMON-BRIEF.md` + `v1523\PLAN.md` section 1. Wave W3, 1.53.0.
 Model: sonnet (fully specified). NO ORM3 edits, no DROP, no Firebird access at all in this lane.

@@ -149,6 +149,12 @@ procedure RestoreRepositoryFromStrings(pConnection: TFDConnection; pLines: TStri
 procedure RestoreRepository(pConnection: TFDConnection; const pFileName: string;
   pReplace: Boolean);
 
+/// <summary>Reads the schema version a backup file declares on its first line.</summary>
+/// <param name="pFileName">Backup file (ASCII).</param>
+/// <returns>1 for `#DLREPO 1`, 2 for `#DLREPO 2`, 0 when the first line is neither (or the file is empty).</returns>
+/// <remarks>Used by `repo restore` to create a missing repository at the backup's own version.</remarks>
+function BackupFileVersion(const pFileName: string): Integer;
+
 implementation
 
 uses
@@ -160,7 +166,7 @@ uses
   FireDAC.Stan.Param;
 
 const
-  BACKUP_MAGIC = '#DLREPO 1';
+  BACKUP_MAGIC_PREFIX = '#DLREPO ';
   BACKUP_END = '#end ';
   TEXT_PREFIX = ' |';
   CHAR_FIRST = ' ';
@@ -415,11 +421,12 @@ procedure BackupRepositoryToStrings(pConnection: TFDConnection; pLines: TStrings
 var
   VTable: TRepoTable;
   VQuery: TFDQuery;
-  VCount: Integer;
+  VCount, VVersion: Integer;
 begin
   pLines.Clear;
-  pLines.Add(BACKUP_MAGIC);
-  for VTable in RepoTables do
+  VVersion := RepoSchemaVersion(pConnection);
+  pLines.Add(BACKUP_MAGIC_PREFIX + IntToStr(VVersion));
+  for VTable in RepoTablesFor(VVersion) do
   begin
     VQuery := TFDQuery.Create(nil);
     try
@@ -479,11 +486,35 @@ end;
 
 { ---- restore: parse ------------------------------------------------------- }
 
+function BackupLineVersion(const pLine: string): Integer;
+var
+  VVersion: Integer;
+begin
+  Result := 0;
+  for VVersion := REPO_SCHEMA_MIN_VERSION to REPO_SCHEMA_VERSION do
+    if SameStr(pLine, BACKUP_MAGIC_PREFIX + IntToStr(VVersion)) then
+      Exit(VVersion);
+end;
+
+function BackupFileVersion(const pFileName: string): Integer;
+var
+  VLines: TStringList;
+begin
+  VLines := TStringList.Create;
+  try
+    VLines.LoadFromFile(pFileName, TEncoding.ASCII);
+    Result := if VLines.Count = 0 then 0 else BackupLineVersion(VLines[0]);
+  finally
+    VLines.Free;
+  end;
+end;
+
 type
   TBackupParser = class
   private
     FLines: TStrings;
     FTables: TArray<TRepoTable>;
+    FVersion: Integer;
     FRows: TList<TParsedRow>;
     procedure Fail(pLineNo: Integer; const pMessage: string);
     procedure CheckChars(pLineNo: Integer; const pLine: string);
@@ -498,13 +529,15 @@ type
     procedure Parse;
     property Rows: TList<TParsedRow> read FRows;
     property Tables: TArray<TRepoTable> read FTables;
+    property Version: Integer read FVersion;
   end;
 
 constructor TBackupParser.Create(pLines: TStrings);
 begin
   inherited Create;
   FLines := pLines;
-  FTables := RepoTables;
+  FTables := nil;
+  FVersion := 0;
   FRows := TList<TParsedRow>.Create;
 end;
 
@@ -747,8 +780,10 @@ var
   VLine: string;
   VKeys: TDictionary<string, Integer>;
 begin
-  if (FLines.Count = 0) or (FLines[0] <> BACKUP_MAGIC) then
-    Fail(1, 'first line must be "' + BACKUP_MAGIC + '"');
+  if (FLines.Count = 0) or (BackupLineVersion(FLines[0]) = 0) then
+    Fail(1, 'first line must be "' + BACKUP_MAGIC_PREFIX + '1" or "' + BACKUP_MAGIC_PREFIX + '2"');
+  FVersion := BackupLineVersion(FLines[0]);
+  FTables := RepoTablesFor(FVersion);
   VNo := 2;
   for VT := 0 to High(FTables) do
   begin
@@ -806,11 +841,10 @@ var
   VCell: TCell;
   VParam: TFDParam;
 begin
-  for VT := 0 to High(pParser.Tables) do
-  begin
-    VTable := pParser.Tables[VT];
+  { every table of the repository's own version is emptied, also the schema-2 tables a
+    `#DLREPO 1` backup does not carry (they are restored empty) }
+  for VTable in RepoTablesFor(RepoSchemaVersion(pConnection)) do
     pConnection.ExecSQL('DELETE FROM ' + QuoteRepoIdent(VTable.Name));
-  end;
   for VT := 0 to High(pParser.Tables) do
   begin
     VTable := pParser.Tables[VT];
@@ -860,6 +894,14 @@ begin
   end;
 end;
 
+function SchemaTwoTablesEmpty(pConnection: TFDConnection): Boolean;
+begin
+  Result := RepoSchemaVersion(pConnection) < 2;
+  if not Result then
+    Result := (RepoRowCount(pConnection, REPO_TABLE_LAYOUT_EVENTS) = 0)
+      and (RepoRowCount(pConnection, REPO_TABLE_EXCEPTIONS) = 0);
+end;
+
 procedure RestoreRepositoryFromStrings(pConnection: TFDConnection; pLines: TStrings;
   pReplace: Boolean);
 var
@@ -868,7 +910,10 @@ begin
   VParser := TBackupParser.Create(pLines);
   try
     VParser.Parse;
-    if (not pReplace) and (not RepoIsEmpty(pConnection)) then
+    if VParser.Version > RepoSchemaVersion(pConnection) then
+      raise ERepoError.CreateFmt('backup schema %d does not match repository schema %d: migrate first (repo migrate --apply)',
+        [VParser.Version, RepoSchemaVersion(pConnection)]);
+    if (not pReplace) and ((not RepoIsEmpty(pConnection)) or (not SchemaTwoTablesEmpty(pConnection))) then
       raise ERepoError.Create('the repository already holds rows; restore needs replace');
     pConnection.StartTransaction;
     try

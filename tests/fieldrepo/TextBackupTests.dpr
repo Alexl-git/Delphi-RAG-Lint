@@ -79,14 +79,15 @@ begin
   Result := TPath.Combine(GFix, pName);
 end;
 
-{ Creates a fresh repository file and returns an open read-write connection. }
-function NewRepo: TFDConnection;
+{ Creates a fresh repository file of the given schema version (default 1: the 1.52 goldens
+  are `#DLREPO 1` and stay byte-identical) and returns an open read-write connection. }
+function NewRepo(pVersion: Integer = 1): TFDConnection;
 var
   vPath: string;
 begin
   Inc(GRepoSeq);
   vPath := TPath.Combine(GDir, 'r' + IntToStr(GRepoSeq) + '.dlrepo');
-  CreateRepository(vPath);
+  CreateRepository(vPath, pVersion);
   Result := OpenRepository(vPath, False);
 end;
 
@@ -289,7 +290,7 @@ begin
     vB2 := TFile.ReadAllBytes(vP2);
     Check('4a two backups give identical bytes', BytesEqual(vB1, vB2));
     vB.ExecSQL('ATTACH DATABASE ''' + RepoFilePath(vA) + ''' AS src');
-    for vT in RepoTables do
+    for vT in RepoTablesFor(1) do
     begin
       vKeys := '';
       for vK in vT.PkColumns do
@@ -467,6 +468,101 @@ begin
   end;
 end;
 
+{ FR-MODEL task 3: #DLREPO 2, the v1/v2 restore matrix, the missing-file version. }
+procedure TestV2;
+var
+  vV1, vV2: TFDConnection;
+  vOut, vMsg: string;
+  vWant, vGot: TBytes;
+  vCls: string;
+  vNull: Boolean;
+  vPath: string;
+begin
+  vV2 := NewRepo(2);
+  try
+    RestoreRepository(vV2, Fixture('golden_v2.txt'), False);
+    vOut := TPath.Combine(GDir, 'out-golden_v2.txt');
+    BackupRepository(vV2, vOut);
+    vWant := TFile.ReadAllBytes(Fixture('golden_v2.txt'));
+    vGot := TFile.ReadAllBytes(vOut);
+    Check('20a golden_v2.txt round trip is byte-identical', BytesEqual(vWant, vGot), FirstDiff(vWant, vGot));
+    Check('20b CALC_BODY restored', ScalarStr(vV2,
+      'SELECT "CALC_BODY" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" = ''TOTAL''', vNull) = '{{TOTAL}} := {{AMOUNT}} * 2;');
+    Check('20c exception row restored', ScalarStr(vV2, 'SELECT "REASON" FROM "DL_EXCEPTIONS"', vNull) = 'legacy width');
+  finally
+    vV2.Free;
+  end;
+
+  vV2 := NewRepo(2);
+  try
+    RestoreRepository(vV2, Fixture('golden.dlrepo.txt'), False);
+    vOut := TPath.Combine(GDir, 'v1-in-v2.txt');
+    BackupRepository(vV2, vOut);
+    vGot := TFile.ReadAllBytes(vOut);
+    vWant := TFile.ReadAllBytes(Fixture('golden.dlrepo.txt'));
+    Check('21a #DLREPO 1 restores into a v2 repository (rows present)',
+      ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO"', vNull) = '6');
+    Check('21b the v2 backup of it is the v1 backup with #DLREPO 2, CALC_BODY absent and two empty trailers',
+      TEncoding.ASCII.GetString(vGot) = '#DLREPO 2' + Copy(TEncoding.ASCII.GetString(vWant), Length('#DLREPO 1') + 1, MaxInt)
+        + '#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10);
+    Check('21c CALC_BODY is NULL after a v1 restore',
+      ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO" WHERE "CALC_BODY" IS NOT NULL', vNull) = '0');
+    Check('21d schema-2 tables are empty after a v1 restore',
+      (ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_EXCEPTIONS"', vNull) = '0')
+      and (ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_LAYOUT_EVENTS"', vNull) = '0'));
+    Check('21e trailers of the two new tables are present and empty',
+      (Pos('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10, TEncoding.ASCII.GetString(vGot)) > 0));
+  finally
+    vV2.Free;
+  end;
+
+  { a v1 repository's backup is still byte-identical to the v1 golden (the existing test 2 pins it
+    too; this is the explicit v1 side of the matrix) }
+  vV1 := NewRepo(1);
+  try
+    RestoreRepository(vV1, Fixture('golden.dlrepo.txt'), False);
+    vOut := TPath.Combine(GDir, 'v1-out.txt');
+    BackupRepository(vV1, vOut);
+    vWant := TFile.ReadAllBytes(Fixture('golden.dlrepo.txt'));
+    vGot := TFile.ReadAllBytes(vOut);
+    Check('22a v1 repository still writes the v1 golden byte-identically', BytesEqual(vWant, vGot), FirstDiff(vWant, vGot));
+    vCls := RaisedClass(procedure begin RestoreRepository(vV1, Fixture('golden_v2.txt'), True); end);
+    Check('22b #DLREPO 2 into a v1 repository is refused with ERepoError', vCls = 'ERepoError', vCls);
+    vMsg := '';
+    try
+      RestoreRepository(vV1, Fixture('golden_v2.txt'), True);
+    except
+      on E: Exception do
+        vMsg := E.Message;
+    end;
+    Check('22c the refusal says "migrate first" and "does not match"',
+      vMsg.Contains('migrate first') and vMsg.Contains('does not match'), vMsg);
+    Check('22d the refused restore changed nothing (still 6 field rows)',
+      ScalarStr(vV1, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO"', vNull) = '6');
+  finally
+    vV1.Free;
+  end;
+
+  Check('23a BackupFileVersion of the v1 golden is 1', BackupFileVersion(Fixture('golden.dlrepo.txt')) = 1);
+  Check('23b BackupFileVersion of the v2 golden is 2', BackupFileVersion(Fixture('golden_v2.txt')) = 2);
+  vPath := TPath.Combine(GDir, 'notmagic.txt');
+  TFile.WriteAllText(vPath, 'hello' + #13#10, TEncoding.ASCII);
+  Check('23c BackupFileVersion of a file without the magic line is 0 (control)', BackupFileVersion(vPath) = 0);
+
+  { restore into a v2 repository that already holds exception rows needs replace }
+  vV2 := NewRepo(2);
+  try
+    vV2.ExecSQL('INSERT INTO "DL_EXCEPTIONS" ("RULE_ID","REASON") VALUES (''r1'',''x'')');
+    vCls := RaisedClass(procedure begin RestoreRepository(vV2, Fixture('golden.dlrepo.txt'), False); end);
+    Check('24a restore without replace refuses when only DL_EXCEPTIONS holds rows', vCls = 'ERepoError', vCls);
+    RestoreRepository(vV2, Fixture('golden.dlrepo.txt'), True);
+    Check('24b with replace the exception rows are replaced (restored empty)',
+      ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_EXCEPTIONS"', vNull) = '0');
+  finally
+    vV2.Free;
+  end;
+end;
+
 begin
   GDir := TPath.Combine(TPath.GetTempPath, 'dl-fieldrepo-TTC-' + IntToStr(GetCurrentProcessId));
   if TDirectory.Exists(GDir) then
@@ -483,6 +579,7 @@ begin
     TestBad;
     TestReplace;
     TestDefaultsDoNotLeak;
+    TestV2;
   except
     on E: Exception do
     begin

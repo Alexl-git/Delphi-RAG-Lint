@@ -1,0 +1,76 @@
+# project-settings
+
+Per-project switches in one place, with a command to read and write them.
+`drag-lint settings list|get|set|unset` works on two files in the project's `_D-RAG` folder:
+
+| file | holds | commit it? |
+|---|---|---|
+| `_D-RAG\drag-lint-project.json` | the project's settings, shared by everyone | yes |
+| `_D-RAG\drag-lint-project.local.json` | this machine's overrides (written by `set --local`) | no |
+
+Precedence, most specific first: **command-line flag > local file > project file > built-in default**.
+Keys are a fixed catalog: a typo is an error (exit 2), never a silent dead key. Keys in a file
+that the catalog does not know are listed as `unknown:` and are always kept when a file is rewritten,
+so hand-written `_comment` lines and the older project keys survive.
+
+## Which project
+
+First hit wins: `--project <x.dproj|.dpr|.dpk>` (its folder); `--in <file>` (the first folder at or
+above the file that holds `_D-RAG`); `--db <db>` (the folder above its `_D-RAG`); the current
+directory (same walk-up). None of them: exit 2, `no project`.
+
+## The keys
+
+| key | type | default | `--local` | settable | what it does |
+|---|---|---|---|---|---|
+| `ownRoots` | path list | the project folder | no | yes | folders whose files count as the project's own code |
+| `excludeRoots` | path list | `[]` | no | yes | vendored folders inside the project, not linted as your own |
+| `reportsDir` | path | `<project>\drag-lint-reports` | no | yes | snapshot / report folder |
+| `fieldRepository` | path | none | no | yes | field repository for the `repo` verbs (`--repo` overrides) |
+| `popupForms` | object list | `[]` | no | no | forms opened as popups; edit the file by hand |
+| `checkInit` | object | `{}` | no | no | `check-init` callee answers; edit the file by hand |
+| `lint.config` | path | the discovery chain | yes | yes | lint config file (relative to the project folder); `--config` overrides |
+| `lint.profile` | string | none | yes | yes | named lint profile when `--profile` is not given |
+| `taint.envSource` | bool | `true` | yes | yes | `false`: `GetEnvironmentVariable` is not a taint source in this project |
+
+`taint.envSource = false` only ever switches that one source OFF (it is added to the taint
+`disable` list of the effective config); it cannot switch ON a source your lint config disabled.
+A value is plain 7-bit ASCII. Lists take a JSON array (`["src","..\\lib"]`) or `a,b`; an empty
+`ownRoots` is refused because it would make the project own nothing and report clean.
+
+## The four sub-verbs
+
+```
+drag-lint settings list  --project App.dproj
+drag-lint settings get   lint.profile --project App.dproj
+drag-lint settings set   taint.envSource false --project App.dproj
+drag-lint settings set   lint.profile strict --local --project App.dproj
+drag-lint settings unset lint.profile --local --project App.dproj
+```
+
+* `list` prints `key = value  (default|project|local)` per key, then `unknown:` lines. `--json` adds
+  the file paths, the type, default, flag and description of every key.
+* `get` prints the effective value alone (a bool as `true`/`false`, a list or object as compact JSON).
+* `set` / `unset` print one line naming the file written. Exit 0 done; **1 nothing to do** (already
+  that value / key not in that file); **2** usage error, unknown key, bad value, key not settable or
+  not `--local`-allowed, a file that is not a JSON object (the file is never rewritten), no project.
+* `unset` removes a nested object that it leaves empty.
+
+A write keeps key order, uses 2-space indent, CRLF and 7-bit ASCII, goes through a temp file and a
+replace, and does not touch the file when the value is unchanged.
+
+## Local file and your ignore file
+
+`set --local` creates `drag-lint-project.local.json` and prints a note once: add
+`_D-RAG/*.local.json` to your ignore file. drag-lint never edits your `.gitignore` / `.hgignore`.
+
+## What reads the new keys
+
+`lint` and `lint-all` read `lint.config`, `lint.profile` and `taint.envSource` for the run's project
+(the `--project` folder, else the folder above the linted file or the `--db`). `--config` and
+`--profile` on the command line still win. A settings file that does not parse is reported as one
+stderr line and ignored by the lint run; the `settings` verbs exit 2 on it. The language server's
+own config discovery is not changed in this release: it spawns `lint <file>`, which reads the keys,
+but a path the LSP discovers itself does not see `lint.config`.
+
+Not part of this release (scheduled for 1.53.1): the IDE Project Manager menu over the same store, and `reportsDir` / `fieldRepository` in the local overlay.
