@@ -55,24 +55,28 @@ type
   /// </remarks>
   TOrmLinker = class
     public
-      /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <summary>Links Delphi classes, interfaces and fields to SQL tables and columns by name, across
+      /// every index given, and rebuilds one orm_links table with the result.</summary>
+      /// <param name="ADbPaths">The indexes, in --db order; each is read for Delphi and SQL symbols alike.
+      /// delphi_db_index / sql_db_index are positions in this list, so the rows mean something only with
+      /// it: they are written ONCE, into the last index, never into every one.</param>
       /// <returns><!-- drag-lint:auto -->TOrmLinkerStats -- Observed: Default
       /// (TOrmLinkerStats).</returns>
       /// <exception cref="EIndexNewerThanEngine"><!-- drag-lint:auto exc -->via DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate: refusing to write: this database is at schema v%d, NEWER than this engine's v%d (drag-lint %s).</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?</para>
-      /// <para>Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate, StripPrefix, UpperCase</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 244 lines (full implementation)</para>
+      /// <para>Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.ClassKey, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate, StripPrefix, UpperCase</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 245 lines (full implementation)</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <para>SQL: writes ORM_LINKS</para>
       /// <para>Transaction: starts, commits, rolls back</para>
       /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Sql.OrmLinker.ClassKey"/>
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink"/>
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Run(const ADbPaths: TArray<string>): TOrmLinkerStats; static;
@@ -108,6 +112,13 @@ begin
   Result:= if (Length(AName) >= 2) and (UpCase(AName[1]) = APrefix) and CharInSet(AName[2], ['A'..'Z']) then Copy(AName, 2, MaxInt) else AName;
 end;
 
+{ Symbol ids are LOCAL to their index: with several --db values a bare class id names a different
+  class in each, so the fields of one class were also linked through another (v153 BUGS). }
+function ClassKey(ADbIdx: Integer; AClassId: Int64): string;
+begin
+  Result:= ADbIdx.ToString + ':' + AClassId.ToString;
+end;
+
 class function TOrmLinker.Run(const ADbPaths: TArray<string>): TOrmLinkerStats;
 var
   Stores         : TArray<TSQLiteSymbolStore>           ;
@@ -116,7 +127,7 @@ var
   SqlColumns     : TDictionary<string, TList<TSqlSym>>  ; { key = upper(table)+'.'+upper(col) }
   DelphiClasses  : TList<TDelphiSym>                    ;
   DelphiIfaces   : TList<TDelphiSym>                    ;
-  DelphiFields   : TDictionary<Int64, TList<TDelphiSym>>; { class symbol id -> fields }
+  DelphiFields   : TDictionary<string, TList<TDelphiSym>>; { ClassKey(db index, class symbol id) -> fields }
   ParentLookup   : TDictionary<Int64, string>           ; { Delphi parent class id -> upper(stripped) }
   SqlTablesByName: TDictionary<string, TSqlSym>         ; { upper(table) -> sym (first wins) }
   OutStore       : TSQLiteSymbolStore                   ;
@@ -214,8 +225,9 @@ var
         Del.ParentId:= ParentId;
         if ParentId > 0 then
         begin
-          if not DelphiFields.ContainsKey(ParentId) then DelphiFields.Add(ParentId, TList<TDelphiSym>.Create);
-          DelphiFields[ParentId].Add(Del);
+          Key:= ClassKey(ADbIdx, ParentId);
+          if not DelphiFields.ContainsKey(Key) then DelphiFields.Add(Key, TList<TDelphiSym>.Create);
+          DelphiFields[Key].Add(Del);
         end;
         Q.Next;
       end;
@@ -266,7 +278,7 @@ begin
   SqlTablesByName:= TDictionary<string, TSqlSym>.Create;
   DelphiClasses:= TList<TDelphiSym>.Create;
   DelphiIfaces := TList<TDelphiSym>.Create;
-  DelphiFields:= TDictionary<Int64, TList<TDelphiSym>>.Create;
+  DelphiFields:= TDictionary<string, TList<TDelphiSym>>.Create;
   ParentLookup:= TDictionary<Int64, string>.Create;
 
   try
@@ -318,7 +330,7 @@ begin
         for Cls in DelphiClasses do
         begin
           if Cls.Stripped = '' then Continue;
-          if not DelphiFields.TryGetValue(Cls.Id, FldList) then Continue;
+          if not DelphiFields.TryGetValue(ClassKey(Cls.DbIndex, Cls.Id), FldList) then Continue;
           ParentStripped:= Cls.Stripped;
           for Fld in FldList do
           begin

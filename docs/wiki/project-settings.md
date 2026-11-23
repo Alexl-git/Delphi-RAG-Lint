@@ -67,7 +67,8 @@ replace, and does not touch the file when the value is unchanged.
 ## What reads the new keys
 
 `lint` and `lint-all` read `lint.config`, `lint.profile` and `taint.envSource` for the run's project
-(the `--project` folder, else the folder above the linted file or the `--db`). `--config` and
+(the `--project` folder, else the folder above the linted file or the `--db`, else the project the
+`--db` was indexed from). `--config` and
 `--profile` on the command line still win. A settings file that does not parse is reported as one
 stderr line and ignored by the lint run; the `settings` verbs exit 2 on it. The language server's
 own config discovery is not changed in this release: it spawns `lint <file>`, which reads the keys,

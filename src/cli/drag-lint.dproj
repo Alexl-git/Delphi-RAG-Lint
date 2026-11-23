@@ -420,6 +420,7 @@
         <DCCReference Include="DRagLint.CLI.RepoConstGen.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoSchema.pas"/>
         <DCCReference Include="DRagLint.CLI.Explain.pas"/>
+        <DCCReference Include="DRagLint.CLI.ConfigAnchor.pas"/>
         <DCCReference Include="DRagLint.CLI.RuleScope.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.pas"/>
         <DCCReference Include="..\preprocess\DRagLint.Preprocess.Tolerance.pas"/>

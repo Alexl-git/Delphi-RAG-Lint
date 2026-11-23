@@ -286,6 +286,7 @@ uses
   , DRagLint.Project.Settings
   , DRagLint.FieldRepo.Locate { LocateFieldRepository: the repo line of resolve-dbs --project (1.53 FR-SCHEMA) }
   , DRagLint.CLI.Explain { explain verb (1.52 FRAME; lane EXPLAIN) }
+  , DRagLint.CLI.ConfigAnchor { 1.53 BUGS: the lint config of the project an index was built from }
   , DRagLint.CLI.RuleScope { rules disable / enable (1.52 FRAME; lane DISRULE) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
   , DRagLint.CLI.MigrateDbs { migrate-dbs verb + the manifest pair rule (v1511 SPLIT) }
@@ -11574,6 +11575,9 @@ begin
   Path:= AArgs.ConfigPath;
   { 1.53 SETTINGS: lint.config / lint.profile / taint.envSource from <anchor>\_D-RAG\drag-lint-project(.local).json }
   SetAnchor:= TProjectSettings.ResolveAnchor(AArgs.ProjectPath, IfThen(AArgs.StandInFor <> '', AArgs.StandInFor, IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile)), AArgs.DbPath, '');
+  { 1.53 BUGS: only the --db names this run, and the DB may be a copy away from its project: ask the index itself }
+  var AnchorDb: string:= DbWhenNoFile(AArgs.DbPath, AArgs.StandInFor + AArgs.Path + AArgs.InFile);
+  SetAnchor:= SettingsAnchorOr(SetAnchor, AnchorDb);
   ProjSettings:= LoadSettingsOrWarn(SetAnchor);
   try
   if (Path = '') and (ProjSettings <> nil) and (ProjSettings.AsString('lint.config') <> '') then Path:= TPath.Combine(SetAnchor, ProjSettings.AsString('lint.config'));
@@ -11683,7 +11687,9 @@ begin
     end;
   end;
 
+  Path:= ConfigPathOr(Path, AArgs.ProjectPath, AnchorDb);
   if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
+  NoteNoLintConfig(Path, AArgs.ProjectPath, AnchorDb);
   Result:= TLintConfig.Load(Path, Profile);
   if IsComplianceProfile(Profile) and not Result.UserProfileFound then
     ApplyComplianceProfile(Result, Profile, AArgs.RulesDir);
@@ -16681,7 +16687,8 @@ begin
   try
     Stats:= TOrmLinker.Run(AArgs.DbPaths);
     Writeln(Format(
-        'link-orm: %d class_to_table, %d iface_to_table, %d field_to_column (across %d DBs)', [Stats.ClassLinks, Stats.IfaceLinks, Stats.FieldLinks, Length(AArgs.DbPaths)]));
+        'link-orm: %d class_to_table, %d iface_to_table, %d field_to_column (across %d DBs) -- written to %s',
+        [Stats.ClassLinks, Stats.IfaceLinks, Stats.FieldLinks, Length(AArgs.DbPaths), AArgs.DbPaths[High(AArgs.DbPaths)]]));
     Result:= 0;
   except
     on E: Exception do begin Writeln(ErrOutput, 'link-orm FAILED: ', E.ClassName, ': ', E.Message); Result:= 3; end;

@@ -24,6 +24,22 @@ The shared Output/CI flags also apply: `--format sarif`, `--fail-on <level>`,
 `--config <file>`, `--enable id1,id2`, `--profile <name>`, `--baseline <file>`,
 `--write-baseline <file>`.
 
+## Which drag-lint-lint.json a run uses
+
+The first of these that exists:
+
+1. `--config <file>`; then the project setting `lint.config`.
+2. With `--project`: the project folder, then its `_D-RAG`.
+3. The nearest one at or above the `--db` file (each folder, then its `_D-RAG`).
+4. The nearest one at or above the project: the `--project` file, else the project the index was built
+   from (its `project_tag` and indexed `.dpr` / `.dpk`). So a COPY of a project index in a scratch
+   folder keeps the project's rulings (1.53).
+5. The current directory.
+
+When nothing is found for a project index whose project file is not on this machine, one note on stderr
+names the folders looked in; `--quiet` and `--json` / `--format sarif` runs stay silent. The project
+settings file (`_D-RAG\drag-lint-project.json`) follows the indexed project in the same way.
+
 ## Judging a marker on a unit several projects share
 
 A `dl:ok` for a closure-dependent rule (project-scope, class-metric, taint,
