@@ -10131,67 +10131,68 @@ type
     did with them. Owned by TSQLiteSymbolStore.FClaims; lives from OpenFileTx to
     CommitFileTx / RollbackFileTx. Not thread-safe (one file tx at a time). }
   TSymbolClaimMap = class
-  public  // dl:ok public-field -- REVIEWED 2026-11-22 GH18: a private record-like holder of the store's implementation section
-    FileId       : Int64;
-    IncBefore    : Boolean;                     { the file hosted / was an include before the write }
-    Flushed      : Boolean;                     { FinishSymbolClaims ran }
-    OldIdByKey   : TDictionary<string, Int64>;  { identity key -> old id }
-    OldFp        : TDictionary<Int64, string>;  { old id -> fingerprint at OpenFileTx }
-    OldName      : TDictionary<Int64, string>;  { old id -> name as stored }
-    OldKind      : TDictionary<Int64, string>;  { old id -> kind text }
-    OldIncNonZero: TDictionary<Int64, Boolean>; { old ids whose inc_variant was not 0 }
-    Claimed      : TDictionary<Int64, Boolean>; { old ids re-emitted }
-    KeyById      : TDictionary<Int64, string>;  { every id THIS emission returned -> its key }
-    NewName      : TDictionary<Int64, string>;
-    NewKind      : TDictionary<Int64, string>;
-    Occurrence   : TDictionary<string, Integer>;
-    GroupLast    : TDictionary<string, Int64>;  { lower(name) -> the last id this emission gave the group }
-    OldPropSpec  : TDictionary<Int64, string>;  { old property id -> its property-spec refs }
-    Added, Changed, Removed: TList<Int64>;
-    constructor Create(AFileId: Int64);
-    destructor Destroy; override;
+  private { unit-private: TSQLiteSymbolStore, in this unit, reads and writes them }
+    FFileId       : Int64;
+    FIncBefore    : Boolean;                     { the file hosted / was an include before the write }
+    FFlushed      : Boolean;                     { FinishSymbolClaims ran }
+    FOldIdByKey   : TDictionary<string, Int64>;  { identity key -> old id }
+    FOldFp        : TDictionary<Int64, string>;  { old id -> fingerprint at OpenFileTx }
+    FOldName      : TDictionary<Int64, string>;  { old id -> name as stored }
+    FOldKind      : TDictionary<Int64, string>;  { old id -> kind text }
+    FOldIncNonZero: TDictionary<Int64, Boolean>; { old ids whose inc_variant was not 0 }
+    FClaimed      : TDictionary<Int64, Boolean>; { old ids re-emitted }
+    FKeyById      : TDictionary<Int64, string>;  { every id THIS emission returned -> its key }
+    FNewName      : TDictionary<Int64, string>;
+    FNewKind      : TDictionary<Int64, string>;
+    FOccurrence   : TDictionary<string, Integer>;
+    FGroupLast    : TDictionary<string, Int64>;  { lower(name) -> the last id this emission gave the group }
+    FOldPropSpec  : TDictionary<Int64, string>;  { old property id -> its property-spec refs }
+    FAdded, FChanged, FRemoved: TList<Int64>;
     function NewKey(const ASymbol: TSymbol): string;
     procedure NoteEmitted(AId: Int64; const AKey: string; const ASymbol: TSymbol);
+  public
+    constructor Create(AFileId: Int64);
+    destructor Destroy; override;
   end;
 
 constructor TSymbolClaimMap.Create(AFileId: Int64);
 begin
   inherited Create;
-  FileId       := AFileId;
-  OldIdByKey   := TDictionary<string, Int64>.Create;
-  OldFp        := TDictionary<Int64, string>.Create;
-  OldName      := TDictionary<Int64, string>.Create;
-  OldKind      := TDictionary<Int64, string>.Create;
-  OldIncNonZero:= TDictionary<Int64, Boolean>.Create;
-  Claimed      := TDictionary<Int64, Boolean>.Create;
-  KeyById      := TDictionary<Int64, string>.Create;
-  NewName      := TDictionary<Int64, string>.Create;
-  NewKind      := TDictionary<Int64, string>.Create;
-  Occurrence   := TDictionary<string, Integer>.Create;
-  GroupLast    := TDictionary<string, Int64>.Create;
-  OldPropSpec  := nil; { set by LoadSymbolClaims }
-  Added        := TList<Int64>.Create;
-  Changed      := TList<Int64>.Create;
-  Removed      := TList<Int64>.Create;
+  FFileId       := AFileId;
+  FOldIdByKey   := TDictionary<string, Int64>.Create;
+  FOldFp        := TDictionary<Int64, string>.Create;
+  FOldName      := TDictionary<Int64, string>.Create;
+  FOldKind      := TDictionary<Int64, string>.Create;
+  FOldIncNonZero:= TDictionary<Int64, Boolean>.Create;
+  FClaimed      := TDictionary<Int64, Boolean>.Create;
+  FKeyById      := TDictionary<Int64, string>.Create;
+  FNewName      := TDictionary<Int64, string>.Create;
+  FNewKind      := TDictionary<Int64, string>.Create;
+  FOccurrence   := TDictionary<string, Integer>.Create;
+  FGroupLast    := TDictionary<string, Int64>.Create;
+  FOldPropSpec  := nil; { set by LoadSymbolClaims }
+  FAdded        := TList<Int64>.Create;
+  FChanged      := TList<Int64>.Create;
+  FRemoved      := TList<Int64>.Create;
 end;
 
 destructor TSymbolClaimMap.Destroy;
 begin
-  OldIdByKey.Free;
-  OldFp.Free;
-  OldName.Free;
-  OldKind.Free;
-  OldIncNonZero.Free;
-  Claimed.Free;
-  KeyById.Free;
-  NewName.Free;
-  NewKind.Free;
-  Occurrence.Free;
-  GroupLast.Free;
-  OldPropSpec.Free;
-  Added.Free;
-  Changed.Free;
-  Removed.Free;
+  FOldIdByKey.Free;
+  FOldFp.Free;
+  FOldName.Free;
+  FOldKind.Free;
+  FOldIncNonZero.Free;
+  FClaimed.Free;
+  FKeyById.Free;
+  FNewName.Free;
+  FNewKind.Free;
+  FOccurrence.Free;
+  FGroupLast.Free;
+  FOldPropSpec.Free;
+  FAdded.Free;
+  FChanged.Free;
+  FRemoved.Free;
   inherited;
 end;
 
@@ -10235,19 +10236,19 @@ var
   N: Integer;
 begin
   ParentKey:= '';
-  if (ASymbol.ParentId >= 0) and not KeyById.TryGetValue(ASymbol.ParentId, ParentKey) then
+  if (ASymbol.ParentId >= 0) and not FKeyById.TryGetValue(ASymbol.ParentId, ParentKey) then
     ParentKey:= '?' + IntToStr(ASymbol.ParentId);
   Tuple:= SymbolTupleKey(ASymbol.Kind.ToText, ASymbol.QualifiedName, ASymbol.Signature, ParentKey);
-  if not Occurrence.TryGetValue(Tuple, N) then N:= 0;
-  Occurrence.AddOrSetValue(Tuple, N + 1);
+  if not FOccurrence.TryGetValue(Tuple, N) then N:= 0;
+  FOccurrence.AddOrSetValue(Tuple, N + 1);
   Result:= Tuple + SYMID_OCC_SEP + IntToStr(N);
 end;
 
 procedure TSymbolClaimMap.NoteEmitted(AId: Int64; const AKey: string; const ASymbol: TSymbol);
 begin
-  KeyById.AddOrSetValue(AId, AKey);
-  NewName.AddOrSetValue(AId, ASymbol.Name);
-  NewKind.AddOrSetValue(AId, ASymbol.Kind.ToText);
+  FKeyById.AddOrSetValue(AId, AKey);
+  FNewName.AddOrSetValue(AId, ASymbol.Name);
+  FNewKind.AddOrSetValue(AId, ASymbol.Kind.ToText);
 end;
 
 { DRAGLINT_NO_SYMBOL_ID_REUSE = 1 / on / yes / true: delete + insert as in 1.52
@@ -10281,7 +10282,7 @@ var
   Claims    : TSymbolClaimMap;
   OldKeyById: TDictionary<Int64, string>;
   Occ       : TDictionary<string, Integer>;
-  FId, FPid, FKind, FQName, FSig, FName, FInc: TField;
+  IdFld, PidFld, KindFld, QNameFld, SigFld, NameFld, IncFld: TField;
   Id        : Int64;
   ParentKey, Tuple, Key: string;
   N         : Integer;
@@ -10297,25 +10298,29 @@ begin
       Q.SQL.Text:= 'SELECT * FROM symbols WHERE file_id = :f ORDER BY id';
       Q.ParamByName('f').AsLargeInt:= AFileId;
       Q.Open;
-      FId:= Q.FieldByName('id'); FPid:= Q.FieldByName('parent_id'); FKind:= Q.FieldByName('kind');  // dl:ok multiple-statements-per-line -- REVIEWED 2026-11-22 GH18: field handles bound together
-      FQName:= Q.FieldByName('qualified_name'); FSig:= Q.FieldByName('signature');  // dl:ok multiple-statements-per-line -- REVIEWED 2026-11-22 GH18: field handles bound together
-      FName:= Q.FieldByName('name'); FInc:= Q.FindField('inc_variant');  // dl:ok multiple-statements-per-line -- REVIEWED 2026-11-22 GH18: field handles bound together
+      IdFld   := Q.FieldByName('id');
+      PidFld  := Q.FieldByName('parent_id');
+      KindFld := Q.FieldByName('kind');
+      QNameFld:= Q.FieldByName('qualified_name');
+      SigFld  := Q.FieldByName('signature');
+      NameFld := Q.FieldByName('name');
+      IncFld  := Q.FindField('inc_variant');
       while not Q.Eof do
       begin
-        Id:= FId.AsLargeInt;
+        Id:= IdFld.AsLargeInt;
         ParentKey:= '';
-        if (not FPid.IsNull) and not OldKeyById.TryGetValue(FPid.AsLargeInt, ParentKey) then
-          ParentKey:= '?' + FPid.AsString;
-        Tuple:= SymbolTupleKey(FKind.AsString, FQName.AsString, FSig.AsString, ParentKey);
+        if (not PidFld.IsNull) and not OldKeyById.TryGetValue(PidFld.AsLargeInt, ParentKey) then
+          ParentKey:= '?' + PidFld.AsString;
+        Tuple:= SymbolTupleKey(KindFld.AsString, QNameFld.AsString, SigFld.AsString, ParentKey);
         if not Occ.TryGetValue(Tuple, N) then N:= 0;
         Occ.AddOrSetValue(Tuple, N + 1);
         Key:= Tuple + SYMID_OCC_SEP + IntToStr(N);
         OldKeyById.AddOrSetValue(Id, Key);
-        Claims.OldIdByKey.AddOrSetValue(Key, Id);
-        Claims.OldFp.AddOrSetValue(Id, SymbolRowFingerprint(Q));
-        Claims.OldName.AddOrSetValue(Id, FName.AsString);
-        Claims.OldKind.AddOrSetValue(Id, FKind.AsString);
-        if (FInc <> nil) and (not FInc.IsNull) and (FInc.AsInteger <> 0) then Claims.OldIncNonZero.AddOrSetValue(Id, True);
+        Claims.FOldIdByKey.AddOrSetValue(Key, Id);
+        Claims.FOldFp.AddOrSetValue(Id, SymbolRowFingerprint(Q));
+        Claims.FOldName.AddOrSetValue(Id, NameFld.AsString);
+        Claims.FOldKind.AddOrSetValue(Id, KindFld.AsString);
+        if (IncFld <> nil) and (not IncFld.IsNull) and (IncFld.AsInteger <> 0) then Claims.FOldIncNonZero.AddOrSetValue(Id, True);
         Q.Next;
       end;
     finally
@@ -10323,7 +10328,7 @@ begin
       OldKeyById.Free;
       Q.Free;
     end;
-    Claims.OldPropSpec:= PropertySpecDigests(AFileId); { before OpenFileTx deletes the file's refs }
+    Claims.FOldPropSpec:= PropertySpecDigests(AFileId); { before OpenFileTx deletes the file's refs }
   except
     Claims.Free;
     raise;
@@ -10370,7 +10375,7 @@ begin
     begin
       Digest:= '';
       for Line:= Q.Fields[1].AsInteger to Q.Fields[2].AsInteger do
-        if ByLine.TryGetValue(Line, Names) then Digest:= Digest + Names;
+        if ByLine.TryGetValue(Line, Names) then Digest:= Digest + Names;  // dl:ok concat-in-loop@eafc -- REVIEWED 2026-11-22 GH18: one property's declaration lines, almost always one
       Result.AddOrSetValue(Q.Fields[0].AsLargeInt, Digest);
       Q.Next;
     end;
@@ -10395,7 +10400,7 @@ var
   T: string;
 begin
   for T in TABLES do
-    if TableExists(T) then FConn.ExecSQL('DELETE FROM ' + T + OF_FILE, [AFileId]);  // dl:ok taint-sql-injection -- REVIEWED 2026-11-22 GH18: T is a constant table name from TABLES
+    if TableExists(T) then FConn.ExecSQL('DELETE FROM ' + T + OF_FILE, [AFileId]);  // dl:ok sql-injection-concat@e46c -- REVIEWED 2026-11-22 GH18: T is a constant table name from TABLES
 end;
 
 { Load AIds into temp.dl_symid_ids -- the id set the reach queries and the
@@ -10405,7 +10410,7 @@ var
   Id: Int64;
 begin
   FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_symid_ids(id INTEGER PRIMARY KEY)');
-  FConn.ExecSQL('DELETE FROM temp.dl_symid_ids');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-22 GH18: a scratch temp table emptied before each fill
+  FConn.ExecSQL('DELETE FROM temp.dl_symid_ids');  // dl:ok sql-update-delete-without-where@3060 -- REVIEWED 2026-11-22 GH18: a scratch temp table emptied before each fill
   for Id in AIds do FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_symid_ids(id) VALUES (?)', [Id]);
 end;
 
@@ -10426,23 +10431,24 @@ var
   OldFp : string;
 begin
   Claims:= TSymbolClaimMap(FClaims);
-  if (Claims = nil) or Claims.Flushed then Exit;
-  Claims.Flushed:= True;
-  for Pair in Claims.OldIdByKey do
-    if not Claims.Claimed.ContainsKey(Pair.Value) then Claims.Removed.Add(Pair.Value);
-  if (Claims.Claimed.Count > 0) and not TestSymIdNoFp then
+  if (Claims = nil) or Claims.FFlushed then Exit;
+  Claims.FFlushed:= True;
+  for Pair in Claims.FOldIdByKey do
+    if not Claims.FClaimed.ContainsKey(Pair.Value) then Claims.FRemoved.Add(Pair.Value);
+  if (Claims.FClaimed.Count > 0) and not TestSymIdNoFp then
   begin
     Q:= TFDQuery.Create(nil);
     try
       Q.Connection:= FConn;
       Q.SQL.Text:= 'SELECT * FROM symbols WHERE file_id = :f';
-      Q.ParamByName('f').AsLargeInt:= Claims.FileId;
+      Q.ParamByName('f').AsLargeInt:= Claims.FFileId;
       Q.Open;
+      var IdF: TField:= Q.FieldByName('id');
       while not Q.Eof do
       begin
-        Id:= Q.FieldByName('id').AsLargeInt;
-        if Claims.Claimed.ContainsKey(Id) and Claims.OldFp.TryGetValue(Id, OldFp) and
-           (SymbolRowFingerprint(Q) <> OldFp) then Claims.Changed.Add(Id);
+        Id:= IdF.AsLargeInt;
+        if Claims.FClaimed.ContainsKey(Id) and Claims.FOldFp.TryGetValue(Id, OldFp) and
+           (SymbolRowFingerprint(Q) <> OldFp) then Claims.FChanged.Add(Id);
         Q.Next;
       end;
     finally
@@ -10450,10 +10456,10 @@ begin
     end;
   end;
   Inc(FSymIdFiles);
-  Inc(FSymIdKept   , Claims.Claimed.Count - Claims.Changed.Count);
-  Inc(FSymIdChanged, Claims.Changed.Count);
-  Inc(FSymIdAdded  , Claims.Added.Count);
-  Inc(FSymIdRemoved, Claims.Removed.Count);
+  Inc(FSymIdKept   , Claims.FClaimed.Count - Claims.FChanged.Count);
+  Inc(FSymIdChanged, Claims.FChanged.Count);
+  Inc(FSymIdAdded  , Claims.FAdded.Count);
+  Inc(FSymIdRemoved, Claims.FRemoved.Count);
   { The 1.52 reach queries (receiver closure, purity old users) over the ids whose
     foreign rows can move: the removed ones lose them below, the changed ones may
     now answer differently. A kept id keeps every foreign row as it was. }
@@ -10461,8 +10467,8 @@ begin
   begin
     Reach:= TList<Int64>.Create;
     try
-      Reach.AddRange(Claims.Removed);
-      Reach.AddRange(Claims.Changed);
+      Reach.AddRange(Claims.FRemoved);
+      Reach.AddRange(Claims.FChanged);
       if Reach.Count > 0 then
       begin
         FillSymIdSet(Reach);
@@ -10472,14 +10478,14 @@ begin
       Reach.Free;
     end;
   end;
-  if Claims.Changed.Count > 0 then
+  if Claims.FChanged.Count > 0 then
   begin
-    FillSymIdSet(Claims.Changed);
+    FillSymIdSet(Claims.FChanged);
     DetachSymbolIds(False);
   end;
-  if Claims.Removed.Count > 0 then
+  if Claims.FRemoved.Count > 0 then
   begin
-    FillSymIdSet(Claims.Removed);
+    FillSymIdSet(Claims.FRemoved);
     FConn.ExecSQL('DELETE FROM symbols WHERE id IN (SELECT id FROM temp.dl_symid_ids)');
   end;
 end;
@@ -10527,9 +10533,9 @@ begin
     Parts:= Spec.Split(['|']);
     if ASkipEmitOwned and SymbolIdColumnIsEmitOwned(Parts[0] + '.' + Parts[1]) then Continue;
     if Parts[2] = 'CASCADE' then
-      FConn.ExecSQL('DELETE FROM ' + Parts[0] + ' WHERE ' + Parts[1] + ' IN (SELECT id FROM temp.dl_symid_ids)')  // dl:ok taint-sql-injection -- REVIEWED 2026-11-22 GH18: table / column names come from sqlite_master + pragma_foreign_key_list of this schema
+      FConn.ExecSQL('DELETE FROM ' + Parts[0] + ' WHERE ' + Parts[1] + ' IN (SELECT id FROM temp.dl_symid_ids)')  // dl:ok taint-sql-injection@8009 -- REVIEWED 2026-11-22 GH18: table / column names come from sqlite_master + pragma_foreign_key_list of this schema
     else if Parts[2] = 'SET NULL' then
-      FConn.ExecSQL('UPDATE ' + Parts[0] + ' SET ' + Parts[1] + ' = NULL WHERE ' + Parts[1] + ' IN (SELECT id FROM temp.dl_symid_ids)');  // dl:ok taint-sql-injection -- REVIEWED 2026-11-22 GH18: table / column names come from sqlite_master + pragma_foreign_key_list of this schema
+      FConn.ExecSQL('UPDATE ' + Parts[0] + ' SET ' + Parts[1] + ' = NULL WHERE ' + Parts[1] + ' IN (SELECT id FROM temp.dl_symid_ids)');  // dl:ok taint-sql-injection@e661 -- REVIEWED 2026-11-22 GH18: table / column names come from sqlite_master + pragma_foreign_key_list of this schema
   end;
 end;
 
@@ -10574,7 +10580,7 @@ begin
     while (Fresh.Count > 0) and (Round < MAX_ROUNDS) do
     begin
       Inc(Round);
-      FConn.ExecSQL('DELETE FROM temp.dl_symid_names');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-22 GH18: a scratch temp table emptied before each round
+      FConn.ExecSQL('DELETE FROM temp.dl_symid_names');  // dl:ok sql-update-delete-without-where@b42c -- REVIEWED 2026-11-22 GH18: a scratch temp table emptied before each round
       for Nm in Fresh do FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_symid_names(n) VALUES (?)', [Nm]);
       Fresh.Clear;
       Q.Open;
@@ -10636,15 +10642,15 @@ begin
     (the accessors are its file's 'property-spec' refs, written after the symbol
     phase -- hence here and not in FinishSymbolClaims). Its foreign rows are
     intact until now, so the reach and the detach run as for any changed id. }
-  if (not TestSymIdNoFp) and (Claims.OldPropSpec <> nil) then
+  if (not TestSymIdNoFp) and (Claims.FOldPropSpec <> nil) then
   begin
-    NewSpec:= PropertySpecDigests(Claims.FileId);
+    NewSpec:= PropertySpecDigests(Claims.FFileId);
     PropChg:= TList<Int64>.Create;
     try
-      for Id in Claims.Claimed.Keys do
+      for Id in Claims.FClaimed.Keys do
       begin
-        if not SameText(Claims.OldKind[Id], 'property') or Claims.Changed.Contains(Id) then Continue;
-        if not Claims.OldPropSpec.TryGetValue(Id, OldD) then OldD:= '';
+        if not SameText(Claims.FOldKind[Id], 'property') or Claims.FChanged.Contains(Id) then Continue;
+        if not Claims.FOldPropSpec.TryGetValue(Id, OldD) then OldD:= '';
         if not NewSpec.TryGetValue(Id, NewD) then NewD:= '';
         if OldD <> NewD then PropChg.Add(Id);
       end;
@@ -10653,7 +10659,7 @@ begin
         FillSymIdSet(PropChg);
         CollectScopeReach('(SELECT id FROM temp.dl_symid_ids)', -1);
         DetachSymbolIds(True);
-        Claims.Changed.AddRange(PropChg);
+        Claims.FChanged.AddRange(PropChg);
         Inc(FSymIdChanged, PropChg.Count);
         Dec(FSymIdKept, PropChg.Count);
       end;
@@ -10666,7 +10672,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= SQL_FILE_INCLUDE_TOUCHED;
-    Q.ParamByName('f').AsLargeInt:= Claims.FileId;
+    Q.ParamByName('f').AsLargeInt:= Claims.FFileId;
     Q.Open;
     IncNow:= not Q.Eof;
   finally
@@ -10675,20 +10681,20 @@ begin
   if IncNow then FScopeIncludeTouched:= True;
   Chain:= TDictionary<string, Boolean>.Create;
   try
-    for Id in Claims.Removed do AddName(Claims.OldName[Id], Claims.OldKind[Id], FScopeTypesBefore);
-    for Id in Claims.Added do AddName(Claims.NewName[Id], Claims.NewKind[Id], FScopeTypesAfter);
-    for Id in Claims.Changed do
+    for Id in Claims.FRemoved do AddName(Claims.FOldName[Id], Claims.FOldKind[Id], FScopeTypesBefore);
+    for Id in Claims.FAdded do AddName(Claims.FNewName[Id], Claims.FNewKind[Id], FScopeTypesAfter);
+    for Id in Claims.FChanged do
     begin
-      AddName(Claims.OldName[Id], Claims.OldKind[Id], FScopeTypesBefore);
-      AddName(Claims.NewName[Id], Claims.NewKind[Id], FScopeTypesAfter);
+      AddName(Claims.FOldName[Id], Claims.FOldKind[Id], FScopeTypesBefore);
+      AddName(Claims.FNewName[Id], Claims.FNewKind[Id], FScopeTypesAfter);
     end;
     { The successors of what moved (see AddReceiverChainNames) -- before the
       include branch below widens the name set to the whole file. }
     AddReceiverChainNames(Chain);
-    if Claims.IncBefore or IncNow then
+    if Claims.FIncBefore or IncNow then
     begin
-      for Id in Claims.OldName.Keys do AddName(Claims.OldName[Id], Claims.OldKind[Id], FScopeTypesBefore);
-      for Id in Claims.NewName.Keys do AddName(Claims.NewName[Id], Claims.NewKind[Id], FScopeTypesAfter);
+      for Id in Claims.FOldName.Keys do AddName(Claims.FOldName[Id], Claims.FOldKind[Id], FScopeTypesBefore);
+      for Id in Claims.FNewName.Keys do AddName(Claims.FNewName[Id], Claims.FNewKind[Id], FScopeTypesAfter);
     end;
   finally
     Chain.Free;
@@ -10887,24 +10893,24 @@ begin
       higher ids) and the group keeps the fresh order. }
     var LcGroup: string:= LowerCase(ASymbol.Name);
     var GroupLast: Int64;
-    if Claims.OldIdByKey.TryGetValue(Key, OldId) and not Claims.Claimed.ContainsKey(OldId) and
-       ((not Claims.GroupLast.TryGetValue(LcGroup, GroupLast)) or (OldId > GroupLast)) then
+    if Claims.FOldIdByKey.TryGetValue(Key, OldId) and not Claims.FClaimed.ContainsKey(OldId) and
+       ((not Claims.FGroupLast.TryGetValue(LcGroup, GroupLast)) or (OldId > GroupLast)) then
     begin
-      Claims.Claimed.Add(OldId, True);
-      Claims.GroupLast.AddOrSetValue(LcGroup, OldId);
+      Claims.FClaimed.Add(OldId, True);
+      Claims.FGroupLast.AddOrSetValue(LcGroup, OldId);
       BindSymbolParams(FQUpdateSymbol, ASymbol);
       FQUpdateSymbol.ParamByName('fid').AsLargeInt:= AToken.FileId;
       FQUpdateSymbol.ParamByName('id' ).AsLargeInt:= OldId;
       FQUpdateSymbol.ExecSQL;
       { inc_variant defaults to 0 on an insert and TagSymbolIncVariant sets it next. }
-      if Claims.OldIncNonZero.ContainsKey(OldId) then
+      if Claims.FOldIncNonZero.ContainsKey(OldId) then
         FConn.ExecSQL('UPDATE symbols SET inc_variant = 0 WHERE id = ?', [OldId]);
       Claims.NoteEmitted(OldId, Key, ASymbol);
       Result:= OldId;
       { Trigrams are of the name; the key holds lower(qualified_name), so only a
         case change can move them. }
       if FTriDeferred then Exit;
-      if Claims.OldName.TryGetValue(OldId, OldName) and (OldName = ASymbol.Name) then Exit;
+      if Claims.FOldName.TryGetValue(OldId, OldName) and (OldName = ASymbol.Name) then Exit;
       FConn.ExecSQL('DELETE FROM symbol_trigrams WHERE symbol_id = ?', [OldId]);
       for var CG: string in DRagLint.Query.Fuzzy.Trigrams(ASymbol.Name) do
       begin
@@ -10922,8 +10928,8 @@ begin
   if Claims <> nil then
   begin
     Claims.NoteEmitted(Result, Key, ASymbol);
-    Claims.Added.Add(Result);
-    Claims.GroupLast.AddOrSetValue(LowerCase(ASymbol.Name), Result);
+    Claims.FAdded.Add(Result);
+    Claims.FGroupLast.AddOrSetValue(LowerCase(ASymbol.Name), Result);
   end;
   { IDXPERF P3: a bulk load into an empty symbol_trigrams writes none here;
     FinishDeferredTrigrams fills the table once, in key order, at the end. }
@@ -11778,7 +11784,7 @@ begin
       Q.Open;
       var IncHere: Boolean:= not Q.Eof;
       Q.Close;
-      if Claims <> nil then Claims.IncBefore:= IncHere;
+      if Claims <> nil then Claims.FIncBefore:= IncHere;
       if IncHere then FScopeIncludeTouched:= True;
     end;
     { THE ONE MOMENT THE HERITAGE STILL EXISTS. A withdrawn type takes its
