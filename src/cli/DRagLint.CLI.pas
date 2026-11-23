@@ -281,6 +281,8 @@ uses
   , DRagLint.CLI.ConvertApply { convert-apply verb (v1511 SPLIT) }
   , DRagLint.CLI.CheckInit { check-init verb (1.52 FRAME; lane HBSKEL) }
   , DRagLint.CLI.Repo { repo verb family (1.52 FRAME; lane TTE) }
+  , DRagLint.CLI.Settings { settings verb (1.53 SETTINGS-CORE) }
+  , DRagLint.Project.Settings
   , DRagLint.CLI.Explain { explain verb (1.52 FRAME; lane EXPLAIN) }
   , DRagLint.CLI.RuleScope { rules disable / enable (1.52 FRAME; lane DISRULE) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
@@ -1001,7 +1003,7 @@ begin
   i:= 2;
   { 1.52 FRAME: check-init <QName>, repo <sub-verb>, explain <rule-id>, rules disable|enable (only
     those two words: every other `rules` argument keeps its old meaning) }
-  if (MatchText(Result.Command, ['query', 'export', 'workspace', 'selftest', 'manifest', 'check-init', 'repo', 'explain'])
+  if (MatchText(Result.Command, ['query', 'export', 'workspace', 'selftest', 'manifest', 'check-init', 'repo', 'explain', 'settings'])
       or ((Result.Command = 'rules') and MatchText(ParamStr(2), ['disable', 'enable']))) and (ParamCount >= 2) then
   begin
     A:= ParamStr(2);
@@ -1800,6 +1802,8 @@ begin
     else if A = '--auto' then Result.CompareAuto:= True
     else if A = '--save' then Result.CompareSave:= True
     else if A = '--update-doc' then Result.UpdateDoc:= True
+    { 1.53 SETTINGS-CORE: settings key/value words and --local are read from ParamStr by DRagLint.CLI.Settings }
+    else if (Result.Command = 'settings') and ((A = '--local') or not A.StartsWith('--')) then begin end
     else if ((Result.Path = '') or Result.PathFromConfig) and (not A.StartsWith('--')) then
     begin
       Result.Path          := A;
@@ -11556,8 +11560,18 @@ end;
 function LoadLintConfig(const AArgs: TArgs): TLintConfig;
 var
   Path: string;
+  Profile: string;
+  SetAnchor: string;
+  ProjSettings: TProjectSettings;
 begin
   Path:= AArgs.ConfigPath;
+  { 1.53 SETTINGS: lint.config / lint.profile / taint.envSource from <anchor>\_D-RAG\drag-lint-project(.local).json }
+  SetAnchor:= TProjectSettings.ResolveAnchor(AArgs.ProjectPath, IfThen(AArgs.StandInFor <> '', AArgs.StandInFor, IfThen(AArgs.Path <> '', AArgs.Path, AArgs.InFile)), AArgs.DbPath, '');
+  ProjSettings:= LoadSettingsOrWarn(SetAnchor);
+  try
+  if (Path = '') and (ProjSettings <> nil) and (ProjSettings.AsString('lint.config') <> '') then Path:= TPath.Combine(SetAnchor, ProjSettings.AsString('lint.config'));
+  Profile:= AArgs.Profile;
+  if (Profile = '') and (ProjSettings <> nil) then Profile:= ProjSettings.AsString('lint.profile');
 
   { DISCOVER THE CONFIG BESIDE THE PROJECT, not only in the CWD.
     Before this, `lint-all --project C:\Projects\YADF\YADF.dproj` ignored
@@ -11663,11 +11677,15 @@ begin
   end;
 
   if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
-  Result:= TLintConfig.Load(Path, AArgs.Profile);
-  if IsComplianceProfile(AArgs.Profile) and not Result.UserProfileFound then
-    ApplyComplianceProfile(Result, AArgs.Profile, AArgs.RulesDir);
+  Result:= TLintConfig.Load(Path, Profile);
+  if IsComplianceProfile(Profile) and not Result.UserProfileFound then
+    ApplyComplianceProfile(Result, Profile, AArgs.RulesDir);
   if AArgs.Disable <> '' then Result.AddDisabled(AArgs.Disable.Split([',', ' ', ';']));
   if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
+  if ProjSettings <> nil then Result.ApplyProjectSettings(ProjSettings.AsBool('taint.envSource'));
+  finally
+    ProjSettings.Free;
+  end;
 end;
 
 var
@@ -29608,6 +29626,7 @@ begin
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
     else if Args.Command = 'check-init'        then Result:= RunCheckInit(if Args.SubCommand <> '' then Args.SubCommand else Args.QName, Args.At, Args.DbPath, Args.ProjectPath, Args.AsJson or SameText(Args.Format, 'json'), Args.HbExplain, Args.MaxRoutines, Args.MaxSeconds) { 1.52 FRAME: DRagLint.CLI.CheckInit; v152 HBFIX --max-seconds }
     else if Args.Command = 'repo'              then Result:= RunRepoVerb(Args.SubCommand, Args.RepoPath, Args.ProjectPath, Args.FbConnection, Args.InFile, Args.Output, Args.Replace, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Repo }
+    else if Args.Command = 'settings'          then Result:= RunSettingsVerb(Args.SubCommand, IfThen(Args.ProjectFromConfig, '', Args.ProjectPath), IfThen(Args.DbFromConfig, '', Args.DbPath), Args.InFile, Args.AsJson or SameText(Args.Format, 'json')) { 1.53 SETTINGS-CORE: DRagLint.CLI.Settings }
     else if Args.Command = 'explain'           then Result:= RunExplain(if Args.SubCommand <> '' then Args.SubCommand else Args.Rule, Args.RulesDir, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Explain }
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)
     else if Args.Command = 'allow'             then Result:= DoAllow           (Args)
