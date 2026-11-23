@@ -441,6 +441,12 @@ begin
     vHand := READ_HEAD + 'var'#13#10'  StreamSize: integer;'#13#10'  Mine: Byte;'#13#10'  ByteTemp: Byte;'#13#10 + READ_BODY;
     Check('H7 Reader var block with another local: left alone and listed', (UpgradeOrmHeaderText(vHand + NEW4 + NEW6, 'ORDERS', vNotes) = vHand + NEW4 + NEW6) and (vNotes.Count = 1), vNotes.Text);
     vNotes.Clear;
+    vNotes.Clear;
+    Check('H7b the formatter comment // else behind the block is not an edit', (UpgradeOrmHeaderText(OLD4.Replace('    end;'#13#10, '    end; // else'#13#10) + NEW6, 'ORDERS', vNotes) =
+      NEW4.Replace('    end;'#13#10, '    end; // else'#13#10) + NEW6) and (vNotes.Count = 0), vNotes.Text);
+    vHand := OLD4.Replace('    end;'#13#10, '    end; // else keep me'#13#10);
+    Check('H7c any other comment there is', (UpgradeOrmHeaderText(vHand + NEW6, 'ORDERS', vNotes) = vHand + NEW6) and (vNotes.Count = 1), vNotes.Text);
+    vNotes.Clear;
     Check('H8 LF-only unit keeps LF', UpgradeOrmHeaderText((OLD4 + OLD6).Replace(#13#10, #10), 'ORDERS', vNotes) = (NEW4 + NEW6).Replace(#13#10, #10));
 
     { the verb: dry run by default, --apply writes with a backup }

@@ -50,7 +50,7 @@ drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]
 | `restore` | Reads a text backup into the repository, creating it when missing. A non-empty repository needs `--replace`. The whole file is validated first; a malformed file prints `line <n>: ...` and changes nothing (a missing repository is not left behind). | 0; 1; 2 malformed backup |
 | `gen-memtable` | Prints (or writes with `--output`) the Pascal source of `Create<Name>Fields`, a procedure that builds the fields of a `TFDMemTable` from a CSV (`FieldName,FieldType,Size,FieldKind,...`). `--name` defaults to `FDMemTable`. | 0; 1; 2 bad CSV |
 
-## gen-orm, update-orm, gen-dataservice
+## gen-orm, update-orm, upgrade-orm-headers, gen-dataservice
 
 Ports of the TableTools ORM / DataService generators, fed by `DL_FIELDS_INFO` (rows with `FIELD_KIND = 1`).
 Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then the hunks) and writes only with
@@ -60,7 +60,23 @@ Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then
 |---|---|---|
 | `gen-orm` | `--code-dir` | new `i<T>.PAS` + `u<T>.PAS` per table (`--table T,...`; empty = every table) |
 | `update-orm` | `--code-dir` [`--server-dir`] [`--client-dir`] | ONLY the lines inside the `{$REGION 'DB-RAD <id>'}` regions of the existing units; every other byte, line ends included, is kept. A missing file or a table without `FIELD_KIND = 1` rows is skipped and named |
+| `upgrade-orm-headers` | `--code-dir` | one time (1.54): in the existing `u<T>.PAS`, the generated text AROUND regions 4 / 6 (`if not (Source is T) then inherited else with Source as T do`) becomes `if Source is not T then inherited else`, and the `StreamSize` / `ByteTemp` locals of `Reader` go when nothing uses them. Only the exact generated shape is recognised, in any layout; a hand-edited header is listed as `skipped` and left alone |
 | `gen-dataservice` | `--server-dir` `--client-dir` | new `u<T>_SERVER.PAS` + `u<T>_CLIENT.PAS` and the two DI container units; prints `add to project:` per new file |
+
+**Assign / AssignTo (1.54).** TableTools wrote `fX:= X` inside `with Source as T do` and `X:= fX` inside
+`with Dest as T do`: both copy the other object onto itself, so nothing was ever copied. Regions 4 / 6 now name
+both objects (`var LSource:= TmcT(Source); Self.fX:= LSource.X;`), which is right inside the old `with` header and
+without it. Class-typed columns (`TStringList`, `TPicture`, streams) are copied the way `AssignI` copies them, by
+reference: **two objects then own one list**, so give the copy its own before both are freed. Order for existing
+units: `update-orm`, build, then `upgrade-orm-headers`; commit both. A table with a column named `SOURCE` / `DEST`
+needs `upgrade-orm-headers` first (`update-orm` skips such a unit and says so).
+
+Other 1.54 changes of the generated text: a placeholder summary (`Summary here`) becomes `DOCUMENTATION`, or a text
+built from the row (`Column CAUSLIST.NAME ("Cause").`), and `Remarks here` is dropped; a column `NAME` gets
+`GetNAME` / `SetNAME` (`reintroduce`) instead of `GetZNAME` / `SetZNAME`, so regenerate the `i` and `u` units
+together; region 11 declares its own local; a new unit's `uses` lists exactly what its text needs (a column type
+added later may need its unit added by hand: the compiler names it). The text needs Delphi 13 (`is not`; inline
+`var` alone needs 10.3).
 
 `--save-form legacy|current` picks how region 9 (Save) binds its parameters. `legacy` (the default) is the form
 the ORM3 units carry (TableTools before 2026-05-19): the `FIELD_AS_TYPE` accessor (`.AsString`, `.AsInteger`, ...),
@@ -68,8 +84,8 @@ the ORM3 units carry (TableTools before 2026-05-19): the `FIELD_AS_TYPE` accesso
 2026-05-19: `.Value`, `.AsWideMemo` (FB-338), `Set1Byte` for an enum, `Clear` when the timestamp `Year = 0`.
 
 Golden (release gate): `tests\autotest\run_fieldrepo_ormgen_golden.ps1 -RequireForm -RepoFile <dev.dlrepo>` runs
-`update-orm` over a COPY of ORM3: 521 of 528 units come out the same ignoring blanks and case and nothing outside
-the regions moves; the 7 others are listed with their reason in `tests\fieldrepo\ormgen-golden-known-drift.txt`
+`update-orm` over a COPY of ORM3: 521 of 528 units come out the same ignoring blanks and case, 260 of them only
+after the 1.54 changes above are turned back (`@region` lines of the drift file), and nothing outside the regions moves; the 7 others are listed with their reason in `tests\fieldrepo\ormgen-golden-known-drift.txt`
 (schema drift, a hand-ported unit, a hand-edited region). Byte parity is not the gate: the ORM3 units were
 re-formatted after TableTools wrote them.
 

@@ -45,7 +45,8 @@ const
     '(?=\s*\{\$REGION\s+''DB-RAD %3:s''\s*\})';
   PAT_NEW = 'if\s+%2:s\s+is\s+not\s+%0:s\s+then\s+inherited\s+else\s+begin(?=\s*\{\$REGION\s+''DB-RAD %3:s''\s*\})';
   PAT_TAIL = '\{\$ENDREGION\s+''DB-RAD %3:s''\s*\}';
-  PAT_TAIL_END = '\G\s*end\s*;\s*end\s*;';
+  { '// else' is what the YADF formatter writes behind the generated 'end;' of a long block }
+  PAT_TAIL_END = '\G\s*end\s*;([ \t]*//[ \t]*else[ \t]*(?=[\r\n]))?\s*end\s*;';
   PAT_READER = '\bfunction\s+%0:s\.Reader\s*\(\s*AStream\s*:\s*TABZMemoryStream\s*\)\s*:\s*boolean\s*;\s*';
   PAT_READER_VARS = '\Gvar\s+StreamSize\s*:\s*integer\s*;\s*ByteTemp\s*:\s*Byte\s*;\s*(?=begin\b)';
   PAT_NEXT_METHOD = '^[ \t]*(procedure|function|constructor|destructor)\s+%0:s\.';
