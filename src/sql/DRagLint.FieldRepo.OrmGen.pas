@@ -1057,8 +1057,8 @@ end;
 
 function XmlText(const pText: string): string;
 begin
-  Result:= pText.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;')
-    .Replace(#13, ' ').Replace(#10, ' ').Trim;
+  Result:= pText.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;');
+  Result:= TRegEx.Replace(Result, '[\r\n]+', ' ').Trim;
 end;
 
 { The summary of a column whose DOC_SUMMARY is a placeholder: its DOCUMENTATION text, or what the
@@ -1123,19 +1123,26 @@ begin
       Exit(True);
 end;
 
-{ True when region 3 (Initialize) calls System.SysUtils: StrToTime / StrToDate / StrToDateTime, or a
-  default that is an expression such as Now (any word outside quotes but True / False / nil). }
+{ True when the line region 3 writes for the default calls System.SysUtils: StrToTime / StrToDate /
+  StrToDateTime, or an expression such as Now (a word outside quotes). The default of an enumeration,
+  a Boolean or a timestamp is a constant, not a call of that unit. }
+function DefaultNeedsSysUtils(pField: TOrmField): Boolean;
+begin
+  if MatchText(pField.VAR_TYPE, ['TTime', 'TDate', 'TDateTime']) then
+    Exit(pField.DEFAULTVAL.Trim <> '');
+  if pField.ISENUM or MatchText(pField.VAR_TYPE, ['TSQLTimeStamp', 'Boolean']) then
+    Exit(False);
+  Result:= TRegEx.IsMatch(TRegEx.Replace(pField.DEFAULTVAL, '''[^'']*''', ''), '[A-Za-z_]');
+end;
+
 function DefaultsNeedSysUtils(pFields: TObjectList<TOrmField>): Boolean;
 var
   F: TOrmField;
 begin
   Result:= False;
   for F in pFields do
-    if F.DEFAULTVAL.Trim <> '' then
-      if MatchText(F.VAR_TYPE, ['TTime', 'TDate', 'TDateTime']) or not (F.ISENUM or
-        MatchText(F.VAR_TYPE, ['TSQLTimeStamp', 'Boolean']) or
-        not TRegEx.IsMatch(TRegEx.Replace(F.DEFAULTVAL, '''[^'']*''', ''), '[A-Za-z_]')) then
-        Exit(True);
+    if DefaultNeedsSysUtils(F) then
+      Exit(True);
 end;
 
 { A unit the text uses only through inline functions: the compiler wants it (H2443) while the
@@ -1423,7 +1430,7 @@ begin
   InterfaceObject.Add('end.'          );
 end;
 
-procedure TOrmGenerator.GenerateNewServerObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@51af, param-name-prefix@81ae -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
+procedure TOrmGenerator.GenerateNewServerObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@5309, param-name-prefix@81ae -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   SectionCode : TStringList;
   TableId   : string;
@@ -1784,11 +1791,12 @@ begin
     PasObject.Add('                                                                                                                 ');
     PasObject.Add('end.                                                                                                             ');
   finally
+    Units.Free;
     SectionCode.Free;
   end; // try
 end; // procedure
 
-procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok method-too-long@4e9f, param-name-prefix@f0af -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
+procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok method-too-long@44fb, param-name-prefix@f0af -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   IntfGUID    : TGUID;
   TableId   : string;
@@ -2452,7 +2460,7 @@ begin
   end;
 end; // procedure
 
-procedure TOrmGenerator.GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@a378, param-name-prefix@6622 -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
+procedure TOrmGenerator.GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@cc78, param-name-prefix@6622 -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   SectionCode  : TStringList;
   TableId    : string;
