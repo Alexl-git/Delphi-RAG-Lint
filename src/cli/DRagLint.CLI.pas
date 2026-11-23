@@ -315,7 +315,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..95] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..97] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -363,6 +363,7 @@ const
     (Name: 'DRAGLINT_NO_SCOPED_PURITY';               Purpose: 'any value makes the purity stage re-derive every routine, also after a scoped resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
+    (Name: 'DRAGLINT_NO_SYMBOL_ID_REUSE';             Purpose: '1|on|yes|true: index writes a re-parsed file the 1.52 way, delete + insert, new symbol ids (A/B)'),
     (Name: 'DRAGLINT_PEER_TRACE';                     Purpose: 'path of a file that receives a trace of every sibling remap (unset = no trace)'),
     (Name: 'DRAGLINT_PLUGIN_LOG_DIR';                 Purpose: 'IDE plugin: redirects every plugin log to this folder (test drivers)'),
     (Name: 'DRAGLINT_PP_TABLE';                      Purpose: '0 = ifdef-undefined ignores the stored directive table'),
@@ -402,6 +403,7 @@ const
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
     (Name: 'DRAGLINT_TEST_SCOPE_NO_NAMES';            Purpose: 'test hook: the scoped resolve pass re-resolves the changed files only (a wrong scope)'),
     (Name: 'DRAGLINT_TEST_STREAM_COUNT_DELAY_MS';     Purpose: 'test hook: delay in the stream count'),
+    (Name: 'DRAGLINT_TEST_SYMID_NO_FP';               Purpose: 'test hook: every claimed symbol reads as unchanged (positive control of run_v153_GH18_SYMID)'),
     (Name: 'DRAGLINT_TEST_WARM_DELAY_MS';             Purpose: 'test hook: delay in the rule-cache warm'),
     (Name: 'DRAGLINT_TEST_WARM_HOLD_MS';              Purpose: 'test hook: hold in the rule-cache warm'),
     (Name: 'DRAGLINT_UNWITH_TEST_SKIP_PREFIX';        Purpose: 'test hook: unwith skips this prefix'),
