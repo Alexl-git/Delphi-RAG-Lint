@@ -90,7 +90,7 @@ begin
     VKey := Trim(Copy(VPair, 1, VEq - 1));
     VValue := Trim(Copy(VPair, VEq + 1, MaxInt));
     if (VValue <> '') and MatchText(VKey, SECRET_KEYS) then
-      Result := StringReplace(Result, VValue, MASK, [rfReplaceAll]);
+      Result := StringReplace(Result, VValue, MASK, [rfReplaceAll, rfIgnoreCase]);
   end;
 end;
 

@@ -5,13 +5,14 @@
 
   CASES
     C1  seed-fb --ddl on an empty repository without --apply = DRY RUN: header + insert lines, no byte written
+    C1b --dry-run wins over --apply: nothing written (positive control: C2, the same call without --dry-run)
     C2  seed-fb --ddl --apply writes (DL_FIELDS_INFO > 0, schema tables filled)
     C3  seed-fb again on a filled repository -> exit 1 (seed needs an empty one), nothing written
     C4  refresh-schema --ddl with a column removed: dry run prints the delete as (unchecked), header says 1 unchecked
     C5  refresh-schema --apply keeps the vanished row; --select <file> naming the delete removes it
     C6  --select naming an unknown id -> exit 1, nothing written
     C7  no source / two sources -> exit 1
-    C8  a failed --connection never echoes the Password value (stdout + stderr)
+    C8  a failed --connection never echoes the Password value (stdout + stderr); C8b / C8c = an error that WOULD show it, masked in any case, with a positive control
     C9  resolve-dbs --project: `repo: <path>` (stderr) and the json "repo" key; `none` without a repository
   Run: pwsh -File tests\autotest\run_repo_cli_schema.ps1 [-Exe <drag-lint.exe>]
 #>
@@ -44,6 +45,8 @@ try {
   $h0 = (Get-FileHash -LiteralPath $x).Hash
   $r = Run @('repo', 'seed-fb', '--ddl', $ddl, '--repo', $x)
   Check 'C1 seed-fb --ddl without --apply is a dry run (exit 0, change lines, no byte written)' (($r.Code -eq 0) -and ($r.Out -match 'direction db-to-repo, \d+ changes, 0 blocked, 0 unchecked') -and ($r.Out -match '\] insert DL_FIELDS_INFO CUSTOMER\|CITY') -and ($r.Out -match 'dry run: nothing written') -and ($h0 -eq (Get-FileHash -LiteralPath $x).Hash)) "exit=$($r.Code)`n$($r.Out)"
+  $r = Run @('repo', 'seed-fb', '--ddl', $ddl, '--repo', $x, '--apply', '--dry-run')
+  Check 'C1b --dry-run wins over --apply (exit 0, no byte written)' (($r.Code -eq 0) -and ($r.Out -match 'dry run: nothing written') -and ($h0 -eq (Get-FileHash -LiteralPath $x).Hash)) "exit=$($r.Code)`n$($r.Out)"
   $r = Run @('repo', 'seed-fb', '--ddl', $ddl, '--repo', $x, '--apply')
   Check 'C2 seed-fb --ddl --apply writes the fields' (($r.Code -eq 0) -and ($r.Out -match 'applied: \d+ changes') -and ((Fields $x) -gt 0)) "exit=$($r.Code)`n$($r.Out)"
   $n0 = Fields $x
@@ -72,6 +75,12 @@ try {
   $pw = 'Zq7s3cr3tPw'
   $r = Run @('repo', 'refresh-schema', '--repo', $x, '--connection', "Database=localhost:C:\no\such\dl-test.fdb;User_Name=SYSDBA;Password=$pw;DriverID=FB")
   Check 'C8 a failed connect exits 1 and never echoes the Password' (($r.Code -eq 1) -and (-not $r.Out.Contains($pw))) "exit=$($r.Code)`n$($r.Out)"
+  # the driver id is echoed by FireDAC in the given and in UPPER case, so this output carries the password unless it is masked
+  $conn = 'Database=localhost:C:\no\x.fdb;User_Name=SYSDBA;DriverID=' + $pw + ';Password='
+  $r = Run @('repo', 'refresh-schema', '--repo', $x, '--connection', ($conn + $pw))
+  Check 'C8b an error text holding the password is masked in any case' (($r.Code -eq 1) -and ($r.Out -match '\*\*\*') -and ($r.Out -notmatch $pw)) "exit=$($r.Code)`n$($r.Out)"
+  $r = Run @('repo', 'refresh-schema', '--repo', $x, '--connection', ($conn + 'other'))
+  Check 'C8c positive control: the same text shows when it is not the password' ($r.Out -cmatch $pw) "$($r.Out)"
   # resolve-dbs names the repository
   $loc = Join-Path $fix 'locate'
   $man = Join-Path $loc 'manifest.json'
