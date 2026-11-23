@@ -284,6 +284,10 @@ repository treats it as
 the same family as the plain table view: one set of column properties, the extra events live in
 `DL_LAYOUT_EVENTS`.
 
+## Reading a form
+
+`repo read-dfm` (1.54) reads the persistent fields, lookup wiring and calc code of a DFM: see [Read a form into the field repository](repo-read-dfm).
+
 ## Known limits
 
 * Firebird is read only; writing the repository back to Firebird (`repo publish-fb`) is not in

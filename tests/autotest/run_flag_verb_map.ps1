@@ -379,6 +379,7 @@ $KnownNoField = [ordered]@{
   '--save-form'        = 'repo gen-orm: CLI.Repo reads ParamStr'
   '--datamodule'       = 'repo gen-const: CLI.RepoConstGen reads ParamStr'
   '--unit-file'        = 'repo check-const: CLI.RepoConstGen reads ParamStr'
+  '--dataset'          = 'repo read-dfm: CLI.RepoDfm reads ParamStr'
   '--ddl'              = 'repo seed-fb / refresh-schema: CLI.RepoSchema reads ParamStr'
   '--select'           = 'repo seed-fb / refresh-schema: CLI.RepoSchema reads ParamStr'
   '--local'            = 'settings: CLI.Settings reads ParamStr'

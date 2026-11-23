@@ -398,6 +398,11 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.ConstGen.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.ConstDataModule.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.SchemaSeed.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmRead.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadSql.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadCalc.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadPlan.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadSelection.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbTypes.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.CsvMemTable.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.ParamArray.pas"/>
@@ -422,6 +427,7 @@
         <DCCReference Include="DRagLint.CLI.RepoModel.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoConstGen.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoSchema.pas"/>
+        <DCCReference Include="DRagLint.CLI.RepoDfm.pas"/>
         <DCCReference Include="DRagLint.CLI.Explain.pas"/>
         <DCCReference Include="DRagLint.CLI.ConfigAnchor.pas"/>
         <DCCReference Include="DRagLint.CLI.RuleScope.pas"/>

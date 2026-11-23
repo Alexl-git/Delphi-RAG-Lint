@@ -1706,6 +1706,7 @@ begin
     else if (A = '--warmup-ms') and (i < ParamCount) then Inc(i)
     else if (A = '--delphi-lsp-config') and (i < ParamCount) then Inc(i)
     else if (A = '--ddl') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: DRagLint.CLI.RepoSchema reads it from ParamStr
+    else if (A = '--dataset') and (i < ParamCount) then Inc(i) // repo read-dfm: DRagLint.CLI.RepoDfm reads it from ParamStr
     else if (A = '--select') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: the change-set id file, read from ParamStr
     else if (A = '--table') and (i < ParamCount) then Inc(i)
     else if (A = '--step-size') and (i < ParamCount) then Inc(i)
