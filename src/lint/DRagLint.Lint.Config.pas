@@ -345,6 +345,9 @@ type
     /// shipped rules\form-object-without-field.exempt.txt is then ignored.</summary>
     /// <remarks>Stored negated so an unloaded (Default) config keeps the list ON.</remarks>
     FormObjectNoDefaultList: Boolean;
+    /// <summary>"schema_rules" -> "local_naming_match" (owner FR-6, 1.54 G-72): a local named after a
+    /// field (tDIMABBR, fldDIMABBR) counts as that field for the schema rules. False when absent.</summary>
+    SchemaLocalNamingMatch: Boolean;
     /// <summary>True when the config gave "rule_time_budget_ms" (PLAN 1.52 D9).</summary>
     RuleTimeBudgetSet: Boolean;
     /// <summary>The "rule_time_budget_ms" value as given (0 = budget off); read it through
@@ -1212,12 +1215,14 @@ end;
 
 procedure TLintConfig.ApplyV152Keys(const AObj: TJSONObject);
 { 1.52 FRAME F2: the PLAN section 5 keys (D1 rule_overrides, D3 form_object_without_field,
-  D9 rule_time_budget_ms). A malformed value raises ELintConfigError, as "disallowed" does:
+  D9 rule_time_budget_ms); 1.54: schema_rules. A malformed value raises ELintConfigError, as "disallowed" does:
   a silently ignored "Disable rule" entry would look like a rule that ignores its config. }
 const
   KEY_OVERRIDES = 'rule_overrides';
   KEY_FORM_OBJ  = 'form_object_without_field';
   KEY_BUDGET    = 'rule_time_budget_ms';
+  KEY_SCHEMA    = 'schema_rules';       { 1.54 FRAME: owner FR-6 }
+  KEY_LOCALS    = 'local_naming_match';
 begin
   if AObj.GetValue(KEY_OVERRIDES) <> nil then
   begin
@@ -1252,6 +1257,15 @@ begin
         if Trim(V.Value) <> '' then FormObjectExemptClasses:= FormObjectExemptClasses + [Trim(V.Value)];
     if F.GetValue('use_default_list') is TJSONBool then
       FormObjectNoDefaultList:= not (F.GetValue('use_default_list') as TJSONBool).AsBoolean;
+  end;
+  if AObj.GetValue(KEY_SCHEMA) <> nil then
+  begin
+    if AObj.GetValue(KEY_SCHEMA) is not TJSONObject then
+      raise ELintConfigError.Create('config: "' + KEY_SCHEMA + '" must be an object');
+    var Locals: TJSONValue:= (AObj.GetValue(KEY_SCHEMA) as TJSONObject).GetValue(KEY_LOCALS);
+    if (Locals <> nil) and (Locals is not TJSONBool) then
+      raise ELintConfigError.Create('config: "' + KEY_SCHEMA + '.' + KEY_LOCALS + '" must be true or false');
+    if Locals is TJSONBool then SchemaLocalNamingMatch:= (Locals as TJSONBool).AsBoolean;
   end;
   if AObj.GetValue(KEY_BUDGET) <> nil then
   begin

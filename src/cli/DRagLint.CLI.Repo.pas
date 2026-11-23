@@ -66,7 +66,10 @@ uses
   DRagLint.CLI.RepoModel,
   DRagLint.CLI.RepoConstGen,
   DRagLint.CLI.RepoSchema,
-  DRagLint.CLI.RepoDfm
+  DRagLint.CLI.RepoDfm,
+  DRagLint.CLI.RepoDfmWrite,
+  DRagLint.CLI.RepoHandlers,
+  DRagLint.CLI.RepoFib
   ;
 
 const
@@ -82,7 +85,8 @@ const
   { positions in the --save-form value list of RepoOrmVerb }
   SAVE_FORM_LEGACY  = 0;
   SAVE_FORM_CURRENT = 1;
-  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check, gen-const, check-const, read-dfm';
+  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check, gen-const, check-const, read-dfm'
+    + REPO_DFMWRITE_SUBS + REPO_HANDLERS_SUBS + REPO_FIB_SUBS; // 1.54 scaffolds: '' until their lane names a sub-verb
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -403,6 +407,8 @@ begin
     Exit(if SameText(pSub, 'gen-const') then RunRepoGenConst(Path, pOutFile) else RunRepoCheckConst(Path));
   if IsRepoSchemaSub(pSub) then Exit(RunRepoSchemaVerb(pSub, Path, pConnection, pJson)); // 1.53 FR-SCHEMA: seed-fb, refresh-schema
   if IsRepoDfmSub(pSub) then Exit(RunRepoDfmVerb(Path, pJson)); // 1.54 TT-DFMREAD: read-dfm
+  if IsRepoDfmWriteSub(pSub) then Exit(RunRepoDfmWriteVerb(pSub, Path, pJson)); // 1.54 TT-DFMWRITE
+  if IsRepoHandlersSub(pSub) then Exit(RunRepoHandlersVerb(pSub, Path, pJson)); // 1.54 TT-HANDLERS
   case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
@@ -413,16 +419,23 @@ begin
   end;
 end;
 
+{ 1.54: the lanes whose units carry their own sub-verbs (TT-DFMREAD, TT-DFMWRITE, TT-HANDLERS). }
+function IsLaneSub(const pSub: string): Boolean;
+begin
+  Result:= IsRepoDfmSub(pSub) or IsRepoDfmWriteSub(pSub) or IsRepoHandlersSub(pSub);
+end;
+
 function IsImplementedSub(const pSub: string): Boolean;
 begin
   Result:= MatchText(pSub, ['init', 'info', 'import-fb', 'seed-fb', 'refresh-schema', 'backup',
-    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'gen-const', 'check-const']) or IsRepoModelSub(pSub) or IsRepoDfmSub(pSub);
+    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'gen-const', 'check-const']) or IsRepoModelSub(pSub) or IsLaneSub(pSub);
 end;
 
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de -- REVIEWED 2026-11-17 v152 TTE: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape)
   pReplace, pJson: Boolean): Integer;
 begin
   if SameText(pSub, 'gen-param-array') then Exit(RunGenParamArray(pProject, pInFile, pJson)); // reads no repository: dispatched before ResolveRepoPath
+  if IsRepoFibSub(pSub) then Exit(RunRepoFibVerb(pSub, pProject, pOutFile, pJson)); // 1.54 TT-FIB: reads no repository either
   if not IsImplementedSub(pSub) then
   begin
     Writeln(ErrOutput, 'repo: unknown sub-verb "', pSub, '"; use one of: ', SUB_VERBS);
