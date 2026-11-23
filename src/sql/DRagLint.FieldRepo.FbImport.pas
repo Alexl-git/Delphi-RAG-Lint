@@ -133,7 +133,8 @@ uses
   FireDAC.Stan.Param,
   FireDAC.Phys,
   FireDAC.Phys.FB,
-  FireDAC.DApt;
+  FireDAC.DApt,
+  DRagLint.Sql.FbConnString;
 
 const
   FIB_VERSION_COLUMN = 'FIB$VERSION';
@@ -298,6 +299,7 @@ var
   Pair: string;
   EqPos: Integer;
 begin
+  RequireFbConnectionSafe(pConnectionString);
   Result := TFDConnection.Create(nil);
   try
     Params := TStringList.Create;
