@@ -392,7 +392,9 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.Schema.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbImport.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.TextBackup.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.ConstMark.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.ConstGen.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.ConstDataModule.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.SchemaSeed.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbTypes.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.CsvMemTable.pas"/>

@@ -255,15 +255,25 @@ naming is NOT resolved (FR-6: 1.54, opt-in, off by default). Rules 3-5 are 1.54+
 Purpose (FU-4, FR-1): the read-only replacement for the FIB$ tables, ONE unit shared by SERVER and CLIENT.
 
 `drag-lint repo gen-const (--repo|--project) --unit <UnitName> --output <file.pas> [--table DL_X,...]
-[--memtable] [--dry-run]`
+[--datamodule <Name>] [--dry-run]`
+
+`drag-lint repo check-const (--repo|--project) --unit-file <file.pas>` (FR-PRELOAD)
 
 * Default tables: DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; never DL_META, DL_EXCEPTIONS,
   DL_LAYOUT_EVENTS or the section 5 schema tables. Generic over `RepoTables`, so v1 and v2 both work.
 * Per table: record `T<Table>Row`, `<Col>IsNull` companion only for columns holding a NULL,
   `const <TABLE>_ROWS: array[0..N-1] of T<Table>Row` in PK order; ASCII-escaped literals in `+`-joined pieces of
   <= 200 characters, no line over 250.
-* `--memtable` adds `Fill<Table>(pTable: TFDMemTable)` with the FIB$ names / types / sizes, so a reader of
-  `TABLE=FIB$FIELDS_INFO` can be fed unchanged.
+* Pre-filled mem tables (owner ruling 2026-11-22, lane FR-PRELOAD; replaces `--memtable` / `Fill<Table>`):
+  `--datamodule <Name>` writes `<unit>.pas` + text `.dfm` instead of the constant unit; one read-only `TFDMemTable` per
+  table, FIB$ names / types / sizes, rows in the FireDAC binary `Content` property, no fill code. A separate call, not
+  part of the constant unit, because a reader needs one or the other and the rows must not be linked twice. Measured
+  on 2,229 real rows (median of 30 fresh Release processes, Win32 / Win64): const + Fill 31.7 / 35.9 ms, tuned Fill
+  21.8 / 23.9 ms, data module 12.7 / 12.3 ms, const lookup 0.3 / 0.4 ms.
+* Repository mark: SHA-256 per table over its column layout and canonical backup text, one hash over all, in the
+  header AND as `REPO_CONTENT_HASH`; the data module also carries the hash of its `.dfm`. `repo check-const`: exit 0
+  current, 1 stale naming the tables, 2 error. A sub-verb of its own, not part of `repo check`: that one judges the
+  repository alone and needs no generated file, and a pre-build step must tell "stale" (1) from "cannot tell" (2).
 * 7-bit ASCII, CRLF, deterministic, DocInsight on every public symbol, lint-clean. Target path: a shared folder
   (e.g. `ORM3\COMMON`) chosen at first generation; until then only `--output` (no default path into ORM3).
 

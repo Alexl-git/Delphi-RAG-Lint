@@ -188,15 +188,16 @@ restoring into a missing file creates the file at the backup's own version.
 `DL_EXCEPTIONS` (rule id or `*`, dataset, table, field, property, reason) lets the schema lint accept a
 known deviation; a finding is silenced when every non-empty key column of some row matches it.
 
-## Generated registry unit (`repo gen-const`, 1.53)
+## Generated registry unit (`repo gen-const`, `repo check-const`, 1.53)
 
 `repo gen-const` is the read-only replacement for the `FIB$` tables at run time: it turns the repository
 into ONE Pascal unit that the SERVER and the CLIENT both use, so neither needs the registry tables in
 Firebird.
 
 ```
-drag-lint repo gen-const (--repo <file> | --project <project file>) --unit uFieldRegistry --output <file.pas>
-                         [--table DL_X,...] [--memtable] [--dry-run]
+drag-lint repo gen-const (--repo <file> | --project <project file>) [--unit uFieldRegistry] --output <file.pas>
+                         [--table DL_X,...] [--datamodule <Name>] [--dry-run]
+drag-lint repo check-const (--repo <file> | --project <project file>) --unit-file <file.pas>
 ```
 
 * **Where it writes.** Only to `--output`; there is no default path. The shared folder (for example
@@ -213,18 +214,43 @@ drag-lint repo gen-const (--repo <file> | --project <project file>) --unit uFiel
   Text is written as 7-bit ASCII literals (`''` for an apostrophe, `#nnn` for control and non-ASCII
   characters, `#13#10` for a line break) in pieces of at most 200 characters joined by `+`, so no line passes
   250 characters.
-* **TFDMemTable fill (`--memtable`).** Adds `Fill<Table>(pTable: TFDMemTable)` (for example
-  `FillDlFieldsInfo`): it creates the field definitions with the `FIB$` names, types and sizes
-  (`VARCHAR(n)` as `ftWideString` n, `BOOLEAN` as `ftBoolean`, text as `ftWideMemo`) and appends every row,
-  leaving NULL columns NULL, so a reader written against `FIB$FIELDS_INFO` can be fed unchanged.
-  The procedure name is the table name in PascalCase so the generated unit stays lint-clean.
-* **Deterministic.** The same repository gives the same bytes (7-bit ASCII, CRLF); the header comment lists the
-  source repository name and the per-table row counts.
+* **Pre-filled data module (`--datamodule <Name>`).** Writes, INSTEAD of the constant unit, a data module unit and
+  its text `.dfm` (class `T<Name>`, one `TFDMemTable` per table named `mt` + the table in PascalCase, for example
+  `mtDlFieldsInfo`). The rows are the FireDAC binary `Content` of the form, so `TdmFieldRegistry.Create(nil)` gives open,
+  filled, read-only tables under the `FIB$` names, types and sizes (`VARCHAR(n)` as `ftWideString` n, `BOOLEAN` as
+  `ftBoolean`, text as `ftWideMemo`; NULL stays NULL), with no fill code. Run the verb twice to have both units. The
+  unit name is the `--output` base name (`--unit` may only repeat it: the form is found by that name). No global
+  variable is declared: the reader creates the module. `FireDAC.Stan.StorageBin` is in its uses clause.
+* **Never edit the generated files.** The repository is the master. If a later Delphi reads the FireDAC stream
+  differently, generate again.
+* **Repository mark.** Both kinds of unit carry, in the header comment, a SHA-256 per table over its columns and its
+  canonical `repo backup` text, one hash over all of them, and that hash again as the constant `REPO_CONTENT_HASH`
+  (in the data module a constant of the class). It depends on the content only: not on the file time, `DL_META` or a
+  table that is not generated. The data module's header also carries the hash of its `.dfm` (line ends do not count).
+* **`repo check-const`** compares those marks with the repository: exit 0 `current`; 1 `STALE`, one line per changed
+  table (or the missing / edited form); 2 when it cannot tell (no repository, no unit file, a file without a mark).
+  It writes nothing. As a pre-build step of the project that uses the units (Project Options > Building > Build
+  Events > Pre-build events, with "Cancel on error"; one line per unit, the path to your `drag-lint.exe` in front):
+
+  ```
+  drag-lint.exe repo check-const --project "$(PROJECTPATH)" --unit-file "..\COMMON\DL-REPO\uFieldRegistry.pas"
+  drag-lint.exe repo check-const --project "$(PROJECTPATH)" --unit-file "..\COMMON\DL-REPO\uFieldRegistryDm.pas"
+  ```
+
+  A build then stops until the units are generated again; a stale unit never reaches the exe unseen.
+* **Why preloaded.** Measured 2026-11-22 on 2,229 registry rows, Release, 30 fresh processes each, median time from
+  nothing to the first row readable: constants plus generated fill code 31.7 ms (Win32) / 35.9 ms (Win64),
+  hand-tuned fill code 21.8 / 23.9 ms, pre-filled data module 12.7 / 12.3 ms, a lookup in the constant array alone
+  0.3 / 0.4 ms. Use the arrays where a dataset is not needed, the data module where it is. The fill procedures an
+  early 1.53 build offered (`--memtable`) are gone.
+* **Deterministic.** The same repository gives the same bytes (7-bit ASCII, CRLF), the form included (two
+  uninitialised padding bytes in FireDAC's stream header are set to zero).
 * `--dry-run` prints the row count per table and writes nothing.
 
-Proof: `tests\autotest\run_fieldrepo_constgen.ps1` restores the golden fixtures into temp repositories,
-generates the unit, compiles a probe program against it with `dcc32`, fills the mem tables and requires the
-dump to equal `repo backup` of the four tables.
+Proof: `tests\autotest\run_fieldrepo_constgen.ps1` restores the golden fixtures into temp repositories, generates
+both units, compiles a probe program against them with `dcc32` and `dcc64`, creates the data module and requires the
+dump of its tables to equal `repo backup` of the four tables; it then changes one row and requires `check-const` to
+exit 1 naming exactly that table.
 
 ## Schema facts in the repository (1.53)
 
