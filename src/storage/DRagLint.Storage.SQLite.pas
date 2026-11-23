@@ -10599,7 +10599,7 @@ begin
   if AIds.Count = 0 then Exit;
   FillSymIdSet(AIds);
   { A procedure, a destructor and a method without a result have no type to hand on. }
-  FConn.ExecSQL('DELETE FROM temp.dl_symid_ids WHERE id IN (SELECT id FROM symbols WHERE ' + SQL_SYMBOL_TYPELESS + ')');
+  FConn.ExecSQL('DELETE FROM temp.dl_symid_ids WHERE id IN (SELECT id FROM symbols WHERE ' + SQL_SYMBOL_TYPELESS + ')');  // dl:ok sql-injection-concat@fbf6 -- REVIEWED 2026-11-23 GH18-FIN: SQL_SYMBOL_TYPELESS is a constant of this unit
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
@@ -10608,8 +10608,8 @@ begin
       'UNION SELECT r.enclosing_symbol_id FROM call_edges ce JOIN refs r ON r.id = ce.ref_id ' +
       'WHERE ce.target_symbol_id IN (SELECT id FROM temp.dl_symid_ids)';
     if HasMemberAccesses then
-      Q.SQL.Text:= Q.SQL.Text + ' UNION SELECT r.enclosing_symbol_id FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id ' +
-                                'WHERE ma.member_symbol_id IN (SELECT id FROM temp.dl_symid_ids)';
+      Q.SQL.Add('UNION SELECT r.enclosing_symbol_id FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id ' +  // dl:ok taint-sql-injection@7c21 -- REVIEWED 2026-11-23 GH18-FIN: literal SQL only
+                'WHERE ma.member_symbol_id IN (SELECT id FROM temp.dl_symid_ids)');
     Q.Open;
     while not Q.Eof do
     begin
@@ -10632,7 +10632,7 @@ var
 begin
   if FScopeChain.Count = 0 then Exit;
   FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_scope_chain(r INTEGER PRIMARY KEY)');
-  FConn.ExecSQL('DELETE FROM temp.dl_scope_chain');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied before its fill
+  FConn.ExecSQL('DELETE FROM temp.dl_scope_chain');  // dl:ok sql-update-delete-without-where@d32c -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied before its fill
   Q  := TFDQuery.Create(nil);
   Ins:= TFDQuery.Create(nil);
   try
@@ -10690,7 +10690,7 @@ var
   Id: Int64;
 begin
   FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_dep_routines(id INTEGER PRIMARY KEY)');
-  FConn.ExecSQL('DELETE FROM temp.dl_dep_routines');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied before its fill
+  FConn.ExecSQL('DELETE FROM temp.dl_dep_routines');  // dl:ok sql-update-delete-without-where@479e -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied before its fill
   for Id in AIds do FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_dep_routines(id) VALUES (?)', [Id]);
 end;
 
@@ -10779,8 +10779,8 @@ var
 begin
   FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_scope_follow(r INTEGER PRIMARY KEY)');
   FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_scope_done(r INTEGER PRIMARY KEY)');
-  FConn.ExecSQL('DELETE FROM temp.dl_scope_follow');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied before its fill
-  if FScopeFollowRound = 0 then FConn.ExecSQL('DELETE FROM temp.dl_scope_done');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied at the first pass of a run
+  FConn.ExecSQL('DELETE FROM temp.dl_scope_follow');  // dl:ok sql-update-delete-without-where@16e2 -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied before its fill
+  if FScopeFollowRound = 0 then FConn.ExecSQL('DELETE FROM temp.dl_scope_done');  // dl:ok sql-update-delete-without-where@46c0 -- REVIEWED 2026-11-23 GH18-FIN: a scratch temp table emptied at the first pass of a run
   FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_done(r) SELECT r FROM temp.dl_scope_refs');
   Q:= TFDQuery.Create(nil);
   Ids:= TList<Int64>.Create;
@@ -11396,6 +11396,12 @@ end;
      collected at the end of the symbol phase (FinishSymbolClaims, before the
      unclaimed delete) and at CommitFileTx (CommitSymbolClaimScope); a file that
      hosts or is an include still puts every old and new name in (point 6).
+     What moves WITHOUT its name being in that set -- a longer expression, an inline
+     var, a with target, an overload picked by an argument -- is selected ref by ref:
+     "WHAT ELSE DEPENDS ON A CHANGED SYMBOL", above CommitSymbolClaimScope. A type that
+     keeps its name but changes shape (its ancestor, a helper's target) is widened as a
+     withdrawal AND an addition (FScopeReshaped). And since no FK unbinds a ref whose
+     target keeps its id, the pass clears refs.symbol_id of its own refs first.
      DRAGLINT_NO_SYMBOL_ID_REUSE=1 restores delete + insert;
      tests\autotest\run_v153_GH18_SYMID.ps1 holds the equality proof (reuse =
      hatch = fresh, index_db_diff) and its positive control
@@ -11845,8 +11851,8 @@ begin
       if FScopeFollowRound > 0 then
       begin
         { A FOLLOW-UP pass (CollectFollowUpRefs): exactly its refs. }
-        FConn.ExecSQL('DELETE FROM temp.dl_scope_files');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: this pass's scratch temp table
-        FConn.ExecSQL('DELETE FROM temp.dl_scope_names');  // dl:ok sql-update-delete-without-where -- REVIEWED 2026-11-23 GH18-FIN: this pass's scratch temp table
+        FConn.ExecSQL('DELETE FROM temp.dl_scope_files');  // dl:ok sql-update-delete-without-where@d0be -- REVIEWED 2026-11-23 GH18-FIN: this pass's scratch temp table
+        FConn.ExecSQL('DELETE FROM temp.dl_scope_names');  // dl:ok sql-update-delete-without-where@13cd -- REVIEWED 2026-11-23 GH18-FIN: this pass's scratch temp table
         FConn.ExecSQL('INSERT INTO temp.dl_scope_refs(r) SELECT r FROM temp.dl_scope_follow');
       end;
       FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_scope_refs(r) SELECT refs.id FROM refs ' +
@@ -21960,7 +21966,7 @@ begin
           stream unbinds a call or member-access ref that now resolves to nothing; under delete +
           insert the FK did it for a target in the rewritten file, a kept id does not. }
         if not SymbolIdReuseOff then
-          FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL AND (' + ScopeWhere + ')' +  // dl:ok sql-injection-concat -- REVIEWED 2026-11-23 GH18-FIN: ScopeWhere and StaleWhere are SQL this pass BUILT (a temp-table subquery, an IN-list of file ids), never user text
+          FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL AND (' + ScopeWhere + ')' +  // dl:ok sql-injection-concat@8322 -- REVIEWED 2026-11-23 GH18-FIN: ScopeWhere and StaleWhere are SQL this pass BUILT (a temp-table subquery, an IN-list of file ids), never user text
                         IfThen(StaleWhere <> '', ' AND (' + StaleWhere + ')', ''));
         FConn.ExecSQL('DELETE FROM call_edges WHERE ref_id IN ' +
                       '(SELECT refs.id FROM refs WHERE (' + ScopeWhere + ')' +

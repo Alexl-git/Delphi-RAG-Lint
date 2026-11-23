@@ -18,7 +18,7 @@
   "audience": "both",
   "related": ["maintenance"],
   "verified": {
-    "date": "2026-11-22",
+    "date": "2026-11-23",
     "by": "ENGINE",
     "build": "1.52.3-alpha",
     "surfaceHash": "ef7035a4a4af9b1f2e8b73f5c2b7d6fd883fabb9660dd0fdf8621cf18cfd0b2e"
