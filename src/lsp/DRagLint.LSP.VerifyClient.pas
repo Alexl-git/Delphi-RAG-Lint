@@ -57,6 +57,7 @@ type
     procedure Start;
     /// <summary>Sends a request and waits for its response.</summary>
     /// <param name="pMethod">LSP method name.</param>
+    /// <param name="pMethod">LSP method name.</param>
     /// <param name="pParams">Owned by the call (freed after sending); nil omits params.</param>
     /// <param name="pTimeoutMs">Wall-clock wait for the response.</param>
     /// <param name="pResult">On success the response's result (cloned; caller frees; may be TJSONNull); else nil.</param>
@@ -65,8 +66,11 @@ type
     function Request(const pMethod: string; pParams: TJSONValue; pTimeoutMs: Integer;
       out pResult: TJSONValue; out pError: string): Boolean;
     /// <summary>Sends a notification. pParams is owned by the call; nil omits params.</summary>
+    /// <param name="pMethod">LSP method name.</param>
+    /// <param name="pParams">Params object, owned by the call; nil omits params.</param>
     procedure Notify(const pMethod: string; pParams: TJSONValue);
     /// <summary>Reads and handles incoming frames for pMs milliseconds (warm-up).</summary>
+    /// <param name="pMs">Wall-clock milliseconds to keep reading.</param>
     procedure Pump(pMs: Integer);
     /// <summary>shutdown (2 s) + exit, close stdin, wait 5 s, TerminateProcess when still alive.</summary>
     /// <remarks>Never raises; safe to call twice.</remarks>
@@ -167,7 +171,7 @@ begin
   SI.hStdError:= GetStdHandle(STD_ERROR_HANDLE);
   Cmd:= '"' + FExe + '"';
   UniqueString(Cmd);
-  Created:= CreateProcess(PChar(FExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI);
+  Created:= CreateProcess(PChar(FExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI);  // dl:ok taint-command-injection@2436 -- REVIEWED 2026-11-23 LSP1-VERB: the executable is the DelphiLSP path from the Studio registry or --delphi-lsp, checked with FileExists by RunVerifyIndex, and passed as lpApplicationName; no user text reaches the command line
   CloseHandle(InRd);
   CloseHandle(OutWr);
   if not Created then

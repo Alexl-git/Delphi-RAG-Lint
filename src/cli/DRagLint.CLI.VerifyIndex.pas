@@ -81,43 +81,64 @@ type
   end;
 
 /// <summary>The sampling SELECT (AC1-AC3): candidate references only, ordered by a seeded hash so the same DB, sample and seed give the same rows in the same order.</summary>
+/// <returns>The SELECT text.</returns>
 /// <param name="pSample">Row cap (LIMIT).</param>
 /// <param name="pSeed">Seed mixed into the ordering hash.</param>
-function VerifySampleSql(pSample, pSeed: Integer): string;
+function VerifySampleSql(pSample, pSeed: Integer): string;  // dl:ok unused-public-symbol@0956 -- REVIEWED 2026-11-23 LSP1-VERB: public so tests\VerifyIndexTests.dpr (a separate program, not in the project) can call the pure function without a process
 
 /// <summary>Location | Location[] | LocationLink[] | null -> locations (AC11); nil, null and [] give no location.</summary>
 /// <param name="pResult">The response's result; not owned.</param>
 /// <returns>Locations in answer order; Line is 1-based.</returns>
-function ParseDefinitionLocations(const pResult: TJSONValue): TArray<TVerifyLocation>;
+function ParseDefinitionLocations(const pResult: TJSONValue): TArray<TVerifyLocation>;  // dl:ok unused-public-symbol@1322 -- REVIEWED 2026-11-23 LSP1-VERB: public so tests\VerifyIndexTests.dpr (a separate program, not in the project) can call the pure function without a process
 
 /// <summary>match / mismatch for a non-empty location list (AC5-AC7); voEmpty for an empty one.</summary>
+/// <param name="pRow">The sampled reference with drag-lint's expected target.</param>
+/// <param name="pLocs">The locations DelphiLSP answered with.</param>
+/// <returns>voMatch, voMismatch or voEmpty.</returns>
 /// <remarks>Paths are compared after ExpandFileName, case-insensitively.</remarks>
-function ClassifyLocations(const pRow: TVerifyRow; const pLocs: TArray<TVerifyLocation>): TVerifyOutcome;
+function ClassifyLocations(const pRow: TVerifyRow; const pLocs: TArray<TVerifyLocation>): TVerifyOutcome;  // dl:ok unused-public-symbol@8d0d -- REVIEWED 2026-11-23 LSP1-VERB: public so tests\VerifyIndexTests.dpr (a separate program, not in the project) can call the pure function without a process
 
 /// <summary>AC10: '' when the line text is usable for the row, else the skip reason ('moved' or 'non-ascii').</summary>
+/// <param name="pRow">The sampled reference.</param>
 /// <param name="pLineText">The 1-based line pRow.Line of the file as it is on disk now.</param>
-function SkipReason(const pRow: TVerifyRow; const pLineText: string): string;
+/// <returns>'' when usable, 'moved' or 'non-ascii'.</returns>
+function SkipReason(const pRow: TVerifyRow; const pLineText: string): string;  // dl:ok unused-public-symbol@5a3c -- REVIEWED 2026-11-23 LSP1-VERB: public so tests\VerifyIndexTests.dpr (a separate program, not in the project) can call the pure function without a process
 
 /// <summary>AC14: mismatch / (match + mismatch); 0 when that denominator is 0.</summary>
-function MismatchRate(const pCounts: TVerifyCounts): Double;
+/// <param name="pCounts">The run's outcome counts.</param>
+/// <returns>The mismatch rate, 0..1.</returns>
+function MismatchRate(const pCounts: TVerifyCounts): Double;  // dl:ok unused-public-symbol@4f1b -- REVIEWED 2026-11-23 LSP1-VERB: public so tests\VerifyIndexTests.dpr (a separate program, not in the project) can call the pure function without a process
 
 /// <summary>AC12 first line.</summary>
+/// <param name="pDb">DB path shown in the line.</param>
+/// <param name="pSample">The requested sample size.</param>
+/// <param name="pSeed">The seed used.</param>
+/// <param name="pCounts">The run's outcome counts.</param>
+/// <returns>The summary line (no line break).</returns>
 function SummaryLine(const pDb: string; pSample, pSeed: Integer; const pCounts: TVerifyCounts): string;
 
 /// <summary>AC12 row line (tab-separated).</summary>
+/// <param name="pRow">A classified row.</param>
+/// <returns>The row line (no line break).</returns>
 function RowLine(const pRow: TVerifyRow): string;
 
 /// <summary>AC13 document.</summary>
+/// <param name="pOpts">The run's options (db, sample, seed, config).</param>
+/// <param name="pExe">The DelphiLSP executable that was used ('' for a dry run).</param>
+/// <param name="pCounts">The run's outcome counts.</param>
+/// <param name="pRows">The rows to list (every non-match row, or every sampled row for --dry-run).</param>
 /// <returns>A new object; the caller frees it.</returns>
-function ReportJson(const pOpts: TVerifyOptions; const pExe: string; const pCounts: TVerifyCounts;
+function ReportJson(const pOpts: TVerifyOptions; const pExe: string; const pCounts: TVerifyCounts;  // dl:ok unused-public-symbol@f2e4 -- REVIEWED 2026-11-23 LSP1-VERB: public so tests\VerifyIndexTests.dpr (a separate program, not in the project) can call the pure function without a process
   const pRows: TArray<TVerifyRow>): TJSONObject;
 
 /// <summary>Runs the verb (AC15-AC23).</summary>
+/// <param name="pOpts">The options; 0 or '' selects the default except WarmupMs.</param>
 /// <returns>0 = no mismatch, 1 = at least one mismatch, 2 = setup error (one ERROR line on stderr, nothing on stdout).</returns>
-function RunVerifyIndex(const pOpts: TVerifyOptions): Integer;
+function RunVerifyIndex(const pOpts: TVerifyOptions): Integer;  // dl:ok unused-public-symbol@82b0 -- REVIEWED 2026-11-23 LSP1-VERB: public so tests\VerifyIndexTests.dpr (a separate program, not in the project) can call the pure function without a process
 
 /// <summary>Entry point for the CLI hub: reads the verb's own flags (--sample, --seed, --warmup-ms, --delphi-lsp-config) from ParamStr and runs.</summary>
 /// <param name="pArgs">The parsed command line; DbPath is already resolved by the hub.</param>
+/// <returns>0 = no mismatch, 1 = at least one mismatch, 2 = setup error.</returns>
 /// <exception cref="EVerifyUsage">A flag value that is not a whole number (the hub maps it to exit 3).</exception>
 function RunVerifyIndexVerb(const pArgs: TArgs): Integer;
 
