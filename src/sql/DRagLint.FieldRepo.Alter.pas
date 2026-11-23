@@ -325,11 +325,7 @@ end;
 { A comparison of two zoned values ignores the zone, so no scan could see that it is lost. }
 function IsUnconvertible(const pType: TFrTypeFacts): Boolean;
 begin
-  case pType.FieldType of
-    FB_BLOB, FB_TIME_TZ, FB_TIMESTAMP_TZ: Result := True;
-  else
-    Result := IsOctets(pType);
-  end;
+  Result := (pType.FieldType = FB_BLOB) or (pType.FieldType = FB_TIME_TZ) or (pType.FieldType = FB_TIMESTAMP_TZ) or IsOctets(pType);
 end;
 
 function SameType(const pLeft, pRight: TFrTypeFacts): Boolean;

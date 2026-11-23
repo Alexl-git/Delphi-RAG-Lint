@@ -10,7 +10,7 @@ uses
 
 /// <summary>The Firebird SQL text generator (dialect 3, quoted identifiers).</summary>
 /// <returns>A stateless dialect.</returns>
-function FirebirdDialect: IFrDbDialect;
+function FirebirdDialect: IFrDbDialect;  // dl:ok unused-public-symbol@82f6 -- TT-ALTER: the pure SQL generator is the public test seam; tests\fieldrepo\AlterTests.dpr (outside the indexed project) calls it
 
 /// <summary>Opens a Firebird connection for planning and (through DRagLint.FieldRepo.AlterApply) applying.</summary>
 /// <param name="pConnection">FireDAC-style 'Database=..;User_Name=..;Password=..'.</param>
