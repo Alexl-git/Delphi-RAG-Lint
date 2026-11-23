@@ -20,7 +20,7 @@
         }
       ],
       "helpOrder": 51,
-      "help": ["  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>"]
+      "help": ["  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>", "                               reads Delphi and SQL symbols from EVERY --db; rebuilds orm_links in the LAST --db only (its db-index columns are --db positions)"]
     }
   ],
   "audience": "both",
@@ -37,9 +37,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-11-23",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.52.3-alpha",
     "surfaceHash": "5fd258380950196939a5e77d666f95ccab96eb5486cffaee8411c68595d60bcc"
   }
 }
