@@ -392,8 +392,8 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "831c44648df21d81111fda80443164998090dec88ae2a20248fabffe45846024",
-    "version": "1.53.0-alpha"
+    "hash": "5a6c252109d974871af80a3e9be3cae416ff0e8d9531afd849e90b6c7ba53d69",
+    "version": "1.54.0-alpha"
   },
   "features/finalization-after-dependency.md": {
     "hash": "ab4ca22ab2db61fa0144d423d879dced716a9354472d7a2a0565b48e3f0ddb15",
