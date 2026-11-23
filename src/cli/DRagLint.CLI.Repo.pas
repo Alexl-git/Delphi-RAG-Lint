@@ -10,7 +10,7 @@ interface
 
 /// <summary>Runs `drag-lint repo &lt;sub-verb&gt; ...`: init, info, import-fb, seed-fb,
 /// refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice,
-/// migrate, check (the last two: DRagLint.CLI.RepoModel, 1.53) (PLAN D11;
+/// migrate, check (the last two: DRagLint.CLI.RepoModel, 1.53), gen-const, check-const (DRagLint.CLI.RepoConstGen) (PLAN D11;
 /// gen-param-array is DRagLint.CLI.RepoParamArray and needs no repository; the generator verbs take
 /// --code-dir / --server-dir / --client-dir / --table, print a dry-run diff and write only with --apply,
 /// --no-backup skips the .BCKn copy).</summary>
@@ -22,8 +22,8 @@ interface
 /// <param name="pOutFile">--output value, '' when absent.</param>
 /// <param name="pReplace">--replace.</param>
 /// <param name="pJson">--json (or --format json); honoured by `repo info`.</param>
-/// <returns>0 = success; 1 = failure or usage error; 2 = schema drift (import-fb) or a
-/// malformed input file (restore, gen-memtable).</returns>
+/// <returns>0 = success; 1 = failure or usage error (check-const: stale); 2 = schema drift (import-fb), a
+/// malformed input file (restore, gen-memtable) or bad arguments (gen-const, check-const).</returns>
 /// <remarks>
 /// The repository path: --repo wins; else the project's `fieldRepository` key
 /// (`_D-RAG\drag-lint-project.json`, relative to the project folder) -- one repository per
@@ -86,7 +86,7 @@ const
   { positions in the --save-form value list of RepoOrmVerb }
   SAVE_FORM_LEGACY  = 0;
   SAVE_FORM_CURRENT = 1;
-  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check, gen-const';
+  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check, gen-const, check-const';
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -478,10 +478,11 @@ var
 begin
   Result:= EXIT_FAIL;
   if SameText(pSub, 'gen-memtable') then Exit(GenMemTable(pInFile, pOutFile));
-  if not ResolveRepoPath(pRepo, pProject, Path) then Exit;
+  if not ResolveRepoPath(pRepo, pProject, Path) then Exit(if SameText(pSub, 'check-const') then EXIT_FORMAT else EXIT_FAIL);
   if MatchText(pSub, ['gen-orm', 'update-orm', 'gen-dataservice']) then Exit(RepoOrmVerb(pSub, Path));
   if IsRepoModelSub(pSub) then Exit(RunRepoModelVerb(pSub, Path, pJson)); // 1.53 FR-MODEL: migrate, check
   if SameText(pSub, 'gen-const') then Exit(RunRepoGenConst(Path, pOutFile)); // 1.53 FR-CONSTGEN
+  if SameText(pSub, 'check-const') then Exit(RunRepoCheckConst(Path)); // 1.53 FR-PRELOAD: 0 current, 1 stale, 2 error
   case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
@@ -495,7 +496,7 @@ end;
 function IsImplementedSub(const pSub: string): Boolean;
 begin
   Result:= MatchText(pSub, ['init', 'info', 'import-fb', 'seed-fb', 'refresh-schema', 'backup',
-    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'gen-const']) or IsRepoModelSub(pSub);
+    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'gen-const', 'check-const']) or IsRepoModelSub(pSub);
 end;
 
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de -- REVIEWED 2026-11-17 v152 TTE: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape)
