@@ -322,9 +322,14 @@ begin
     else pLeft.ByteLength = pRight.ByteLength;
 end;
 
-function IsZoned(const pType: TFrTypeFacts): Boolean;
+{ A comparison of two zoned values ignores the zone, so no scan could see that it is lost. }
+function IsUnconvertible(const pType: TFrTypeFacts): Boolean;
 begin
-  Result := (pType.FieldType = FB_TIME_TZ) or (pType.FieldType = FB_TIMESTAMP_TZ);
+  case pType.FieldType of
+    FB_BLOB, FB_TIME_TZ, FB_TIMESTAMP_TZ: Result := True;
+  else
+    Result := IsOctets(pType);
+  end;
 end;
 
 function SameType(const pLeft, pRight: TFrTypeFacts): Boolean;
@@ -355,8 +360,7 @@ function TypeVerdict(const pOld, pNew: TFrTypeFacts): TFrTypeVerdict;
 begin
   if SameType(pOld, pNew) then
     Exit(tvSame);
-  { a comparison of two zoned values ignores the zone, so no scan could see that it is lost }
-  if (pOld.FieldType = FB_BLOB) or (pNew.FieldType = FB_BLOB) or IsOctets(pOld) or IsOctets(pNew) or IsZoned(pOld) or IsZoned(pNew) then
+  if IsUnconvertible(pOld) or IsUnconvertible(pNew) then
     Exit(tvUnsupported);
   if IsChar(pOld) and (pOld.FieldType = pNew.FieldType) then
     Exit(if CharsOf(pNew) > CharsOf(pOld) then tvWiden else tvShrink);

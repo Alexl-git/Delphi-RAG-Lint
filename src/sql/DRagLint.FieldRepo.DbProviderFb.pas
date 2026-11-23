@@ -368,7 +368,7 @@ begin
   inherited Create;
   RequireFbConnectionSafe(pConnection);
   RequireFbDriver(pConnection);
-  FDialect := TFrFirebirdDialect.Create;
+  FDialect := FirebirdDialect;
   FSession := TGUID.NewGuid.ToString;
   FConn := OpenSourceConnection(pConnection, FDatabase);
   FRead := TFDTransaction.Create(nil);

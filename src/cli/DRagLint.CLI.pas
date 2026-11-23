@@ -1711,7 +1711,7 @@ begin
     { repo alter-table (1.54): DRagLint.CLI.RepoAlter reads these from ParamStr }
     else if (A = '--order') and (i < ParamCount) then Inc(i)
     else if (A = '--hook') and (i < ParamCount) then Inc(i)
-    else if A = '--safe-path' then
+    else if A = '--safe-path' then // repo alter-table: a bare switch, DRagLint.CLI.RepoAlter reads it from ParamStr
     else if (A = '--step-size') and (i < ParamCount) then Inc(i)
     else if (A = '--progress-form') and (i < ParamCount) then Inc(i)
     else if (A = '--scope') and (i < ParamCount) then
