@@ -1093,6 +1093,10 @@ type
       procedure ClearEmitOwnedSymbolRows(AFileId: Int64);
       procedure BindSymbolParams(AQ: TFDQuery; const ASymbol: TSymbol);
       procedure FillSymIdSet(const AIds: TList<Int64>);
+      { SEARCHFAST: see the notes at the bodies. }
+      procedure CorrectFtsShadowStats;
+      procedure DropSearchTriggers;
+      procedure RebuildSearchFts;
       procedure FinishSymbolClaims;
       procedure CommitSymbolClaimScope;
       procedure DetachSymbolIds(ASkipEmitOwned: Boolean);
@@ -8475,6 +8479,7 @@ begin
       end;
     end;
   end;
+  CorrectFtsShadowStats;
 
   { STAMP THE VERSION LAST -- this is the real commit point of the migration.
     Everything above is idempotent (CREATE ... IF NOT EXISTS, plus TryExec'd
@@ -9633,6 +9638,40 @@ const
   { a targeted patch of ~36k rows costs 2.6 s and a rebuild of ~770k rows ~12 s,
     so the crossover is a few hundred thousand rows; stay well under. }
   FTS_TARGETED_MAX_ROWS   = 150000;
+
+{ POISONED FTS5 STATISTICS (2026-11-23, SEARCHFAST).
+
+  Migrate's ANALYZE runs once, on a database that is still EMPTY. Every ordinary
+  table then gets no sqlite_stat1 row and keeps the planner's default, but each
+  FTS5 %_data table already holds its two seed rows (averages + structure), so it
+  was recorded as a TWO-ROW table, for ever. FTS5 drops a merged segment with
+  `DELETE FROM %_data WHERE id>=? AND id<=?`; believing in two rows, the planner
+  SCANS the whole table for it. Merges come every ~16 one-row flushes, so each
+  inserted row paid for the whole index: 377/s falling to 120/s over 1.4 M rows,
+  and 103/s -> 14,000+/s on one DB copy when nothing but this number changed.
+
+  So a recorded count too small to be a real one is raised to SQLite's own default
+  for an un-analysed table, and the planner of THIS connection is told
+  (`ANALYZE sqlite_schema` reloads the statistics without gathering any). Deleting
+  the row would not do: the reload does not put a table back to its default.
+  Existing databases are healed by the next writer. Nothing is written when there
+  is nothing to correct. BEST-EFFORT like the ANALYZE above it: a planner hint. }
+procedure TSQLiteSymbolStore.CorrectFtsShadowStats;
+const
+  PROBE_SQL = 'SELECT 1 FROM sqlite_stat1 WHERE idx IS NULL AND CAST(stat AS INTEGER) < 1000 ' +
+              'AND tbl IN (''string_fts_data'', ''string_fts_tri_data'', ''symbol_search_fts_data'')';
+  RAISE_SQL = 'UPDATE sqlite_stat1 SET stat = ''1048576'' WHERE idx IS NULL AND CAST(stat AS INTEGER) < 1000 ' +
+              'AND tbl IN (''string_fts_data'', ''string_fts_tri_data'', ''symbol_search_fts_data'')';
+begin
+  try
+    if not (TableExists('sqlite_stat1') and ProbeExists(PROBE_SQL)) then Exit;
+    FConn.ExecSQL(RAISE_SQL);
+    FConn.ExecSQL('ANALYZE sqlite_schema');
+  except
+    on E: Exception do
+      ResolveLog('the FTS5 table statistics were not corrected (' + E.Message + '); the next writer retries.');
+  end;
+end; // procedure
 
 procedure TSQLiteSymbolStore.BeginDeferredTextIndex;
 begin
@@ -15953,6 +15992,29 @@ begin
   if Hit(ARemarks) then Result:= Result + IfThen(Result = '', '', ',') + 'remarks';
 end; // function
 
+procedure TSQLiteSymbolStore.DropSearchTriggers;
+begin
+  FConn.ExecSQL('DROP TRIGGER IF EXISTS symbol_search_ai');
+  FConn.ExecSQL('DROP TRIGGER IF EXISTS symbol_search_ad');
+  FConn.ExecSQL('DROP TRIGGER IF EXISTS symbol_search_au');
+end;
+
+{ Second half of the bulk fill: rebuild the FTS5 index from symbol_search and
+  restore what DropSearchTriggers removed. Inside the caller's transaction.
+  TEST SEAM: DRAGLINT_TEST_SEARCH_HOLD_MS holds the fill complete but not
+  committed, so a guard can kill the process or read beside it. }
+procedure TSQLiteSymbolStore.RebuildSearchFts;
+const
+  FIRST_TRIGGER = 2; { SCHEMA_DDL_SYMBOL_SEARCH[0..1] = the table and its FTS5 mirror }
+var
+  I: Integer;
+begin
+  BeatStep('search fts rebuild');
+  FConn.ExecSQL('INSERT INTO symbol_search_fts(symbol_search_fts) VALUES (''rebuild'')');
+  for I:= FIRST_TRIGGER to High(SCHEMA_DDL_SYMBOL_SEARCH) do FConn.ExecSQL(SCHEMA_DDL_SYMBOL_SEARCH[I]);
+  TThread.Sleep(StrToIntDef(System.SysUtils.GetEnvironmentVariable('DRAGLINT_TEST_SEARCH_HOLD_MS'), 0));
+end;
+
 function TSQLiteSymbolStore.BuildSymbolSearch: Integer;
 { Doc attribution (xj-5 integration, 2026-10-28): string_literals.symbol_id of a
   kind='doc' row is the ENCLOSING scope (the unit or the class), not the symbol
@@ -15967,6 +16029,16 @@ function TSQLiteSymbolStore.BuildSymbolSearch: Integer;
 const
   DOC_GAP      = 2;   { lines allowed between a doc block and its declaration }
   MAX_IN_FILES = 500; { above this many files, read every doc literal instead of an IN list }
+  { BULK FILL (2026-11-23, SEARCHFAST). Through the triggers every row is one FTS5
+    flush: one segment written, later merged. When the missing rows are a large
+    share of the table, drop the three triggers, write the rows, 'rebuild' the FTS5
+    index in one pass (rowid order, no tombstones of the rows the re-parse removed)
+    and put the triggers back -- all inside the stage's one transaction. A crash
+    rolls the whole fill back and the next run's NOT EXISTS finds every row missing
+    again; a reader keeps the state from before the stage until the commit. }
+  BULK_MIN_ROWS = 1000; { below this the triggers are cheap }
+  BULK_RATIO    = 8;    { a rebuild re-reads the whole table, so the new rows must be at least 1/8 of it }
+  FILL_CHUNK    = 2000; { rows per array-DML insert }
 type
   TSearchRow = record
     Id                     : Int64;
@@ -15975,6 +16047,8 @@ type
   end;
 var
   Q, Ins   : TFDQuery;
+  Bulk     : Boolean;
+  Started  : Int64;
   Rows     : TList<TSearchRow>;
   R        : TSearchRow;
   I        : Integer;
@@ -15987,6 +16061,39 @@ var
   FldId, FldName, FldPName, FldDSum, FldDRem, FldFile, FldStart, FldEnd, FldText: TField;
   Block    : TStringBuilder;
   IdText   : TArray<string>;
+
+  function WantBulk: Boolean;
+  begin
+    Result:= (Rows.Count >= BULK_MIN_ROWS) and
+             (Int64(Rows.Count) * BULK_RATIO >= Int64(FConn.ExecSQLScalar('SELECT COUNT(*) FROM symbol_search')));
+  end;
+
+  procedure WriteRows;
+  var
+    Done, N, K: Integer;
+  begin
+    Ins.SQL.Text:= 'INSERT INTO symbol_search(symbol_id, tokens, summary, remarks) ' +
+                   'VALUES (:sid, :tok, :sum, :rem)';
+    Ins.Params[0].DataType:= ftLargeint;
+    for K:= 1 to Ins.Params.Count - 1 do Ins.Params[K].DataType:= ftWideMemo;
+    Done:= 0;
+    while Done < Rows.Count do
+    begin
+      N:= Min(FILL_CHUNK, Rows.Count - Done);
+      Ins.Params.ArraySize:= N;
+      for K:= 0 to N - 1 do
+      begin
+        R:= Rows[Done + K];
+        Ins.Params[0].AsLargeInts[K]:= R.Id;
+        Ins.Params[1].AsWideMemos[K]:= R.Tokens;
+        if R.Summary = '' then Ins.Params[2].Clear(K) else Ins.Params[2].AsWideMemos[K]:= R.Summary;
+        if R.Remarks = '' then Ins.Params[3].Clear(K) else Ins.Params[3].AsWideMemos[K]:= R.Remarks;
+      end;
+      Ins.Execute(N);
+      Inc(Done, N);
+      BeatProgress(Done);
+    end; // while
+  end;
 
   procedure FlushBlock;
   var
@@ -16124,26 +16231,19 @@ begin
       Ins:= TFDQuery.Create(nil);
       try
         Ins.Connection:= FConn;
-        Ins.SQL.Text:= 'INSERT INTO symbol_search(symbol_id, tokens, summary, remarks) ' +
-                       'VALUES (:sid, :tok, :sum, :rem)';
-        Ins.ParamByName('sid').DataType:= ftLargeint;
-        Ins.ParamByName('tok').DataType:= ftWideMemo;
-        Ins.ParamByName('sum').DataType:= ftWideMemo;
-        Ins.ParamByName('rem').DataType:= ftWideMemo;
-        Ins.Prepare;
+        Bulk:= WantBulk;
+        if Bulk then DropSearchTriggers;
         Q.SQL.Text:= 'DELETE FROM symbol_search WHERE symbol_id NOT IN (SELECT id FROM symbols)';
         Q.ExecSQL;
         BeatStep('search write', Rows.Count);
-        for R in Rows do  // dl:ok duplicate-code@b0f0 -- the prepared-insert-in-one-transaction shape PutEffectFacts also uses; PutEffectFacts is a hashed emit routine, so sharing a helper with it would bill an extractor re-parse
-        begin
-          Ins.ParamByName('sid').AsLargeInt:= R.Id;
-          Ins.ParamByName('tok').Value:= R.Tokens;
-          if R.Summary = '' then Ins.ParamByName('sum').Clear else Ins.ParamByName('sum').Value:= R.Summary;
-          if R.Remarks = '' then Ins.ParamByName('rem').Clear else Ins.ParamByName('rem').Value:= R.Remarks;
-          Ins.ExecSQL;
-          BeatProgress;
-        end; // for
+        Started:= TStopwatch.GetTimeStamp;
+        WriteRows;
+        if Bulk then RebuildSearchFts;
         FConn.Commit;
+        if Rows.Count > 0 then
+          ResolveLog(Format('search     %d row(s) written, %s  [%.1fs]',
+            [Rows.Count, if Bulk then 'symbol_search_fts rebuilt' else 'symbol_search_fts patched', ResolveSecs(Started)],
+            TFormatSettings.Invariant));
       finally
         Ins.Free;
       end; // try

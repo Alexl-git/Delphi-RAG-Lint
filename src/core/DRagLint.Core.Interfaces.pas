@@ -3597,9 +3597,12 @@ type
     /// <remarks>
     /// Derived data only: never touches symbols, refs or any
     /// extracted row, so it costs no re-parse and no SCHEMA_VERSION bump.
-    /// One transaction. Idempotent. A re-indexed file deletes its symbols,
-    /// whose rows cascade out of symbol_search, so the NOT-EXISTS fill keeps
-    /// incremental runs consistent.
+    /// One transaction: a reader keeps the state from before the stage until the
+    /// commit, and a killed run leaves it, so the next run fills again.
+    /// Idempotent. A re-indexed file deletes its symbols, whose rows cascade out of
+    /// symbol_search, so the NOT-EXISTS fill keeps incremental runs consistent.
+    /// When many rows are missing the triggers are dropped, the rows written and
+    /// symbol_search_fts rebuilt in one pass, then the triggers restored.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
