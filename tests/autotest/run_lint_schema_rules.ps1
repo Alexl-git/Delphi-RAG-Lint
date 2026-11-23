@@ -50,6 +50,20 @@ function Invoke-Engine([string[]]$EngineArgs, [string]$Engine = $Exe) {
   return ,@($out)
 }
 
+# Runs the engine with stdout and stderr captured SEPARATELY (Invoke-Engine merges them).
+function Invoke-EngineSplit([string[]]$EngineArgs) {
+  $psi = New-Object Diagnostics.ProcessStartInfo
+  $psi.FileName = $Exe
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.UseShellExecute = $false
+  foreach ($a in $EngineArgs) { $psi.ArgumentList.Add($a) }
+  $pr = [Diagnostics.Process]::Start($psi)
+  $so = $pr.StandardOutput.ReadToEndAsync()
+  $se = $pr.StandardError.ReadToEndAsync()
+  $pr.WaitForExit()
+  return [pscustomobject]@{ Out = $so.Result; Err = $se.Result }
+}
 # One fixture copy per scenario: the repository file name is fixed by _D-RAG\drag-lint-project.json.
 function New-Scenario([string]$Name, [AllowNull()][object]$RepoBackup) {
   $dir = Join-Path $WorkDir $Name
@@ -179,6 +193,20 @@ try {
   $oneS = @($oneJ | Where-Object { $_.rule -like 'schema-*' })
   Check 'T6a lint uBounds.pas reports its 2 schema findings' ($oneS.Count -eq 2) "count=$($oneS.Count)"
   Check 'T6b lint <file> prints the banner once' (@($one | Where-Object { $_ -match 'schema facts' }).Count -eq 1)
+  # T10 notice channel: a configured-but-missing repository says ONE line on stderr, never on stdout (--json stays clean);
+  # no fieldRepository configured stays fully silent (silent control).
+  $sm = Invoke-EngineSplit @('lint', (Join-Path $miss.Dir 'uBounds.pas'), '--db', $miss.Db, '--project', $miss.Proj, '--json')
+  $smErrLines = @(($sm.Err -split "`r?`n") | Where-Object { $_ -match 'dlrepo' })
+  Check 'T10a missing repository: exactly one stderr line' ($smErrLines.Count -eq 1) "count=$($smErrLines.Count)"
+  $smJsonOk = $true
+  try { $null = $sm.Out | ConvertFrom-Json } catch { $smJsonOk = $false }
+  Check 'T10b missing repository: stdout has no notice and parses as JSON' (($sm.Out -notmatch 'dlrepo') -and $smJsonOk) "out=$($sm.Out.Substring(0, [Math]::Min(80, $sm.Out.Length)))"
+  $sa = Invoke-EngineSplit @('lint-all', '--db', $miss.Db, '--project', $miss.Proj, '--json')
+  Check 'T10c lint-all missing repository: one stderr line, none on stdout' ((@(($sa.Err -split "`r?`n") | Where-Object { $_ -match 'dlrepo' }).Count -eq 1) -and ($sa.Out -notmatch 'dlrepo'))
+  $sn = Invoke-EngineSplit @('lint', (Join-Path $none.Dir 'uBounds.pas'), '--db', $none.Db, '--project', $none.Proj, '--json')
+  Check 'T10d no fieldRepository: no stderr notice at all (silent control)' ($sn.Err -notmatch 'dlrepo|schema facts|field repository') "err=$($sn.Err)"
+  $snp = Invoke-EngineSplit @('lint', (Join-Path $base.Dir 'uBounds.pas'), '--db', $base.Db, '--project', $base.Proj, '--json')
+  Check 'T10e positive control: present repository prints the banner on stderr only' (($snp.Err -match 'schema facts') -and ($snp.Out -notmatch 'schema facts'))
 }
 finally {
   if ($script:Failed -eq 0 -and (Test-Path $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }

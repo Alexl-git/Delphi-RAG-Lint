@@ -174,7 +174,6 @@ uses
   , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
   , DRagLint.Lint.SchemaRules       { 1.53 FR-LINT }
-  , DRagLint.FieldRepo.Locate
   , DRagLint.Lint   .SharedUnit
   , DRagLint.Lint.Bookmarks { bookmarks verb: dl:bk comment anchors (E-BOOKMARKS) }
   , DRagLint.CLI.Bookmarks { bookmarks-strip / bookmarks-restore (E-BOOKMARKS phase 2) }
