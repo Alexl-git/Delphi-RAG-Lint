@@ -35,7 +35,8 @@ uses
   System.SysUtils, System.Classes, System.RegularExpressions, System.StrUtils,
   System.Generics.Collections, System.Math,
   DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Refactor.TextEdit, DRagLint.Lint.Autofix,
-  DRagLint.Lint.SharedUnit, DRagLint.Fix.ProjectWide;
+  DRagLint.Lint.SharedUnit, DRagLint.Fix.ProjectWide,
+  DRagLint.Doc.Harvest; { IsBannerSlashLine }
 
 const
   CRoutineKw = '(?:class\s+)?(?:procedure|function|constructor|destructor)';
@@ -58,11 +59,12 @@ begin
   Result.EndLine := ALast;
 end;
 
-{ First line (1-based) of the run of '///' lines directly above ALine. }
+{ First line (1-based) of the run of '///' lines directly above ALine; a banner line (four or more
+  slashes) is not documentation and ends the run. }
 function DocRunStart(ALines: TStrings; ALine: Integer): Integer;
 begin
   Result:= ALine;
-  while (Result > 1) and Trim(ALines[Result - 2]).StartsWith('///') do Dec(Result);
+  while (Result > 1) and Trim(ALines[Result - 2]).StartsWith('///') and not IsBannerSlashLine(ALines[Result - 2]) do Dec(Result);
 end;
 
 { The name of the class or record whose declaration encloses ALine (1-based),

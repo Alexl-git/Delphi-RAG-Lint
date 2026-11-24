@@ -211,6 +211,18 @@ function HarvestReasonToString(const AReason: THarvestReason): string;
 /// </remarks>
 function IsDlMarkerLine(const ALine: string): Boolean;
 
+/// <summary>True when ALine starts with FOUR or more slashes: a banner / separator
+/// comment, never a DocInsight line (which starts with exactly three).</summary>
+/// <param name="ALine">One physical source line; indentation is ignored.</param>
+/// <returns>True for `//////...` and `//// text`; False for `/// text`, a bare `///`,
+/// `// text` and everything else.</returns>
+/// <remarks>
+/// Pure. TDocCommentScanner (extraction surface) types such a line as a /// doc line, so
+/// every doc reader and writer OUTSIDE the extractor asks this first (INBOX-orm3-server-153
+/// item 1: the banner was deleted and rewritten as a summary).
+/// </remarks>
+function IsBannerSlashLine(const ALine: string): Boolean;
+
 implementation
 
 uses
@@ -670,6 +682,11 @@ var
 begin
   T:= Trim(ALine);
   Result:= T.StartsWith('//') and (not T.StartsWith('///')) and Trim(Copy(T, Length('//') + 1, MaxInt)).StartsWith('dl:');
+end;
+
+function IsBannerSlashLine(const ALine: string): Boolean;
+begin
+  Result:= TrimLeft(ALine).StartsWith('////');
 end;
 
 function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarvestResult;  // dl:ok cyclomatic-complexity@4d4a, too-many-exit-points@b58a -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 45 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
