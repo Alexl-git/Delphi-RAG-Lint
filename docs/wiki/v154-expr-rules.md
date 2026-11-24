@@ -62,4 +62,10 @@ identifier character.
 
 ## Measured
 
-See the "Measured" section below once the corpora ran.
+Read-only copies of five project indexes (drag-lint, Micronite, Loader2025, TableTools370P, YADF GuardTest), 2026-11-24, one rule
+and one process at a time. The final build reports 0 findings for all six rules on all five corpora, so all six ship ON as
+proposed and are marked "not measured in the field" (no true positive was seen either). The first run found 8 false positives
+of duplicate-logical-operand on drag-lint: `(C >= 'A')` and `(C >= 'a')` were read as equal (the key was lower-cased inside character
+literals), and `T.TryGetValue(.., Cnt) and (Cnt = 1) and U.TryGetValue(.., Cnt) and (Cnt = 1)` (a call in between changes Cnt). Both are fixed
+(literals keep their case; an operand that is not effect-free clears the operands seen so far) and are negative fixtures.
+Not measured: DFM-only identifiers (homoglyph-identifier reads .pas / .dpr / .dpk only).
