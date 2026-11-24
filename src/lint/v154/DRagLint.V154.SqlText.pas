@@ -193,6 +193,7 @@ type
     FRoutine  : Cardinal;
     FList0    : UInt64;                           // statement list being walked
     FHasRecv  : Boolean;                          // the index has ref_receivers, ref_types and dfm_properties
+    FRefs     : TDictionary<string, TPair<Int64, string>>;  // line:col:name -> symbol id and static type; nil until asked
     function Txt(const ANode: TTSNode): string;
     procedure CollectUnit(const ANode: TTSNode; const AClass: string);
     procedure CollectFields(const ANode: TTSNode; const AClass: string);
@@ -220,7 +221,8 @@ type
     procedure AddCreated(const AData: TSqlDataset; const ANode: TTSNode; const AClass: string);
     function EvalConst(const AName: string; const ANode: TTSNode; out AText: string): Boolean;
     function NewQuery(const ASql: string): TObject;
-    function RefValue(const ANode: TTSNode; const AColumn: string): string;
+    procedure LoadRefs;
+    function RefAt(const ANode: TTSNode): TPair<Int64, string>;
     function SymbolAt(const ANode: TTSNode): Int64;
     function TypeAt(const ANode: TTSNode): string;
     procedure LoadDfm(const ADfm: string);
@@ -673,6 +675,7 @@ end;
 destructor TSqlTextScan.Destroy;
 begin
   FWith.Free;
+  FRefs.Free;
   FLate.Free;
   FDfmNotes.Free;
   FDfmRoots.Free;
@@ -1385,37 +1388,63 @@ begin
   Result:= Query;
 end;
 
-{ AColumn of the reference at ANode as text; '' = none. }
-function TSqlTextScan.RefValue(const ANode: TTSNode; const AColumn: string): string;
+{ The name is part of the key: a stale index must not answer for another word at the same place. }
+function RefKey(ALine, ACol: Integer; const AName: string): string;
+begin
+  Result:= Format('%d:%d:%s', [ALine, ACol, LowerCase(AName)]);
+end;
+
+{ The references of the file, read once: one query per name costs seconds on a large form. }
+procedure TSqlTextScan.LoadRefs;
+const
+  FLD_SYMBOL = 2;
+  FLD_TYPE = 3;
+  FLD_NAME = 4;
 var
   Query: TFDQuery;
+  Item : TPair<Int64, string>;
+  Key  : string;
 begin
-  Result:= '';
-  if (not FHasRecv) or (FFileId = 0) then Exit;
-  Query:= NewQuery('SELECT ' + AColumn + ' FROM refs r LEFT JOIN ref_types t ON t.ref_id = r.id WHERE r.file_id = :f ' +
-    'AND r.start_line = :l AND r.start_col = :c AND r.name_text = :n COLLATE NOCASE AND ' + AColumn + ' IS NOT NULL LIMIT 1') as TFDQuery;
+  FRefs:= TDictionary<string, TPair<Int64, string>>.Create;
+  Query:= NewQuery('SELECT r.start_line, r.start_col, r.symbol_id, t.type_qname, r.name_text FROM refs r LEFT JOIN ref_types t ON t.ref_id = r.id ' +
+    'WHERE r.file_id = :f AND (r.symbol_id IS NOT NULL OR t.type_qname IS NOT NULL)') as TFDQuery;
   try
     Query.ParamByName('f').AsLargeInt:= FFileId;
-    Query.ParamByName('l').AsInteger := Integer(ANode.StartPoint.Row) + 1;
-    Query.ParamByName('c').AsInteger := TAstParseCache.CharCol(FFile, ANode.StartPoint);
-    Query.ParamByName('n').AsString  := Txt(ANode).TrimLeft(['&']);
     Query.Open;
-    if not Query.Eof then Result:= Query.Fields[0].AsString;
+    while not Query.Eof do
+    begin
+      Key:= RefKey(Query.Fields[0].AsInteger, Query.Fields[1].AsInteger, Query.Fields[FLD_NAME].AsString);
+      if not FRefs.TryGetValue(Key, Item) then Item:= Default(TPair<Int64, string>);
+      if Item.Key = 0 then Item.Key:= Query.Fields[FLD_SYMBOL].AsLargeInt;
+      if Item.Value = '' then Item.Value:= Query.Fields[FLD_TYPE].AsString;
+      FRefs.AddOrSetValue(Key, Item);
+      Query.Next;
+    end;
   finally
     Query.Free;
   end;
 end;
 
+function TSqlTextScan.RefAt(const ANode: TTSNode): TPair<Int64, string>;
+begin
+  Result:= Default(TPair<Int64, string>);
+  if (not FHasRecv) or (FFileId = 0) then Exit;
+  if FRefs = nil then LoadRefs;
+  if not FRefs.TryGetValue(RefKey(Integer(ANode.StartPoint.Row) + 1, TAstParseCache.CharCol(FFile, ANode.StartPoint),
+    Txt(ANode).TrimLeft(['&'])), Result) then
+    Result:= Default(TPair<Int64, string>);
+end;
+
 { The symbol the index binds the name at ANode to; 0 = none. }
 function TSqlTextScan.SymbolAt(const ANode: TTSNode): Int64;
 begin
-  Result:= StrToInt64Def(RefValue(ANode, 'r.symbol_id'), 0);
+  Result:= RefAt(ANode).Key;
 end;
 
 { The static type ref_types records for the name at ANode, as a leaf; '' = none. }
 function TSqlTextScan.TypeAt(const ANode: TTSNode): string;
 begin
-  Result:= LeafName(RefValue(ANode, 't.type_qname'));
+  Result:= LeafName(RefAt(ANode).Value);
 end;
 
 { The constant node of that name that starts on ALine, in another file's tree. }
@@ -1492,6 +1521,9 @@ type
   TDfmProps = record
     Rows : TArray<TDfmPropertyRow>;
     Owner: Integer;
+    First: Integer;  // Owner's rows are Rows[First..Last]; they stand together
+    Last : Integer;
+    procedure MoveTo(AOwner: Integer);
     function Value(const AName: string): string;
     function ListText(ARow: Integer): string;
     function IsFalse(const AName: string): Boolean;
@@ -1506,16 +1538,26 @@ begin
   Parts:= nil;
   for I:= ARow + 1 to High(Rows) do
     if Rows[I].Parent = ARow then Parts:= Parts + [Rows[I].ValueText]
-    else if Rows[I].Depth <= Rows[ARow].Depth then Break;
+    else if Rows[I].Depth = 0 then Break;
   Result:= string.Join(sLineBreak, Parts).TrimRight;
+end;
+
+{ Objects are asked in rising order, so the rows are read once per form. }
+procedure TDfmProps.MoveTo(AOwner: Integer);
+begin
+  Owner:= AOwner;
+  First:= Last + 1;
+  while (First <= High(Rows)) and (Rows[First].ObjectOrdinal < Owner) do Inc(First);
+  Last:= First - 1;
+  while (Last < High(Rows)) and (Rows[Last + 1].ObjectOrdinal = Owner) do Inc(Last);
 end;
 
 function TDfmProps.Value(const AName: string): string;
 var
   I: Integer;
 begin
-  for I:= 0 to High(Rows) do
-    if (Rows[I].ObjectOrdinal = Owner) and (Rows[I].Depth = 0) and SameText(Rows[I].Name, AName) then
+  for I:= First to Last do
+    if (Rows[I].Depth = 0) and SameText(Rows[I].Name, AName) then
       Exit(if Rows[I].ValueKind = KIND_LIST then ListText(I) else Rows[I].ValueText);
   Result:= '';
 end;
@@ -1533,14 +1575,11 @@ var
 begin
   Result:= nil;
   Name  := '';
-  for I:= 0 to High(Rows) do
-  begin
-    if Rows[I].ObjectOrdinal <> Owner then Continue;
+  for I:= First to Last do
     if Rows[I].ValueKind = KIND_ITEM then Name:= ''
     else if (Rows[I].Depth > 0) and SameText(Rows[I].Name, 'Name') then Name:= Rows[I].ValueText
     else if (Rows[I].Depth > 0) and SameText(Rows[I].Name, 'Value') and (Name <> '') and (not MatchText(Rows[I].ValueText, ['Null', ''])) then
       Result:= Result + [Name];
-  end;
 end;
 
 procedure TSqlTextScan.LoadDfm(const ADfm: string);
@@ -1576,9 +1615,10 @@ begin
   FDfmRoots[Key]:= Parsed.DfmObjects[0].ClassName;
   Props.Rows:= ExtractDfmPropertyRows(ADfm, TEncoding.UTF8.GetString(Bytes), Parsed.DfmObjects);
   Items:= nil;
+  Props.Last:= -1;
   for I:= 1 to High(Parsed.DfmObjects) do
   begin
-    Props.Owner:= I;
+    Props.MoveTo(I);
     Item:= Default(TSqlDfmDataset);
     Item.Name       := Parsed.DfmObjects[I].Name;
     Item.ClassName  := Parsed.DfmObjects[I].ClassName;
