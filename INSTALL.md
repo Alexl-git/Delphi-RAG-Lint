@@ -26,7 +26,7 @@ Contents:
 | Needed for | Requirement | Notes |
 |---|---|---|
 | everything | Windows x64 | `drag-lint.exe` is a native Win64 program. |
-| the CLI, the indexer and the linter | nothing else | No RAD Studio, no .NET, Python or Node. The three tree-sitter DLLs ship beside the exe. |
+| the CLI, the indexer and the linter | nothing else | No RAD Studio, no .NET, Python or Node. The three tree-sitter DLLs and the Microsoft C runtime they need (`vcruntime140.dll`) ship beside the exe; no VC++ redistributable is needed. Windows 10 or later (Universal CRT). |
 | the platform library index (RTL/VCL/third-party) | RAD Studio installed | The `Library` manifest section reads the Library/Browsing paths RAD Studio registers (section 2a). |
 | the IDE plugin | RAD Studio 37.0 (Delphi 13) | The plugin is a design-time package and is not in the release archive (section 5). |
 | the charts, and the test scripts in a source checkout | PowerShell 7 (`pwsh`) | |
@@ -43,6 +43,7 @@ Contents:
    tree-sitter-delphi13.dll      } parser DLLs -- must sit next to the exe
    tree-sitter-dfm.dll           }
    tree-sitter.dll               }
+   vcruntime140.dll              the Microsoft C runtime the parser DLLs import
    rules\                        external lint rules (*.scm + *.json)  <-- REQUIRED for linting
      builtin-symbols.txt
      README.md                   the rule list with one-line descriptions

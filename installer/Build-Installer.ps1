@@ -22,6 +22,10 @@ param(
   [string] $YadfDir     = 'C:\Projects\YADF',
   [string] $GraphvizBin = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin',
   [string] $OutDir      = (Join-Path $PSScriptRoot 'Output'),
+  [string] $ToolsDir    = '',  # the folder of dl-field-repo.exe / dl-field-repo-std.exe; '' = src\tools\field-repo
+  [string] $HelpIndex   = '',  # the offline feature list; '' = <repo>\WWW\help\dl\index.json
+  [string] $VcRedistDir = '',  # folder of vcruntime140.dll (x64); '' = the newest Visual Studio redist folder
+  [string] $EngineSha256 = '', # when given, the engine must have exactly this hash
   [string] $Iscc        = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
   [switch] $DryRun,
   [switch] $LayoutV2
@@ -37,6 +41,14 @@ $version = $m.Matches[0].Groups[1].Value
 
 $engine = Join-Path $EngineDir 'drag-lint.exe'
 if (-not (Test-Path -LiteralPath $engine -PathType Leaf)) { throw "engine not found: $engine" }
+if ($EngineSha256 -ne '') {
+  $h = (Get-FileHash -LiteralPath $engine -Algorithm SHA256).Hash
+  if ($h -ne $EngineSha256) { throw "the engine at $engine has SHA256 $h, expected $EngineSha256" }
+}
+if ($ToolsDir -eq '') { $ToolsDir = Join-Path $repo 'src\tools\field-repo' }
+if ($HelpIndex -eq '') { $HelpIndex = Join-Path $repo 'WWW\help\dl\index.json' }
+. (Join-Path $repo 'build\VcRuntime.ps1')
+$VcRedistDir = Resolve-VcRuntimeDir 'x64' $VcRedistDir
 $reported = ((& $engine --version) | Out-String).Trim()
 if ($reported -ne "drag-lint $version") {
   throw "the engine at $engine reports '$reported', but DRAGLINT_VERSION is '$version'. Build and deploy that version first, or pass -EngineDir."
@@ -53,12 +65,26 @@ $need = @(
   "$YadfDir\Win32\Release\EXE\YADFOT.bpl", "$YadfDir\Win64\Release\EXE\YADFOT.bpl", "$YadfDir\LICENSE",
   "$repo\installer\drag-lint.starter.json", "$repo\installer\drag-lint.starter-v2.json", "$repo\charts\report-pairs.example.json",
   "$EngineDir\drag-lint-open.exe",
-  "$repo\src\tools\field-repo\dl-field-repo.exe", "$repo\src\tools\field-repo\dl-field-repo-std.exe",
+  "$ToolsDir\dl-field-repo.exe", "$ToolsDir\dl-field-repo-std.exe",
+  "$VcRedistDir\vcruntime140.dll", $HelpIndex,
+  "$repo\docs\examples\convrules\casts.castlib", "$repo\convrules\sample.rules", "$repo\convrules\BDE-to-FireDAC.rules",
+  "$repo\convrules\vendor\FireDAC_Migrate_BDE.rules", "$repo\convrules\vendor\FireDAC_Rename_Units.rules", "$repo\convrules\vendor\README.md",
   "$repo\installer\licenses\drag-lint-LICENSE.txt", "$repo\installer\licenses\graphviz-EPL-2.0.txt"
 )
 $missing = @($need | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
 if (-not (Test-Path -LiteralPath "$EngineDir\rules" -PathType Container)) { $missing += "$EngineDir\rules\" }
 if ($missing.Count) { throw ("missing source file(s):`n  " + ($missing -join "`n  ")) }
+
+# The C runtime: the .iss ships exactly vcruntime140.dll in bin\, so nothing that goes to bin\ may
+# import any other C runtime DLL (Graphviz brings its own in bin\graphviz\bin).
+Assert-VcRuntimeFile "$VcRedistDir\vcruntime140.dll" 'x64'
+$binPe = @('drag-lint.exe','drag-lint-config.exe','drag-lint-switch.exe','drag-lint-open.exe','sqlite3.dll','tree-sitter.dll',
+  'tree-sitter-delphi13.dll','tree-sitter-dfm.dll','ConvRulesEditor.exe','drag_lint_graph.exe' | ForEach-Object { Join-Path $EngineDir $_ })
+$binPe += "$ToolsDir\dl-field-repo.exe", "$ToolsDir\dl-field-repo-std.exe", "$VcRedistDir\vcruntime140.dll"
+$vcMissing = @(Get-VcRuntimeNeeded $binPe)
+if ($vcMissing.Count) { throw ("C runtime DLL(s) needed in bin\ that drag-lint.iss does not ship: " + ($vcMissing -join ', ')) }
+$yadfMissing = @(Get-VcRuntimeNeeded @("$YadfDir\Win64\Release\EXE\YADF.exe", "$YadfDir\Win64\Release\EXE\YADFSetup.exe"))
+if ($yadfMissing.Count) { throw ("C runtime DLL(s) needed in yadf\ that drag-lint.iss does not ship: " + ($yadfMissing -join ', ')) }
 
 # The BPLs must be the ones the IDE loads: the Win32 plugin from dll-win32 is the
 # one registered on the build machine, the Win64 one sits beside the engine.
@@ -79,6 +105,7 @@ $numericVersion += '.0'
 $defines = [ordered]@{
   AppVersion = $version; NumericVersion = $numericVersion; EngineDir = $EngineDir; Plugin32Dir = $Plugin32Dir; YadfDir = $YadfDir
   GraphvizBin = $GraphvizBin; RepoRoot = $repo; OutDir = $OutDir
+  ToolsDir = $ToolsDir; HelpIndex = $HelpIndex; VcRedistDir = $VcRedistDir
 }
 if ($LayoutV2) { $defines['LayoutV2'] = '1' }
 "drag-lint installer $version"

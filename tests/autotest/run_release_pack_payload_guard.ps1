@@ -122,6 +122,39 @@ Write-Host 'check 4 -- the offline feature list ships beside the engine'
 Check 'WWW\help\dl\index.json is copied' ($text.Contains('Join-Path $repo "WWW\help\dl\index.json"')) 'the help line would show "(feature list not installed)" in every release'
 Check '... into <stage>\help\dl\index.json' ($text.Contains('Join-Path $stg "help\dl\index.json"')) 'the plugin looks for <engine dir>\help\dl\index.json'
 Write-Host ''
+Write-Host 'check 5 -- the setup carries what the zips carry beside the engine'
+
+# 1.54: the first setup built had neither casts.castlib, nor the rule books, nor the help line's
+# feature list, although the zips did. Each line is matched on the [Files] entry of
+# installer\drag-lint.iss; the folder matters (the editor, convert-apply and the plugin look there).
+$iss = [IO.File]::ReadAllLines((Join-Path $repo 'installer\drag-lint.iss'))
+function Get-IssHits([string[]]$Lines, [string]$Rx) { @($Lines | Where-Object { $_ -match $Rx }).Count }
+$setup = @(
+  @('casts.castlib beside the engine',       '^Source: "\{#CastLib\}";\s+DestDir: "\{app\}\\bin";\s+Components: core;'),
+  @('sample.rules',                          '^Source: "\{#Books\}\\sample\.rules";\s+DestDir: "\{app\}\\bin\\convrules";'),
+  @('BDE-to-FireDAC.rules',                  '^Source: "\{#Books\}\\BDE-to-FireDAC\.rules";\s+DestDir: "\{app\}\\bin\\convrules";'),
+  @('vendor\FireDAC_Migrate_BDE.rules',      '^Source: "\{#Books\}\\vendor\\FireDAC_Migrate_BDE\.rules";\s+DestDir: "\{app\}\\bin\\convrules\\vendor";'),
+  @('vendor\FireDAC_Rename_Units.rules',     '^Source: "\{#Books\}\\vendor\\FireDAC_Rename_Units\.rules";\s+DestDir: "\{app\}\\bin\\convrules\\vendor";'),
+  @('vendor\README.md',                      '^Source: "\{#Books\}\\vendor\\README\.md";\s+DestDir: "\{app\}\\bin\\convrules\\vendor";'),
+  @('help\dl\index.json beside the engine',  '^Source: "\{#HelpIndex\}";\s+DestDir: "\{app\}\\bin\\help\\dl";\s+DestName: "index\.json"')
+)
+foreach ($s in $setup) {
+  Check "setup ships $($s[0])" ((Get-IssHits $iss $s[1]) -eq 1) "no [Files] line matches $($s[1])"
+}
+# every file of convrules\vendor the zips take by wildcard is named in the .iss
+foreach ($v in Get-ChildItem -LiteralPath (Join-Path $repo 'convrules\vendor') -File) {
+  Check "setup names convrules\vendor\$($v.Name)" ((Get-IssHits $iss ('^Source: "\{#Books\}\\vendor\\' + [regex]::Escape($v.Name) + '"')) -eq 1) 'the zips ship it, the setup does not'
+}
+# upgrade / uninstall of a text file the user may have edited: every book is kept, in both directions
+$books = @($iss | Where-Object { $_ -match '^Source: "\{#(CastLib|Books)' -and $_ -notmatch 'README\.md' })
+Check 'every book has KeepEditedBook (upgrade keeps an edited copy)' (@($books | Where-Object { $_ -notmatch 'BeforeInstall: KeepEditedBook\(' }).Count -eq 0 -and $books.Count -eq 5) "books=$($books.Count)"
+$released = Get-IssHits $iss '^\s+ReleaseBook\('
+Check 'every book has a ReleaseBook (uninstall keeps an edited copy)' ($released -eq $books.Count) "ReleaseBook calls=$released"
+Check 'uninstall calls ReleaseBooks before the files go' ((Get-IssHits $iss 'CurUninstallStep = usUninstall then ReleaseBooks') -eq 1) 'not called'
+# positive control: the same check fails on a copy without the line
+$cut = @($iss | Where-Object { $_ -notmatch $setup[0][1] })
+Check 'control: without its line the castlib check fails' ((Get-IssHits $cut $setup[0][1]) -eq 0 -and $cut.Count -eq $iss.Count - 1) 'the check cannot fail'
+Write-Host ''
 if ($script:Failed) { Write-Host 'RELEASE PACK PAYLOAD GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RELEASE PACK PAYLOAD GUARD: PASS' -ForegroundColor Green
 exit 0

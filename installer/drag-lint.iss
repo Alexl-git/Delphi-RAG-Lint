@@ -10,6 +10,9 @@
 ; share one folder):
 ;   {app}\bin\                 drag-lint.exe + companions, tree-sitter DLLs, rules\,
 ;                              the Win32 plugin BPL, drag-lint.json
+;   {app}\bin\vcruntime140.dll  the Microsoft C runtime the tree-sitter DLLs import, app-local
+;   {app}\bin\casts.castlib, {app}\bin\convrules\   the cast library and rule books, beside the editor and the engine
+;   {app}\bin\help\dl\index.json   the IDE help line's offline feature list (DragLint.Plugin.HelpIndex)
 ;   {app}\bin\x64\             the Win64 plugin BPL (64-bit IDE only; a second file
 ;                              of the same name cannot share bin\)
 ;   {app}\bin\graphviz\bin\    dot.exe + its DLLs + config8 -- the engine finds its
@@ -42,6 +45,16 @@
 
 #ifndef NumericVersion
   #error NumericVersion is not defined -- build with installer\Build-Installer.ps1
+#endif
+
+#ifndef ToolsDir
+  #error ToolsDir is not defined -- build with installer\Build-Installer.ps1
+#endif
+#ifndef HelpIndex
+  #error HelpIndex is not defined -- build with installer\Build-Installer.ps1
+#endif
+#ifndef VcRedistDir
+  #error VcRedistDir is not defined -- build with installer\Build-Installer.ps1
 #endif
 
 ; INSTALLED LAYOUT V2, phase 4 (docs\superpowers\specs\2026-11-06-installed-layout-v2.md).
@@ -122,6 +135,9 @@ Source: "{#EngineDir}\sqlite3.dll";             DestDir: "{app}\bin"; Components
 Source: "{#EngineDir}\tree-sitter.dll";          DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\tree-sitter-delphi13.dll"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\tree-sitter-dfm.dll";      DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
+; the parser DLLs import VCRUNTIME140.dll, which Windows does not have: app-local, Microsoft signed
+Source: "{#VcRedistDir}\vcruntime140.dll";       DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
+Source: "{#HelpIndex}"; DestDir: "{app}\bin\help\dl"; DestName: "index.json"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\rules\*";                  DestDir: "{app}\bin\rules"; Components: core; Flags: ignoreversion recursesubdirs createallsubdirs
 ; starter manifest (R2-X2): zero sections is the engine's first-run state. Never
 ; overwritten, never removed -- after the first run it is the user's file. In an
@@ -138,11 +154,22 @@ Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; De
 #endif
 Source: "{#RepoRoot}\charts\report-pairs.example.json"; DestDir: "{app}"; Components: core; Flags: ignoreversion
 Source: "{#RepoRoot}\docs\wiki\Wiki-Blocks-Authoring.md"; DestDir: "{app}\docs"; Components: core; Flags: ignoreversion
+; ---- cast library + starter rule books (core: the convert-* verbs use them without the editor).
+; They are text a user may edit in place. An upgrade keeps an edited or older copy as <file>.bak
+; (KeepEditedBook); uninstall renames an edited copy to <file>.user.bak instead of deleting it (ReleaseBooks).
+#define Books  RepoRoot + "\convrules"
+#define CastLib RepoRoot + "\docs\examples\convrules\casts.castlib"
+Source: "{#CastLib}";                                DestDir: "{app}\bin";                  Components: core; BeforeInstall: KeepEditedBook('{#GetSHA256OfFile(CastLib)}'); Flags: ignoreversion
+Source: "{#Books}\sample.rules";                     DestDir: "{app}\bin\convrules";        Components: core; BeforeInstall: KeepEditedBook('{#GetSHA256OfFile(Books + "\sample.rules")}'); Flags: ignoreversion
+Source: "{#Books}\BDE-to-FireDAC.rules";             DestDir: "{app}\bin\convrules";        Components: core; BeforeInstall: KeepEditedBook('{#GetSHA256OfFile(Books + "\BDE-to-FireDAC.rules")}'); Flags: ignoreversion
+Source: "{#Books}\vendor\FireDAC_Migrate_BDE.rules"; DestDir: "{app}\bin\convrules\vendor"; Components: core; BeforeInstall: KeepEditedBook('{#GetSHA256OfFile(Books + "\vendor\FireDAC_Migrate_BDE.rules")}'); Flags: ignoreversion
+Source: "{#Books}\vendor\FireDAC_Rename_Units.rules"; DestDir: "{app}\bin\convrules\vendor"; Components: core; BeforeInstall: KeepEditedBook('{#GetSHA256OfFile(Books + "\vendor\FireDAC_Rename_Units.rules")}'); Flags: ignoreversion
+Source: "{#Books}\vendor\README.md";                 DestDir: "{app}\bin\convrules\vendor"; Components: core; Flags: ignoreversion
 ; ---- optional tools ---------------------------------------------------------
 Source: "{#EngineDir}\drag-lint-open.exe"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\ConvRulesEditor.exe";  DestDir: "{app}\bin"; Components: convrules; Flags: ignoreversion
-Source: "{#RepoRoot}\src\tools\field-repo\dl-field-repo.exe";     DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
-Source: "{#RepoRoot}\src\tools\field-repo\dl-field-repo-std.exe"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
+Source: "{#ToolsDir}\dl-field-repo.exe";     DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
+Source: "{#ToolsDir}\dl-field-repo-std.exe"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\drag_lint_graph.exe";  DestDir: "{app}\bin"; Components: graph; Flags: ignoreversion
 Source: "{#GraphvizBin}\dot.exe";  DestDir: "{app}\bin\graphviz\bin"; Components: graphviz; Flags: ignoreversion
 Source: "{#GraphvizBin}\*.dll";    DestDir: "{app}\bin\graphviz\bin"; Components: graphviz; Flags: ignoreversion
@@ -456,6 +483,41 @@ end;
 
 { ---- uninstall ----------------------------------------------------------- }
 
+{ ---- rule books: text the user may have edited ---------------------------- }
+
+{ BeforeInstall of a rule book. A copy on disk that differs from the one being installed
+  (edited, or from an older version) is kept beside it as <file>.bak. }
+procedure KeepEditedBook(const ShippedSha: string);
+var
+  Dest: string;
+begin
+  Dest:= ExpandConstant(CurrentFileName);
+  if not FileExists(Dest) or (CompareText(GetSHA256OfFile(Dest), ShippedSha) = 0) then Exit;
+  if CopyFile(Dest, Dest + '.bak', False) then
+    Log('kept the previous ' + Dest + ' as ' + Dest + '.bak')
+  else
+    Log('could not keep a copy of ' + Dest);
+end;
+
+procedure ReleaseBook(const Rel, ShippedSha: string);
+var
+  Path: string;
+begin
+  Path:= ExpandConstant('{app}\bin\') + Rel;
+  if FileExists(Path) and (CompareText(GetSHA256OfFile(Path), ShippedSha) <> 0) then
+    RenameFile(Path, Path + '.user.bak');
+end;
+
+{ Uninstall: an edited book is the user's file -- renamed, so the uninstaller does not delete it. }
+procedure ReleaseBooks;
+begin
+  ReleaseBook('casts.castlib', '{#GetSHA256OfFile(CastLib)}');
+  ReleaseBook('convrules\sample.rules', '{#GetSHA256OfFile(Books + "\sample.rules")}');
+  ReleaseBook('convrules\BDE-to-FireDAC.rules', '{#GetSHA256OfFile(Books + "\BDE-to-FireDAC.rules")}');
+  ReleaseBook('convrules\vendor\FireDAC_Migrate_BDE.rules', '{#GetSHA256OfFile(Books + "\vendor\FireDAC_Migrate_BDE.rules")}');
+  ReleaseBook('convrules\vendor\FireDAC_Rename_Units.rules', '{#GetSHA256OfFile(Books + "\vendor\FireDAC_Rename_Units.rules")}');
+end;
+
 function InitializeUninstall: Boolean;
 begin
   Result:= True;
@@ -487,6 +549,7 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
+  if CurUninstallStep = usUninstall then ReleaseBooks;
   if CurUninstallStep <> usPostUninstall then Exit;
   ReleasePathSetting('{#PlugKey}', 'ExePath', 'PluginExePath');
   ReleasePathSetting('{#YadfKey}', 'ExePath', 'YadfExePath');
