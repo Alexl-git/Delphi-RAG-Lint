@@ -233,6 +233,7 @@ uses
   DRagLint.FieldRepo.ParamArray in '..\sql\DRagLint.FieldRepo.ParamArray.pas',
   DRagLint.FieldRepo.ParamArray.Prepare in '..\sql\DRagLint.FieldRepo.ParamArray.Prepare.pas',
   DRagLint.FieldRepo.OrmGen in '..\sql\DRagLint.FieldRepo.OrmGen.pas',
+  DRagLint.FieldRepo.HandlersRegions in '..\sql\DRagLint.FieldRepo.HandlersRegions.pas',
   DRagLint.FieldRepo.DataServiceGen in '..\sql\DRagLint.FieldRepo.DataServiceGen.pas',
   DRagLint.FieldRepo.Kinds in '..\sql\DRagLint.FieldRepo.Kinds.pas',
   DRagLint.FieldRepo.Exceptions in '..\sql\DRagLint.FieldRepo.Exceptions.pas',

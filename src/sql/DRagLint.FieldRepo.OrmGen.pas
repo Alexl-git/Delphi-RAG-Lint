@@ -13,7 +13,9 @@ unit DRagLint.FieldRepo.OrmGen;  // dl:ok unit-too-large@1be3 -- REVIEWED 2026-1
     'GEN_' + table + '_' + field, as TableTools built it;
   * tables = the distinct TABLE_NAME values of DL_FIELDS_INFO.
   Region update (repo update-orm) rewrites ONLY the lines between a DB-RAD region start and
-  its end; every other byte of the file, line ends included, is kept as it was. }
+  its end; every other byte of the file, line ends included, is kept as it was. A unit whose markers
+  cannot be trusted is refused as a whole (1.53.1; TableTools read line by line to the next DB-RAD end,
+  whatever its id, and emptied a region with an unknown id). }
 
 interface
 
@@ -40,6 +42,9 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   EOrmGenError = class(Exception);
+
+  /// <summary>Raised when the region markers of a unit cannot be trusted: the unit must stay as it is.</summary>
+  EOrmRegionError = class(EOrmGenError);
 
   /// <summary>One column of a table as the generators see it (a DL_FIELDS_INFO row,
   /// FIELD_KIND = 1, not calculated, not lookup).</summary>
@@ -697,9 +702,8 @@ type
     procedure GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok param-name-prefix@a4cc -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <summary>Regenerates every DB-RAD region of a unit's text for one table (TableTools
     /// UpdateFileRegions). Region ids 1, 1A, 2 (2I in an interface unit, 2P otherwise),
-    /// 3..15, 8A, 9A, CL-KEY, CL-LOAD, CL-SAVE, CL-DEL, CL-NEXTID; an unknown id empties its
-    /// region, as in TableTools. A start line without an end line keeps the rest of the file
-    /// after the generated lines.</summary>
+    /// 3..15, 8A, 9A, CL-KEY, CL-LOAD, CL-SAVE, CL-DEL, CL-NEXTID. Markers are read by a Pascal
+    /// scanner: a copy in a comment or a string is not a region.</summary>
     /// <param name="pText">The unit text; any line-end style.</param>
     /// <param name="pTableName">Table name as stored.</param>
     /// <param name="pIsInterface">True for an i&lt;T&gt; unit (region 2 = interface form).</param>
@@ -707,6 +711,8 @@ type
     /// <returns>The new text: region start / end lines and every byte outside the regions are
     /// unchanged; generated lines end with CRLF.</returns>
     /// <exception cref="EOrmGenError">Unknown table.</exception>
+    /// <exception cref="EOrmRegionError">A start without its end (missing, unnamed, another id), an unknown id, a marker
+    /// that shares its line, a region inside a region or across a conditional, a text that cannot be scanned.</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.PlanUpdateOrm.One (DRagLint.FieldRepo.OrmGen.pas)</para>
@@ -770,11 +776,11 @@ type
     NewText: string;
   end;
 
-/// <summary>True when a line opens a DB-RAD region: a '{$REGION' whose name starts with
-/// DB-RAD followed by an id (TableTools IsRegionStart accepted any name containing DB-RAD).</summary>
+/// <summary>True when a line opens a DB-RAD region: a '{$REGION' named DB-RAD and an ORM id, nothing else
+/// (TableTools IsRegionStart accepted any name containing DB-RAD).</summary>
 /// <param name="pLine">One source line without its line end.</param>
 /// <param name="pRegionId">Receives the upper-case id ('2', '1A', 'CL-KEY'); '' when False.</param>
-/// <returns>True for a '{$REGION 'DB-RAD &lt;id&gt;'}' line.</returns>
+/// <returns>True for a '{$REGION 'DB-RAD &lt;id&gt;'}' line, known id or not.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.UpdateRegions (DRagLint.FieldRepo.OrmGen.pas)</para>
@@ -786,9 +792,9 @@ type
 /// </remarks>
 function IsOrmRegionStart(const pLine: string; out pRegionId: string): Boolean;  // dl:ok unused-public-symbol@e22e -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
 
-/// <summary>True when a line closes a DB-RAD region: a '{$ENDREGION' whose name starts with DB-RAD.</summary>
+/// <summary>True when a line closes a DB-RAD region: a '{$ENDREGION' named DB-RAD and an ORM id.</summary>
 /// <param name="pLine">One source line without its line end.</param>
-/// <returns>True for a '{$ENDREGION 'DB-RAD ...'}' line.</returns>
+/// <returns>True for a '{$ENDREGION 'DB-RAD &lt;id&gt;'}' line.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FieldRepo.OrmGen.OrmChangeDiff (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.UpdateRegions (DRagLint.FieldRepo.OrmGen.pas)</para>
@@ -802,7 +808,8 @@ function IsOrmRegionEnd(const pLine: string): Boolean;  // dl:ok unused-public-s
 /// <summary>Plans repo update-orm: regenerates the DB-RAD regions of i&lt;T&gt;.PAS and
 /// u&lt;T&gt;.PAS in pCodeDir, u&lt;T&gt;_SERVER.PAS in pServerDir and u&lt;T&gt;_CLIENT.PAS in
 /// pClientDir for each table. A missing file is skipped and named in pSkipped; so is a table
-/// without a FIELD_KIND = 1 row (TableTools would have emptied its regions).</summary>
+/// without a FIELD_KIND = 1 row (TableTools would have emptied its regions), and every unit
+/// UpdateRegions refuses (its line in pSkipped starts with REFUSED behind the file name).</summary>
 /// <param name="pRepo">Open repository.</param>
 /// <param name="pCodeDir">Folder of the i/u units (COMMON\OBJECTS).</param>
 /// <param name="pServerDir">Folder of the _SERVER units; '' = skip them.</param>
@@ -930,7 +937,9 @@ function OrmJoinLines(const pLines: TStrings): string;  // dl:ok unused-public-s
 implementation
 
 uses
-  DRagLint.Core.Encoding, System.IOUtils,
+  DRagLint.Core.Encoding,
+  DRagLint.FieldRepo.HandlersRegions,
+  System.IOUtils,
   Data.DB,
   FireDAC.Stan.Param;
 
@@ -942,7 +951,9 @@ const
   { TableTools column widths: PadRight of a field name / of a type name }
   PAD_NAME = 25;
   PAD_TYPE = 10;
-  DB_RAD = 'DB-RAD';
+  { the ids GenerateRegion knows }
+  REGION_IDS: array [0 .. 22] of string = ('1', '1A', '2', '3', '4', '5', '6', '7', '8', '8A', '9', '9A', '10', '11', '12', '13', '14', '15',
+    'CL-KEY', 'CL-LOAD', 'CL-SAVE', 'CL-DEL', 'CL-NEXTID');
   { opening of the VALUES list of section 9A (TableTools tested Length > 9; after the first
     ':FIELD' the length is at least 10, so '> Length(VALUES_OPEN)' decides the same) }
   VALUES_OPEN = 'VALUES (';
@@ -1024,26 +1035,16 @@ begin
 end;
 
 function IsOrmRegionStart(const pLine: string; out pRegionId: string): Boolean;
-var
-  Name: string;
 begin
-  pRegionId:= '';
   { TableTools accepted any region whose name CONTAINS DB-RAD, which emptied hand-written
-    regions such as 'MicStream prototype -- hand-written, not DB-RAD' (ORM3 uFOLDERS.PAS);
-    here the name must START with DB-RAD and carry an id }
-  Name:= RegionName(pLine, '{$REGION');
-  if not Name.StartsWith(DB_RAD) then
-    Exit(False);
-  pRegionId:= Name.Substring(Length(DB_RAD)).Trim;
-  { TableTools: the "DB-RADa" spelling }
-  if pRegionId.StartsWith('A') then
-    pRegionId:= pRegionId.Substring(1).Trim;
+    regions such as 'MicStream prototype -- hand-written, not DB-RAD' (ORM3 uFOLDERS.PAS) }
+  pRegionId:= OrmRegionId(RegionName(pLine, '{$REGION'));
   Result:= pRegionId <> '';
 end;
 
 function IsOrmRegionEnd(const pLine: string): Boolean;
 begin
-  Result:= RegionName(pLine, '{$ENDREGION').StartsWith(DB_RAD);
+  Result:= OrmRegionId(RegionName(pLine, '{$ENDREGION')) <> '';
 end;
 
 { TOrmField }
@@ -3207,93 +3208,46 @@ begin
     GenerateCLSectionNEXTID(pCode, FLoadedTable, FHasGenerator, FGenName);
 end;
 
-type
-  { One physical line of a file: its text and its own line end ('' on a last line without one). }
-  TRawLine = record
-    Text: string;
-    Eol: string;
-  end;
-
-function SplitRawLines(const pText: string): TArray<TRawLine>;
+{ The regions of a unit, or EOrmRegionError. }
+function TrustedRegions(const pText: string): TArray<TDlfrRegion>;
 var
-  L: TList<TRawLine>;
-  I, Start: Integer;
-  R: TRawLine;
+  Reason, Id: string;
+  KnownIds: TArray<string>;
 begin
-  L:= TList<TRawLine>.Create;
-  try
-    I:= 1;
-    Start:= 1;
-    while I <= Length(pText) do
-    begin
-      if CharInSet(pText[I], [#10, #13]) then
-      begin
-        R.Text:= Copy(pText, Start, I - Start);
-        if (pText[I] = #13) and (I < Length(pText)) and (pText[I + 1] = #10) then
-        begin
-          R.Eol:= #13#10;
-          Inc(I);
-        end
-        else
-          R.Eol:= pText[I];
-        L.Add(R);
-        Start:= I + 1;
-      end;
-      Inc(I);
-    end;
-    if Start <= Length(pText) then
-    begin
-      R.Text:= Copy(pText, Start, MaxInt);
-      R.Eol:= '';
-      L.Add(R);
-    end;
-    Result:= L.ToArray;
-  finally
-    L.Free;
-  end;
+  KnownIds:= nil;
+  for Id in REGION_IDS do
+    KnownIds:= KnownIds + [Id];
+  Reason:= ReadOrmRegions(pText, KnownIds, Result);
+  if Reason <> '' then
+    raise EOrmRegionError.Create(Reason);
 end;
 
 function TOrmGenerator.UpdateRegions(const pText, pTableName: string; pIsInterface: Boolean;
   out pRegionCount: Integer): string;
 var
-  Lines: TArray<TRawLine>;
+  Regions: TArray<TDlfrRegion>;
+  Region: TDlfrRegion;
   SB: TStringBuilder;
   Code: TStringList;
-  I, J: Integer;
-  RegionId: string;
+  Kept: Integer;
 begin
+  pRegionCount:= 0;
   if FLoadedTable <> pTableName then
     LoadTable(pTableName);
-  pRegionCount:= 0;
-  Lines:= SplitRawLines(pText);
+  Regions:= TrustedRegions(pText);
   SB:= TStringBuilder.Create;
   Code:= TStringList.Create;
   try
-    I:= 0;
-    while I < Length(Lines) do
+    Kept:= 1;
+    for Region in Regions do
     begin
-      SB.Append(Lines[I].Text).Append(Lines[I].Eol);
-      if IsOrmRegionStart(Lines[I].Text, RegionId) then
-      begin
-        Inc(pRegionCount);
-        { a start line on the last line without a line end: TableTools would add one }
-        if Lines[I].Eol = '' then
-          SB.Append(#13#10);
-        Code.Clear;
-        GenerateRegion(RegionId, pIsInterface, Code);
-        SB.Append(OrmJoinLines(Code));
-        J:= I + 1;
-        while (J < Length(Lines)) and not IsOrmRegionEnd(Lines[J].Text) do
-          Inc(J);
-        if J < Length(Lines) then
-        begin
-          SB.Append(Lines[J].Text).Append(Lines[J].Eol);
-          I:= J;
-        end;
-      end;
-      Inc(I);
+      Code.Clear;
+      GenerateRegion(Region.Id, pIsInterface, Code);
+      SB.Append(Copy(pText, Kept, Region.Body.First - Kept)).Append(OrmJoinLines(Code));
+      Kept:= Region.Body.Last;
     end;
-    Result:= SB.ToString;
+    pRegionCount:= Length(Regions);
+    Result:= SB.Append(Copy(pText, Kept, MaxInt)).ToString;
   finally
     Code.Free;
     SB.Free;
@@ -3360,7 +3314,12 @@ var
       Exit;
     end;
     OldL:= ReadUnitText(pFile);
-    L.Add(ChangeOf(pFile, OldL, Gen.UpdateRegions(OldL, T, pIsInterface, N), True));
+    try
+      L.Add(ChangeOf(pFile, OldL, Gen.UpdateRegions(OldL, T, pIsInterface, N), True));
+    except
+      on E: EOrmRegionError do
+        pSkipped.Add(pFile + ': REFUSED, the unit is left unchanged: ' + E.Message);
+    end;
   end;
 
 begin
