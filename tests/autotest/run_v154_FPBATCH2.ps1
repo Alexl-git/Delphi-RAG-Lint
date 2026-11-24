@@ -425,8 +425,11 @@ procedure ShowAll(pS: TSettings);
 implementation
 
 procedure ShowAll(pS: TSettings);
+var
+  X: Integer;
 begin
-  Writeln(GWrittenInP2, GNeverWritten, pS.FWrittenInP2, pS.FNeverWritten);
+  { an assignment, not Writeln: with no platform library an unknown callee counts as a possible write }
+  X:= GWrittenInP2 + GNeverWritten + pS.FWrittenInP2 + pS.FNeverWritten;
 end;
 
 end.

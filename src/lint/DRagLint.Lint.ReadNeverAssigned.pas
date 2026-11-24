@@ -976,6 +976,7 @@ var
         end;
     end;
   end;
+
   procedure Report(const ASym: TSymbol; AIsField: Boolean);
   var
     Owner: TSymbol;
