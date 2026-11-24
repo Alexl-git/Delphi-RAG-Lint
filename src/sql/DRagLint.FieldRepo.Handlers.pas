@@ -150,13 +150,13 @@ function ApplyHandlerJob(const pText, pFile: string; const pJob: TFrhJob; out pI
 function ApplyMaxLen(const pText, pTable: string; const pColumns: TArray<TFrhLength>; out pItem: TFrhItem): string;  // dl:ok unused-public-symbol@58b1 -- REVIEWED 2026-11-23 TT-HANDLERS: pure part of the generator, asserted directly by tests/fieldrepo/HandlersTests.dpr; outside this project index
 
 /// <summary>Plans the handler regions of a form unit.</summary>
-/// <param name="pRepo">Open repository, schema 2.</param>
+/// <param name="pRepo">Open repository, schema 3.</param>
 /// <param name="pDfm">DFM path; the unit is the .pas beside it.</param>
 /// <param name="pDataset">Dataset component to limit the plan to; '' = all.</param>
 /// <returns>The plan; nothing is written.</returns>
 /// <exception cref="EDfmReadError">The DFM cannot be read, or has no such dataset.</exception>
 /// <exception cref="EDlfrError">The unit does not exist or is not ASCII.</exception>
-/// <exception cref="ERepoError">The repository is schema 1.</exception>
+/// <exception cref="ERepoError">The repository is schema 1 or 2.</exception>
 function PlanHandlers(pRepo: TFDConnection; const pDfm, pDataset: string): TFrhPlan;
 
 /// <summary>Plans the MAXLEN region of a table's interface unit.</summary>
@@ -199,7 +199,6 @@ const
   EVENT_PARAMS: array[0..3] of string = ('Sender,Text,DisplayText', 'Sender,Text', 'Sender', 'Sender');
   COL_FIELD = 'FIELD_NAME';
   COL_CALC_BODY = 'CALC_BODY';
-  BODY_SUFFIX = '_BODY';
   PARAM_DATASET = 'DataSet';
   ORM_SECTION_2 = '2';
   PAS_EXT = '.pas';
@@ -208,8 +207,6 @@ const
   SAME_BY_HAND = ': the handler holds the same code by hand, not generated';
   NOTHING_LEFT = 'the repository has nothing for this region any more; it was left (delete it by hand)';
   SQL_BODIES = 'SELECT * FROM "DL_FIELDS_INFO" WHERE UPPER("TABLE_NAME") = UPPER(:T) ORDER BY "FIELD_NAME"';
-  SQL_EVENTS = 'SELECT "FIELD_NAME", "EVENT_CODE" FROM "DL_LAYOUT_EVENTS" WHERE UPPER("TABLE_NAME") = UPPER(:T) ' +
-    'AND "LAYOUT_TYPE" = :L AND "EVENT_NAME" = :E ORDER BY "FIELD_NAME"';
   SQL_FIELDS = 'SELECT "FIELD_NAME" FROM "DL_FIELDS_INFO" WHERE UPPER("TABLE_NAME") = UPPER(:T) ORDER BY "FIELD_NAME"';
   PAT_NO_SEMICOLON_AFTER = '(?:;|\bbegin)$';
   PAT_EMPTY_FIRST_LINE = '^\s*;\s*\n';
@@ -481,45 +478,20 @@ begin
   pBodies := pBodies + [VBody];
 end;
 
-{ Event bodies of a repository without the column of that event. }
-procedure AddLayoutBodies(pRepo: TFDConnection; const pTable, pEvent: string; var pBodies: TArray<TFrhBody>);
-var
-  VQuery: TFDQuery;
-begin
-  VQuery := TFDQuery.Create(nil);
-  try
-    VQuery.Connection := pRepo;
-    VQuery.Open(SQL_EVENTS, [pTable, LAYOUT_TYPE_FIELD, pEvent]);
-    while not VQuery.Eof do
-    begin
-      AddBody(pBodies, VQuery.Fields[0].AsString, pEvent, VQuery.Fields[1].AsString);
-      VQuery.Next;
-    end;
-  finally
-    VQuery.Free;
-  end;
-end;
-
 procedure AddRowBodies(pRow: TFDQuery; var pBodies: TArray<TFrhBody>);
 var
-  VEvent: string;
-  VColumn: TField;
+  VEvent: TFrEventColumn;
 begin
   AddBody(pBodies, pRow.FieldByName(COL_FIELD).AsString, EVENT_CALC, pRow.FieldByName(COL_CALC_BODY).AsString);
-  for VEvent in FIELD_EVENTS do
-  begin
-    VColumn := pRow.FindField(VEvent + BODY_SUFFIX);
-    if VColumn <> nil then
-      AddBody(pBodies, pRow.FieldByName(COL_FIELD).AsString, VEvent, VColumn.AsString);
-  end;
+  for VEvent in FR_EVENT_COLUMNS do
+    if not VEvent.IsGrid then
+      AddBody(pBodies, pRow.FieldByName(COL_FIELD).AsString, VEvent.Event, pRow.FieldByName(VEvent.Column).AsString);
 end;
 
-{ The bodies the repository holds for a table: CALC_BODY and the event columns of DL_FIELDS_INFO (ONGETTEXT_BODY, ...).
-  An event whose column the schema does not have yet is read from DL_LAYOUT_EVENTS, layout Field. }
+{ The bodies the repository holds for a table: CALC_BODY and the TField event columns of DL_FIELDS_INFO. }
 function RepositoryBodies(pRepo: TFDConnection; const pTable: string): TArray<TFrhBody>;
 var
   VQuery: TFDQuery;
-  VEvent: string;
 begin
   Result := nil;
   VQuery := TFDQuery.Create(nil);
@@ -531,9 +503,6 @@ begin
       AddRowBodies(VQuery, Result);
       VQuery.Next;
     end;
-    for VEvent in FIELD_EVENTS do
-      if VQuery.FindField(VEvent + BODY_SUFFIX) = nil then
-        AddLayoutBodies(pRepo, pTable, VEvent, Result);
   finally
     VQuery.Free;
   end;

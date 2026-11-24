@@ -5,7 +5,7 @@ until `--apply`; `--dry-run` wins over `--apply`.
 
 | Sub-verb | Options | What it does |
 |---|---|---|
-| `gen-handlers` | `--dfm <file.dfm>[;...]` [`--dataset <Name>`] [`--apply`] [`--json`] | Puts the stored bodies of a dataset's fields into the event handlers the DFM assigns: `OnCalcFields`, `OnGetText`, `OnSetText`, `OnValidate`, `OnChange` |
+| `gen-handlers` | `--dfm <file.dfm>[;...]` [`--dataset <Name>`] [`--apply`] [`--json`] | Puts the stored bodies of a dataset's fields (`CALC_BODY`, `ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY` of the field row) into the event handlers the DFM assigns: `OnCalcFields`, `OnGetText`, `OnSetText`, `OnValidate`, `OnChange`. Needs a schema-3 repository |
 | `gen-maxlen` | `--code-dir <folder>` [`--table <T,...>`] [`--apply`] [`--json`] | Writes `<TABLE>_<FIELD>_MAXLEN` constants into region `DLFR 2a` of each interface unit `i<TABLE>.pas`, behind section 2 |
 | `renumber-regions` | `--code-dir <folder>` or `--in <file.pas>[;...]` [`--apply`] [`--json`] | Renames the numbered ORM region markers of whole units: `DB-RAD n` becomes `DLFR n` |
 

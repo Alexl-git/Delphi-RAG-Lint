@@ -174,7 +174,7 @@ begin
   vConn := nil;
   try
     vConn := OpenRepository(vPath, True);
-    Check('M2 the migrated file passes the v2 table-set validation', RepoSchemaVersion(vConn) = 2);
+    Check('M2 the migrated file passes the table-set validation of its schema', RepoSchemaVersion(vConn) = REPO_SCHEMA_VERSION);
     vOk := True;
     for vTab in RepoTablesFor(2) do
       try

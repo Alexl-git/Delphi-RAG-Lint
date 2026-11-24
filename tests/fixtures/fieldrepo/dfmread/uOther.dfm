@@ -5,4 +5,7 @@ object dmOther: TdmOther
       FieldName = 'Code'
     end
   end
+  object dsReason: TDataSource
+    DataSet = tblReason
+  end
 end

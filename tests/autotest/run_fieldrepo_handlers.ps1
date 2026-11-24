@@ -9,6 +9,7 @@
     G5  a second run writes nothing; G6 a changed body rewrites its own region only, hand code behind it survives
     G7  a hand-edited region is refused (exit 1) and stays byte for byte, the other regions are still written
     G8  a region whose end marker is commented out: refused; G9 a unit that is not ASCII: refused, unchanged
+    G13 generated code is not read back by read-dfm
     G10 no handler assigned = skipped, a shared handler = refused; G11 --json; G12 usage and missing files
   PART 3  gen-maxlen: M1 dry run, M2 apply + compile + run, M3 second run, M4 hand-edited, M5 not ASCII
   PART 4  renumber-regions: N1 dry run, N2 apply (or refused while update-orm cannot read DLFR), N3 not ASCII
@@ -46,31 +47,31 @@ function Edit($f, $from, $to) {
 }
 # the text with every real DLFR region of a hashed header removed (the marker lines must be whole lines)
 function Outside($t) { [regex]::Replace($t, '(?m)^ *\{\$REGION ''DLFR \S+ hash=(?!0123456789abcdef)[0-9a-f]{16}''\}\r\n(?:(?!^ *\{\$ENDREGION).*\r\n)*^ *\{\$ENDREGION ''DLFR \S+''\}\r\n', '') }
-function FieldRow($name, $kind = '', $body = @(), $len = '') {
+# $events: a hashtable event column -> lines
+function FieldRow($name, $kind = '', $body = @(), $len = '', $events = @{}) {
   $l = @("[DL_FIELDS_INFO ORDERS|$name]", 'VISIBLE=true', 'TRIGGERED=false', 'BG_COLOR=false', 'FG_COLOR=false', 'UNIQUE_FLAG=false')
   if ($kind) { $l += "FIELD_KIND=$kind" }
   $l += @('PRIMARY_KEY=false', 'CUSTOM_TYPE=false', "ISCALCULATED=$(if ($kind -eq '2') { 'true' } else { 'false' })", 'ISLOOKUP=false', 'ISENUM=false')
   if ($body.Count) { $l += 'CALC_BODY:'; $l += @($body | ForEach-Object { " |$_" }) }
   if ($len) { $l += "CHAR_LENGTH=$len" }
+  foreach ($c in 'ONGETTEXT_BODY', 'ONSETTEXT_BODY', 'ONVALIDATE_BODY', 'ONCHANGE_BODY') { if ($events[$c]) { $l += "$($c):"; $l += @($events[$c] | ForEach-Object { " |$_" }) } }
   return $l + ''
 }
-function EventRow($name, $event, $body) { @("[DL_LAYOUT_EVENTS ORDERS|$name|Field|$event]", 'EVENT_CODE:') + @($body | ForEach-Object { " |$_" }) + '' }
 # a repository made through the product's own text format
 function NewRepo($name, $vat = '0.2', $noteLen = '40') {
   $empty = Join-Path $work "$name.empty.dlrepo"
   $bk = Join-Path $work "$name.txt"
   $null = Run @('repo', 'init', '--repo', $empty)
   $null = Run @('repo', 'backup', '--repo', $empty, '--output', $bk)
-  $fields = @((FieldRow 'HANDY' '2' @('{{HANDY}}.AsInteger := 7;')), (FieldRow 'ID'), (FieldRow 'NOTE' '' @() $noteLen), (FieldRow 'PRICE'), (FieldRow 'QTY'),
+  $fields = @((FieldRow 'HANDY' '2' @('{{HANDY}}.AsInteger := 7;')), (FieldRow 'ID' '' @() '' @{ ONGETTEXT_BODY = @('Text := {{ID}}.AsString;') }),
+    (FieldRow 'NOTE' '' @() $noteLen @{ ONGETTEXT_BODY = @('var VOpen := ''<'';', 'Text := VOpen + {{NOTE}}.AsString + ''>'';'); ONSETTEXT_BODY = @('{{NOTE}}.AsString := UpperCase(Text);') }),
+    (FieldRow 'PRICE'),
+    (FieldRow 'QTY' '' @() '' @{ ONCHANGE_BODY = @('{{NOTE}}.AsString := ''q'' + {{QTY}}.AsString;'); ONVALIDATE_BODY = @('if {{QTY}}.AsInteger < 0 then', '  raise Exception.Create(''negative'');') }),
     (FieldRow 'REFNO' '' @() '12'),
     (FieldRow 'TOTAL' '2' @('if {{QTY}}.IsNull or {{PRICE}}.IsNull then', '  {{TOTAL}}.Clear', 'else', '  {{TOTAL}}.AsFloat := {{QTY}}.AsInteger * {{PRICE}}.AsFloat;')),
-    (FieldRow 'VAT' '2' @("{{VAT}}.AsFloat := {{TOTAL}}.AsFloat * $vat;")))
-  $events = @((EventRow 'ID' 'OnGetText' @('Text := {{ID}}.AsString;')), (EventRow 'NOTE' 'OnGetText' @('var VOpen := ''<'';', 'Text := VOpen + {{NOTE}}.AsString + ''>'';')),
-    (EventRow 'NOTE' 'OnSetText' @('{{NOTE}}.AsString := UpperCase(Text);')), (EventRow 'QTY' 'OnChange' @('{{NOTE}}.AsString := ''q'' + {{QTY}}.AsString;')),
-    (EventRow 'QTY' 'OnValidate' @('if {{QTY}}.AsInteger < 0 then', '  raise Exception.Create(''negative'');')), (EventRow 'VAT' 'OnGetText' @('Text := {{VAT}}.AsString;')))
+    (FieldRow 'VAT' '2' @("{{VAT}}.AsFloat := {{TOTAL}}.AsFloat * $vat;") '' @{ ONGETTEXT_BODY = @('Text := {{VAT}}.AsString;') }))
   $out = foreach ($l in [IO.File]::ReadAllLines($bk)) {
     if ($l -match '^#end DL_FIELDS_INFO 0$') { $fields | ForEach-Object { $_ }; "#end DL_FIELDS_INFO $($fields.Count)" }
-    elseif ($l -match '^#end DL_LAYOUT_EVENTS 0$') { $events | ForEach-Object { $_ }; "#end DL_LAYOUT_EVENTS $($events.Count)" }
     elseif ($l -match '^#end DL_META (\d+)$') { '[DL_META schema_read_at_utc]', 'META_VALUE=2026-11-23T00:00:00Z', '', "#end DL_META $([int]$Matches[1] + 1)" }
     else { $l }
   }
@@ -158,6 +159,12 @@ try {
   Check 'G6b hand code around it survives' ((Outside $after) -ceq (Outside $before)) 'differs'
   $got = ProbeOut $d 'HandlersProbe.dpr' 'dcc64'
   Check 'G6c compiles and runs with the new body' ($got -ceq $want.Replace('vat=1.5', 'vat=3.75')) "$got"
+  # G13: what gen-handlers wrote is not read back
+  $r = Run @('repo', 'read-dfm', '--repo', $y, '--dfm', (Join-Path $d 'uGen.dfm'), '--direction', 'dfm-to-repo')
+  Check 'G13a read-dfm proposes no body for generated code' (($r.Code -eq 0) -and ($r.Out -notmatch '_BODY[:=]')) $r.Out
+  Check 'G13b ... and names the region it left out' (($r.Out -match 'no CALC_BODY: its code is in the generated region DLFR memOrders\.OnCalcFields') -and ($r.Out -match 'NOTE\.OnGetText: not read: its code is in the generated region DLFR memOrdersNOTE\.OnGetText')) $r.Out
+  $r = Run @('repo', 'check', '--repo', $y)
+  Check 'G13c repo check: no cycle and no macro finding for member macros' ($r.Out -notmatch 'calc-|event-') $r.Out
   # G7: hand edit inside one region, both bodies change
   $e = NewForm 'edited'
   $epas = Join-Path $e 'uGen.pas'

@@ -139,6 +139,11 @@ end;
 
 { ---- task 1: kinds and macros ------------------------------------------------ }
 
+procedure CheckDeps(const pName, pBody, pWant: string);
+begin
+  Check(pName, Join(CalcDependencies(pBody, 'T')) = pWant, Join(CalcDependencies(pBody, 'T')));
+end;
+
 procedure TestKinds;
 var
   vMacros: TArray<TFrMacro>;
@@ -184,6 +189,17 @@ begin
     Join(CalcDependencies('{{X}} := 1; {{T}} := {{X}};', 'T')) = 'X');
   Check('K3e an aggregate expression', Join(CalcDependencies('SUM({{QTY}})', 'SUMQ')) = 'QTY');
   Check('K3f no macros = no dependencies (control)', Length(CalcDependencies('Result := 1;', 'T')) = 0);
+
+  CheckDeps('K4a a member assignment is the target', '{{T}}.AsFloat := {{Q}}.AsInteger * {{P}}.AsFloat;', 'Q,P');
+  CheckDeps('K4b blanks and line breaks inside the target', '{{T}} .'#13#10'  AsFloat'#9':= {{Q}}.AsInteger;', 'Q');
+  CheckDeps('K4c Clear writes too', 'if {{Q}}.IsNull then'#13#10'  {{T}}.Clear'#13#10'else'#13#10'  {{T}}.AsFloat := 1;', 'Q');
+  CheckDeps('K4d a read of the field before it is assigned stays', 'if {{T}}.IsNull then {{T}}.AsFloat := 1;', 'T');
+  CheckDeps('K4e the field in its own expression stays', '{{T}}.AsFloat := {{T}}.AsFloat + 1;', 'T');
+  CheckDeps('K4f a read behind an assignment statement is no dependency', '{{T}}.AsFloat := {{Q}}.AsFloat; if {{T}}.AsFloat > 9 then {{T}}.AsFloat := 9;', 'Q');
+  CheckDeps('K4g a semicolon in a string or comment ends no statement', '{{T}}.AsString := ''a;'' { ; } + // ;'#13#10'  (* ; *) {{T}}.AsString;', 'T');
+  CheckDeps('K4h a comparison is no assignment', 'if {{T}}.AsFloat = 1 then {{T}}.AsFloat := 2;', 'T');
+  CheckDeps('K4i another field''s member target stays a dependency', '{{X}}.AsFloat := 1; {{T}}.AsFloat := 2;', 'X');
+  CheckDeps('K4j a member of a member is a read', '{{T}}.DataSet.Tag := 1;', 'T');
 end;
 
 { ---- task 4: migrate ---------------------------------------------------------- }
@@ -195,7 +211,7 @@ var
   vOut: TStringList;
   vLine, vCur: string;
 begin
-  vLines := pV1Text.Replace('#DLREPO 1', '#DLREPO 2').Replace('META_VALUE=1', 'META_VALUE=2').Split([#13#10]);
+  vLines := pV1Text.Replace('#DLREPO 1', '#DLREPO 3').Replace('META_VALUE=1', 'META_VALUE=3').Split([#13#10]);
   vOut := TStringList.Create;
   try
     vCur := '';
@@ -216,7 +232,7 @@ begin
   end;
   { TStringList.Text ends with a line break; the split left one empty last element, so the join is exact }
   Result := Result.Substring(0, Length(Result) - Length(sLineBreak))
-    + '#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10;
+    + '#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10 + '#end DL_GRID_COLUMNS 0' + #13#10;
 end;
 
 procedure TestMigrate;
@@ -246,8 +262,9 @@ begin
   vAfter := TFile.ReadAllBytes(vPath);
   Check('M1a dry run reports 2 calc rows and the plan line (NULL and 1 count, 10 does not)',
     (not vRes.AlreadyCurrent) and (not vRes.Applied) and (vRes.CalcRows = 2)
-    and (vRes.Plan = 'v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, create DL_LAYOUT_EVENTS, '
-      + 'DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, FIELD_KIND 2 for 2 ISCALCULATED rows, user_version 2'), vRes.Plan);
+    and (vRes.Plan = 'v1 -> v3: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, ONGETTEXT_BODY, ONSETTEXT_BODY, ONVALIDATE_BODY, '
+      + 'ONCHANGE_BODY, GRID_DISPLAYTEXT_BODY, GRID_DRAWCELL_BODY, create DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, '
+      + 'DL_CONSTRAINT_COLUMNS, DL_GENERATORS, DL_GRID_COLUMNS, FIELD_KIND 2 for 2 ISCALCULATED rows, ALIGNMENT -2 to NULL in 0 rows, user_version 3'), vRes.Plan);
   Check('M1b dry run leaves the file byte-identical', (Length(vBefore) = Length(vAfter))
     and CompareMem(@vBefore[0], @vAfter[0], Length(vBefore)));
   Check('M1c dry run wrote no backup file', Length(TDirectory.GetFiles(GDir, ExtractFileName(vPath) + '.before-migrate-*')) = 0);
@@ -258,8 +275,8 @@ begin
   Check('M2b the before-migrate backup is the v1 text byte for byte', FileBytesText(vRes.BackupFile) = vV1Text);
   vConn := OpenRepository(vPath, False);
   try
-    Check('M2c user_version 2 and DL_META schema_version 2', (RepoSchemaVersion(vConn) = 2)
-      and (ScalarStr(vConn, 'SELECT "META_VALUE" FROM "DL_META" WHERE "META_KEY" = ''schema_version''') = '2'));
+    Check('M2c user_version 3 and DL_META schema_version 3', (RepoSchemaVersion(vConn) = 3)
+      and (ScalarStr(vConn, 'SELECT "META_VALUE" FROM "DL_META" WHERE "META_KEY" = ''schema_version''') = '3'));
     Check('M2d ISCALCULATED rows with kind NULL / 1 became kind 2',
       (ScalarInt(vConn, 'SELECT "FIELD_KIND" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" = ''CALCX''') = 2)
       and (ScalarInt(vConn, 'SELECT "FIELD_KIND" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" = ''CALCY''') = 2));
@@ -273,8 +290,8 @@ begin
     vConn.Free;
   end;
   vText := FileBytesText(TPath.Combine(GDir, 'v2-after.txt'));
-  Check('M2g backup(migrated) starts with #DLREPO 2 and ends with the two empty trailers',
-    vText.StartsWith('#DLREPO 2' + #13#10) and vText.EndsWith('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10));
+  Check('M2g backup(migrated) starts with #DLREPO 3 and ends with the empty trailers',
+    vText.StartsWith('#DLREPO 3' + #13#10) and vText.EndsWith('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10 + '#end DL_GRID_COLUMNS 0' + #13#10));
   vExpect := ExpectedMigrated(vV1Text);
   Check('M2h the migrated backup differs from the v1 backup ONLY by magic, schema_version, FIELD_KIND 2 and the trailers',
     vText = vExpect, 'lengths ' + IntToStr(Length(vText)) + ' vs ' + IntToStr(Length(vExpect)));  vRes2 := MigrateRepository(vPath, True);
@@ -282,6 +299,78 @@ begin
   Check('M3b the second dry run is also already current', MigrateRepository(vPath, False).AlreadyCurrent and (vRes2.Plan = ''));
   Check('M4 migrating a missing file raises ERepoError',
     RaisedClass(procedure begin MigrateRepository(TPath.Combine(GDir, 'nope.dlrepo'), False); end) = 'ERepoError');
+end;
+
+{ The v2 backup text as the migration must change it: TOTAL has its OnGetText column, AMOUNT no ALIGNMENT. }
+function ExpectedFromV2(const pText: string): string;
+begin
+  Result := pText.Replace('#DLREPO 2', '#DLREPO 3').Replace('META_VALUE=2', 'META_VALUE=3').Replace('ALIGNMENT=-2' + #13#10, '')
+    .Replace(' |{{TOTAL}} := {{AMOUNT}} * 2;' + #13#10, ' |{{TOTAL}} := {{AMOUNT}} * 2;' + #13#10 + 'ONGETTEXT_BODY:' + #13#10
+      + ' |Text := ''T'';' + #13#10)
+    .Replace('[DL_LAYOUT_EVENTS ORDERS|TOTAL|Field|OnGetText]' + #13#10 + 'EVENT_CODE:' + #13#10 + ' |Text := ''T'';' + #13#10 + #13#10, '')
+    .Replace('#end DL_LAYOUT_EVENTS 5', '#end DL_LAYOUT_EVENTS 4') + '#end DL_GRID_COLUMNS 0' + #13#10;
+end;
+
+{ EVCOLS: schema 2 -> 3. }
+procedure TestMigrateV2;
+var
+  vPath, vText: string;
+  vConn: TFDConnection;
+  vRes: TFrMigrateResult;
+  vBefore, vAfter: TBytes;
+begin
+  vPath := NewPath;
+  CreateRepository(vPath, 2);
+  vConn := OpenRepository(vPath, False);
+  try
+    RestoreRepository(vConn, Fixture('golden_v2.txt'), False);
+    vConn.ExecSQL('UPDATE "DL_FIELDS_INFO" SET "ALIGNMENT" = -2 WHERE "FIELD_NAME" = ''AMOUNT''');
+    vConn.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" VALUES (''ORDERS'',''TOTAL'',''Field'',''OnGetText'',''Text := ''''T'''';'')');
+    vConn.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" VALUES (''ORDERS'',''GONE'',''Field'',''OnGetText'',''x;'')');
+    vConn.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" VALUES (''ORDERS'',''TOTAL'',''Field'',''OnOther'',''y;'')');
+    vConn.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" VALUES (''ORDERS'',''NOTE'',''Card'',''OnGetText'',''z;'')');
+    BackupRepository(vConn, TPath.Combine(GDir, 'v2-before.txt'));
+  finally
+    vConn.Free;
+  end;
+  vBefore := TFile.ReadAllBytes(vPath);
+  vRes := MigrateRepository(vPath, False);
+  vAfter := TFile.ReadAllBytes(vPath);
+  Check('M5a v2 -> v3 plan', vRes.Plan = 'v2 -> v3: add DL_FIELDS_INFO.ONGETTEXT_BODY, ONSETTEXT_BODY, ONVALIDATE_BODY, ONCHANGE_BODY, '
+    + 'GRID_DISPLAYTEXT_BODY, GRID_DRAWCELL_BODY, create DL_GRID_COLUMNS, ALIGNMENT -2 to NULL in 1 rows, move 1 Field events into columns, user_version 3', vRes.Plan);
+  Check('M5b dry run leaves the file byte-identical', (Length(vBefore) = Length(vAfter)) and CompareMem(@vBefore[0], @vAfter[0], Length(vBefore)));
+  vRes := MigrateRepository(vPath, True);
+  vText := FileBytesText(TPath.Combine(GDir, 'v2-before.txt'));
+  Check('M5c the before-migrate backup is the #DLREPO 2 text byte for byte', vRes.Applied and (FileBytesText(vRes.BackupFile) = vText));
+  vConn := OpenRepository(vPath, False);
+  try
+    BackupRepository(vConn, TPath.Combine(GDir, 'v3-after.txt'));
+    Check('M5d a Field event without a field row, and one without a column, stay',
+      ScalarInt(vConn, 'SELECT COUNT(*) FROM "DL_LAYOUT_EVENTS" WHERE "LAYOUT_TYPE" = ''Field''') = 2);
+  finally
+    vConn.Free;
+  end;
+  Check('M5e nothing else changed: the migrated backup is the v2 backup with the moved event, the cleared ALIGNMENT, the new trailer',
+    FileBytesText(TPath.Combine(GDir, 'v3-after.txt')) = ExpectedFromV2(vText));
+  Check('M5f a second run is already current', MigrateRepository(vPath, True).AlreadyCurrent);
+  { a failure inside the transaction rolls everything back }
+  vPath := NewPath;
+  CreateRepository(vPath, 2);
+  vConn := OpenRepository(vPath, False);
+  try
+    vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME","FIELD_NAME","ALIGNMENT") VALUES (''T'',''F'',-2)');
+    vConn.ExecSQL('CREATE TRIGGER t1 BEFORE UPDATE ON "DL_FIELDS_INFO" BEGIN SELECT RAISE(ABORT, ''no''); END');
+  finally
+    vConn.Free;
+  end;
+  Check('M5g a migration that fails raises', RaisedClass(procedure begin MigrateRepository(vPath, True); end) <> '');
+  vConn := OpenRepository(vPath, True);
+  try
+    Check('M5h ... and the file is still schema 2, row unchanged', (RepoSchemaVersion(vConn) = 2)
+      and (ScalarInt(vConn, 'SELECT "ALIGNMENT" FROM "DL_FIELDS_INFO"') = -2));
+  finally
+    vConn.Free;
+  end;
 end;
 
 { ---- FR-4: layout events -------------------------------------------------------- }
@@ -437,6 +526,46 @@ begin
   end;
 end;
 
+{ EVCOLS: what repo check adds on schema 3. }
+procedure TestCheckV3;
+var
+  vConn: TFDConnection;
+  vCodes: string;
+
+  procedure Event(const pField, pLayout, pEvent, pCode: string);
+  begin
+    vConn.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" VALUES (''ORDERS'',:f,:l,:e,:c)', [pField, pLayout, pEvent, pCode]);
+  end;
+
+begin
+  vConn := NewRepoFrom('golden_v3.txt', 3);
+  try
+    Check('V0 control: the fixture checks clean, member macros and an unbound column included', Length(CheckRepository(vConn)) = 0, CodesOf(CheckRepository(vConn)));
+    vConn.ExecSQL('UPDATE "DL_FIELDS_INFO" SET "ONCHANGE_BODY" = ''{{NOPE}}.Clear; {{nope}}.AsInteger := 1;'' WHERE "FIELD_NAME" = ''AMOUNT''');
+    vConn.ExecSQL('UPDATE "DL_FIELDS_INFO" SET "GRID_DRAWCELL_BODY" = ''if {{ID'' WHERE "FIELD_NAME" = ''ID'' AND "TABLE_NAME" = ''ORDERS''');
+    vConn.ExecSQL('UPDATE "DL_FIELDS_INFO" SET "ALIGNMENT" = -2 WHERE "FIELD_NAME" = ''NOTE''');
+    vConn.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" VALUES (''frmA'',''view1'',''colBad'',''ORDERS'',''GHOST'',7)');
+    Event('', 'DBTable', 'OnCustomDrawCell', 'if {{AMOUNT}}.IsNull then ADone := True;');
+    Event('NOTE', 'Field', 'OnGetText', 'x;');
+    Event('AMOUNT', 'Card', 'OnGetDisplayText', 'AText := {{GONE}}.AsString;');
+    vCodes := CodesOf(CheckRepository(vConn));
+    Check('V1 a macro of an event column that names no field, once', vCodes.Contains('event-unknown-field@ORDERS.AMOUNT ONCHANGE_BODY'), vCodes);
+    Check('V2 a malformed macro of an event column', vCodes.Contains('event-macro-error@ORDERS.ID GRID_DRAWCELL_BODY'), vCodes);
+    Check('V3 ALIGNMENT outside NULL / 0 / 1 / 2 is a warning', vCodes.Contains('alignment-invalid@ORDERS.NOTE') and not vCodes.Contains('alignment-invalid@ORDERS.AMOUNT'), vCodes);
+    Check('V4 a grid column that names an unknown field', vCodes.Contains('grid-column-unknown-field@grid frmA.view1.colBad'), vCodes);
+    Check('V5 a Field event left in DL_LAYOUT_EVENTS', vCodes.Contains('layout-event-field-type@layout Field ORDERS.NOTE OnGetText'), vCodes);
+    Check('V6 a macro of a layout event that names no field', vCodes.Contains('event-unknown-field@layout Card ORDERS.AMOUNT OnGetDisplayText'), vCodes);
+    Check('V7 a view-level event needs no field row', not vCodes.Contains('layout DBTable'), vCodes);
+    Check('V8 exactly these six', Length(CheckRepository(vConn)) = 6, vCodes);
+    vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME","FIELD_NAME","FIELD_KIND","ISCALCULATED","CALC_BODY") VALUES (''ORDERS'',''IC'',4,1,''if {{IC}}.IsNull then {{IC}}.AsInteger := 1;'')');
+    vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME","FIELD_NAME","FIELD_KIND","ISCALCULATED","CALC_BODY") VALUES (''ORDERS'',''CF'',2,1,''if {{CF}}.IsNull then {{CF}}.AsInteger := 1;'')');
+    vCodes := CodesOf(CheckRepository(vConn));
+    Check('V9 an internal-calc field may read itself, a calc field may not', vCodes.Contains('calc-cycle@ORDERS.CF') and not vCodes.Contains('calc-cycle@ORDERS.IC'), vCodes);
+  finally
+    vConn.Free;
+  end;
+end;
+
 { ---- task 9: change set ------------------------------------------------------- }
 
 function MakeChange(pId: Integer; pOp: TFrChangeOp; const pTarget, pProp, pOld, pNew, pBlocked: string): TFrChange;
@@ -496,9 +625,11 @@ begin
   try
     TestKinds;
     TestMigrate;
+    TestMigrateV2;
     TestLayoutEvents;
     TestExceptions;
     TestCheck;
+    TestCheckV3;
     TestChangeSet;
   except
     on E: Exception do

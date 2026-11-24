@@ -88,7 +88,7 @@ type
 /// whole run back and is re-raised.</exception>
 /// <remarks>
 /// Per column of Fields (UpdateFieldsInfo): a new row gets the TableTools
-/// new-row values (DISPLAY_LABEL '', VISIBLE False, ALIGNMENT -2, ...); every row gets the
+/// new-row values (DISPLAY_LABEL '', VISIBLE False, ..., ALIGNMENT NULL); every row gets the
 /// schema-derived columns FIELD_AS_TYPE, VAR_TYPE (ENUMTYPE when CUSTOM_TYPE or ISENUM),
 /// FIELD_SIZE, STRING_SIZE, NULL_FLAG, FIELD_KIND = 1, FIELD_TYPE, FIELD_SUBTYPE,
 /// FIELD_LENGTH, FIELD_SCALE, PRIMARY_KEY; DEFAULTVAL only while it is NULL;
@@ -202,9 +202,8 @@ const
   META_REFRESHED = 'schema_refreshed_at_utc';
   { DL_DATASETS_INFO.KEY_FIELD is VARCHAR(68): a longer composite key is skipped (TableTools). }
   MAX_KEY_FIELD_LEN = 68;
-  { FIELD_KIND of a real table column; ALIGNMENT of a new row (TableTools new-row values). }
+  { FIELD_KIND of a real table column. }
   FIELD_KIND_COLUMN = 1;
-  ALIGNMENT_NEW_ROW = -2;
   FB_TYPE_INT64 = 16;
   DEFAULT_PREFIX = 'DEFAULT ';
   NULL_TEXT = 'NULL';
@@ -598,15 +597,14 @@ begin
     else
       Names := Names + (if i = 0 then '' else ', ') + QuoteRepoIdent(SCHEMA_COLS[i]) + ' = :P' + IntToStr(i);
   end;
-  { a new row gets the TableTools new-row values for the hand-maintained columns; the rest
-    take the DDL defaults }
+  { a new row gets the TableTools new-row values for the hand-maintained columns; the rest take the DDL defaults
+    (ALIGNMENT NULL = the default of the field type) }
   Sql := if pIsNew then
     'INSERT INTO ' + QuoteRepoIdent(FIELDS_TABLE) + ' (' + Names +
       '"TABLE_NAME", "FIELD_NAME", "DISPLAY_LABEL", "VISIBLE", "DISPLAY_FORMAT", "EDIT_FORMAT", ' +
-      '"DISPLAY_WIDTH", "BG_COLOR", "FG_COLOR", "ALIGNMENT", "CUSTOM_TYPE", "ISCALCULATED", ' +
+      '"DISPLAY_WIDTH", "BG_COLOR", "FG_COLOR", "CUSTOM_TYPE", "ISCALCULATED", ' +
       '"ISLOOKUP", "DESTTABLE", "SOURCEKEY", "DESTKEY", "DESTVALUE") VALUES (' + Marks +
-      ':T, :F, '''', 0, '''', '''', 0, 0, 0, ' + IntToStr(ALIGNMENT_NEW_ROW) +
-      ', 0, 0, 0, '''', '''', '''', '''')'
+      ':T, :F, '''', 0, '''', '''', 0, 0, 0, 0, 0, 0, '''', '''', '''', '''')'
   else
     'UPDATE ' + QuoteRepoIdent(FIELDS_TABLE) + ' SET ' + Names +
       ' WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F';

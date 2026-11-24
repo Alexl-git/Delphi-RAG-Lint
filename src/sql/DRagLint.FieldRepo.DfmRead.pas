@@ -1,6 +1,6 @@
 unit DRagLint.FieldRepo.DfmRead;
 
-{ drag-lint 1.54 -- lane TT-DFMREAD: the datasets and persistent fields of one DFM as records (design
+{ drag-lint 1.54 -- lane TT-DFMREAD: the datasets, persistent fields, data sources and grid columns of one DFM as records (design
   2026-11-22-field-repository-v2-design.md section 9, plan 2026-11-23-fr-dfmread.md). The DFM is read with the
   producers of the index's dfm_objects / dfm_properties rows (DRagLint.Parser.DFM / DFMProps); a binary DFM is
   converted to text in memory first. Nothing is written and no repository is needed. }
@@ -72,6 +72,35 @@ type
     InheritedFields: TArray<string>;
   end;
 
+  /// <summary>Family of a data-aware cxGrid view.</summary>
+  /// <remarks>dvkTable = TcxGridDBTableView, dvkBanded = TcxGridDBBandedTableView, dvkOther = card, layout, ...</remarks>
+  TDfmrViewKind = (dvkTable, dvkBanded, dvkOther);
+
+  /// <summary>One column of a grid view.</summary>
+  TDfmrGridColumn = record
+    /// <summary>Component name.</summary>
+    Name: string;
+    /// <summary>DataBinding.FieldName as written; '' = unbound.</summary>
+    FieldName: string;
+    /// <summary>Assigned column events that have a repository column: event name, handler name.</summary>
+    Events: TArray<TDfmrPair>;
+  end;
+
+  /// <summary>One data-aware cxGrid view.</summary>
+  TDfmrGridView = record
+    /// <summary>Component name and class.</summary>
+    Name: string;
+    ViewClass: string;
+    /// <summary>Family; only table and banded views have Columns.</summary>
+    Kind: TDfmrViewKind;
+    /// <summary>object, inherited or inline.</summary>
+    ObjKind: string;
+    /// <summary>DataController.DataSource as written (dsX or dmX.dsX); '' = none.</summary>
+    DataSource: string;
+    /// <summary>Columns in DFM order: the order of the column's Index.</summary>
+    Columns: TArray<TDfmrGridColumn>;
+  end;
+
   /// <summary>One DFM.</summary>
   TDfmrForm = record
     /// <summary>Full path of the DFM.</summary>
@@ -83,6 +112,10 @@ type
     IsBinary: Boolean;
     /// <summary>Datasets in DFM order.</summary>
     Datasets: TArray<TDfmrDataset>;
+    /// <summary>TDataSource components: component name, DataSet property as written.</summary>
+    DataSources: TArray<TDfmrPair>;
+    /// <summary>Data-aware cxGrid views in DFM order.</summary>
+    Views: TArray<TDfmrGridView>;
     /// <summary>Every component name of the form (the persistent fields included).</summary>
     Components: TArray<string>;
     /// <summary>Parse problems; the rows around them may be missing.</summary>
@@ -101,10 +134,10 @@ function LoadDfmForm(const pFile: string): TDfmrForm;
 /// <returns>The root object name.</returns>
 function DfmRootName(const pFile: string): string;
 
-/// <summary>The typed accessor of a TField class: what a calc-body macro stands for (AsInteger, AsString, ...).</summary>
+/// <summary>The typed accessor of a TField class (AsInteger, AsString, ...).</summary>
 /// <param name="pFieldClass">A TField class name.</param>
 /// <returns>The accessor, '' for a class without one.</returns>
-function FieldClassAccessor(const pFieldClass: string): string;
+function FieldClassAccessor(const pFieldClass: string): string;  // dl:ok unused-public-symbol@bd89 -- REVIEWED 2026-11-23 EVCOLS: lane DFMWRITE checks its class map against it (tests/fieldrepo/DfmWriteTests.dpr); outside this project index
 
 implementation
 
@@ -188,7 +221,11 @@ const
     (ClassName: 'TVariantField'; Accessor: ''; VarType: ''),
     (ClassName: AGGREGATE_CLASS; Accessor: ''; VarType: ''));
 
-  FIELD_EVENTS: array[0..3] of string = ('OnGetText', 'OnSetText', 'OnValidate', 'OnChange');
+  DATA_SOURCE_CLASS = 'TDataSource';
+  VIEW_CLASS_PREFIX = 'TcxGridDB';
+  VIEW_CLASS_SUFFIX = 'View';
+  COLUMN_SUFFIX = 'Column';
+  VIEW_CLASSES: array[dvkTable..dvkBanded] of string = ('TcxGridDBTableView', 'TcxGridDBBandedTableView');
 
   KIND_NAMES: array[TFrFieldKind] of string = ('fkData', 'fkCalculated', 'fkLookup', 'fkInternalCalc', 'fkAggregate', '');
 
@@ -359,7 +396,7 @@ begin
   begin
     VText := pRows.Prop(pObject, VPair.Name);
     if (VText <> '') and (VPair.Value = 'ALIGNMENT') then
-      VText := IntToStr(IndexText(VText, ALIGNMENT_NAMES));
+      VText := if MatchText(VText, ALIGNMENT_NAMES) then IntToStr(IndexText(VText, ALIGNMENT_NAMES)) else '';
     if VText <> '' then
       AddPair(Result, VPair.Value, VText);
   end;
@@ -383,9 +420,22 @@ begin
     AddPair(Result, 'STRING_SIZE', VSize);
 end;
 
-function ReadField(const pRows: TDfmRows; pObject: Integer): TDfmrField;
+{ The assigned events that have a repository column. }
+function ReadEvents(const pRows: TDfmRows; pObject: Integer; pGrid: Boolean): TArray<TDfmrPair>;
 var
-  VEvent, VHandler: string;
+  VEvent: TFrEventColumn;
+  VHandler: string;
+begin
+  Result := nil;
+  for VEvent in FR_EVENT_COLUMNS do
+  begin
+    VHandler := if VEvent.IsGrid = pGrid then pRows.Prop(pObject, VEvent.Event) else '';
+    if VHandler <> '' then
+      AddPair(Result, VEvent.Event, VHandler);
+  end;
+end;
+
+function ReadField(const pRows: TDfmRows; pObject: Integer): TDfmrField;
 begin
   Result := Default(TDfmrField);
   Result.CompName := pRows.Objects[pObject].Name;
@@ -400,12 +450,7 @@ begin
   Result.Origin := pRows.Prop(pObject, 'Origin');
   Result.Stated := StatedPairs(pRows, pObject);
   Result.Typed := TypedPairs(pRows, pObject);
-  for VEvent in FIELD_EVENTS do
-  begin
-    VHandler := pRows.Prop(pObject, VEvent);
-    if VHandler <> '' then
-      AddPair(Result.Events, VEvent, VHandler);
-  end;
+  Result.Events := ReadEvents(pRows, pObject, False);
 end;
 
 { True when object pObject is a persistent field; pKnown = its parent has a known dataset class. }
@@ -451,6 +496,45 @@ begin
   Result.OnCalcFields := pRows.Prop(pObject, 'OnCalcFields');
 end;
 
+function ReadColumn(const pRows: TDfmRows; pObject: Integer): TDfmrGridColumn;
+begin
+  Result.Name := pRows.Objects[pObject].Name;
+  Result.FieldName := Trim(pRows.Prop(pObject, 'DataBinding.FieldName'));
+  Result.Events := ReadEvents(pRows, pObject, True);
+end;
+
+function IsView(const pClass: string): Boolean;
+begin
+  Result := StartsText(VIEW_CLASS_PREFIX, pClass) and EndsText(VIEW_CLASS_SUFFIX, pClass);
+end;
+
+function ReadView(const pRows: TDfmRows; pObject: Integer): TDfmrGridView;
+var
+  VI: Integer;
+  VRow: TDfmObjectRow;
+  VKind: TDfmrViewKind;
+begin
+  Result := Default(TDfmrGridView);
+  VRow := pRows.Objects[pObject];
+  Result.Name := VRow.Name;
+  Result.ViewClass := VRow.ClassName;
+  Result.ObjKind := VRow.ObjKind;
+  Result.DataSource := pRows.Prop(pObject, 'DataController.DataSource');
+  Result.Kind := dvkOther;
+  for VKind := Low(VIEW_CLASSES) to High(VIEW_CLASSES) do
+    if SameText(VIEW_CLASSES[VKind], VRow.ClassName) then
+      Result.Kind := VKind;
+  if Result.Kind = dvkOther then
+    Exit;
+  VI := pObject + 1;
+  while (VI < Length(pRows.Objects)) and (pRows.Objects[VI].Depth > VRow.Depth) do
+  begin
+    if (pRows.Objects[VI].Depth = VRow.Depth + 1) and EndsText(COLUMN_SUFFIX, pRows.Objects[VI].ClassName) then
+      Result.Columns := Result.Columns + [ReadColumn(pRows, VI)];
+    Inc(VI);
+  end;
+end;
+
 function LoadDfmForm(const pFile: string): TDfmrForm;
 var
   VRows: TDfmRows;
@@ -468,7 +552,11 @@ begin
     Result.Components := Result.Components + [VRows.Objects[VI].Name];
     VDataset := ReadDataset(VRows, VI, VIsDataset);
     if VIsDataset then
-      Result.Datasets := Result.Datasets + [VDataset];
+      Result.Datasets := Result.Datasets + [VDataset]
+    else if SameText(VRows.Objects[VI].ClassName, DATA_SOURCE_CLASS) then
+      AddPair(Result.DataSources, VRows.Objects[VI].Name, VRows.Prop(VI, 'DataSet'))
+    else if IsView(VRows.Objects[VI].ClassName) then
+      Result.Views := Result.Views + [ReadView(VRows, VI)];
   end;
 end;
 

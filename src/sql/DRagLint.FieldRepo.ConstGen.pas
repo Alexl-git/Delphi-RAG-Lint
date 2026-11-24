@@ -85,7 +85,8 @@ function ConstHeaderComment(const pSourceName: string; const pMarks: TArray<TCon
 /// <param name="pOptions">Selection; UnitName is not used.</param>
 /// <returns>One entry per selected table, in generation order.</returns>
 /// <exception cref="EConstGenError">A table is unknown for the repository's schema version or is never generated
-/// (DL_META, DL_EXCEPTIONS, DL_LAYOUT_EVENTS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS).</exception>
+/// (DL_META, DL_EXCEPTIONS, DL_LAYOUT_EVENTS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS,
+/// DL_GRID_COLUMNS).</exception>
 function CountConstRows(pConn: TFDConnection; const pOptions: TConstGenOptions): TArray<TConstGenCount>;
 
 /// <summary>Generates the registry unit.</summary>
@@ -115,8 +116,8 @@ const
   INDENT3 = '      ';
   INDENT4 = '        ';
   FIELD_PIECE_INDENT = INDENT4;
-  REFUSED_TABLES: array[0..6] of string = ('DL_META', 'DL_EXCEPTIONS', 'DL_LAYOUT_EVENTS', 'DL_DOMAINS',
-    'DL_CONSTRAINTS', 'DL_CONSTRAINT_COLUMNS', 'DL_GENERATORS');
+  REFUSED_TABLES: array[0..7] of string = ('DL_META', 'DL_EXCEPTIONS', 'DL_LAYOUT_EVENTS', 'DL_DOMAINS',
+    'DL_CONSTRAINTS', 'DL_CONSTRAINT_COLUMNS', 'DL_GENERATORS', 'DL_GRID_COLUMNS');
 
 type
   TTableData = record

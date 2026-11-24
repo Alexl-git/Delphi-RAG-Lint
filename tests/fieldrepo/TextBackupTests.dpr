@@ -549,6 +549,52 @@ begin
   TFile.WriteAllText(vPath, 'hello' + #13#10, TEncoding.ASCII);
   Check('23c BackupFileVersion of a file without the magic line is 0 (control)', BackupFileVersion(vPath) = 0);
 
+  { EVCOLS: #DLREPO 3 }
+  vV2 := NewRepo(3);
+  try
+    RestoreRepository(vV2, Fixture('golden_v3.txt'), False);
+    vOut := TPath.Combine(GDir, 'out-golden_v3.txt');
+    BackupRepository(vV2, vOut);
+    vWant := TFile.ReadAllBytes(Fixture('golden_v3.txt'));
+    vGot := TFile.ReadAllBytes(vOut);
+    Check('25a golden_v3.txt round trip is byte-identical', BytesEqual(vWant, vGot), FirstDiff(vWant, vGot));
+    Check('25b an event column restored', ScalarStr(vV2, 'SELECT "ONGETTEXT_BODY" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" = ''AMOUNT''', vNull)
+      = 'if {{AMOUNT}}.IsNull then'#13#10'  Text := '''';');
+    Check('25c an unbound grid column has no table', (ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_GRID_COLUMNS" WHERE "TABLE_NAME" IS NULL AND "FIELD_NAME" IS NULL', vNull) = '1'));
+    RestoreRepository(vV2, Fixture('golden_v2.txt'), True);
+    vOut := TPath.Combine(GDir, 'out-v2-in-v3.txt');
+    BackupRepository(vV2, vOut);
+    Check('25d #DLREPO 2 restores into a v3 repository: the v2 text with #DLREPO 3 and an empty DL_GRID_COLUMNS',
+      TEncoding.ASCII.GetString(TFile.ReadAllBytes(vOut)) = TEncoding.ASCII.GetString(TFile.ReadAllBytes(Fixture('golden_v2.txt'))).Replace('#DLREPO 2', '#DLREPO 3')
+        + '#end DL_GRID_COLUMNS 0' + #13#10);
+    RestoreRepository(vV2, Fixture('golden.dlrepo.txt'), True);
+    Check('25e #DLREPO 1 restores into a v3 repository', ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO"', vNull) = '6');
+  finally
+    vV2.Free;
+  end;
+  vV2 := NewRepo(2);
+  try
+    vMsg := '';
+    try
+      RestoreRepository(vV2, Fixture('golden_v3.txt'), True);
+    except
+      on E: Exception do
+        vMsg := E.Message;
+    end;
+    Check('25f #DLREPO 3 into a v2 repository is refused: migrate first', vMsg.Contains('migrate first'), vMsg);
+  finally
+    vV2.Free;
+  end;
+  vV2 := NewRepo(3);
+  try
+    vV2.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" VALUES (''f'',''v'',''c'',NULL,NULL,0)');
+    vCls := RaisedClass(procedure begin RestoreRepository(vV2, Fixture('golden.dlrepo.txt'), False); end);
+    Check('25g restore without replace refuses when only DL_GRID_COLUMNS holds rows', vCls = 'ERepoError', vCls);
+  finally
+    vV2.Free;
+  end;
+  Check('25h BackupFileVersion of the v3 golden is 3', BackupFileVersion(Fixture('golden_v3.txt')) = 3);
+
   { restore into a v2 repository that already holds exception rows needs replace }
   vV2 := NewRepo(2);
   try

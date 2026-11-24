@@ -2,6 +2,7 @@ unit DRagLint.FieldRepo.Kinds;
 
 { drag-lint 1.53 -- lane FR-MODEL: field kinds of the repository model v2 and the calc-body macro
   parser (design 2026-11-22-field-repository-v2-design.md sections 4.1 and 4.3).
+  1.54 (rulings 2026-11-23, R2 / R3): the event columns of a field row, and macros that name the field component.
   Pure functions: no repository connection, no I/O. }
 
 interface
@@ -27,6 +28,28 @@ type
     /// <summary>Length of the whole macro text including both brace pairs.</summary>
     Len: Integer;
   end;
+
+  /// <summary>An event whose code is a column of the field row (ruling R2).</summary>
+  TFrEventColumn = record
+    /// <summary>Event property, e.g. OnGetText.</summary>
+    Event: string;
+    /// <summary>DL_FIELDS_INFO column, e.g. ONGETTEXT_BODY.</summary>
+    Column: string;
+    /// <summary>Parameter names stored code uses, in the order of the event type, comma-separated.</summary>
+    Params: string;
+    /// <summary>True for a column event of a DBTable grid view, False for a TField event.</summary>
+    IsGrid: Boolean;
+  end;
+
+const
+  /// <summary>The event columns of DL_FIELDS_INFO, in column order.</summary>
+  FR_EVENT_COLUMNS: array[0..5] of TFrEventColumn = (
+    (Event: 'OnGetText'; Column: 'ONGETTEXT_BODY'; Params: 'Sender,Text,DisplayText'; IsGrid: False),
+    (Event: 'OnSetText'; Column: 'ONSETTEXT_BODY'; Params: 'Sender,Text'; IsGrid: False),
+    (Event: 'OnValidate'; Column: 'ONVALIDATE_BODY'; Params: 'Sender'; IsGrid: False),
+    (Event: 'OnChange'; Column: 'ONCHANGE_BODY'; Params: 'Sender'; IsGrid: False),
+    (Event: 'OnGetDisplayText'; Column: 'GRID_DISPLAYTEXT_BODY'; Params: 'Sender,ARecord,AText'; IsGrid: True),
+    (Event: 'OnCustomDrawCell'; Column: 'GRID_DRAWCELL_BODY'; Params: 'Sender,ACanvas,AViewInfo,ADone'; IsGrid: True));
 
 /// <summary>Maps a FIELD_KIND column value to its kind.</summary>
 /// <param name="pCode">The column value: Null or Unassigned (a legacy row) or an integer code.</param>
@@ -61,21 +84,23 @@ function FrKindHasBody(pKind: TFrFieldKind): Boolean;
 /// empty or malformed identifier, or `{{TABLE.FIELD}}` (reserved, an error in 1.53).</exception>
 /// <remarks>Grammar: `{{` identifier `}}`, identifier = [A-Za-z_][A-Za-z0-9_$]*. There are no escapes:
 /// `{{{{` is an error, a literal `{{` in a string has to be rewritten.</remarks>
-function ParseMacros(const pBody: string): TArray<TFrMacro>;  // dl:ok unused-public-symbol@0107 -- REVIEWED 2026-11-23: public API of the calc-body grammar: tests/fieldrepo/ModelTests.dpr K2 asserts its errors directly; outside this project index
+function ParseMacros(const pBody: string): TArray<TFrMacro>;
 
 /// <summary>The fields a calc body depends on.</summary>
 /// <param name="pBody">The CALC_BODY text.</param>
-/// <param name="pSelf">The field that owns the body; a macro of that name directly followed by `:=`
-/// is its own assignment target and is not a dependency.</param>
+/// <param name="pSelf">The field that owns the body; a macro of that name that is written (`:=`, `.Member :=` or
+/// `.Clear` follows) is not a dependency, and neither is a read of it behind the end of a statement that writes it.</param>
 /// <returns>Distinct field names (compared case-insensitively) in order of first appearance, as written.</returns>
 /// <exception cref="EFrKindError">As ParseMacros.</exception>
-/// <remarks>CalcDependencies('{{TOTAL}} := {{QTY}} * {{PRICE}};', 'TOTAL') = [QTY, PRICE]. A right-hand
-/// side use of pSelf stays a dependency, so `repo check` reports it as a cycle TOTAL -> TOTAL.</remarks>
+/// <remarks>CalcDependencies('{{TOTAL}}.AsFloat := {{QTY}}.AsInteger * {{PRICE}}.AsFloat;', 'TOTAL') = [QTY, PRICE]. A
+/// use of pSelf in its own assignment or before one stays a dependency: `repo check` reports it as a cycle
+/// TOTAL -> TOTAL.</remarks>
 function CalcDependencies(const pBody, pSelf: string): TArray<string>;
 
 implementation
 
 uses
+  System.StrUtils,
   System.Variants;
 
 const
@@ -90,6 +115,8 @@ const
   MACRO_OPEN_LEN = 2;
   MACRO_CLOSE_LEN = 2;
   ASSIGN_OP = ':=';
+  MEMBER_CLEAR = 'Clear';
+  QUOTE = '''';
 
 function IsIdentStart(pC: Char): Boolean;
 begin
@@ -186,33 +213,90 @@ begin
   end;
 end;
 
-{ True when the text after the macro, blanks skipped, starts with ':='. }
-function IsAssignTarget(const pBody: string; const pMacro: TFrMacro): Boolean;
-var
-  VPos: Integer;
+function SkipBlanks(const pText: string; pPos: Integer): Integer;
 begin
-  VPos := pMacro.Offset + pMacro.Len;
-  while (VPos <= Length(pBody)) and CharInSet(pBody[VPos], [' ', #9, #13, #10]) do
-    Inc(VPos);
-  Result := Copy(pBody, VPos, Length(ASSIGN_OP)) = ASSIGN_OP;
+  Result := pPos;
+  while (Result <= Length(pText)) and CharInSet(pText[Result], [' ', #9, #13, #10]) do
+    Inc(Result);
+end;
+
+{ True when the macro is written: ':=', '.Member :=' or '.Clear' follows, blanks skipped. }
+function IsWriteTarget(const pBody: string; const pMacro: TFrMacro): Boolean;
+var
+  VPos, VFirst: Integer;
+begin
+  VPos := SkipBlanks(pBody, pMacro.Offset + pMacro.Len);
+  Result := False;
+  if Copy(pBody, VPos, 1) = '.' then
+  begin
+    VFirst := SkipBlanks(pBody, VPos + 1);
+    VPos := VFirst;
+    while (VPos <= Length(pBody)) and IsIdentChar(pBody[VPos]) do
+      Inc(VPos);
+    Result := SameText(Copy(pBody, VFirst, VPos - VFirst), MEMBER_CLEAR);
+    VPos := SkipBlanks(pBody, VPos);
+  end;
+  Result := Result or (Copy(pBody, VPos, Length(ASSIGN_OP)) = ASSIGN_OP);
+end;
+
+{ Offset behind a string or comment that starts at pPos; pPos itself when none does. }
+function SkipTrivia(const pText: string; pPos: Integer): Integer;
+
+  function Behind(const pClose: string; pOpenLen: Integer): Integer;
+  begin
+    Result := Pos(pClose, pText, pPos + pOpenLen);
+    Result := if Result = 0 then Length(pText) + 1 else Result + Length(pClose);
+  end;
+
+begin
+  Result := pPos;
+  if pText[pPos] = QUOTE then
+    Result := Behind(QUOTE, 1)
+  else if (pText[pPos] = '{') and (Copy(pText, pPos, MACRO_OPEN_LEN) <> MACRO_OPEN) then
+    Result := Behind('}', 1)
+  else if Copy(pText, pPos, 2) = '(*' then
+    Result := Behind('*)', 2)
+  else if Copy(pText, pPos, 2) = '//' then
+    Result := Behind(#10, 2);
+end;
+
+{ True when a statement ends between two offsets: a semicolon outside strings and comments. }
+function StatementEnds(const pBody: string; pFirst, pLast: Integer): Boolean;
+var
+  VPos, VNext: Integer;
+begin
+  VPos := pFirst;
+  while VPos < pLast do
+  begin
+    if pBody[VPos] = ';' then
+      Exit(True);
+    VNext := SkipTrivia(pBody, VPos);
+    VPos := if VNext > VPos then VNext else VPos + 1;
+  end;
+  Result := False;
 end;
 
 function CalcDependencies(const pBody, pSelf: string): TArray<string>;
 var
   VMacro: TFrMacro;
-  VName: string;
-  VSeen: Boolean;
+  VWritten: Integer; // behind the first write of pSelf, 0 = none yet
 begin
   Result := nil;
+  VWritten := 0;
   for VMacro in ParseMacros(pBody) do
   begin
-    if SameText(VMacro.Name, pSelf) and IsAssignTarget(pBody, VMacro) then
-      Continue;
-    VSeen := False;
-    for VName in Result do
-      if SameText(VName, VMacro.Name) then
-        VSeen := True;
-    if not VSeen then
+    if SameText(VMacro.Name, pSelf) then
+    begin
+      if IsWriteTarget(pBody, VMacro) then
+      begin
+        if VWritten = 0 then
+          VWritten := VMacro.Offset + VMacro.Len;
+        Continue;
+      end;
+      if (VWritten > 0) and StatementEnds(pBody, VWritten, VMacro.Offset) then
+        Continue;
+    end;
+    if not MatchText(VMacro.Name, Result) then
       Result := Result + [VMacro.Name];
   end;
 end;
