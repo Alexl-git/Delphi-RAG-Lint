@@ -10,7 +10,7 @@ until `--apply`; `--dry-run` wins over `--apply`.
 | `renumber-regions` | `--code-dir <folder>` or `--in <file.pas>[;...]` [`--apply`] [`--json`] | Renames the numbered ORM region markers of whole units: `DB-RAD n` becomes `DLFR n` |
 
 Exit code: 0 ok, 1 a failure, at least one region refused or at least one unit not written (the others are still written),
-2 wrong arguments. A file named twice is planned once. After `--apply` every changed unit is listed as `written` or
+2 wrong arguments. A file named twice is read once. After `--apply` every changed unit is listed as `written` or
 `NOT WRITTEN` with the reason (locked, read-only, changed meanwhile); such a unit is as it was and no temporary file is left
 (`--json`: `written` / `error` per unit, `written` / `not_written` in total).
 

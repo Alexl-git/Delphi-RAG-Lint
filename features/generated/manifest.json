@@ -16749,7 +16749,7 @@
         {
           "type": "cli",
           "verb": "repo",
-          "sub": "backup --connection",
+          "sub": "backup",
           "usage": "drag-lint repo backup --connection \"<Firebird connection string>\" [--verify <full|quick>] [--table <T>] [--backup-dir <folder>] [--project <project file>] [--json]",
           "flags": [
             {
@@ -16809,7 +16809,7 @@
         "date": "2026-11-23",
         "by": "ENGINE",
         "build": "1.54.0-alpha",
-        "surfaceHash": "ed375b2a8b05ef8382f87e9366b7c5a2f8fed9e5fff000e454e0c3b152c61d3c"
+        "surfaceHash": "37b540d43831079de0c27b35ebc3651d5a96df2aa2a02e7fce778284b6cd864d"
       }
     },
     {

@@ -477,7 +477,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [sql](sql) | `sql` |  |
 | [stop-now](Features) | `stop-now` |  |
 | [test-store-freshness](Maintenance) | `test-store-freshness` | internal |
-| [Verified database backups and their purge](repo-db-backup) | `repo backup --connection` |  |
+| [Verified database backups and their purge](repo-db-backup) | `repo backup` |  |
 
 ## Uses and Dependencies
 

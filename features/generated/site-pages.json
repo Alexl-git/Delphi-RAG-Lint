@@ -308,7 +308,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "241339054bb193b574bc077aefe4bb77cd1dde5d1e0ca7795e84b76227b8e188",
+    "hash": "c3acdfd57d97415f0a9418e20c9678c1b5fc832b2639a0ef8b5d062b4c9a1bb6",
     "version": "1.54.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -392,7 +392,7 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository-handlers.md": {
-    "hash": "5ba00b3707bf67bb15cc735bd114935b986b08345b3405e95ae72e95067ef4ae",
+    "hash": "ff09579aae8b27d0996a13db01ded82d51cd6c5071684f5ee280b1a79eb7c98e",
     "version": "1.54.0-alpha"
   },
   "features/field-repository.md": {

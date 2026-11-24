@@ -28,7 +28,7 @@ database.
 
 ## Example
 Illustrative only: opening drag-lint > drag-lint Options... shows the
-full 437-rule catalog, grouped by its 18 categories, with a toggle per
+full 439-rule catalog, grouped by its 18 categories, with a toggle per
 rule and a marker for which of the 131 fixable rules have an auto-fix.
 
 ## Inline markers and severity icons (on by default)

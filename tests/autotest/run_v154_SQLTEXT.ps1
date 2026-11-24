@@ -57,7 +57,7 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
 $exe = Join-Path $WorkDir ([IO.Path]::GetFileNameWithoutExtension($DprName) + '.exe')
 if (-not (Test-Path $exe)) { Write-Host "FATAL: built exe missing: $exe" -ForegroundColor Red; exit 2 }
 # The scan parses: the tree-sitter DLLs must sit beside the test exe.
-Copy-Item (Join-Path $DprDir '..\third_party\dll-win64\tree-sitter*.dll') $WorkDir
+Copy-Item "$DprDir\..\third_party\dll-win64\tree-sitter*.dll" $WorkDir
 & $exe
 $rc = $LASTEXITCODE
 if ($rc -eq 0) { Write-Host 'PASS' -ForegroundColor Green } else { Write-Host 'FAIL' -ForegroundColor Red }

@@ -49,13 +49,19 @@ type
   /// <summary>Raised when a table has no rows in the repository or a file cannot be planned.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.FieldRepo.DataServiceGen.RunOrmGenVerb (DRagLint.FieldRepo.DataServiceGen.pas) ?, DRagLint.FieldRepo.OrmGen.CheckedTables (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField (DRagLint.FieldRepo.OrmGen.pas)</para>
+  /// <para>Used by: declaration (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.DataServiceGen.RunOrmGenVerb (DRagLint.FieldRepo.DataServiceGen.pas) ?, DRagLint.FieldRepo.OrmGen.CheckedTables (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField (DRagLint.FieldRepo.OrmGen.pas)</para>
   /// <para>Used in units: DRagLint.FieldRepo.DataServiceGen, DRagLint.FieldRepo.OrmGen</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   EOrmGenError = class(Exception);
 
   /// <summary>Raised when the region markers of a unit cannot be trusted: the unit must stay as it is.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.RepoHandlers.ReadsTheSame (DRagLint.CLI.RepoHandlers.pas) ?, DRagLint.FieldRepo.OrmGen.PlanUpdateOrm.One (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.TrustedRegions (DRagLint.FieldRepo.OrmGen.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.RepoHandlers, DRagLint.FieldRepo.OrmGen</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EOrmRegionError = class(EOrmGenError);
 
   /// <summary>One column of a table as the generators see it (a DL_FIELDS_INFO row,
@@ -63,7 +69,7 @@ type
   /// <remarks>
   /// Read-only after construction; owns its two documentation lists.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewServerObject (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField (DRagLint.FieldRepo.OrmGen.pas) ? (+22 more)</para>
+  /// <para>Used by: declaration (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.AddTypeUnits (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.HasEnum (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.HasVarType (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable (DRagLint.FieldRepo.OrmGen.pas) (+28 more)</para>
   /// <para>Used in units: DRagLint.FieldRepo.OrmGen</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -114,7 +120,7 @@ type
     /// <returns>The identifier form of the field name.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection1 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection10 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection11 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection14 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection15 (DRagLint.FieldRepo.OrmGen.pas) (+13 more)</para>
+    /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection1 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection10 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection11 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection14 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection15 (DRagLint.FieldRepo.OrmGen.pas) (+14 more)</para>
     /// <para>Returns: FFieldName.Replace('$', '_')</para>
     /// <para>Reads: FFieldName</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.Create"/>
@@ -160,7 +166,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.FieldRepo.DataServiceGen.PlanGenDataService (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.OrmGen.CheckedTables (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.PlanGenOrm (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.PlanUpdateOrm (DRagLint.FieldRepo.OrmGen.pas)</para>
+  /// <para>Used by: DRagLint.FieldRepo.DataServiceGen.PlanGenDataService (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.OrmGen.CheckedTables (DRagLint.FieldRepo.OrmGen.pas) ?, DRagLint.FieldRepo.OrmGen.PlanGenOrm (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.PlanUpdateOrm (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.PlanUpgradeOrmHeaders (DRagLint.FieldRepo.OrmGen.pas)</para>
   /// <para>Used in units: DRagLint.FieldRepo.DataServiceGen, DRagLint.FieldRepo.OrmGen</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -184,9 +190,9 @@ type
     /// <para>Reads: FGuidProvider</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function NewGuid: TGUID;
@@ -194,12 +200,12 @@ type
     /// <returns><!-- drag-lint:auto -->string -- Observed: AName.Replace('$', '_').</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionLOAD (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionSAVE (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewClientObject (DRagLint.FieldRepo.OrmGen.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionLOAD (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionSAVE (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewClientObject (DRagLint.FieldRepo.OrmGen.pas) (+4 more)</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetFieldName(const AName: string): string;
@@ -212,9 +218,9 @@ type
     /// <para>Reads: FFieldList, FLoadedTable</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LocateField(const pKeyField: string): TOrmField;
@@ -222,7 +228,27 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection14 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection15 (DRagLint.FieldRepo.OrmGen.pas)</para>
+    /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection14 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection15 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection4 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection5 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection6 (DRagLint.FieldRepo.OrmGen.pas)</para>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function IsVarTypeCreatable(const AType: string): Boolean;
+    /// <summary>Region 4 / 6 text for a column the generator creates and frees itself (regions 14 / 15, IsVarTypeCreatable): the object keeps its own list or stream and takes the other one's content.</summary>
+    /// <param name="pCode">Receives the lines.</param>
+    /// <param name="pField">The column; a stream (STPicture) is copied with CopyFrom, a list with Assign / Clear.</param>
+    /// <param name="pIndent">Indent of the emitted lines (6 blanks in regions 4 / 6, 4 in region 5).</param>
+    /// <param name="pDest">Full expression of the object that takes the content (nil: nothing is copied).</param>
+    /// <param name="pSource">Full expression of the object copied from (nil: the destination is emptied).</param>
+    /// <param name="pGuard">Condition that must hold besides pDest being assigned: not self-assignment (regions 4 / 6) or not the same list instance (region 5).</param>
+    /// <remarks>
+    /// A stream source keeps its Position (saved and restored); the copy ends at Position 0.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection4 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection5 (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection6 (DRagLint.FieldRepo.OrmGen.pas)</para>
+    /// <para>Calls: Format, SameText</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
@@ -230,15 +256,6 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function IsVarTypeCreatable(const AType: string): Boolean;
-    /// <summary>Region 4 / 6 text for a column the generator creates and frees itself (regions 14 / 15, IsVarTypeCreatable): the object keeps its own list or stream and takes the other one's content.</summary>
-    /// <param name="pCode">Receives the lines.</param>
-    /// <param name="pField">The column; a stream (STPicture) is copied with CopyFrom, a list with Assign / Clear.</param>
-    /// <param name="pDest">Full expression of the object that takes the content (nil: nothing is copied).</param>
-    /// <param name="pSource">Full expression of the object copied from (nil: the destination is emptied).</param>
-    /// <param name="pIndent">Indent of the emitted lines (6 blanks in regions 4 / 6, 4 in region 5).</param>
-    /// <param name="pGuard">Condition that must hold besides pDest being assigned: not self-assignment (regions 4 / 6) or not the same list instance (region 5).</param>
-    /// <remarks>A stream source keeps its Position (saved and restored); the copy ends at Position 0.</remarks>
     procedure EmitOwnedCopy(pCode: TStringList; const pField: TOrmField; const pIndent, pDest, pSource, pGuard: string);
     /// <param name="InterfaceObject"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
@@ -246,9 +263,9 @@ type
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas)</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateInterfaceFooter(InterfaceObject: TStringList);  // dl:ok param-name-prefix@a196 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -261,8 +278,8 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection1(SectionCode: TStringList);  // dl:ok param-name-prefix@2039 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -270,13 +287,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.AccessorName, DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.SetterDirective, DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
     /// <para>Reads: FFieldList</para>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AccessorName"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.SetterDirective"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection1A(SectionCode: TStringList);  // dl:ok param-name-prefix@6beb -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -284,12 +301,12 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.AccessorName, DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
     /// <para>Reads: FFieldList</para>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AccessorName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -298,12 +315,12 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.AccessorName, DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
     /// <para>Reads: FFieldList</para>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AccessorName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -319,7 +336,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.ZeroTime"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection3(SectionCode: TStringList);  // dl:ok param-name-prefix@3b3d -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -327,13 +344,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
-    /// <para>Reads: FFieldList</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GetFieldName, DRagLint.FieldRepo.OrmGen.TOrmGenerator.IsVarTypeCreatable, Format</para>
+    /// <para>Reads: FFieldList, FLoadedTable</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GetFieldName"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.IsVarTypeCreatable"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection4(SectionCode: TStringList);  // dl:ok param-name-prefix@86fe -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -341,13 +358,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy, DRagLint.FieldRepo.OrmGen.TOrmGenerator.IsVarTypeCreatable, Format</para>
     /// <para>Reads: FFieldList</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.IsVarTypeCreatable"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection5(SectionCode: TStringList);  // dl:ok param-name-prefix@e4af -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -355,13 +372,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
-    /// <para>Reads: FFieldList</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GetFieldName, DRagLint.FieldRepo.OrmGen.TOrmGenerator.IsVarTypeCreatable, Format</para>
+    /// <para>Reads: FFieldList, FLoadedTable</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GetFieldName"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.IsVarTypeCreatable"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection6(SectionCode: TStringList);  // dl:ok param-name-prefix@028b -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -370,12 +387,12 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.AccessorName, DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
     /// <para>Reads: FFieldList</para>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AccessorName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -425,7 +442,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection9(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@8e09 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -440,7 +457,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection9A(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@6d14 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -454,8 +471,8 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection10(SectionCode: TStringList);  // dl:ok param-name-prefix@1123 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -463,14 +480,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
-    /// <para>Complexity: 19 (cyclomatic, outer body), 86 lines (full implementation)</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.HasEnum, DRagLint.FieldRepo.OrmGen.HasVarType, DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, Format</para>
+    /// <para>Complexity: 21 (cyclomatic, outer body), 91 lines (full implementation)</para>
     /// <para>Reads: FFieldList</para>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.HasEnum"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.HasVarType"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection11(SectionCode: TStringList);  // dl:ok param-name-prefix@28d1 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -484,7 +501,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.IsVarTypeCreatable"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection14(SectionCode: TStringList);  // dl:ok param-name-prefix@aaa0 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -498,7 +515,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.IsVarTypeCreatable"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateSection15(SectionCode: TStringList);  // dl:ok param-name-prefix@c2c6 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -514,7 +531,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateCLSectionKEY(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@4588 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -530,7 +547,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateCLSectionLOAD(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@1c6b -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -546,7 +563,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateCLSectionSAVE(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@159a -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -562,7 +579,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateCLSectionDEL(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@939b -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -576,9 +593,9 @@ type
     /// <para>Calls: Format</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateCLSectionNEXTID(SectionCode: TStringList; const TableName0: string; HasGenerator: Boolean; const GenName: string);  // dl:ok param-name-prefix@bf58 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -608,14 +625,14 @@ type
     /// <param name="pRepo">Open repository connection (OpenRepository); not owned; must outlive the generator.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.FieldRepo.DataServiceGen.PlanGenDataService (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.OrmGen.PlanGenOrm (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.PlanUpdateOrm (DRagLint.FieldRepo.OrmGen.pas)</para>
+    /// <para>Called from: DRagLint.FieldRepo.DataServiceGen.PlanGenDataService (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.OrmGen.PlanGenOrm (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.PlanUpdateOrm (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.PlanUpgradeOrmHeaders (DRagLint.FieldRepo.OrmGen.pas)</para>
     /// <para>constructor</para>
     /// <para>Writes: FRepo, FFieldList, FKeyFields, FKeyTypes, FKeyGens</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionLOAD"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     constructor Create(pRepo: TFDConnection);
@@ -625,10 +642,10 @@ type
     /// <para>Reads: FKeyGens, FKeyTypes, FKeyFields, FFieldList</para>
     /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionLOAD"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     destructor Destroy; override;
@@ -642,9 +659,9 @@ type
     /// <para>SQL: reads DL_FIELDS_INFO</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function TableNames: TArray<string>;
@@ -657,14 +674,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.PlanUpdateOrm (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewClientObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewServerObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateNewTableObject (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.UpdateRegions (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.Create, DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName</para>
+    /// <para>Calls: ColumnSummary, DRagLint.FieldRepo.OrmGen.TOrmField.Create, DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable.RemarksOfRow, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable.SummaryOfRow, IsDocPlaceholder</para>
     /// <para>Reads: FFieldList, FKeyFields, FKeyTypes, FKeyGens, FRepo   Writes: FHasGenerator, FGenName, FLoadedTable</para>
     /// <para>SQL: reads DL_FIELDS_INFO</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable.RemarksOfRow"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable.SummaryOfRow"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure LoadTable(const pTableName: string);
@@ -677,12 +694,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.PlanGenOrm (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateInterfaceFooter, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection1, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection10, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection11, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection14, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection15, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection1A, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection2I, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection2P, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection3 (+8 more)</para>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateInterfaceFooter"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection1"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection10"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection11"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection14"/>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.AddTypeUnits, DRagLint.FieldRepo.OrmGen.AddUnit, DRagLint.FieldRepo.OrmGen.AddUsesClause, DRagLint.FieldRepo.OrmGen.DefaultsNeedSysUtils, DRagLint.FieldRepo.OrmGen.HasVarType, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateInterfaceFooter, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection1, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection10, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection11, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection14 (+13 more)</para>
+    /// <para>Reads: FFieldList</para>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AddTypeUnits"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AddUnit"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AddUsesClause"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.DefaultsNeedSysUtils"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.HasVarType"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok param-name-prefix@87cb -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -693,13 +711,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.DataServiceGen.PlanGenDataService (DRagLint.FieldRepo.DataServiceGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection8, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection8A, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection9, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection9A, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable, Format, SameText</para>
-    /// <para>Reads: FGenName, FFieldList</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.AddInlineUnit, DRagLint.FieldRepo.OrmGen.AddUsesClause, DRagLint.FieldRepo.OrmGen.HasEnum, DRagLint.FieldRepo.OrmGen.HasVarType, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection8, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection8A, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection9, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection9A, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable, Format</para>
+    /// <para>Reads: FGenName, FFieldList, FKeyFields</para>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AddInlineUnit"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AddUsesClause"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.HasEnum"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.HasVarType"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection8"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection8A"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection9"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection9A"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateNewServerObject(const TableName0: string; PasObject: TStringList);  // dl:ok param-name-prefix@79eb -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -710,14 +728,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.DataServiceGen.PlanGenDataService (DRagLint.FieldRepo.DataServiceGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionLOAD, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionNEXTID, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionSAVE, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GetFieldName, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField, Format, SameText</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 423 lines (full implementation)</para>
-    /// <para>Reads: FHasGenerator, FGenName, FFieldList, FKeyFields</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.AddUsesClause, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionLOAD, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionNEXTID, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionSAVE, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GetFieldName, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField, Format, SameText</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 420 lines (full implementation)</para>
+    /// <para>Reads: FHasGenerator, FGenName, FKeyFields</para>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.AddUsesClause"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionLOAD"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionNEXTID"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionSAVE"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok param-name-prefix@a4cc -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -737,15 +755,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.PlanUpdateOrm.One (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.IsOrmRegionEnd, DRagLint.FieldRepo.OrmGen.IsOrmRegionStart, DRagLint.FieldRepo.OrmGen.OrmJoinLines, DRagLint.FieldRepo.OrmGen.SplitRawLines, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable</para>
-    /// <para>Returns: SB.ToString</para>
+    /// <para>Calls: Copy, DRagLint.FieldRepo.OrmGen.OrmJoinLines, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable, DRagLint.FieldRepo.OrmGen.TrustedRegions</para>
+    /// <para>Returns: SB.Append(Copy(pText, Kept, MaxInt)).ToString</para>
     /// <para>Reads: FLoadedTable</para>
     /// <para>Mutates: pRegionCount (out)</para>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.IsOrmRegionEnd"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.IsOrmRegionStart"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.OrmJoinLines"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.SplitRawLines"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TrustedRegions"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function UpdateRegions(const pText, pTableName: string; pIsInterface: Boolean;
@@ -763,15 +781,28 @@ type
     /// <para>Reads: FFieldList</para>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionLOAD"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FieldCount: Integer;
     /// <summary>True when the loaded table has a generated column of that name.</summary>
     /// <param name="pIdent">Identifier form of the column name; letter case does not matter.</param>
     /// <returns>True for a column of the current field list.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FieldRepo.OrmGen.PlanUpdateOrm.One (DRagLint.FieldRepo.OrmGen.pas)</para>
+    /// <para>Calls: DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName, SameText</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Reads: FFieldList</para>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmField.GetCurrentFieldName"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.EmitOwnedCopy"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasColumn(const pIdent: string): Boolean;
   end;
 
@@ -786,7 +817,7 @@ type
   /// <summary>One file a generator verb would write.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.DataServiceGen.PlanGenDataService (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.DataServiceGen.PlanVerb (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.DataServiceGen.ReportPlan (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.DataServiceGen.RunOrmGenVerb (DRagLint.FieldRepo.DataServiceGen.pas) (+7 more)</para>
+  /// <para>Used by: declaration (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.DataServiceGen.PlanGenDataService (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.DataServiceGen.PlanVerb (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.DataServiceGen.ReportPlan (DRagLint.FieldRepo.DataServiceGen.pas), DRagLint.FieldRepo.DataServiceGen.RunOrmGenVerb (DRagLint.FieldRepo.DataServiceGen.pas) (+8 more)</para>
   /// <para>Used in units: DRagLint.FieldRepo.DataServiceGen, DRagLint.FieldRepo.OrmGen</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -808,10 +839,10 @@ type
 /// <returns>True for a '{$REGION 'DB-RAD &lt;id&gt;'}' or '{$REGION 'DLFR &lt;id&gt;'}' line, known id or not.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.UpdateRegions (DRagLint.FieldRepo.OrmGen.pas)</para>
-/// <para>Calls: DRagLint.FieldRepo.OrmGen.RegionName</para>
-/// <para>Returns: False; pRegionId &lt;&gt; ''</para>
+/// <para>Calls: DRagLint.FieldRepo.HandlersRegions.OrmRegionId, DRagLint.FieldRepo.OrmGen.RegionName</para>
+/// <para>Returns: pRegionId &lt;&gt; ''</para>
 /// <para>Mutates: pRegionId (out)</para>
+/// <seealso cref="DRagLint.FieldRepo.HandlersRegions.OrmRegionId"/>
 /// <seealso cref="DRagLint.FieldRepo.OrmGen.RegionName"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -822,9 +853,10 @@ function IsOrmRegionStart(const pLine: string; out pRegionId: string): Boolean; 
 /// <returns>True for a '{$ENDREGION 'DB-RAD &lt;id&gt;'}' or '{$ENDREGION 'DLFR &lt;id&gt;'}' line.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.FieldRepo.OrmGen.OrmChangeDiff (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.UpdateRegions (DRagLint.FieldRepo.OrmGen.pas)</para>
-/// <para>Calls: DRagLint.FieldRepo.OrmGen.RegionName</para>
-/// <para>Returns: RegionName(pLine, '{$ENDREGION').StartsWith(DB_RAD)</para>
+/// <para>Called from: DRagLint.FieldRepo.OrmGen.OrmChangeDiff (DRagLint.FieldRepo.OrmGen.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.HandlersRegions.OrmRegionId, DRagLint.FieldRepo.OrmGen.RegionName</para>
+/// <para>Returns: OrmRegionId(RegionName(pLine, '{$ENDREGION')) &lt;&gt; ''</para>
+/// <seealso cref="DRagLint.FieldRepo.HandlersRegions.OrmRegionId"/>
 /// <seealso cref="DRagLint.FieldRepo.OrmGen.RegionName"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -849,8 +881,9 @@ function IsOrmRegionEnd(const pLine: string): Boolean;  // dl:ok unused-public-s
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FieldRepo.DataServiceGen.PlanVerb (DRagLint.FieldRepo.DataServiceGen.pas)</para>
-/// <para>Calls: ChangeOf, DRagLint.FieldRepo.OrmGen.CheckedTables, DRagLint.FieldRepo.OrmGen.PlanUpdateOrm.One, DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create, DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable, ReadUnitText</para>
+/// <para>Calls: ChangeOf, DRagLint.FieldRepo.OrmGen.CheckedTables, DRagLint.FieldRepo.OrmGen.PlanUpdateOrm.One, DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create, DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable, HasOrmWithHeader, ReadUnitText</para>
 /// <para>Returns: L.ToArray</para>
+/// <para>Catches: EOrmRegionError (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.FieldRepo.OrmGen.CheckedTables"/>
 /// <seealso cref="DRagLint.FieldRepo.OrmGen.PlanUpdateOrm.One"/>
@@ -866,6 +899,13 @@ function PlanUpdateOrm(pRepo: TFDConnection; const pCodeDir, pServerDir, pClient
 /// <param name="pText">The unit text.</param>
 /// <returns>The ids in the order of the text.</returns>
 /// <exception cref="EOrmRegionError">update-orm refuses the unit.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RepoHandlers.ReadsTheSame (DRagLint.CLI.RepoHandlers.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.OrmGen.TrustedRegions</para>
+/// <seealso cref="DRagLint.FieldRepo.OrmGen.TrustedRegions"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OrmRegionIds(const pText: string): TArray<string>;
 
 /// <summary>Plans repo upgrade-orm-headers: the u&lt;T&gt;.PAS units of pCodeDir with the generated
@@ -880,6 +920,19 @@ function OrmRegionIds(const pText: string): TArray<string>;
 /// is not in the generated form; not cleared.</param>
 /// <returns>One entry per existing u unit and per existing i unit, in table order.</returns>
 /// <exception cref="EOrmGenError">A named table is not in the repository.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.DataServiceGen.PlanVerb (DRagLint.FieldRepo.DataServiceGen.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.OrmGen.ChangeOf, DRagLint.FieldRepo.OrmGen.CheckedTables, DRagLint.FieldRepo.OrmGen.ReadUnitText, DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create, DRagLint.FieldRepo.OrmHeaders.FindAssignICalls, DRagLint.FieldRepo.OrmHeaders.UpgradeOrmAssignPair, DRagLint.FieldRepo.OrmHeaders.UpgradeOrmHeaderText, Format</para>
+/// <para>Returns: L.ToArray</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.FieldRepo.OrmGen.ChangeOf"/>
+/// <seealso cref="DRagLint.FieldRepo.OrmGen.CheckedTables"/>
+/// <seealso cref="DRagLint.FieldRepo.OrmGen.ReadUnitText"/>
+/// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Create"/>
+/// <seealso cref="DRagLint.FieldRepo.OrmHeaders.FindAssignICalls"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlanUpgradeOrmHeaders(pRepo: TFDConnection; const pCodeDir: string; const pTables: TArray<string>;
   pSkipped: TStrings): TArray<TOrmFileChange>;
 
