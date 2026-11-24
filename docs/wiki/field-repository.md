@@ -62,8 +62,8 @@ Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then
 | `update-orm` | `--code-dir` [`--server-dir`] [`--client-dir`] | ONLY the lines inside the `{$REGION 'DB-RAD <id>'}` regions of the existing units; every other byte, line ends included, is kept. A missing file or a table without `FIELD_KIND = 1` rows is skipped and named. A unit whose region markers cannot be trusted is REFUSED and left as it is (below) |
 | `gen-dataservice` | `--server-dir` `--client-dir` | new `u<T>_SERVER.PAS` + `u<T>_CLIENT.PAS` and the two DI container units; prints `add to project:` per new file |
 
-`update-orm` pairs region markers by id with a Pascal scan (1.53.1). It refuses a whole unit -- `<file>: REFUSED, the
-unit is left unchanged: <why>` among the skipped files, the other units go on -- when a start marker has no end of its
+`update-orm` pairs region markers by id with a Pascal scan (1.53.1). It refuses a whole unit --
+`<file>: REFUSED, the unit is left unchanged: <why>` among the skipped files, the other units go on -- when a start marker has no end of its
 own id (missing, unnamed, another id, inside a comment), an id is unknown (`DB-RAD notes`, `DB-RAD 99`), a marker shares
 its line with code, a region holds another DB-RAD region or a part of a conditional, or the text has an unclosed comment
 or string. Up to 1.53.0 it read on to the next DB-RAD end whatever its id and emptied a region with an unknown id. A

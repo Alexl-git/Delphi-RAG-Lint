@@ -292,12 +292,12 @@
     "version": "1.51.1-alpha"
   },
   "features/document-project.md": {
-    "hash": "4f7582976eb3f303398801f4a9ccaf6d52fea182705e812f3b2a38249e727700",
-    "version": "1.51.1-alpha"
+    "hash": "97e93f331d34004f092e51db3938621d02682c83b8810418c00a78c040a44043",
+    "version": "1.53.1-alpha"
   },
   "features/document-unit.md": {
-    "hash": "0bc8151064532df11fc9626a2bfb8218bc48543cdeee3dd0b6132789a66ab314",
-    "version": "1.48.0-alpha"
+    "hash": "baed99d8fd0d84f22b4b76ad258e041cfdd98997fe1f67cf8c49b8c64dc9f424",
+    "version": "1.53.1-alpha"
   },
   "features/drag-lint-graph-dockable.md": {
     "hash": "0f151375dcae58e5ebd0763f4b9864cf3f78366df59e15b175f7751a016766e4",
@@ -392,8 +392,8 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "0f865abddf116024a1cd806c5c5ebe41c84f068ceb422cbbd7de6ec6d751ffeb",
-    "version": "1.53.0-alpha"
+    "hash": "d61df80e5bbc53a7bd628db3921ce9f01e1ab6031d88133d70d42f0fbb8efa86",
+    "version": "1.53.1-alpha"
   },
   "features/finalization-after-dependency.md": {
     "hash": "ab4ca22ab2db61fa0144d423d879dced716a9354472d7a2a0565b48e3f0ddb15",
@@ -532,8 +532,8 @@
     "version": "1.51.0-alpha"
   },
   "features/inc-indexing.md": {
-    "hash": "50de07e3e82c76a07662d555611c7510735e7041f5c54ad5a87cadb791a3aba5",
-    "version": "1.52.2-alpha"
+    "hash": "e732aef2f9010cab0c30f0afcb8c32fe50efe478022cda9025f1f5f55caa7a3f",
+    "version": "1.53.1-alpha"
   },
   "features/index-build-config.md": {
     "hash": "e274f5e7a4048bb261edbe79db15b60c9a763c5f98e45f6afdab540ef27a11f2",
@@ -1040,8 +1040,8 @@
     "version": "1.53.0-alpha"
   },
   "features/v1511-inc2-fixes.md": {
-    "hash": "0d10b8ad482c486026d465c55ff6f436dd591ea4686b7a9662c33a849c477933",
-    "version": "1.53.0-alpha"
+    "hash": "0e7e5be049dead92546563195914f6425d4bb750bb0edc042730c82b74a9f6a0",
+    "version": "1.53.1-alpha"
   },
   "features/v1511-res-fixes.md": {
     "hash": "157c805c70917f9de9b54f76efce302c2798f7e97f8a60b841e300954008ab0e",
