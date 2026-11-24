@@ -996,9 +996,9 @@ begin
       Continue;
     if pCalc and (not FStatements[VI].IsGuard) and HasExit(FStatements[VI].Node) then
       Problem('Exit would skip the other generated calculations');
-    if FStatements[VI].Node.HasError then
-      Problem('the handler does not parse');
   end;
+  if FNode.HasError then
+    Problem('the handler does not parse');
 end;
 
 { Refuses a calculated field's component that other code gets: that code may write the field. pField's own counts
@@ -1131,7 +1131,8 @@ begin
   inherited;
 end;
 
-{ Blanks the generated regions: their code came from the repository. A region the engine cannot trust stays, and its
+{ Blanks the generated regions: their code came from the repository. The semicolon a region starts with, which ends the
+  hand code before it, stays. A region the engine cannot trust stays, and its
   directive blocks the handler around it. }
 procedure TDfmrUnit.BlankRegions;
 var
@@ -1140,7 +1141,7 @@ var
   VMatch: TMatch;
   VRegion: TDlfrRegion;
   VItem: TGenerated;
-  VI: Integer;
+  VI, VFirst: Integer;
   VLatin: TEncoding;
 begin
   VLatin := TEncoding.GetEncoding(LATIN_1);
@@ -1163,6 +1164,11 @@ begin
     for VI := VRegion.Start.Start to VRegion.Finish.Finish - 1 do
       if not CharInSet(VText[VI], [#13, #10]) then
         FRaw[VI - 1] := Ord(' ');
+    VFirst := VRegion.Body.First;
+    while (VFirst < VRegion.Body.Last) and (VText[VFirst] <= ' ') do
+      Inc(VFirst);
+    if (VFirst < VRegion.Body.Last) and (VText[VFirst] = ';') then
+      FRaw[VFirst - 1] := Ord(';');
   end;
 end;
 

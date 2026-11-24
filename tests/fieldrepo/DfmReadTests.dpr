@@ -315,6 +315,11 @@ begin
   CheckText('R2 hand code beside the region is read', Body(Handler('', '  T1NAME.Value := ''caf'#233''';'#13#10 + REGION), 'T1NAME'), '{{NAME}}.Value := ''caf'#233''';');
   CheckText('R3 a region that is not closed blocks', Body(Handler('', '  T1NAME.Value := ''x'';'#13#10'  {$REGION ''DLFR T1.OnCalcFields hash=0123456789abcdef''}'), 'T1NAME'),
     '!the handler holds compiler directives! {{NAME}}.Value := ''x'';');
+  CheckText('R6 the semicolon a region ends the code before it with stays', Body(Handler('', '  T1NAME.Value := ''x'''#13#10 +
+    REGION.Replace('  begin // TOTAL', '  ;'#13#10'  begin // TOTAL') + '  if T1QTY.Value = 0 then T1NAME.Value := ''y'';'), 'T1NAME'),
+    '{{NAME}}.Value := ''x'';'#13#10'if {{QTY}}.Value = 0 then {{NAME}}.Value := ''y'';');
+  Check('R7 a handler that does not parse blocks, the kept statement is fine or not', Body(Handler('', '  T1NAME.Value := ''x'''#13#10 +
+    '  if T1QTY.Value = 0 then T1NAME.Value := ''y'';'), 'T1NAME').StartsWith('!the handler does not parse'));
   CheckText('R4 an event handler with a region is not read', Event('  AText := ''h'';'#13#10 + REGION2), '!its code is in the generated region DLFR T1QTY.OnGetText! ');
   CheckText('R5 control: a region of another handler does not count', Event('  AText := ''h'';', REGION), 'Text := ''h'';');
 end;
