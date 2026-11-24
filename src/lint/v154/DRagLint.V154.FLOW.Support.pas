@@ -52,7 +52,7 @@ type
 
   /// <summary>One run of the lane over one parsed unit.</summary>
   /// <remarks>Create, call the Check methods, Free. Not thread-safe. The node lists are collected once, in Create.</remarks>
-  TFlowRun = class
+  TFlowRun = class  // dl:ok high-response@2180 -- REVIEWED 2026-11-24 v154 FLOW: one walker per file run; the rules share its node lists and tree helpers
   strict private
     FCtx      : TV151FileCtx;
     FSrc      : TBytes;
@@ -66,7 +66,7 @@ type
     FEdges    : TDictionary<string, Int64>;
     FParams   : TDictionary<Int64, TV154ParamList>;
     FFindings : TList<TLintFinding>;
-    procedure Collect(const ANode: TTSNode);
+    procedure Collect(const ARoot: TTSNode);
     procedure Emit(const ARule, ASeverity, AMessage: string; const ANode: TTSNode);
     function Text(const ANode: TTSNode): string;
     function Lower(const ANode: TTSNode): string;
@@ -138,8 +138,10 @@ implementation
 
 uses
   System.StrUtils
+  , System.RegularExpressions
   , FireDAC.Comp.Client
   , FireDAC.Stan.Param
+  , TreeSitterLib
   , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Storage.SQLite
@@ -188,12 +190,8 @@ end;
 
 { Lower case without any blank. }
 function FlatText(const AText: string): string;
-var
-  Part: Char;
 begin
-  Result:= '';
-  for Part in LowerCase(AText) do
-    if Part > ' ' then Result:= Result + Part;
+  Result:= string.Join('', LowerCase(AText).Split([' ', #9, #10, #13], TStringSplitOptions.ExcludeEmpty));
 end;
 
 function HasChild(const ANode: TTSNode; const AKinds: array of string): Boolean;
@@ -374,19 +372,8 @@ end;
 
 { TFoo<T>.TBar.Create -> TFoo.TBar.Create }
 function WithoutGenerics(const AName: string): string;
-var
-  Part : Char;
-  Depth: Integer;
 begin
-  Result:= '';
-  Depth := 0;
-  for Part in AName do
-    case Part of
-      '<': Inc(Depth);
-      '>': Dec(Depth);
-    else
-      if Depth = 0 then Result:= Result + Part;
-    end;
+  Result:= TRegEx.Replace(AName, '<[^<>]*>', '');
 end;
 
 function IsInterfaceName(const AName: string): Boolean;
@@ -450,18 +437,47 @@ begin
   Result:= FFindings.ToArray;
 end;
 
-procedure TFlowRun.Collect(const ANode: TTSNode);
+{ One cursor walk that compares node symbols, not node names: every unit of a project passes here. }
+procedure TFlowRun.Collect(const ARoot: TTSNode);
 var
-  I: Integer;
-  Kind: string;
+  Cursor: TTSTreeCursor;
+  Node  : TTSNode;
+  DefProc, ExprCall, DeclType, At, Overlay: TSSymbol;
+
+  function Symbol(const AName: string): TSSymbol;
+  begin
+    Result:= ARoot.Language.SymbolForName[AName, True];
+  end;
+
+  function Next: Boolean;
+  begin
+    Result:= Cursor.GotoFirstChild or Cursor.GotoNextSibling;
+    while not Result do
+    begin
+      if not Cursor.GotoParent then Exit;
+      Result:= Cursor.GotoNextSibling;
+    end;
+  end;
+
 begin
-  Kind:= ANode.NodeType;
-  if Kind = 'defProc' then FRoutines.Add(ANode)
-  else if Kind = 'exprCall' then FCalls.Add(ANode)
-  else if IsAddressOf(ANode) then FAddresses.Add(ANode)
-  else if (Kind = 'declVar') and HasChild(ANode, ['kAbsolute']) then FOverlays.Add(ANode)
-  else if Kind = 'declType' then FTypes.AddOrSetValue(Lower(ANode.ChildByField('name')), ANode);
-  for I:= 0 to ANode.NamedChildCount - 1 do Collect(ANode.NamedChild(I));
+  DefProc := Symbol('defProc');
+  ExprCall:= Symbol('exprCall');
+  DeclType:= Symbol('declType');
+  At      := Symbol('kAt');
+  Overlay := Symbol('kAbsolute');
+  Cursor  := TTSTreeCursor.Create(ARoot);
+  try
+    repeat
+      Node:= Cursor.CurrentNode;
+      if Node.Symbol = DefProc then FRoutines.Add(Node)
+      else if Node.Symbol = ExprCall then FCalls.Add(Node)
+      else if Node.Symbol = DeclType then FTypes.AddOrSetValue(Lower(Node.ChildByField('name')), Node)
+      else if Node.Symbol = At then FAddresses.Add(Node.Parent)
+      else if Node.Symbol = Overlay then FOverlays.Add(Node.Parent);
+    until not Next;
+  finally
+    Cursor.Free;
+  end;
 end;
 
 procedure TFlowRun.Emit(const ARule, ASeverity, AMessage: string; const ANode: TTSNode);
@@ -815,7 +831,8 @@ function TFlowRun.Conflict(const A, B: TV154Param): Boolean;
   end;
 
 begin
-  Result:= (not A.IsUntyped) and (not B.IsUntyped) and ((A.ByReference and B.ByReference) or Clears(A, B) or Clears(B, A));
+  if A.IsUntyped or B.IsUntyped then Exit(False);
+  Result:= (A.ByReference and B.ByReference) or Clears(A, B) or Clears(B, A);
 end;
 
 { The variable an argument names, '' when it is something else. }
@@ -838,7 +855,7 @@ begin
   Names:= nil;
   if Length(Args) < 2 then Exit;
   for I:= 0 to High(Args) do Names:= Names + [VariableText(Args[I])];
-  for I:= 1 to High(Names) do
+  for I:= 1 to High(Args) do
     for J:= 0 to I - 1 do
     begin
       if (Names[I] = '') or (Names[I] <> Names[J]) then Continue;
@@ -887,7 +904,8 @@ var
 begin
   Sites:= TList<TTSNode>.Create;
   try
-    for Node in FAddresses do Sites.Add(Node.NamedChild(Node.NamedChildCount - 1));
+    for Node in FAddresses do
+      if IsAddressOf(Node) then Sites.Add(Node.NamedChild(Node.NamedChildCount - 1));
     for Node in FCalls do
       if (Lower(Node.ChildByField('entity')) = 'addr') and (Length(CallArguments(Node)) = 1) then Sites.Add(CallArguments(Node)[0]);
     for Name in Sites do
@@ -933,7 +951,7 @@ end;
 function TFlowRun.MethodFixed(const ASymbol: TSymbol): Boolean;
 begin
   if (ASymbol.Kind <> skMethod) or (not MatchStr(Trim(ASymbol.Modifiers), CODE_VISIBILITY)) then Exit(True);
-  Result:= (Pos(',', FCtx.Store.GetSymbolById(ASymbol.ParentId).Heritage) > 0) or
+  Result:= FCtx.Store.GetSymbolById(ASymbol.ParentId).Heritage.Contains(',') or
     HasRows('SELECT 1 FROM symbols m JOIN symbols i ON i.id = m.parent_id AND i.kind = ''interface'' WHERE m.name = :n COLLATE NOCASE LIMIT 1', ASymbol.Name);
 end;
 
@@ -943,7 +961,7 @@ var
   Directive: string;
 begin
   Result:= True;
-  if ASymbol.IsVirtual or (Pos(EVENT_PARAM, FlatText(ASymbol.Signature)) > 0) then Exit;
+  if ASymbol.IsVirtual or FlatText(ASymbol.Signature).Contains(EVENT_PARAM) then Exit;
   for Directive in SplitString(ASymbol.Directives, ' ') do
     if MatchStr(Directive, FIXED_DIRECTIVES) then Exit;
   if (ASymbol.Kind not in [skProcedure, skFunction]) and MethodFixed(ASymbol) then Exit;
@@ -1244,7 +1262,7 @@ var
   Body, Node, Target, Value, Decl: TTSNode;
   Name, Field, FieldType: string;
   I    : Integer;
-  Plain, Outside: Boolean;
+  Plain, Outside, Fresh: Boolean;
   Seen : TArray<string>;
 begin
   Name:= WithoutGenerics(Flat(Header(ARoutine).ChildByField('name')));
@@ -1272,8 +1290,8 @@ begin
     if StartsStr(SELF_PREFIX, Field) then Delete(Field, 1, Length(SELF_PREFIX))
     else if Declares(ARoutine, Field, FSrc, Decl) then Continue;
     if not Info.Fields.TryGetValue(Field, FieldType) then Exit;
-    if MatchStr(Flat(Value), ZERO_VALUES) and (FieldType <> 'variant') and (not MatchStr(Field, Seen)) and
-       not (Outside and (Info.Hooked or (FCtx.DfmPath <> '')) and NamedElsewhere(Name, Field)) then
+    Fresh:= (not MatchStr(Field, Seen)) and not (Outside and (Info.Hooked or (FCtx.DfmPath <> '')) and NamedElsewhere(Name, Field));
+    if Fresh and MatchStr(Flat(Value), ZERO_VALUES) and (FieldType <> 'variant') then
       Emit(RULE_FIELD_INIT, SEVERITY_HINT, Format('%s of a new object is already %s: the constructor need not set it', [Text(Target), Text(Value)]), Target);
     Seen := Seen + [Field];
     Plain:= PlainValue(Value, ARoutine, Outside);

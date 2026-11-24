@@ -101,17 +101,17 @@ begin
   end;
 end;
 
-class function TV154FLOWRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV154FLOWRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@bde6 -- REVIEWED 2026-11-24 v154 FLOW: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV154FLOWRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV154FLOWRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@bcf2 -- REVIEWED 2026-11-24 v154 FLOW: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV154FLOWRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV154FLOWRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@2bcc -- REVIEWED 2026-11-24 v154 FLOW: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
