@@ -29,7 +29,7 @@
   "verified": {
     "date": "2026-11-23",
     "by": "ENGINE",
-    "build": "1.53.0-alpha",
-    "surfaceHash": "3e497be9e452533907ae61a5c2dc32d7532aafd3df9bef212a0e5410bf44e5df"
+    "build": "1.54.0-alpha",
+    "surfaceHash": "650199a00ae1ce175217901df5aa549dfdbdd373a88061192d919882f8df1a83"
   }
 }

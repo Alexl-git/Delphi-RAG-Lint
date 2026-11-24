@@ -67,5 +67,11 @@
       "ask": "How do I delete old database backups safely?",
       "command": "drag-lint repo backup purge --keep 3"
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-11-23",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha",
+    "surfaceHash": "ed375b2a8b05ef8382f87e9366b7c5a2f8fed9e5fff000e454e0c3b152c61d3c"
+  }
 }

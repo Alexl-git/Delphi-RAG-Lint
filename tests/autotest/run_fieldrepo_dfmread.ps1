@@ -41,7 +41,7 @@ $Exe = (Resolve-Path -LiteralPath $Exe).Path
 $work = Join-Path ([IO.Path]::GetTempPath()) ('dl-repo-dfm-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($work) | Out-Null
 function Run([string[]]$a) {
-  $o = & $Exe @a 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = (($o | ForEach-Object { "$_" }) -join "`n") }
 }
 function Dfm([string[]]$more, $dfm = $script:dfm, $r = $script:x) { Run (@('repo', 'read-dfm', '--repo', $r, '--dfm', $dfm, '--direction', 'dfm-to-repo') + $more) }
@@ -55,7 +55,7 @@ try {
     Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + $bat + '" "' + $work + '" > "' + $blog + '" 2>&1"') -Wait -NoNewWindow
     $bl = Get-Content -LiteralPath $blog -Raw
     Check 'U0 the unit tests build' (($bl -match 'BUILD_EXITCODE=0') -and ($bl -notmatch 'Error: E\d+')) $blog
-    $u = (& (Join-Path $work 'DfmReadTests.exe') 2>&1 | ForEach-Object { "$_" })
+    $u = (& { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'DfmReadTests.exe') 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
     $uc = $LASTEXITCODE
     $u | Where-Object { $_ -match '^FAIL' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     $sum = ($u | Where-Object { $_ -match '^Summary: ' } | Select-Object -Last 1)
@@ -92,7 +92,7 @@ try {
   [IO.Directory]::CreateDirectory($bin) | Out-Null
   Get-ChildItem $fix -File | ForEach-Object { [IO.File]::Copy($_.FullName, (Join-Path $bin $_.Name)) }
   $conv = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\convert.exe'
-  $null = & $conv -b -i (Join-Path $bin 'uOrders.dfm') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $conv -b -i (Join-Path $bin 'uOrders.dfm') 2>&1 | ForEach-Object { "$_" } }
   $first = [IO.File]::ReadAllBytes((Join-Path $bin 'uOrders.dfm'))[0]
   $rb = Dfm @() (Join-Path $bin 'uOrders.dfm')
   Check 'D6 a binary DFM gives the same output as its text form' (($first -in 0xFF, 0x54) -and ($rb.Code -eq 0) -and ($rb.Out -eq $r.Out)) "first byte $first`n$($rb.Out)"
@@ -231,8 +231,8 @@ end
   Check 'D15c a hand-kept column the DFM does not state survives apply' (($r.Code -eq 0) -and $vt.Contains('DISPLAY_WIDTH=77')) $r.Out
   Check 'D15d a hand-kept value the DFM contradicts is replaced and logged' ((Has $r 'replacing HAND with #,##0') -and (Has $r 'applied: 1 changes') -and -not $vt.Contains('HAND')) $r.Out
   # json
-  $o = & $Exe repo read-dfm --repo $y --dfm $dfm --direction dfm-to-repo --json 2>$null
-  $j = ($o -join "`n") | ConvertFrom-Json
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe repo read-dfm --repo $y --dfm $dfm --direction dfm-to-repo --json 2>$null }
+  $j = ($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'D12 --json: one object, same counts' (($j.totals.datasets -eq 6) -and ($j.totals.unresolved -eq 2) -and ($j.totals.fields.calc -eq 4) -and ($j.changeSet.count -eq 21) -and ($j.changeSet.blocked -eq 4) -and ($j.applied -eq 0) -and ($j.datasets.Count -eq 6)) ($o -join "`n")
 
   # ---- grid columns and event columns ----

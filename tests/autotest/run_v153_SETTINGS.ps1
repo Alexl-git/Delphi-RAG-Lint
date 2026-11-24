@@ -61,6 +61,8 @@ try {
   $R = Run (@('settings', 'get', 'lint.profile') + $Pj)
   Check 'S1 get lint.profile default is empty, exit 0' (($R.code -eq 0) -and ($R.out.Trim() -eq '')) "code=$($R.code) out=[$($R.out)]"
   $R = Run (@('settings', 'get', 'taint.envSource') + $Pj)
+  $Rb = Run (@('settings', 'get', 'backupDir') + $Pj)
+  Check 'S1 get backupDir (1.54) default is empty, exit 0' (($Rb.code -eq 0) -and ($Rb.out.Trim() -eq '')) "code=$($Rb.code) out=[$($Rb.out)]"
   Check 'S1 get taint.envSource default true' (($R.code -eq 0) -and ($R.out.Trim() -eq 'true')) "code=$($R.code) out=[$($R.out)]"
 
   # S2 set creates the file

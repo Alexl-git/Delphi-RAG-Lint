@@ -57,7 +57,9 @@ function Compare-Rule([string]$Rule, [string]$Cfg) {
 }
 
 Write-Host 'WITH THE INDEX' -ForegroundColor Cyan
+# positive-control: sql-param-mismatch
 Compare-Rule 'sql-param-mismatch' $OffCfg
+# positive-control: query-in-loop
 Compare-Rule 'query-in-loop' $OffCfg
 Compare-Rule 'field-by-name-in-loop' $OnCfg
 

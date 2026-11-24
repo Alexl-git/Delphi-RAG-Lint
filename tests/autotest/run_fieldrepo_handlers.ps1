@@ -37,7 +37,7 @@ $work = Join-Path ([IO.Path]::GetTempPath()) ('dl-repo-handlers-' + [guid]::NewG
 [IO.Directory]::CreateDirectory($work) | Out-Null
 $ansi = [Text.Encoding]::GetEncoding(1252)
 function Run([string[]]$a) {
-  $o = & $Exe @a 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = (($o | ForEach-Object { "$_" }) -join "`n") }
 }
 function ReadText($f) { [IO.File]::ReadAllText($f, $ansi) }
@@ -102,7 +102,7 @@ function Compile($dir, $dpr, $dcc) {
 }
 function ProbeOut($dir, $dpr, $dcc) {
   if (-not (Compile $dir $dpr $dcc)) { return "NOT COMPILED $script:compileLog" }
-  return ((& (Join-Path $dir "o_$dcc\$([IO.Path]::GetFileNameWithoutExtension($dpr)).exe") 2>&1 | ForEach-Object { "$_" }) -join '|')
+  return ((& { $ErrorActionPreference = 'Continue'; & (Join-Path $dir "o_$dcc\$([IO.Path]::GetFileNameWithoutExtension($dpr)).exe") 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join '|')
 }
 $fixDir = Join-Path $Repo 'tests\fixtures\fieldrepo\handlers'
 function NewForm($name) {
@@ -121,7 +121,7 @@ try {
     Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + $bat + '" "' + $work + '" > "' + $blog + '" 2>&1"') -Wait -NoNewWindow
     $bl = Get-Content -LiteralPath $blog -Raw
     Check 'U0 the unit tests build' (($bl -match 'BUILD_EXITCODE=0') -and ($bl -notmatch 'Error: [EF]\d+')) $blog
-    $u = (& (Join-Path $work 'HandlersTests.exe') 2>&1 | ForEach-Object { "$_" })
+    $u = (& { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'HandlersTests.exe') 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
     $uc = $LASTEXITCODE
     $u | Where-Object { $_ -match '^FAIL' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     $sum = ($u | Where-Object { $_ -match '^Summary: ' } | Select-Object -Last 1)
@@ -220,7 +220,7 @@ try {
   # G11 / G12
   $r = Gen (NewForm 'json') $x @('--json')
   $j = $null
-  try { $j = $r.Out | ConvertFrom-Json } catch { }
+  try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'G11 --json is one object with the same facts' (($null -ne $j) -and ($j.refused -eq 1) -and ($j.not_written -eq 0) -and ($j.units[0].written -eq $false) -and ($j.written -eq 0) -and (@($j.units[0].regions | Where-Object state -eq 'inserted').Count -eq 5)) $r.Out
   Check 'G12a no --dfm = 2' ((Run @('repo', 'gen-handlers', '--repo', $x)).Code -eq 2)
   Check 'G12b a missing repository = 1' ((Gen $d (Join-Path $work 'nope.dlrepo') @()).Code -eq 1)
@@ -255,7 +255,7 @@ try {
       Check "G14c ${how}: no temporary file is left" ((@(Get-ChildItem $a).Count -eq 3) -and (@(Get-ChildItem $b).Count -eq 3))
       $r = Two $a $b @('--apply', '--json')
       $j = $null
-      try { $j = $r.Out | ConvertFrom-Json } catch { }
+      try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
       Check "G14d ${how}: --json says the same" (($r.Code -eq 1) -and ($null -ne $j) -and ($j.not_written -eq 1) -and ($j.written -eq 0) -and ($j.units[0].error -ne '') -and ($j.units[1].error -eq '')) $r.Out
     }
     finally { if ($lock) { $lock.Dispose() } else { [IO.File]::SetAttributes($apas, 'Normal') } }

@@ -37,13 +37,13 @@ $env:LOCALAPPDATA = Join-Path $work 'local'
 $manifest = Join-Path $env:LOCALAPPDATA 'drag-lint\db-backups.json'
 $script:Bin = $Exe
 function Run([string[]]$a) {
-  $o = & $script:Bin @a 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $script:Bin @a 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = (($o | ForEach-Object { "$_" }) -join "`n") }
 }
 function JsonOf($r) {
   $line = @($r.Out -split "`n" | Where-Object { $_.StartsWith('{') })
   if ($line.Count -eq 0) { return $null }
-  return ($line[-1] | ConvertFrom-Json)
+  return ($line[-1] | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Fbk([string]$dir) { @(Get-ChildItem -LiteralPath $dir -Filter *.fbk -ErrorAction SilentlyContinue) }
 try {
@@ -99,7 +99,7 @@ COMMIT;
 INSERT INTO T VALUES (1, 'a');
 COMMIT;
 "@)
-  $null = & "$embed\isql.exe" -q -i $sql 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & "$embed\isql.exe" -q -i $sql 2>&1 | ForEach-Object { "$_" } }
   $cs = "Database=$fdb;User_Name=SYSDBA;Password=$pw"
   $r = Run @('repo', 'backup', '--connection', $cs)
   $made = Fbk $dbDir
@@ -139,7 +139,7 @@ COMMIT;
   # M2: two backups of another database
   $other = Join-Path $work 'other.fdb'
   [IO.File]::WriteAllText($sql, "CREATE DATABASE '$other' USER 'SYSDBA' PAGE_SIZE 8192;`r`nCREATE TABLE O (ID INTEGER);`r`nCOMMIT;`r`n")
-  $null = & "$embed\isql.exe" -q -i $sql 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & "$embed\isql.exe" -q -i $sql 2>&1 | ForEach-Object { "$_" } }
   $oc = "Database=$other;User_Name=SYSDBA;Password=$pw"
   $o1 = JsonOf (Run @('repo', 'backup', '--connection', $oc, '--json'))
   $o2 = JsonOf (Run @('repo', 'backup', '--connection', $oc, '--json'))

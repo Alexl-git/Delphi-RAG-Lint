@@ -127,7 +127,7 @@ function Start-Harness([int]$port, [string]$mode, [string]$enabled) {
   $script:procs += $p
   return $p
 }
-function Stop-All { foreach ($p in $script:procs) { try { if (-not $p.HasExited) { $p.Kill() } } catch { } } }
+function Stop-All { foreach ($p in $script:procs) { try { if (-not $p.HasExited) { $p.Kill(); [void]$p.WaitForExit(5000) } } catch { } } } # Kill is asynchronous: until the process is gone it holds its h_<port>.log, and the scratch folder below could not be deleted
 
 try {
   # ---- CASE A: B3.1 -- off means off --------------------------------------
@@ -235,7 +235,7 @@ try {
   $exited = $sp.WaitForExit(20000)
   Check 'the harness process exits (Stop did not hang)' $exited `
     $(if ($exited) { "" } else { "still running after 20s -- Stop() never returned" })
-  if (-not $exited) { try { $sp.Kill() } catch { } }
+  if (-not $exited) { try { $sp.Kill(); [void]$sp.WaitForExit(5000) } catch { } }
   $sOut = Get-Content $sLog -Raw -ErrorAction SilentlyContinue
   $ms = -1
   if ($sOut -match 'STOP_MS=(\d+)') { $ms = [int]$Matches[1] }
@@ -275,7 +275,7 @@ try {
   $exitedH = $hp.WaitForExit(25000)
   Check 'the harness exits with a client mid-request' $exitedH `
     $(if ($exitedH) { "" } else { "still running after 25s" })
-  if (-not $exitedH) { try { $hp.Kill() } catch { } }
+  if (-not $exitedH) { try { $hp.Kill(); [void]$hp.WaitForExit(5000) } catch { } }
   try { $cli.Close() } catch { }
   $hOut = Get-Content $hLog -Raw -ErrorAction SilentlyContinue
   $hMs = -1

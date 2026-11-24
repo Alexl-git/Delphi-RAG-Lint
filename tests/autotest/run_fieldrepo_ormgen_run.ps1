@@ -77,7 +77,7 @@ if (-not $SkipLint) {
     $js = Join-Path $dir 'lint.json'
     & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $dir 'OrmGenAssignRun.dpr') --db $db *> (Join-Path $dir 'index.log') }
     & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --enable ($rules -join ',') --json 2> (Join-Path $dir 'lint.err') | Out-File -LiteralPath $js -Encoding ascii }
-    $all = Get-Content -LiteralPath $js -Raw | ConvertFrom-Json
+    $all = Get-Content -LiteralPath $js -Raw | ConvertFrom-Json | ForEach-Object { $_ }
     $c = @{}
     $rules | ForEach-Object { $c[$_] = 0 }
     $c['lines'] = @()
