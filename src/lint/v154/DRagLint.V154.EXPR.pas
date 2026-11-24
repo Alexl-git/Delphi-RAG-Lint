@@ -48,20 +48,26 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V154.EXPR.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V154.EXPR.Support
+  ;
 
 class procedure TV154EXPRRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_DUP_OPERAND, 'bug-patterns', 'warning', 'The same Boolean operand twice in one and / or chain'));
+  ADecls.Add(V151Rule(RULE_CONTRADICTION, 'bug-patterns', 'warning', 'Comparisons of one variable with literals that cannot all hold in an and chain'));
+  ADecls.Add(V151Rule(RULE_WARNINGS_OFF, 'bug-patterns', 'hint', 'Warnings switched off and never switched back on in the file'));
+  ADecls.Add(V151Rule(RULE_NAME_READS_ITSELF, 'bug-patterns', 'warning', 'A function that assigns its own name reads it back: this is a recursive call, not the result'));
+  ADecls.Add(V151Rule(RULE_BOOL_PRECEDENCE, 'bug-patterns', 'warning', 'Boolean comparison whose and / or binds tighter than the comparison'));
+  ADecls.Add(V151Rule(RULE_HOMOGLYPH, 'security', 'warning', 'Identifier that mixes Latin letters with look-alike Cyrillic or Greek letters'));
 end;
 
 class function TV154EXPRRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
-  Result:= nil;
+  Result:= CheckLogicalChains(ACtx) + CheckBooleanPrecedence(ACtx) + CheckFunctionNameReads(ACtx);
 end;
 
-class function TV154EXPRRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV154EXPRRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@9646 -- REVIEWED 2026-11-24 v154 EXPR: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
@@ -69,9 +75,11 @@ end;
 class function TV154EXPRRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
 begin
   Result:= nil;
+  if ACtx.Wants(RULE_WARNINGS_OFF) then Result:= CheckWarningsRestored(AFilePath, ABytes);
+  if ACtx.Wants(RULE_HOMOGLYPH) then Result:= Result + CheckHomoglyphs(AFilePath, ABytes);
 end;
 
-class function TV154EXPRRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV154EXPRRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@36a0 -- REVIEWED 2026-11-24 v154 EXPR: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
