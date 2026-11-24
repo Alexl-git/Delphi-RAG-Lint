@@ -23,6 +23,7 @@
     W16 conditional directives in the unit
     W17 two forms, one form given twice
     W18 the parts of one lookup wiring are written together
+    W19 no selected change names a field that the same selection deletes
   Run: pwsh -File tests\autotest\run_fieldrepo_dfmwrite.ps1 [-Exe <drag-lint.exe>] [-SkipUnit] [-SkipForm]
        -SkipForm leaves out W6 and the load half of W7 (a machine without DevExpress).
 #>
@@ -398,6 +399,33 @@ end
   Put $ldfm ((Text $ldfm).Replace("LookupResultField = 'NAME'", "LookupResultField = 'ID'"))
   $r = Write-Dfm @() $ldfm
   Check 'W18d one blocked part blocks the whole wiring' (($r.Out -match 'LookupResultField: ID -> NAME\n  BLOCKED: qryTools has no field for TOOLS\.NAME') -and ($r.Out -match 'LookupDataSet: qryOther -> qryTools\n  BLOCKED: part of a lookup wiring that is blocked \(change \d+\)') -and ($r.Out -match 'KeyFields: QTY -> TOOLID\n  BLOCKED: part of a lookup wiring that is blocked')) $r.Out
+  # ---- a field wired and deleted in one selection ----
+  $wz = Join-Path $work 'wz.dlrepo'
+  EditRepo $y $wz { param($t) (SetCol $t 'ORDERS|TOOL' 'SOURCEKEY' 'XCOL').Replace('|SUM(QTY)', '|SUM(XCOL)') }
+  $all = @('--dataset', 'qryMain', '--names', 'all')
+  $more = "    object qryMainXCOL: TIntegerField`n      FieldName = 'XCOL'`n    end`n    object qryMainYCOL: TIntegerField`n      FieldName = 'YCOL'`n    end`n"
+  Put (Join-Path $ld 'uLook.pas') "unit uLook;`ninterface`nuses Data.DB;`ntype`n  TfrmLook = class(TForm)`n    qryMain: TFDQuery;`n    qryMainXCOL: TIntegerField;`n    qryMainYCOL: TIntegerField;`n  end;`nimplementation`nend.`n"
+  $wpas = Text (Join-Path $ld 'uLook.pas')
+  function WireForm { LookForm 'qryTools' $plainTool
+    Put $ldfm ((Text $ldfm).Replace("    object qryMainTOOL:", $more + "    object qryMainSUMQ: TAggregateField`n      FieldName = 'SUMQ'`n      Expression = 'SUM(QTY)'`n    end`n    object qryMainTOOL:")) }
+  function Both($what, $pattern) {
+    $r = Write-Dfm $all $ldfm $wz
+    $w = IdOf $r $pattern; $dx = IdOf $r 'delete uLook\.dfm qryMainXCOL'; $dy = IdOf $r 'delete uLook\.dfm qryMainYCOL'
+    $h = Hash $ldfm; $hp2 = Hash (Join-Path $ld 'uLook.pas'); $n = (Backups $ld).Count
+    PutSel $sel $r @($w, $dx)
+    $x1 = Write-Dfm ($all + @('--select', $sel)) $ldfm $wz
+    Check "W19 $what`: wiring to a deleted field is refused, nothing written" (($w -ne '') -and ($dx -ne '') -and ($x1.Code -eq 2) -and ($x1.Out -match "deletes qryMainXCOL, but the form would still name 'XCOL': ") -and ($h -eq (Hash $ldfm)) -and ($hp2 -eq (Hash (Join-Path $ld 'uLook.pas'))) -and ($n -eq (Backups $ld).Count)) ($r.Out + $x1.Out)
+    PutSel $sel $r @($w, $dy)
+    $x1 = Write-Dfm ($all + @('--select', $sel)) $ldfm $wz
+    Check "W19 $what`: control: deleting an unrelated field with it works" (($dy -ne '') -and ($x1.Code -eq 0) -and (Has $x1 'applied: 2 changes') -and ((Text $ldfm) -notmatch 'YCOL') -and ((Text $ldfm) -match 'XCOL')) $x1.Out
+    Put (Join-Path $ld 'uLook.pas') $wpas
+  }
+  WireForm
+  Both 'KeyFields' 'update uLook\.dfm qryMainTOOL KeyFields: QTY -> XCOL'
+  WireForm
+  Both 'Expression' 'update uLook\.dfm qryMainSUMQ Expression: SUM\(QTY\) -> SUM\(XCOL\)'
+  Put $ldfm ($noTool.Replace("    object qryMainTOOLID", $more + "    object qryMainTOOLID") + "$plainTool`nend`n")
+  Both 'a new lookup' 'insert uLook\.dfm qryMainTOOL:'
   # ---- M1: by-name bindings ----
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID') (Join-Path $nd 'uAllKinds.dfm')
   Check 'W13a a column of a tree list binds NOTE, a grid QTY; OLDCOL is free' (($r.Out -match "delete uAllKinds\.dfm memOrdersNOTE: [^\n]*\n  BLOCKED: the DFM names 'NOTE': TreeNOTE\.DataBinding\.FieldName") -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersQTY: [^\n]*\n  BLOCKED: the DFM names') -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersOLDCOL: [^\n]*\n  \(unchecked\)')) $r.Out

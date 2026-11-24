@@ -35,6 +35,8 @@ type
     /// <summary>Dataset and field component names.</summary>
     Dataset: string;
     Component: string;
+    /// <summary>dwaDelete: FieldName of the removed field.</summary>
+    FieldName: string;
     /// <summary>Class of the field (its declaration in the unit, the order of its properties).</summary>
     FieldClass: string;
     /// <summary>dwaSet, dwaRemove: the property; dwaSet: its DFM literal.</summary>
@@ -103,7 +105,8 @@ function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const 
 /// <param name="pChosen">Changes to apply.</param>
 /// <returns>Only the files whose bytes change. Every new DFM was converted to binary by the RTL and read again.</returns>
 /// <exception cref="EDfmWriteError">A chosen change is blocked, or the result does not read back as planned.</exception>
-/// <exception cref="EDfmWriteSelection">A chosen change needs one that was not chosen.</exception>
+/// <exception cref="EDfmWriteSelection">A chosen change needs one that was not chosen, or names a field that another one
+/// deletes.</exception>
 /// <remarks>No file is read or written: the applier for an open designer uses this too.</remarks>
 function RenderDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>): TArray<TDfmwOutput>;  // dl:ok unused-public-symbol@ad3b -- REVIEWED 2026-11-23 DFMWFIX: the in-memory half for the open designer (plan 1.54 lane TT-OTA)
 
@@ -342,7 +345,6 @@ type
     function ClassOfRow(const pRow: TRepoField): string;
     function SizeOfRow(const pRow: TRepoField): Integer;
     function NewComponentName(const pField: string): string;
-    function BindingsOf(const pField: TDfmrField): string;
     function DeleteBlockReason(const pField: TDfmrField): string;
   public
     constructor Create(pRepo: TFDConnection);
@@ -1504,18 +1506,18 @@ begin
 end;
 
 { Every place of the form that binds the field by its name. A persistent field of another dataset only has the same name. }
-function TDfmWritePlanner.BindingsOf(const pField: TDfmrField): string;
+function BindingsIn(pDoc: TDfmDocument; const pComponent, pFieldName: string): string;
 var
   VString: TDfmwString;
   VObject: TDfmwObject;
   VPlaces: TArray<string>;
 begin
   VPlaces := nil;
-  for VString in FDoc.Strings do
+  for VString in pDoc.Strings do
   begin
-    VObject := FDoc.Objects[VString.ObjectIndex];
-    if SameText(VObject.Name, pField.CompName) or (EndsText('Field', VObject.ObjClass)
-      and MatchText(VString.ItemProp, [PROP_FIELD_NAME, 'Origin'])) or not NamesField(VString, pField.FieldName) then
+    VObject := pDoc.Objects[VString.ObjectIndex];
+    if SameText(VObject.Name, pComponent) or (EndsText('Field', VObject.ObjClass)
+      and MatchText(VString.ItemProp, [PROP_FIELD_NAME, 'Origin'])) or not NamesField(VString, pFieldName) then
       Continue;
     VPlaces := VPlaces + [VObject.Name + '.' + VString.ItemProp];
   end;
@@ -1534,7 +1536,7 @@ begin
   VRefs := FDoc.ReferencesTo(pField.CompName);
   if Length(VRefs) > 0 then
     Exit('used in the DFM: ' + string.Join(', ', VRefs));
-  Result := BindingsOf(pField);
+  Result := BindingsIn(FDoc, pField.CompName, pField.FieldName);
   if Result <> '' then
     Exit('the DFM names ' + QuotedStr(pField.FieldName) + ': ' + Result);
   if FUnit = nil then
@@ -1553,6 +1555,7 @@ var
   VReason: string;
 begin
   VItem := NewItem(dwaDelete, pField.CompName, pField.FieldClass);
+  VItem.FieldName := pField.FieldName;
   try
     VReason := DeleteBlockReason(pField);
   except
@@ -1796,6 +1799,17 @@ begin
   end;
 end;
 
+{ A deleted field was bound nowhere before: a binding in the new text is from a change of the same selection. }
+procedure CheckDeleted(pDoc: TDfmDocument; const pFile: TDfmwFile; const pItem: TDfmwItem);
+var
+  VPlaces: string;
+begin
+  VPlaces := if pItem.FieldName = '' then '' else BindingsIn(pDoc, pItem.Component, pItem.FieldName);
+  if VPlaces <> '' then
+    raise EDfmWriteSelection.CreateFmt('%s: the selection deletes %s, but the form would still name %s: %s',
+      [ExtractFileName(pFile.DfmName), pItem.Component, QuotedStr(pItem.FieldName), VPlaces]);
+end;
+
 { Reads the new DFM back: the RTL converts it and every planned change is there. }
 procedure CheckDfm(const pBytes: TBytes; const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>);
 var
@@ -1817,6 +1831,8 @@ begin
         VOk := not VDoc.TryProp(VObject, VItem.PropName, VText);
       if not VOk then
         raise EDfmWriteError.CreateFmt('%s: the change of %s does not read back', [ExtractFileName(pFile.DfmName), VItem.Component]);
+      if VItem.Action = dwaDelete then
+        CheckDeleted(VDoc, pFile, VItem);
     end;
   finally
     VDoc.Free;

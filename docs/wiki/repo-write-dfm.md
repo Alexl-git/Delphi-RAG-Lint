@@ -58,7 +58,8 @@ dataset; a unit that is missing, does not declare the form class or does not use
 form or its unit still needs. "Needs" is wide: the component, or the field name as a word of any string of the DFM
 (`DataField`, `DataBinding.FieldName`, `KeyFields`, `LookupResultField`, `MasterFields`, `IndexFieldNames`, an
 expression or filter, a SQL parameter; captions and hints do not count), or in a string of the unit. A control of
-another dataset that binds the same name counts too. Other forms and units are not searched.
+another dataset that binds the same name counts too. A selection that deletes a field and also makes the form name it is
+refused (exit 2). Other forms and units are not searched.
 
 **Safety.** Every byte outside a planned change stays the same: encoding, line ends, indentation, hand formatting. A
 binary DFM is refused, and so is one that Delphi cannot convert. The result is converted to binary and read back before
