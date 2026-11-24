@@ -3628,6 +3628,31 @@ begin
   if Length(Raw) = 0 then Exit(McEmitTagged(C, AOpen, AValue, AClose));
   Result:= ALinePrefix + string.Join(sLineBreak + ALinePrefix, Raw);
 end;
+// INBOX-orm3-server-153 item 5: a plain, UNTAGGED /// note becomes a <summary> with
+// its own line breaks kept (a numbered list must not collapse into one line). The
+// parser's Summary is whitespace-collapsed, so the lines are taken from RawBlock. ''
+// when the comment is not an untagged one or has a single line -- McEmitPreserved's
+// rebuild is already verbatim there. The next run meets a TAGGED multi-line summary,
+// which VerbatimTagLines carries through unchanged, so this is written once.
+function McEmitUntaggedSummary(const C: TMergeCtx): string;
+var
+  Lines: TArray<string>;
+  First: Integer;
+  Last : Integer;
+begin
+  Result:= '';
+  if C.AExisting.Format <> dfOneline then Exit;
+  Lines:= StringReplace(C.Eff.RawBlock, #13#10, #10, [rfReplaceAll]).Split([#10]);
+  First:= 0;
+  Last := High(Lines);
+  while (First <= Last) and (Trim(Lines[First]) = '') do Inc(First);
+  while (Last >= First) and (Trim(Lines[Last]) = '') do Dec(Last);
+  if First >= Last then Exit;
+  Result:= C.APrefix + '<summary>' + Trim(Lines[First]);
+  for var I: Integer:= First + 1 to Last do
+    Result:= Result + sLineBreak + C.LinePrefix + TrimRight(Lines[I]);
+  Result:= Result + '</summary>';
+end;
 // v(ADP3 T9): the body of this test now lives on TDocRegions itself, as
 // IsEngineOwnedTagText -- Doc.Drift's harvest-drift check needs the SAME
 // ownership test, and a second hand-expansion of its two arms is exactly how
@@ -4298,7 +4323,12 @@ begin
   // written at all.
   if C.StandaloneSummary.HasSummaryTag and (not McIsEngineOwnedRegardlessOfContent(C.SummaryRaw))
      and (not McIsBlankBody(C.SummaryRaw)) then
-    C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'summary', '<summary>', C.SummaryRaw, '</summary>'))
+  begin
+    var Untagged: string:= McEmitUntaggedSummary(C);
+    if Untagged = '' then
+      Untagged:= McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'summary', '<summary>', C.SummaryRaw, '</summary>');
+    C.Sb.AppendLine(Untagged);
+  end
   // v(SESSION 74): AUTO_SUM, not AUTO_MARK. This arm is also the MIGRATION
   // for every legacy bare-AUTO_MARK summary: reaching it means the source
   // comment still yields prose, so the tag is the engine's, and it is
