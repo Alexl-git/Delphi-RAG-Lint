@@ -3,7 +3,7 @@ unit DRagLint.V154.FLOW;
 { Wave v154 (1.54.0-alpha) lane FLOW -- managed-result-read-first, same-variable-two-var-params,
   address-of-nested-routine, var-param-never-written, value-param-assigned, constant-return,
   redundant-field-init, absolute-overlay (G-08 G-09 G-17 G-18 G-19 G-31 G-33 G-39).
-  Scaffold created EMPTY by lane FRAME; lane FLOW owns this unit and DRagLint.V154.FLOW.Support.
+  Wiki: docs\wiki\v154-flow-rules.md. Helpers: DRagLint.V154.FLOW.Support.
   Called only by DRagLint.V151.Dispatch (the ONE provider mechanism; v154 lanes reuse the
   DRagLint.V151.Api types). }
 
@@ -48,17 +48,57 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V154.FLOW.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  System.StrUtils
+  , DRagLint.V154.FLOW.Support
+  ;
 
+const
+  CATEGORY_BUG = 'bug-patterns';
+  CATEGORY_FLOW = 'data-flow';
+  CATEGORY_REFACTORING = 'refactoring';
+  SEVERITY_WARNING = 'warning';
+  SEVERITY_HINT = 'hint';
+  { OFF unless the config or --rule asks for them: computed only then }
+  OFF_RULES: array[0..3] of string = (RULE_VAR_UNWRITTEN, RULE_VALUE_SET, RULE_CONST_RETURN, RULE_FIELD_INIT);
+
+{ The defaults follow "Measured" in docs\wiki\v154-flow-rules.md. }
 class procedure TV154FLOWRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_RESULT_FIRST, CATEGORY_FLOW, SEVERITY_WARNING, 'Result of a string, dynamic array, interface or Variant function read before it is set'));
+  ADecls.Add(V151Rule(RULE_SAME_VAR, CATEGORY_BUG, SEVERITY_WARNING, 'One variable passed to two parameters that can change it'));
+  ADecls.Add(V151Rule(RULE_NESTED_ADDR, CATEGORY_BUG, SEVERITY_WARNING, 'Address of a nested routine taken'));
+  ADecls.Add(V151Rule(RULE_VAR_UNWRITTEN, CATEGORY_REFACTORING, SEVERITY_HINT, 'var parameter that is never written', False));
+  ADecls.Add(V151Rule(RULE_VALUE_SET, CATEGORY_REFACTORING, SEVERITY_HINT, 'By-value parameter used as a local variable', False));
+  ADecls.Add(V151Rule(RULE_CONST_RETURN, CATEGORY_FLOW, SEVERITY_HINT, 'Function whose every assignment to Result is the same literal', False));
+  ADecls.Add(V151Rule(RULE_FIELD_INIT, CATEGORY_REFACTORING, SEVERITY_HINT, 'Constructor sets a field to the value a new object already has', False));
+  ADecls.Add(V151Rule(RULE_OVERLAY, CATEGORY_BUG, SEVERITY_HINT, 'Variable declared absolute over another variable'));
 end;
 
 class function TV154FLOWRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  Run: TFlowRun;
+
+  function Wanted(const ARule: string): Boolean;
+  begin
+    Result:= ACtx.Wants(ARule) and ((not MatchStr(ARule, OFF_RULES)) or SameText(ACtx.NarrowRule, ARule) or ACtx.Cfg.ShouldKeep(ARule, True));
+  end;
+
 begin
-  Result:= nil;
+  Run:= TFlowRun.Create(ACtx);
+  try
+    if Wanted(RULE_RESULT_FIRST) then Run.CheckResults;
+    if Wanted(RULE_SAME_VAR) then Run.CheckArguments;
+    if Wanted(RULE_NESTED_ADDR) then Run.CheckNestedAddresses;
+    if Wanted(RULE_VAR_UNWRITTEN) then Run.CheckVarParams;
+    if Wanted(RULE_VALUE_SET) then Run.CheckValueParams;
+    if Wanted(RULE_CONST_RETURN) then Run.CheckConstants;
+    if Wanted(RULE_FIELD_INIT) then Run.CheckFieldInits;
+    if Wanted(RULE_OVERLAY) then Run.CheckOverlays;
+    Result:= Run.Findings;
+  finally
+    Run.Free;
+  end;
 end;
 
 class function TV154FLOWRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
