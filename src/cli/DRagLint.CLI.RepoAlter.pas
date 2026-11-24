@@ -182,6 +182,7 @@ var
   VTicket: TFrPrecheckTicket;
   VReport: TFrAlterReport;
   VIds: TArray<Integer>;
+  VLine: string;
 begin
   Result := EXIT_OK;
   VReport := Default(TFrAlterReport);
@@ -203,11 +204,19 @@ begin
   VIds := ChosenIds(VReport.Plan, pArgs.SelectFile, pArgs.Apply);
   if pArgs.Apply then
   begin
-    VReport.Outcome := ApplyAlterPlan(VProvider, VReport.Plan, VTicket, VIds,
-      procedure
-      begin
-        VReport.Backup := BackupBeforeApply(pConnection, pArgs.Table);
-      end);
+    try
+      VReport.Outcome := ApplyAlterPlan(VProvider, VReport.Plan, VTicket, VIds,
+        procedure
+        begin
+          VReport.Backup := BackupBeforeApply(pConnection, pArgs.Table, VProvider.ReadScalar(FB_IDENTITY_SQL));
+        end);
+    except
+      { refused after the backup was made (the table changed meanwhile): there is no report, the file is named here }
+      if VReport.Backup.FileName <> '' then
+        for VLine in RenderBackupText(VReport.Backup) do
+          Writeln(ErrOutput, VLine);
+      raise;
+    end;
     ScrubOutcome(VReport.Outcome, pConnection);
     VReport.HasOutcome := True;
     Result := if VReport.Outcome.Success then EXIT_OK else EXIT_FAIL;

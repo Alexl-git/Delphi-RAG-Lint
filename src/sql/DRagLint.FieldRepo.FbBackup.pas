@@ -4,7 +4,8 @@ unit DRagLint.FieldRepo.FbBackup;
   TFDIBRestore, no gbak.exe) with a restore test into a temporary database.
 
   The SERVER writes the backup file and the temporary database, so the server must be on this machine: otherwise free
-  space, size and date cannot be checked here. Any other host is refused before anything is opened. }
+  space, size and date cannot be checked here. Any other host is refused before anything is opened, as FireDAC resolves
+  the connection string; what the open connection reports (attachment, database) is checked again. }
 
 interface
 
@@ -25,6 +26,11 @@ type
     /// <summary>Table whose row count is compared too; '' = only the table list.</summary>
     TableName: string;
     Verify: TFrVerifyMode;
+    /// <summary>What FB_IDENTITY_SQL returned on the connection that is going to change the database; the backup is
+    /// refused when its own connection reports another value. 0 = not compared.</summary>
+    Identity: Int64;
+    /// <summary>Test seam: "protocol|address" of the attachment; nil = ask the server.</summary>
+    Attachment: TFunc<string>;
     /// <summary>Test seam: free bytes of a folder; nil = ask the disk.</summary>
     FreeSpace: TFunc<string, Int64>;
     /// <summary>Test seam: called with the file name after the source was read, before the backup starts.</summary>
@@ -44,15 +50,31 @@ type
     Leftover: string;
   end;
 
-/// <summary>The host a connection string names, when it is not this machine.</summary>
+const
+  /// <summary>A number that tells one database from another: a hash of its file name with its creation time.</summary>
+  FB_IDENTITY_SQL = 'SELECT BIN_XOR(HASH(TRIM(MON$DATABASE_NAME)), ' +
+    'CAST(DATEDIFF(MILLISECOND FROM TIMESTAMP ''2000-01-01 00:00:00'' TO CAST(MON$CREATION_DATE AS TIMESTAMP)) AS BIGINT)) ' +
+    'FROM MON$DATABASE';
+
+/// <summary>The host FireDAC would connect to with a connection string, when it is not this machine.</summary>
 /// <param name="pConnection">The --connection value.</param>
-/// <returns>The host (or the protocol that is not supported); '' = this machine. Pure.</returns>
+/// <returns>The host (or the protocol that is not supported); '' = this machine.</returns>
+/// <exception cref="EFrBackupError">A key is given twice, or there is no Database.</exception>
+/// <remarks>Reads FireDAC's own definition ($(NAME) expanded); nothing is opened.</remarks>
 function RemoteFbHost(const pConnection: string): string;  // dl:ok unused-public-symbol@3f08 -- REVIEWED 2026-11-23 ALTERBK: the pure part is the test seam; BackupTests.dpr (outside the indexed project) calls it
 
-/// <summary>Refuses a connection string whose server is another machine.</summary>
+/// <summary>Refuses a connection string whose server is another machine, or that is ambiguous.</summary>
 /// <param name="pConnection">The --connection value.</param>
-/// <exception cref="EFrBackupError">The server is not this machine. Nothing is opened.</exception>
+/// <exception cref="EFrBackupError">The server is not this machine, a key is given twice, or there is no Database.
+/// Nothing is opened.</exception>
 procedure RequireLocalFbServer(const pConnection: string);
+
+/// <summary>The database file a connection string names.</summary>
+/// <param name="pConnection">The --connection value.</param>
+/// <returns>MON$DATABASE_NAME, the name the list of backups records.</returns>
+/// <exception cref="EFrBackupError">As RequireLocalFbServer, or the server reports a remote attachment.</exception>
+/// <remarks>Opens the database and only reads.</remarks>
+function FbDatabaseFile(const pConnection: string): string;
 
 /// <summary>Backs a database up, verifies the backup and records it.</summary>
 /// <param name="pRequest">What and where.</param>
@@ -62,7 +84,7 @@ procedure RequireLocalFbServer(const pConnection: string);
 /// verification failed. A backup that was written but not verified is recorded as 'failed'.</exception>
 /// <remarks>Only reads the source database. Free space is checked first: one database size for the backup and, with
 /// fvmFull, one more for the temporary database, which has a new unique name in the backup folder and is the only database
-/// that is dropped. Messages hold no password of their own; the caller scrubs what the driver adds. Not thread-safe.</remarks>
+/// that is dropped. It is opened without its database triggers. Messages hold no password of their own; the caller scrubs what the driver adds. Not thread-safe.</remarks>
 function BackupFbDatabase(const pRequest: TFrBackupRequest; const pManifest: string): TFrBackupResult;
 
 implementation
@@ -83,7 +105,6 @@ uses
   DRagLint.FieldRepo.DbProviderFb;
 
 const
-  BACKUP_EXT = '.fbk';
   TEMP_PREFIX = 'drag-lint-verify-';
   TEMP_EXT = '.fdb';
   { head room over the size of the database: 10 % }
@@ -223,16 +244,49 @@ begin
   end;
 end;
 
-function ConnectionValue(const pConnection, pKey: string): string;
+{ The first key a connection string gives twice; FireDAC takes the first value, a reader may see the last. }
+function DuplicateKey(const pConnection: string): string;
 var
-  VPair: string;
+  VKeys: TStringList;
+  VPair, VKey: string;
 begin
   Result := '';
-  for VPair in pConnection.Split([';'], TStringSplitOptions.ExcludeEmpty) do
-    if SameText(Trim(Copy(VPair, 1, Pos('=', VPair + '=') - 1)), pKey) then
-      Result := Trim(Copy(VPair, Pos('=', VPair + '=') + 1, MaxInt));
+  VKeys := TStringList.Create;
+  try
+    for VPair in pConnection.Split([';'], TStringSplitOptions.ExcludeEmpty) do
+    begin
+      VKey := Trim(Copy(VPair, 1, Pos('=', VPair + '=') - 1));
+      if VKey = '' then
+        Continue;
+      if VKeys.IndexOf(VKey) >= 0 then
+        Exit(VKey);
+      VKeys.Add(VKey);
+    end;
+  finally
+    VKeys.Free;
+  end;
 end;
 
+{ The definition FireDAC would open, built as OpenSourceConnection does; it is never opened. The caller frees it. }
+function FbDefinition(const pConnection: string): TFDConnection;
+var
+  VKey, VPair: string;
+begin
+  VKey := DuplicateKey(pConnection);
+  if VKey <> '' then
+    raise EFrBackupError.CreateFmt('%s is given twice in --connection: which one counts is not clear', [VKey]);
+  Result := TFDConnection.Create(nil);
+  try
+    for VPair in pConnection.Split([';'], TStringSplitOptions.ExcludeEmpty) do
+      if VPair.Contains('=') then
+        Result.Params.Add(Trim(Copy(VPair, 1, Pos('=', VPair) - 1)) + '=' + Trim(Copy(VPair, Pos('=', VPair) + 1, MaxInt)));
+    if Result.Params.Values['Database'].Trim = '' then
+      raise EFrBackupError.Create('--connection has no Database');
+  except
+    Result.Free;
+    raise;
+  end;
+end;
 { 'host/port' -> host, port; the port of the string wins over pPort }
 procedure SplitHost(const pText, pPort: string; pSeparator: Char; var pTarget: TFbTarget);
 var
@@ -273,7 +327,15 @@ begin
   end;
 end;
 
-function ParseTarget(const pConnection: string): TFbTarget;
+{ The port as FireDAC takes it: Port before InstanceName. }
+function TargetPort(pConn: TFDConnection): string;
+begin
+  Result := pConn.Params.Values['Port'].Trim;
+  if Result = '' then
+    Result := pConn.Params.Values['InstanceName'].Trim;
+end;
+
+function ParseTarget(pConn: TFDConnection): TFbTarget;
 const
   PROTOCOL_TCP = 'TCPIP';
   PROTOCOL_LOCAL = 'Local';
@@ -283,17 +345,23 @@ var
   VColon: Integer;
 begin
   Result := Default(TFbTarget);
-  VServer := ConnectionValue(pConnection, 'Server');
-  VProtocol := ConnectionValue(pConnection, 'Protocol');
-  VDatabase := ConnectionValue(pConnection, 'Database');
+  VServer := pConn.Params.Values['Server'].Trim;
+  VProtocol := pConn.Params.Values['Protocol'].Trim;
+  VDatabase := pConn.Params.ExpandedDatabase;
   VColon := Pos(':', VDatabase);
   if (VProtocol <> '') and not MatchText(VProtocol, [PROTOCOL_TCP, PROTOCOL_LOCAL]) then
   begin
     Result.Kind := ftkOther;
     Result.Host := VProtocol;
   end
+  else if ((VServer <> '') or (VProtocol <> '')) and (VColon > DRIVE_COLON) then
+  begin
+    { a host in Server / Protocol and another one in Database: the first would be asked to connect to the second }
+    Result.Kind := ftkOther;
+    Result.Host := Copy(VDatabase, 1, VColon - 1);
+  end
   else if (VServer <> '') or SameText(VProtocol, PROTOCOL_TCP) then
-    SplitHost(VServer, ConnectionValue(pConnection, 'Port'), '/', Result)
+    SplitHost(VServer, TargetPort(pConn), '/', Result)
   else if SameText(VProtocol, PROTOCOL_LOCAL) then
     Result.Kind := ftkXnet
   else if VDatabase.Contains('://') then
@@ -310,27 +378,112 @@ begin
   end;
 end;
 
-function RemoteFbHost(const pConnection: string): string;
+function RemoteTargetHost(const pTarget: TFbTarget): string;
 const
   LOCAL_HOSTS: array[0..4] of string = ('', 'localhost', '127.0.0.1', '::1', '[::1]');  // dl:ok hardcoded-ip-address@2bf6 -- REVIEWED 2026-11-23 ALTERBK: the loopback names are what "this machine" means; nothing to configure
-var
-  VTarget: TFbTarget;
 begin
-  VTarget := ParseTarget(pConnection);
   Result := '';
-  if (VTarget.Kind = ftkOther) or ((VTarget.Kind = ftkTcp) and not MatchText(VTarget.Host, LOCAL_HOSTS) and
-    not SameText(VTarget.Host, GetEnvironmentVariable('COMPUTERNAME'))) then
-    Result := VTarget.Host;
+  if (pTarget.Kind = ftkOther) or ((pTarget.Kind = ftkTcp) and not MatchText(pTarget.Host, LOCAL_HOSTS) and
+    not SameText(pTarget.Host, GetEnvironmentVariable('COMPUTERNAME'))) then
+    Result := pTarget.Host;
+end;
+
+function RemoteFbHost(const pConnection: string): string;
+var
+  VDefinition: TFDConnection;
+begin
+  VDefinition := FbDefinition(pConnection);
+  try
+    Result := RemoteTargetHost(ParseTarget(VDefinition));
+  finally
+    VDefinition.Free;
+  end;
+end;
+
+procedure RefuseRemote(const pHost: string);
+begin
+  if pHost <> '' then
+    raise EFrBackupError.CreateFmt('the server is not on this machine (%s): it would write the backup on its own disk, where ' +
+      'drag-lint can check neither space nor file; run the command on the server', [pHost]);
 end;
 
 procedure RequireLocalFbServer(const pConnection: string);
-var
-  VHost: string;
 begin
-  VHost := RemoteFbHost(pConnection);
-  if VHost <> '' then
-    raise EFrBackupError.CreateFmt('the server is not on this machine (%s): it would write the backup on its own disk, where ' +
-      'drag-lint can check neither space nor file; run the command on the server', [VHost]);
+  RefuseRemote(RemoteFbHost(pConnection));
+end;
+
+{ The address of an attachment ("protocol|address" of MON$ATTACHMENTS) that does not come from this machine; '' = it does:
+  no protocol (embedded), XNET, a loopback address. }
+function RemoteAddress(const pAttachment: string): string;
+const
+  XNET = 'XNET';
+  TCP = 'TCP';
+  LOOPBACK: array[0..2] of string = ('127.', '::1', '::ffff:127.');
+var
+  VProtocol, VAddress, VLoop: string;
+begin
+  VProtocol := Copy(pAttachment, 1, Pos('|', pAttachment) - 1);
+  VAddress := Copy(pAttachment, Pos('|', pAttachment) + 1, MaxInt);
+  if VAddress.Contains('/') then
+    VAddress := Copy(VAddress, 1, Pos('/', VAddress) - 1);
+  if (VProtocol = '') or SameText(VProtocol, XNET) then
+    Exit('');
+  if not VProtocol.StartsWith(TCP, True) then
+    Exit(VProtocol);
+  for VLoop in LOOPBACK do
+    if SameText(VAddress, VLoop) or (VLoop.EndsWith('.') and VAddress.StartsWith(VLoop, True)) then
+      Exit('');
+  Result := if VAddress = '' then VProtocol else VAddress;
+end;
+
+procedure PlainSql(pConn: TFDConnection);
+begin
+  pConn.TxOptions.ReadOnly := True;
+  pConn.ResourceOptions.MacroCreate := False;
+  pConn.ResourceOptions.MacroExpand := False;
+  pConn.ResourceOptions.EscapeExpand := False;
+end;
+{ Opens the database, with what FireDAC connected to and what the server says about the attachment checked. }
+function OpenLocal(const pConnection: string; const pAttachment: TFunc<string>; out pTarget: TFbTarget): TFDConnection;
+const
+  SQL_ATTACHMENT = 'SELECT COALESCE(TRIM(MON$REMOTE_PROTOCOL), '''') || ''|'' || COALESCE(TRIM(MON$REMOTE_ADDRESS), '''') ' +
+    'FROM MON$ATTACHMENTS WHERE MON$ATTACHMENT_ID = CURRENT_CONNECTION';
+var
+  VDatabase, VReported: string;
+begin
+  RequireFbConnectionSafe(pConnection);
+  RequireLocalFbServer(pConnection);
+  Result := OpenSourceConnection(pConnection, VDatabase);
+  try
+    PlainSql(Result);
+    pTarget := ParseTarget(Result);
+    RefuseRemote(RemoteTargetHost(pTarget));
+    VReported := if Assigned(pAttachment) then pAttachment() else string(Result.ExecSQLScalar(SQL_ATTACHMENT));
+    { a connection to the own name of this machine does not come from a loopback address }
+    if not SameText(pTarget.Host, GetEnvironmentVariable('COMPUTERNAME')) or (pTarget.Host = '') then
+      RefuseRemote(RemoteAddress(VReported));
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+function DatabaseFile(pConn: TFDConnection): string;
+begin
+  Result := Trim(string(pConn.ExecSQLScalar('SELECT MON$DATABASE_NAME FROM MON$DATABASE')));
+end;
+
+function FbDatabaseFile(const pConnection: string): string;
+var
+  VConn: TFDConnection;
+  VTarget: TFbTarget;
+begin
+  VConn := OpenLocal(pConnection, nil, VTarget);
+  try
+    Result := DatabaseFile(VConn);
+  finally
+    VConn.Free;
+  end;
 end;
 
 function FreeBytes(const pRequest: TFrBackupRequest; const pDir: string): Int64;
@@ -344,13 +497,6 @@ begin
   Result := VFree;
 end;
 
-procedure PlainSql(pConn: TFDConnection);
-begin
-  pConn.TxOptions.ReadOnly := True;
-  pConn.ResourceOptions.MacroCreate := False;
-  pConn.ResourceOptions.MacroExpand := False;
-  pConn.ResourceOptions.EscapeExpand := False;
-end;
 
 function TableList(pConn: TFDConnection; out pCount: Integer): string;
 var
@@ -386,7 +532,7 @@ end;
 
 function ReadSource(pConn: TFDConnection; const pTable: string): TFbSource;
 begin
-  Result.FileName := Trim(string(pConn.ExecSQLScalar('SELECT MON$DATABASE_NAME FROM MON$DATABASE')));
+  Result.FileName := DatabaseFile(pConn);
   Result.Bytes := Int64(pConn.ExecSQLScalar('SELECT CAST(MON$PAGES AS BIGINT) * MON$PAGE_SIZE FROM MON$DATABASE'));
   Result.Tables := TableList(pConn, Result.TableCount);
   Result.Rows := CountTable(pConn, pTable);
@@ -406,6 +552,8 @@ begin
   Result := ExcludeTrailingPathDelimiter(Result);
   if Result.Contains('=') then
     raise EFrBackupError.CreateFmt('the backup folder must not hold "=" in its name: %s', [Result]);
+  if ExtractFileName(pSource.FileName).Contains('=') then
+    raise EFrBackupError.CreateFmt('the Firebird service cannot back up a database with "=" in its name: %s', [pSource.FileName]);
   if TFile.Exists(Result) then
     raise EFrBackupError.CreateFmt('the backup folder is a file: %s', [Result]);
   if not ForceDirectories(Result) then
@@ -486,6 +634,8 @@ end;
 
 { A connection to the temporary database; DropDatabase removes it when the connection closes. }
 function OpenTemp(const pTarget: TFbTarget; pConn: TFDConnection; const pTemp: string): TFDConnection;
+var
+  VAdvanced: string;
 begin
   Result := TFDConnection.Create(nil);
   try
@@ -493,6 +643,9 @@ begin
     Result.Params.Assign(pConn.Params);
     Result.Params.Values['Database'] := pTarget.Prefix + pTemp;
     Result.Params.Values['DropDatabase'] := 'Yes';
+    { a trigger ON CONNECT may act outside the database }
+    VAdvanced := Result.Params.Values['IBAdvanced'].Trim;
+    Result.Params.Values['IBAdvanced'] := VAdvanced + (if VAdvanced = '' then '' else ';') + 'no_db_triggers=1';
     PlainSql(Result);
     Result.Open;
   except
@@ -554,8 +707,7 @@ begin
   Result := Default(TFrBackupEntry);
   Result.Database := pSource.FileName;
   Result.CreatedUtc := TTimeZone.Local.ToUniversalTime(Now);
-  Result.FileName := TPath.Combine(PrepareFolder(pRequest, pSource), ChangeFileExt(ExtractFileName(pSource.FileName), '') +
-    FormatDateTime('"-"yyyymmdd"-"hhnnsszzz', Now) + BACKUP_EXT);
+  Result.FileName := TPath.Combine(PrepareFolder(pRequest, pSource), BackupFileName(pSource.FileName, Now));
   if Assigned(pRequest.BeforeBackup) then
     pRequest.BeforeBackup(Result.FileName);
   if TFile.Exists(Result.FileName) or TDirectory.Exists(Result.FileName) then
@@ -573,7 +725,19 @@ begin
   Result.ModifiedUtc := TFile.GetLastWriteTimeUtc(Result.FileName);
   Result.Verified := fbvQuick;
   if Result.Size = 0 then
-    raise EFrBackupError.CreateFmt('the backup file is empty: %s', [Result.FileName]);
+    raise EFrBackupError.CreateFmt('the backup file is empty: %s%s', [Result.FileName, if RemoveOwnFile(Result.FileName) = '' then ' (removed)' else '']);
+end;
+
+{ Adds a backup to the list. Returns '' or what went wrong, the file named: it stays on disk unlisted. }
+function Recorded(const pManifest: string; const pEntry: TFrBackupEntry): string;
+begin
+  Result := '';
+  try
+    AddToBackupManifest(pManifest, pEntry);
+  except
+    on E: Exception do
+      Result := Format('the backup %s is there but not in the list: %s', [pEntry.FileName, E.Message]);
+  end;
 end;
 
 function BackupFbDatabase(const pRequest: TFrBackupRequest; const pManifest: string): TFrBackupResult;
@@ -581,18 +745,16 @@ var
   VTarget: TFbTarget;
   VConn: TFDConnection;
   VSource: TFbSource;
-  VDatabase: string;
+  VUnlisted: string;
 begin
-  RequireFbConnectionSafe(pRequest.Connection);
-  RequireLocalFbServer(pRequest.Connection);
   { a list that cannot be written to must be found before the work }
   ReadBackupManifest(pManifest);
   Result := Default(TFrBackupResult);
   Result.Rows := NO_ROWS;
-  VTarget := ParseTarget(pRequest.Connection);
-  VConn := OpenSourceConnection(pRequest.Connection, VDatabase);
+  VConn := OpenLocal(pRequest.Connection, pRequest.Attachment, VTarget);
   try
-    PlainSql(VConn);
+    if (pRequest.Identity <> 0) and (Int64(VConn.ExecSQLScalar(FB_IDENTITY_SQL)) <> pRequest.Identity) then
+      raise EFrBackupError.CreateFmt('the backup connection reached another database (%s) than the one to be changed', [DatabaseFile(VConn)]);
     VSource := ReadSource(VConn, pRequest.TableName);
     Result.Entry := WriteBackup(pRequest, VTarget, VConn, VSource);
     if Assigned(pRequest.AfterBackup) then
@@ -604,15 +766,18 @@ begin
         on E: Exception do
         begin
           Result.Entry.Verified := fbvFailed;
-          AddToBackupManifest(pManifest, Result.Entry);
-          raise EFrBackupError.CreateFmt('the backup %s was written but its verification failed: %s%s', [Result.Entry.FileName,
-            E.Message, if Result.Leftover <> '' then '; the temporary database is left: ' + Result.Leftover else '']);
+          VUnlisted := Recorded(pManifest, Result.Entry);
+          raise EFrBackupError.CreateFmt('the backup %s was written but its verification failed: %s%s%s', [Result.Entry.FileName,
+            E.Message, if Result.Leftover <> '' then '; the temporary database is left: ' + Result.Leftover else '',
+            if VUnlisted <> '' then '; ' + VUnlisted else '']);
         end;
       end;
   finally
     VConn.Free;
   end;
-  AddToBackupManifest(pManifest, Result.Entry);
+  VUnlisted := Recorded(pManifest, Result.Entry);
+  if VUnlisted <> '' then
+    raise EFrBackupError.Create(VUnlisted);
 end;
 
 end.

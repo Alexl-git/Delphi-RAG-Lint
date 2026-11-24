@@ -10,7 +10,9 @@
     C3  `repo backup --connection`: verified file beside the database, total printed, no password; --json
     C4  --backup-dir wins over the project's backupDir, which wins over "beside the database"
     C5  list: the files with their state
-    C6  purge: dry run deletes nothing; --apply deletes only old listed files; modified and foreign files stay; newest verified stays
+    C6  purge: dry run deletes nothing; --apply needs --connection and deletes only old listed files of that database; modified
+        and foreign files and the backups of other databases stay; newest verified stays
+    C7  any flag or word of the database backup without a usable --connection, and any other flag -> an error, no text backup
   Run: pwsh -File tests\autotest\run_repo_cli_backup.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
@@ -62,6 +64,25 @@ try {
   Check 'C1e nothing of it wrote a list' (-not (Test-Path -LiteralPath $manifest))
   $r = Run @('repo', 'backup', '--repo', $repo)
   Check 'C2 without --connection it is the text backup of the repository' (($r.Code -eq 0) -and (Test-Path -LiteralPath "$repo.txt")) $r.Out
+  # M6: a command line meant for the database backup never becomes the text backup (the RTL drops an empty argument: the parser then refuses --connection)
+  [IO.File]::Delete("$repo.txt")
+  $n = 0
+  foreach ($a in @(
+      @('--repo', $repo, '--verify', 'full'), @('--repo', $repo, '--backup-dir', $work), @('--repo', $repo, '--keep', '2'), @('--repo', $repo, '--table', 'T'),
+      @('--repo', $repo, '--connection', ''), @('--connection', '', '--repo', $repo), @('--connection', '--json'), @('--connection', '   ', '--repo', $repo),
+      @('--repo', $repo, 'purge', '--keep', '2'), @('--repo', $repo, 'list'), @('prune', '--repo', $repo), @('--repo', $repo, '--apply'),
+      @('--repo', $repo, '--replace'), @('--repo', $repo, '--repo', $repo), @('list', '--repo', $repo), @('purge', '--keep', '1', '--repo', $repo),
+      @('--connection', $far, '--keep', '2'), @('--connection', $far, 'purge'), @('list', '--backup-dir', $work), @('purge', '--keep', '1', '--table', 'T'),
+      @('purge', '--keep', '1', '--backup-dir', $work), @('purge', '--keep', '1', '--project', 'x.dproj'), @('--connection', $far, '--connection', $far), @('--connection', 'User_Name=SYSDBA'))) {
+    $n++
+    $r = Run (@('repo', 'backup') + $a)
+    Check "C7.$n an error, nothing written: $(($a -join ' ').Replace($pw, '***').Replace($work, '.'))" (($r.Code -ne 0) -and -not (Test-Path -LiteralPath "$repo.txt") -and ($r.Out -notmatch $pw) -and -not (Test-Path -LiteralPath $manifest) -and
+      ($r.Out -match '(?m)^repo backup: |Unknown argument: --connection$') -and ($r.Out -notmatch 'not on this machine')) $r.Out
+  }
+  $r = Run @('repo', 'backup', '--repo', $repo, '--out', "$repo.2.txt")
+  $r2 = Run @('repo', 'backup', '--repo', $repo, '--output', "$repo.2.txt")
+  Check 'C7z control: the text backup with its own flags, twice over the same file' (($r.Code -eq 0) -and ($r2.Code -eq 0) -and (Test-Path -LiteralPath "$repo.2.txt") -and
+    (@(Get-ChildItem -LiteralPath $work -Filter '*.tmp').Count -eq 0)) "$($r.Out)`n$($r2.Out)"
   $embed = New-FirebirdEmbed (Join-Path $work 'fb')
   if (-not $embed) { Write-Host 'SKIP C3-C6 no Firebird 4 on this machine'; if ($script:Failed) { exit 1 } else { exit 0 } }
   $env:FIREBIRD = $embed
@@ -113,17 +134,38 @@ COMMIT;
   $r = Run @('repo', 'backup', 'purge', '--keep', '1')
   Check 'C6a dry run: nothing deleted, nothing written' (($r.Code -eq 0) -and ($r.Out -match 'dry run: nothing deleted') -and ($r.Out -match '(?m)^delete ') -and ([IO.File]::ReadAllText($manifest) -eq $before) -and
     (Test-Path -LiteralPath $l.backups[1].file)) $r.Out
-  $r = Run @('repo', 'backup', 'purge', '--keep', '1', '--apply', '--dry-run')
+  $r = Run @('repo', 'backup', 'purge', '--keep', '1', '--apply')
+  Check 'C6y --apply without --connection -> exit 1, nothing deleted' (($r.Code -eq 1) -and ($r.Out -match '--connection') -and ([IO.File]::ReadAllText($manifest) -eq $before) -and (Test-Path -LiteralPath $l.backups[1].file)) $r.Out
+  # M2: two backups of another database
+  $other = Join-Path $work 'other.fdb'
+  [IO.File]::WriteAllText($sql, "CREATE DATABASE '$other' USER 'SYSDBA' PAGE_SIZE 8192;`r`nCREATE TABLE O (ID INTEGER);`r`nCOMMIT;`r`n")
+  $null = & "$embed\isql.exe" -q -i $sql 2>&1
+  $oc = "Database=$other;User_Name=SYSDBA;Password=$pw"
+  $o1 = JsonOf (Run @('repo', 'backup', '--connection', $oc, '--json'))
+  $o2 = JsonOf (Run @('repo', 'backup', '--connection', $oc, '--json'))
+  $r = Run @('repo', 'backup', 'list', '--connection', $oc, '--json')
+  Check 'C5c list --connection: the backups of that database' (($r.Code -eq 0) -and (@((JsonOf $r).backups).Count -eq 2)) $r.Out
+  $r = Run @('repo', 'backup', 'purge', '--keep', '1', '--apply', '--dry-run', '--connection', $cs)
   Check 'C6b --dry-run wins over --apply' (($r.Code -eq 0) -and (Test-Path -LiteralPath $l.backups[1].file)) $r.Out
-  $r = Run @('repo', 'backup', 'purge', '--keep', '1', '--apply', '--json')
+  $r = Run @('repo', 'backup', 'purge', '--keep', '1', '--apply', '--json', '--connection', $cs)
   $j = JsonOf $r
   $acts = (@($j.items) | ForEach-Object { $_.action }) -join ','
   Check 'C6c --apply: the newest stays, the modified one is skipped, the old quick one goes, the newest verified one stays' (($r.Code -eq 0) -and ($acts -eq 'keep,skip,delete,keep') -and
     -not (Test-Path -LiteralPath $l.backups[1].file) -and (Test-Path -LiteralPath $l.backups[0].file) -and (Test-Path -LiteralPath $third) -and (Test-Path -LiteralPath $l.backups[3].file)) "$acts`n$($r.Out)"
+  Check 'C6x M2: both backups of the other database are still there' ((Test-Path -LiteralPath $o1.file) -and (Test-Path -LiteralPath $o2.file)) "$($o1.file) $($o2.file)"
+  $r = Run @('repo', 'backup', 'purge', '--keep', '1', '--apply', '--connection', $oc)
+  Check 'C6w control: with its own connection the older one goes; no password printed' (($r.Code -eq 0) -and -not (Test-Path -LiteralPath $o1.file) -and (Test-Path -LiteralPath $o2.file) -and ($r.Out -notmatch $pw)) $r.Out
+  # M1: what FireDAC would open counts, not the text
+  $env:DLBK_FAR = 'srv.invalid:C:\x.fdb'
+  $r = Run @('repo', 'backup', '--connection', 'Database=$(DLBK_FAR);User_Name=SYSDBA')
+  Check 'C1f a variable that names another machine -> exit 1' (($r.Code -eq 1) -and ($r.Out -match 'not on this machine \(srv\.invalid\)')) $r.Out
+  $r = Run @('repo', 'backup', '--connection', "Server=srv.invalid;Server=localhost;Database=$fdb;User_Name=SYSDBA;Password=$pw")
+  Check 'C1g a key given twice -> exit 1' (($r.Code -eq 1) -and ($r.Out -match 'Server is given twice') -and ($r.Out -notmatch $pw)) $r.Out
   Check 'C6d the foreign file and the database are untouched' ((Test-Path -LiteralPath $foreign) -and (Test-Path -LiteralPath $fdb))
 } finally {
   $env:FIREBIRD = $savedFb
   $env:LOCALAPPDATA = $savedLocal
+  $env:DLBK_FAR = $null
   try { [IO.Directory]::Delete($work, $true) } catch { Write-Host "note: scratch folder kept: $work" }
 }
 if ($script:Failed) { Write-Host 'REPO BACKUP: FAIL' -ForegroundColor Red; exit 1 }

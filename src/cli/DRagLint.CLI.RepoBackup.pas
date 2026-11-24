@@ -1,28 +1,31 @@
 unit DRagLint.CLI.RepoBackup;
 
 { drag-lint 1.54 -- lane ALTERBK (rulings R9 / R10): `repo backup --connection` (a database backup), `repo backup list`,
-  `repo backup purge`, and the backup `repo alter-table --apply` makes first. Without --connection and without list /
-  purge `repo backup` stays the text backup of the repository (DRagLint.CLI.Repo). The flags are read from the command
-  line (ParseArgs only has to accept them). }
+  `repo backup purge`, and the backup `repo alter-table --apply` makes first. Only a command line of --repo / --project /
+  --output is the text backup of the repository (DRagLint.CLI.Repo); anything else on `repo backup` comes here and is a
+  database backup, its list, its purge, or an error. The flags are read from the command line (ParseArgs only has to
+  accept them). }
 
 interface
 
 uses
   DRagLint.FieldRepo.AlterReport;
 
-/// <summary>True when `repo backup` means database backups, not the text backup of the repository.</summary>
+/// <summary>True when `repo backup` is not the plain text backup of the repository.</summary>
 /// <param name="pSub">The sub-verb.</param>
 /// <param name="pConnection">--connection.</param>
-/// <returns>True for `backup` with --connection, `backup list` and `backup purge`.</returns>
+/// <returns>False only for `backup` with nothing but --repo, --project and --output on the command line.</returns>
+/// <remarks>So a database backup with a forgotten --connection never writes a text backup instead.</remarks>
 function IsRepoDbBackup(const pSub, pConnection: string): Boolean;
 
 /// <summary>Runs `repo backup --connection ...`, `repo backup list` or `repo backup purge --keep N [--apply]`.</summary>
 /// <param name="pRepo">--repo; refused, because a database backup has nothing to do with a repository file.</param>
 /// <param name="pConnection">--connection.</param>
 /// <param name="pJson">--json: one JSON object on stdout.</param>
-/// <returns>0 = ok (a purge dry run included); 1 = bad arguments, a failed backup, a failed verification, or a file the
-/// purge could not delete.</returns>
-/// <remarks>Never prints a password. The purge deletes nothing without --apply.</remarks>
+/// <returns>0 = ok (a purge dry run included); 1 = bad arguments (a flag or word that does not belong, has no value or is
+/// given twice), a failed backup, a failed verification, or a file the purge could not delete.</returns>
+/// <remarks>Never prints a password. The purge deletes nothing without --apply and --connection, and then only backups of
+/// the database the connection opens.</remarks>
 function RunRepoDbBackup(const pRepo, pConnection: string; pJson: Boolean): Integer;
 
 /// <summary>What is wrong with --verify on this command line.</summary>
@@ -32,10 +35,11 @@ function BackupArgsProblem: string;
 /// <summary>Makes the verified, recorded backup of `alter-table --apply`.</summary>
 /// <param name="pConnection">--connection.</param>
 /// <param name="pTable">The altered table; its row count is compared.</param>
+/// <param name="pIdentity">FB_IDENTITY_SQL as the connection that applies the changes reports it.</param>
 /// <returns>What the report prints.</returns>
 /// <exception cref="EFrBackupError">The backup or its verification failed; the message may hold driver text, scrub it
 /// with ScrubSecrets.</exception>
-function BackupBeforeApply(const pConnection, pTable: string): TFrAlterBackup;
+function BackupBeforeApply(const pConnection, pTable: string; pIdentity: Int64): TFrAlterBackup;
 
 /// <summary>Masks every password value of a connection string in a text.</summary>
 /// <param name="pText">The text.</param>
@@ -71,6 +75,12 @@ const
   MANIFEST_FILE = 'db-backups.json';
   CFG_KEY = 'backupDir';
   CFG_FILE = '_D-RAG\drag-lint-project.json';
+  FLAG_CONNECTION = '--connection';
+  FLAG_TABLE = '--table';
+  FLAG_KEEP = '--keep';
+  FLAG_APPLY = '--apply';
+  FLAG_DRY_RUN = '--dry-run';
+  FLAG_JSON = '--json';
   DATE_FORMAT = 'yyyy"-"mm"-"dd hh":"nn":"ss';
 
 function CommandLineFlag(const pFlag: string): Boolean;
@@ -108,9 +118,71 @@ begin
   end;
 end;
 
+{ The first argument that is neither one of pPlain nor one of pValued with a value of its own, or that comes twice; '' = none. }
+function StrayArgument(pFrom: Integer; const pValued, pPlain: array of string): string;
+var
+  VI: Integer;
+  VArg: string;
+  VSeen: TArray<string>;
+begin
+  Result := '';
+  VSeen := nil;
+  VI := pFrom;
+  while VI <= ParamCount do
+  begin
+    VArg := ParamStr(VI).ToLower;
+    if MatchText(VArg, VSeen) or not (MatchText(VArg, pValued) or MatchText(VArg, pPlain)) then
+      Exit(ParamStr(VI));
+    VSeen := VSeen + [VArg];
+    if MatchText(VArg, pValued) then
+    begin
+      Inc(VI);
+      if (VI > ParamCount) or (Trim(ParamStr(VI)) = '') or ParamStr(VI).StartsWith('--') then
+        Exit(VArg);
+    end;
+    Inc(VI);
+  end;
+end;
+
 function IsRepoDbBackup(const pSub, pConnection: string): Boolean;
 begin
-  Result := SameText(pSub, SUB_BACKUP) and ((pConnection <> '') or MatchText(ParamStr(WORD_ARG), [WORD_LIST, WORD_PURGE]));
+  Result := SameText(pSub, SUB_BACKUP) and ((pConnection <> '') or
+    (StrayArgument(WORD_ARG, ['--repo', '--project', '--output', '--out', '--report'], []) <> ''));
+end;
+
+{ What is on the command line that the verb does not take; '' = nothing. }
+function StrayForWord(const pWord: string): string;
+begin
+  if SameText(pWord, WORD_LIST) then
+    Result := StrayArgument(WORD_ARG + 1, [FLAG_CONNECTION], [FLAG_JSON])
+  else if SameText(pWord, WORD_PURGE) then
+    Result := StrayArgument(WORD_ARG + 1, [FLAG_CONNECTION, FLAG_KEEP], [FLAG_APPLY, FLAG_DRY_RUN, FLAG_JSON])
+  else
+    Result := StrayArgument(WORD_ARG, [FLAG_CONNECTION, '--verify', FLAG_TABLE, '--backup-dir', '--project'], [FLAG_JSON]);
+end;
+
+{ '' = usable; else what is wrong with the arguments of a database backup, its list or its purge. }
+function DbBackupProblem(const pWord, pRepo, pConnection: string): string;
+var
+  VStray: string;
+begin
+  if pRepo <> '' then
+    Exit('--repo does not go with a database backup (the text backup of the repository takes --repo, --project and --output only)');
+  Result := BackupArgsProblem;
+  if (Result <> '') or (MatchText(pWord, [WORD_PURGE]) and (CommandLineValue(FLAG_KEEP) = '')) then
+    Exit(if Result <> '' then Result else 'give --keep <number of backups per database>');
+  VStray := StrayForWord(pWord);
+  if VStray <> '' then
+    Result := Format('"%s" does not belong here, has no value or is given twice; nothing was written', [VStray])
+  else if (Trim(pConnection) = '') and not MatchText(pWord, [WORD_LIST, WORD_PURGE]) then
+    Result := 'give --connection "Database=...;User_Name=...;Password=..." (the text backup of the repository takes --repo, --project and ' +
+      '--output only); nothing was written';
+end;
+
+{ The database of --connection as the list records it; '' = no --connection. }
+function NamedDatabase(const pConnection: string): string;
+begin
+  Result := if pConnection = '' then '' else FbDatabaseFile(pConnection);
 end;
 
 function BackupArgsProblem: string;
@@ -162,7 +234,7 @@ begin
     Result := SettingBackupDir;
 end;
 
-function MakeBackup(const pConnection, pTable: string): TFrAlterBackup;
+function MakeBackup(const pConnection, pTable: string; pIdentity: Int64): TFrAlterBackup;
 var
   VRequest: TFrBackupRequest;
   VMade: TFrBackupResult;
@@ -171,6 +243,7 @@ begin
   VRequest.Connection := pConnection;
   VRequest.BackupDir := BackupDir;
   VRequest.TableName := pTable;
+  VRequest.Identity := pIdentity;
   VRequest.Verify := if SameText(CommandLineValue('--verify'), VERIFY_QUICK) then fvmQuick else fvmFull;
   Writeln(ErrOutput, 'making a backup of the database',
     if VRequest.Verify = fvmFull then ' and restoring it into a temporary database (--verify quick skips that)' else '', ' ...');
@@ -184,10 +257,12 @@ begin
   Result.TotalSize := TotalBackupSize(ReadBackupManifest(ManifestFile), Result.TotalFiles);
 end;
 
-function BackupBeforeApply(const pConnection, pTable: string): TFrAlterBackup;
+function BackupBeforeApply(const pConnection, pTable: string; pIdentity: Int64): TFrAlterBackup;
 begin
+  if pIdentity = 0 then
+    raise EFrBackupError.Create('no backup, nothing applied: the database does not say which one it is');
   try
-    Result := MakeBackup(pConnection, pTable);
+    Result := MakeBackup(pConnection, pTable, pIdentity);
   except
     on E: Exception do
       raise EFrBackupError.Create('no backup, nothing applied: ' + E.Message);
@@ -201,7 +276,7 @@ var
   VRoot: TJSONObject;
 begin
   Result := EXIT_OK;
-  VBackup := MakeBackup(pConnection, CommandLineValue('--table').Trim.ToUpper);
+  VBackup := MakeBackup(pConnection, CommandLineValue(FLAG_TABLE).Trim.ToUpper, 0);
   if not pJson then
   begin
     for VLine in RenderBackupText(VBackup) do
@@ -232,7 +307,18 @@ begin
     VERIFIED_NAMES[pEntry.Verified], pEntry.Database]);
 end;
 
-function RunList(pJson: Boolean): Integer;
+{ The recorded backups of one database; '' = of every one. }
+function EntriesOf(const pDatabase: string): TArray<TFrBackupEntry>;
+var
+  VEntry: TFrBackupEntry;
+begin
+  Result := nil;
+  for VEntry in ReadBackupManifest(ManifestFile) do
+    if (pDatabase = '') or SameText(VEntry.Database, pDatabase) then
+      Result := Result + [VEntry];
+end;
+
+function RunList(const pConnection: string; pJson: Boolean): Integer;
 var
   VEntries: TArray<TFrBackupEntry>;
   VEntry: TFrBackupEntry;
@@ -241,7 +327,7 @@ var
   VRoot, VItem: TJSONObject;
   VList: TJSONArray;
 begin
-  VEntries := ReadBackupManifest(ManifestFile);
+  VEntries := EntriesOf(NamedDatabase(pConnection));
   VTotal := TotalBackupSize(VEntries, VFiles);
   Result := EXIT_OK;
   if not pJson then
@@ -282,7 +368,7 @@ begin
       Writeln(PURGE_ACTION_NAMES[VItem.Action], '  ', EntryText(VItem.Entry), '  ', VItem.Reason,
         if VItem.Error <> '' then '  FAILED: ' + VItem.Error else '');
     if not pApply then
-      Writeln('dry run: nothing deleted (add --apply to delete)');
+      Writeln('dry run: nothing deleted (add --apply, with the --connection of the database, to delete)');
     Exit;
   end;
   VRoot := TJSONObject.Create;
@@ -304,17 +390,17 @@ begin
   end;
 end;
 
-function RunPurge(pJson: Boolean): Integer;
+function RunPurge(const pConnection: string; pJson: Boolean): Integer;
 var
   VKeep: Integer;
   VApply: Boolean;
   VItems: TArray<TFrPurgeItem>;
   VItem: TFrPurgeItem;
 begin
-  if not TryStrToInt(CommandLineValue('--keep'), VKeep) then
+  if not TryStrToInt(CommandLineValue(FLAG_KEEP), VKeep) then
     raise EFrBackupError.Create('give --keep <number of backups per database>');
-  VApply := CommandLineFlag('--apply') and not CommandLineFlag('--dry-run');
-  VItems := PurgeBackups(ManifestFile, VKeep, VApply);
+  VApply := CommandLineFlag(FLAG_APPLY) and not CommandLineFlag(FLAG_DRY_RUN);
+  VItems := PurgeBackups(ManifestFile, NamedDatabase(pConnection), VKeep, VApply);
   PrintPurge(VItems, VApply, pJson);
   Result := EXIT_OK;
   for VItem in VItems do
@@ -329,15 +415,13 @@ begin
   Result := EXIT_FAIL;
   try
     VWord := ParamStr(WORD_ARG);
-    VProblem := BackupArgsProblem;
-    if pRepo <> '' then
-      VProblem := '--repo does not go with a database backup (without --connection: the text backup of the repository)';
+    VProblem := DbBackupProblem(VWord, pRepo, pConnection);
     if VProblem <> '' then
       raise EFrBackupError.Create(VProblem);
     if SameText(VWord, WORD_LIST) then
-      Result := RunList(pJson)
+      Result := RunList(pConnection, pJson)
     else if SameText(VWord, WORD_PURGE) then
-      Result := RunPurge(pJson)
+      Result := RunPurge(pConnection, pJson)
     else
       Result := RunBackup(pConnection, pJson);
   except

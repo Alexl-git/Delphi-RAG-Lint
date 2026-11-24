@@ -150,6 +150,28 @@ COMMIT;
   $r = Alter @('--apply')
   Check 'R9d a list of backups that cannot be read -> exit 1, nothing changed, the file kept' (($r.Code -eq 1) -and ($r.Out -match 'not readable') -and ((Shape) -eq $shape0) -and ([IO.File]::ReadAllText($broken) -eq 'no list')) $r.Out
   [IO.File]::Delete($broken)
+  # the table changes while the backup is made: refused, the backup is named. The first attachment of the run is the alter's own.
+  [IO.File]::WriteAllText($sql, "CONNECT '$fdb' USER 'SYSDBA';`r`nCREATE SEQUENCE G_CONN;`r`nCOMMIT;`r`nSET TERM ^;`r`nCREATE TRIGGER TR_CONN ON CONNECT AS BEGIN IF (GEN_ID(G_CONN, 1) = 2) THEN IN AUTONOMOUS TRANSACTION DO EXECUTE STATEMENT 'ALTER TABLE T ADD Z9 INTEGER'; END^`r`nCOMMIT^`r`n")
+  $null = & "$embed\isql.exe" -q -i $sql 2>&1
+  $r = Alter @('--apply', '--verify', 'quick')
+  [IO.File]::WriteAllText($sql, "CONNECT '$fdb' USER 'SYSDBA';`r`nDROP TRIGGER TR_CONN;`r`nCOMMIT;`r`nDROP SEQUENCE G_CONN;`r`nALTER TABLE T DROP Z9;`r`nCOMMIT;`r`n")
+  $null = & "$embed\isql.exe" -q -i $sql 2>&1
+  Check 'R9j the table changed while the backup was made -> exit 1, nothing applied, the backup and the total are named' (($r.Code -eq 1) -and ($r.Out -match 'changed') -and ($r.Out -match 'backup: .*\.fbk \(\d+ bytes') -and
+    ($r.Out -match 'backups on disk: 1 file') -and ((Shape) -eq $shape0) -and ((Backups) -eq 1)) "$(Shape)`n$($r.Out)"
+  Get-ChildItem -LiteralPath $bk | ForEach-Object { [IO.File]::Delete($_.FullName) }
+  [IO.File]::Delete($broken)
+  # a failing restore test: a trigger ON CONNECT adds a row on the attachment of the backup service, after the rows were counted
+  [IO.File]::WriteAllText($sql, "CONNECT '$fdb' USER 'SYSDBA';`r`nSET TERM ^;`r`nCREATE TRIGGER TR_CONN ON CONNECT AS BEGIN INSERT INTO T (ID) SELECT COALESCE(MAX(ID), 0) + 1 FROM T; END^`r`nCOMMIT^`r`n")
+  $null = & "$embed\isql.exe" -q -i $sql 2>&1
+  $r = Alter @('--apply')
+  [IO.File]::WriteAllText($sql, "CONNECT '$fdb' USER 'SYSDBA';`r`nDROP TRIGGER TR_CONN;`r`nDELETE FROM T WHERE ID > 2;`r`nCOMMIT;`r`n")
+  $null = & "$embed\isql.exe" -q -i $sql 2>&1
+  $list = (Run @('repo', 'backup', 'list', '--json')).Out | ConvertFrom-Json
+  Check 'R9h a failing restore test -> exit 1, nothing changed, the backup recorded as failed' (($r.Code -eq 1) -and ($r.Out -match 'verification failed') -and ($r.Out -match 'row\(s\)') -and ((Shape) -eq $shape0) -and
+    (@($list.backups).Count -eq 1) -and ($list.backups[0].verified -eq 'failed')) "$(Shape)`n$($r.Out)`n$($list | ConvertTo-Json -Depth 4)"
+  Check 'R9i the temporary database is gone' (@(Get-ChildItem -LiteralPath $bk -Filter *.fdb).Count -eq 0) ((Get-ChildItem -LiteralPath $bk).Name -join ',')
+  Get-ChildItem -LiteralPath $bk | ForEach-Object { [IO.File]::Delete($_.FullName) }
+  [IO.File]::Delete($broken)
   $r = Alter @('--apply')
   $list = (Run @('repo', 'backup', 'list', '--json')).Out | ConvertFrom-Json
   Check 'R9e --apply made one verified, recorded backup and printed the total' (((Backups) -eq 1) -and ($r.Out -match 'backup: .*\.fbk \(\d+ bytes, verified full: 2 table\(s\) and view\(s\) compared, 2 row\(s\)\)') -and
