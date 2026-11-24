@@ -152,7 +152,7 @@ try {
   Check 'W3f the DFM: only the planned changes' ($cut -ceq $want) $cut
   # ---- round trip ----
   $rr = Read-Dfm @()
-  Check 'W4a read-dfm finds no difference' (($rr.Code -eq 0) -and (Has $rr 'direction dfm-to-repo, 0 changes, 0 blocked, 0 unchecked') -and (Has $rr 'memOrders (TFDMemTable) -> ORDERS: 10 data, 1 calc, 1 lookup, 1 internal-calc, 1 aggregate')) $rr.Out
+  Check 'W4a read-dfm finds no difference in a field (the two grid columns the repository never read are the only changes)' (($rr.Code -eq 0) -and (Has $rr 'direction dfm-to-repo, 2 changes, 0 blocked, 0 unchecked') -and ([regex]::Matches($rr.Out, '(?m)^\[\d+\] insert DL_GRID_COLUMNS frmAllKinds\|GridView\|').Count -eq 2) -and (Has $rr 'memOrders (TFDMemTable) -> ORDERS: 10 data, 1 calc, 1 lookup, 1 internal-calc, 1 aggregate')) $rr.Out
   $h2 = Hash $dfm; $h3 = Hash $pas
   $rw = Write-Dfm @('--dataset', 'memOrders', '--names', 'all', '--apply')
   Check 'W4b a second write has nothing to do and writes nothing' (($rw.Code -eq 0) -and (Has $rw 'applied: 0 changes') -and ($h2 -eq (Hash $dfm)) -and ($h3 -eq (Hash $pas)) -and ((Backups $forms).Count -eq 2)) $rw.Out
