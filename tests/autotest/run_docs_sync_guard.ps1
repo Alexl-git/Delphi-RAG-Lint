@@ -1453,8 +1453,9 @@ foreach ($x in @($freq.GetEnumerator() | Where-Object { $_.Value -ge 5 } | ForEa
   [void]$promoted.Add($x)
 }
 [void]$promoted.Remove('--help')
-Check 'check 9: the promoted set is a sane size' (($promoted.Count -ge 20) -and ($promoted.Count -le 60)) `
-  "promoted=$($promoted.Count) -- outside 20..60 means the block parse broke, not that the banner changed"
+# 60 -> 70 at 1.54: the repo handlers verbs put --code-dir on a 5th verb line (61 flags, every one listed below is real).
+Check 'check 9: the promoted set is a sane size' (($promoted.Count -ge 20) -and ($promoted.Count -le 70)) `
+  "promoted=$($promoted.Count) -- outside 20..70 means the block parse broke, not that the banner changed"
 Write-Host ("      [NOTE] promoted flags ({0}): {1}" -f $promoted.Count, (($promoted | Sort-Object) -join ' ')) -ForegroundColor DarkGray
 
 foreach ($name in $proseSets.Keys) {

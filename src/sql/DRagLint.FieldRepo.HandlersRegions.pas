@@ -179,7 +179,7 @@ function EolOf(const pText: string): string;
 /// <summary>Position of the first byte above 127.</summary>
 /// <param name="pBytes">File bytes.</param>
 /// <returns>0-based index; -1 when all are ASCII.</returns>
-function FirstNonAscii(const pBytes: TBytes): Integer;  // dl:ok unused-public-symbol@70f1 -- REVIEWED 2026-11-23 TT-HANDLERS: pure part of the generator, asserted directly by tests/fieldrepo/HandlersTests.dpr; outside this project index
+function FirstNonAscii(const pBytes: TBytes): Integer;
 
 /// <summary>True when a text is 7-bit ASCII.</summary>
 /// <param name="pText">Any text.</param>
