@@ -67,8 +67,8 @@ sees, and since 2026-09-23 each inbound entry (`Called from:`, `Used by:`,
   holds a project tag or a fact naming a unit this index does not hold (usually
   the other project's registrar in `Used by:`). A unit of one project is never
   tagged. An untagged line from before is tagged once by the project that
-  renders it; until then the other projects keep it, except where they register
-  the same interface themselves. When both registrars are units of the same
+  renders it; the other projects leave it as it stands, except where they
+  register the same interface themselves. When both registrars are units of the same
   name, or both are compiled by both projects, there is no evidence in the file:
   mark the unit `dl:shared`.
 
