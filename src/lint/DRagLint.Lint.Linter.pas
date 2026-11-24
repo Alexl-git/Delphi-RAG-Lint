@@ -430,14 +430,43 @@ begin
     if (N.Child(I).NodeType <> 'defProc') and SqlDeclaresLocal(N.Child(I), AName, ASrc) then Exit(True);
 end;
 
+{ True when an identifier named AName occurs anywhere under N (an argument expression). }
+function SqlMentions(const N: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if N.IsNull then Exit;
+  if (N.NodeType = 'identifier') and SameText(SqlNodeText(N, ASrc), AName) then Exit(True);
+  for I:= 0 to N.ChildCount - 1 do
+    if SqlMentions(N.Child(I), AName, ASrc) then Exit(True);
+end;
+
 procedure SqlScanAssigns(const N: TTSNode; const AName: string; const ASrc: TBytes; var ASafe, AUnsafe: Integer);
 var
   I     : Integer;
   Lhs   : TTSNode;
   Rhs   : TTSNode;
+  Ent   : TTSNode;
   Callee: string;
 begin
   if N.IsNull then Exit;
+  { A call that takes the identifier as an argument may bind it to a var / out parameter and
+    rewrite it with anything, so it counts as an unknown assignment. Calls that only read it
+    (IntToStr, Length, Trim, Write, Writeln) do not. }
+  if N.NodeType = 'exprCall' then
+  begin
+    Ent:= N.ChildByField('entity');
+    Callee:= SqlNodeText(Ent, ASrc);
+    if not (SameText(Callee, 'IntToStr') or SameText(Callee, 'IntToHex') or SameText(Callee, 'Length')
+            or SameText(Callee, 'Trim') or SameText(Callee, 'Write') or SameText(Callee, 'Writeln')) then
+      for I:= 0 to N.ChildCount - 1 do
+        if not (N.Child(I) = Ent) and SqlMentions(N.Child(I), AName, ASrc) then
+        begin
+          Inc(AUnsafe);
+          Break;
+        end;
+  end;
   if N.NodeType = 'assignment' then
   begin
     Lhs:= N.ChildByField('lhs');
