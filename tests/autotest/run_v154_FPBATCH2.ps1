@@ -127,7 +127,9 @@ end.
 Check-Exact 'sql-injection-concat' (Run-Lint $f1 'sql-injection-concat') 'sql-injection-concat' $f1
 
 # ---------------------------------------------------------------- 8 try-except-swallowed
-Write-Host 'class 8: try-except-swallowed' -ForegroundColor Cyan
+# INT-W2: class 8 is HELD BACK until the owner rules on R22 (a field / global that gets E.Message). The three Fp* routines
+# below therefore carry a TPNEXT mark; revert the INT-W2 hold commit to bring class 8 back.
+Write-Host 'class 8: try-except-swallowed (held back: the Fp* routines still fire)' -ForegroundColor Cyan
 $f8 = Join-Path $WorkDir 'uSwallow8.pas'
 Write-Ascii $f8 @'
 unit uSwallow8;
@@ -156,7 +158,7 @@ var
 procedure THolder.FpFieldGetsMessage;
 begin
   try
-    Writeln('x');
+    Writeln('x'); // TPNEXT
   except
     on E: Exception do
       FDescription:= E.Message;
@@ -166,7 +168,7 @@ end;
 procedure THolder.FpFieldGetsConcatenatedMessage;
 begin
   try
-    Writeln('x');
+    Writeln('x'); // TPNEXT
   except
     on e: Exception do
     begin
@@ -178,7 +180,7 @@ end;
 procedure FpGlobalGetsMessage;
 begin
   try
-    Writeln('x');
+    Writeln('x'); // TPNEXT
   except
     on E: Exception do
       GLast:= E.Message;

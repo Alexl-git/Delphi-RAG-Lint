@@ -8922,7 +8922,6 @@ var
     Locals      : TArray<string>;
     Scope       : TTSNode;
     Name        : string;
-    ExcText     : string;
   begin
     if N.IsNull or (Findings.Count >= 100) then Exit;  // dl:ok magic-literal@cdd2 -- REVIEWED 2026-11-21 SLZ-S04: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'try' then
@@ -8933,7 +8932,6 @@ var
       CommentsOnly:= True;
       ExceptPt := Default(TTSPoint);
       Captured := nil;
-      ExcText  := '';
       HandledNames:= TStringList.Create;
       try
         HandledNames.CaseSensitive:= False;
@@ -8968,7 +8966,6 @@ var
               CommentsOnly:= False;
               if HandlesException(C, HandledNames) then Handled:= True;
               CollectAssignedNames(C, Captured);
-              ExcText:= ExcText + ' ' + LowerCase(NodeStr(C));
             end;
           end;
         end;
@@ -8978,23 +8975,16 @@ var
         begin
           Scope:= N.Parent;
           while (not Scope.IsNull) and (not IsRoutineScope(Scope)) do Scope:= Scope.Parent;
-          Locals:= nil;
-          if not Scope.IsNull then Locals:= RoutineLocals(Scope);
-          for Name in Captured do
-            if (IndexStr(Name, Locals) >= 0) and ReadAfterTry(Scope, Name, N, Scope) then
-            begin
-              Handled:= True;
-              Break;
-            end
-            { FPBATCH2 class 8: a bare identifier that is no local / value parameter is a FIELD
-              or a global -- it outlives the routine, so writing the exception's text (E.Message /
-              E.ClassName) into it records the failure where a caller can see it. }
-            else if (IndexStr(Name, Locals) < 0) and (HandledNames.IndexOf(Name) < 0)
-                    and (ExcText.Contains('.message') or ExcText.Contains('.classname')) then
-            begin
-              Handled:= True;
-              Break;
-            end;
+          if not Scope.IsNull then
+          begin
+            Locals:= RoutineLocals(Scope);
+            for Name in Captured do
+              if (IndexStr(Name, Locals) >= 0) and ReadAfterTry(Scope, Name, N, Scope) then
+              begin
+                Handled:= True;
+                Break;
+              end;
+          end;
         end;
       finally
         HandledNames.Free;
