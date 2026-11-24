@@ -1,0 +1,19 @@
+{
+  "id": "v154-flow-rules",
+  "title": "Lint rules for results, parameters, nested addresses and overlays",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Eight rules: a managed Result read before it is set, one variable in two var parameters, the address of a nested routine, absolute overlays, unused var parameters, assigned value parameters, constant returns, redundant field initialisation",
+  "intro": "Read this to see what each of the eight rules reports, when it stays silent, and which four you have to turn on.",
+  "wikiPage": "v154-flow-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas> --rule managed-result-read-first --db <index.sqlite>"
+    }
+  ],
+  "audience": "both"
+}
