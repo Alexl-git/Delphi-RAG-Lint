@@ -9,7 +9,8 @@ unit DRagLint.FieldRepo.DfmWrite;
 interface
 
 uses
-  System.SysUtils;
+  System.SysUtils,
+  System.Generics.Collections;
 
 type
   /// <summary>Raised when a DFM or unit cannot be edited safely; nothing has been changed then.</summary>
@@ -56,6 +57,18 @@ type
     Finish: Integer;
     /// <summary>Own properties in file order (those of child objects and collection items excluded).</summary>
     Props: TArray<TDfmwProp>;
+  end;
+
+  /// <summary>One string literal of a DFM property value.</summary>
+  TDfmwString = record
+    /// <summary>Index of its object in Objects.</summary>
+    ObjectIndex: Integer;
+    /// <summary>The object's property; the collection property for a string of an item.</summary>
+    Prop: string;
+    /// <summary>The property the string belongs to: of the collection item, else the same as Prop.</summary>
+    ItemProp: string;
+    /// <summary>The decoded string.</summary>
+    Text: string;
   end;
 
   /// <summary>Byte buffer with recorded edits.</summary>
@@ -107,6 +120,7 @@ type
     procedure SkipValue;
     procedure SkipQuoted;
     procedure SkipList(pClose: Char);
+    procedure CollectStrings(pObject, pProp: Integer; pList: TList<TDfmwString>);
     function InsertPosition(pObject: Integer; const pName: string; const pOrder: TArray<string>): Integer;
     function ChildInsertPosition(pParent: Integer; const pSiblings: TArray<string>): Integer;
   public
@@ -156,6 +170,10 @@ type
     /// <param name="pName">Component name.</param>
     /// <returns>`Component.Property` per reference, the component's own properties excluded.</returns>
     function ReferencesTo(const pName: string): TArray<string>;
+    /// <summary>Every string of every property (collection items and string lists included; a string list gives one
+    /// entry per line).</summary>
+    /// <returns>The strings in file order; binary data is not searched.</returns>
+    function Strings: TArray<TDfmwString>;
     /// <summary>Every object, parents before children, in file order.</summary>
     property Objects: TArray<TDfmwObject> read FObjects;
   end;
@@ -185,6 +203,12 @@ type
   TDfmUnitDocument = class(TDfmwBuffer)
   strict private
     FTokens: TArray<TDfmwToken>;
+    FComments: TArray<TDfmwToken>; // directives included
+    FConditionals: TArray<TDfmwToken>; // Text = IFDEF, ELSE, ENDIF, ...
+    function DirectiveWord(pStart: Integer): string;
+    function ConditionsAt(pPos: Integer): string;
+    function IsSafePlace(pHeader, pStop, pPos: Integer): Boolean;
+    function ReadSection(const pClass: string; out pHeader, pStop: Integer): TArray<TDfmwDecl>;
     procedure Tokenize;
     function SkipComment(var pPos: Integer): Boolean;
     function SkipString(pPos: Integer): Integer;
@@ -202,7 +226,8 @@ type
     /// <summary>Component declarations of a class: the fields before its first method or other visibility.</summary>
     /// <param name="pClass">Class name.</param>
     /// <returns>The declarations in order.</returns>
-    /// <exception cref="EDfmWriteError">The unit does not declare the class.</exception>
+    /// <exception cref="EDfmWriteError">The unit does not declare the class, or declares it more than once (conditional
+    /// compilation).</exception>
     function Declarations(const pClass: string): TArray<TDfmwDecl>;
     /// <summary>True when the interface section uses one of the units.</summary>
     /// <param name="pUnits">Unit names (case-insensitive).</param>
@@ -212,13 +237,19 @@ type
     /// <param name="pText">An identifier or a string literal with its quotes (case-insensitive).</param>
     /// <returns>The number of tokens.</returns>
     function Mentions(const pText: string): Integer;
+    /// <summary>True when a string literal of the code is the name, or has it as one entry of a list `A;B`.</summary>
+    /// <param name="pName">A field name (case-insensitive).</param>
+    /// <returns>True when found.</returns>
+    function NamesInString(const pName: string): Boolean;
     /// <summary>Records: declare a component.</summary>
     /// <param name="pClass">The form class.</param>
     /// <param name="pName">Component name.</param>
     /// <param name="pFieldClass">Component class.</param>
     /// <param name="pAfter">Component names; the line goes after the last declaration among them, else after the last
-    /// declaration, else after the class header.</param>
-    /// <exception cref="EDfmWriteError">The class is missing or the neighbouring line holds other code.</exception>
+    /// declaration, else after the class header. A place that a conditional directive compiles away while the rest of
+    /// the published section stays, or one inside a comment, is passed over.</param>
+    /// <exception cref="EDfmWriteError">The class is missing or declared more than once, the neighbouring line holds
+    /// other code, or every place is inside a conditional.</exception>
     procedure AddField(const pClass, pName, pFieldClass: string; const pAfter: TArray<string>);
     /// <summary>Records: remove a component's declaration.</summary>
     /// <param name="pClass">The form class.</param>
@@ -239,6 +270,11 @@ function DfmTextToBinary(const pText: TBytes): TBytes;
 /// relative to the property's object.</returns>
 function DfmStringLiteral(const pValue: string): string;
 
+/// <summary>What a DFM value stands for: the string of a string literal, else the value without blanks around it.</summary>
+/// <param name="pLiteral">A value as SetProp takes it.</param>
+/// <returns>The text TryProp gives for it.</returns>
+function DfmLiteralText(const pLiteral: string): string;
+
 /// <summary>The text block of a component as the RTL writes it.</summary>
 /// <param name="pBinary">A component stream (TStream.WriteComponent).</param>
 /// <returns>Lines without line breaks, from the `object` line to its `end`.</returns>
@@ -254,9 +290,7 @@ implementation
 
 uses
   System.Classes,
-  System.StrUtils,
-  System.Generics.Collections,
-  DRagLint.Core.Encoding;
+  System.StrUtils;
 
 const
   TAB = 9;
@@ -266,7 +300,7 @@ const
   FIRST_NON_ASCII = $80;
   LAST_BLANK = 32;
   BYTE_MASK = $FF;
-  ANSI_CODE_PAGE = 1252;
+  LAST_ASCII = #$7E;
   UTF16_BOM_LENGTH = 2;
   UTF16_FIRST = $FE; // FE FF and FF FE are the two UTF-16 marks
   NAIVE_CHUNK = 48; // characters per line of the literal handed to the RTL (TParser has a line limit)
@@ -283,6 +317,11 @@ const
   PROBE_HEAD = 'object A: TB' + CRLF + '  ' + PROBE_PROP + ' ';
   PROBE_TAIL = CRLF + WORD_END + CRLF;
   REFERENCE_BREAKS: array[0..11] of Char = (' ', '.', '=', '(', ')', '[', ']', '<', '>', ',', #13, #10);
+  DIRECTIVE_MARK = '$';
+  PAREN_COMMENT_LENGTH = 2; // (* and //
+  CONDITIONAL_OPENS: array[0..3] of string = ('IF', 'IFDEF', 'IFNDEF', 'IFOPT');
+  CONDITIONAL_BRANCHES: array[0..1] of string = ('ELSE', 'ELSEIF');
+  CONDITIONAL_CLOSES: array[0..1] of string = ('ENDIF', 'IFEND');
   MEMBER_STOPS: array[0..17] of string = ('private', 'protected', 'public', 'strict', WORD_END, 'procedure', 'function',
     'constructor', 'destructor', 'property', 'class', 'const', 'type', 'var', '[', 'automated', 'operator', 'threadvar');
 
@@ -396,7 +435,11 @@ end;
 procedure TDfmwBuffer.Edit(pPos, pLen: Integer; const pText: string);
 var
   VEdit: TDfmwEdit;
+  VC: Char;
 begin
+  for VC in pText do
+    if VC > LAST_ASCII then
+      Fail('the new text is not ASCII: ' + Trim(pText));
   VEdit.Pos := pPos;
   VEdit.Len := pLen;
   VEdit.Text := pText;
@@ -559,7 +602,7 @@ begin
   if IsBinaryDfm(pBytes) then
     raise EDfmWriteError.Create(pFileName + ': a binary DFM is not written (make it text first: convert -i -t <file>)');
   inherited Create(pBytes, pFileName);
-  FUtf8 := IsValidUtf8(pBytes);
+  FUtf8 := BomLength > 0; // as TParser: without a BOM the text is ANSI
   try
     DfmTextToBinary(pBytes);
   except
@@ -776,19 +819,11 @@ function DecodeRun(const pRaw: string; pUtf8: Boolean): string;
 var
   VI: Integer;
   VBytes: TBytes;
-  VAnsi: TEncoding;
 begin
   SetLength(VBytes, Length(pRaw));
   for VI := 1 to Length(pRaw) do
     VBytes[VI - 1] := Byte(Ord(pRaw[VI]) and BYTE_MASK);
-  if pUtf8 then
-    Exit(TEncoding.UTF8.GetString(VBytes));
-  VAnsi := TEncoding.GetEncoding(ANSI_CODE_PAGE);
-  try
-    Result := VAnsi.GetString(VBytes);
-  finally
-    VAnsi.Free;
-  end;
+  Result := if pUtf8 then TEncoding.UTF8.GetString(VBytes) else TEncoding.ANSI.GetString(VBytes);
 end;
 
 { The string a literal stands for; pSource has one character per byte. }
@@ -824,6 +859,19 @@ begin
     VText.Free;
   end;
 end;
+
+function IsStringLiteral(const pText: string): Boolean;
+begin
+  Result := (pText <> '') and CharInSet(pText[1], ['''', '#']);
+end;
+
+function DfmLiteralText(const pLiteral: string): string;
+begin
+  Result := Trim(pLiteral);
+  if IsStringLiteral(Result) then
+    Result := DecodeLiteral(Result, False);
+end;
+
 function TDfmDocument.TryProp(pObject: Integer; const pName: string; out pText: string): Boolean;
 var
   VIdx: Integer;
@@ -834,7 +882,7 @@ begin
   if not Result then
     Exit;
   pText := Slice(FObjects[pObject].Props[VIdx].ValueStart, FObjects[pObject].Props[VIdx].ValueEnd);
-  if (pText <> '') and CharInSet(pText[1], ['''', '#']) then
+  if IsStringLiteral(pText) then
     pText := DecodeLiteral(pText, FUtf8);
 end;
 
@@ -965,6 +1013,58 @@ begin
       end;
 end;
 
+{ The strings of one property; a word before `=` names the property of a collection item. }
+procedure TDfmDocument.CollectStrings(pObject, pProp: Integer; pList: TList<TDfmwString>);
+var
+  VProp: TDfmwProp;
+  VString: TDfmwString;
+  VStart: Integer;
+  VWord: string;
+begin
+  VProp := FObjects[pObject].Props[pProp];
+  VString.ObjectIndex := pObject;
+  VString.Prop := VProp.Name;
+  VString.ItemProp := VProp.Name;
+  FPos := VProp.ValueStart;
+  while FPos < VProp.ValueEnd do
+  begin
+    VStart := FPos;
+    VWord := ReadWord;
+    if At('''') or At('#') then
+    begin
+      VStart := FPos;
+      SkipQuoted;
+      VString.Text := DecodeLiteral(Slice(VStart, FPos), FUtf8);
+      pList.Add(VString);
+    end
+    else if VWord <> '' then
+    begin
+      SkipBlanks;
+      if At('=') then
+        VString.ItemProp := VWord;
+    end
+    else if FPos = VStart then
+      Inc(FPos);
+  end;
+end;
+
+function TDfmDocument.Strings: TArray<TDfmwString>;
+var
+  VI, VJ: Integer;
+  VList: TList<TDfmwString>;
+begin
+  VList := TList<TDfmwString>.Create;
+  try
+    for VI := 0 to High(FObjects) do
+      for VJ := 0 to High(FObjects[VI].Props) do
+        if Bytes[FObjects[VI].Props[VJ].ValueStart] <> Ord('{') then
+          CollectStrings(VI, VJ, VList);
+    Result := VList.ToArray;
+  finally
+    VList.Free;
+  end;
+end;
+
 { TDfmUnitDocument }
 
 constructor TDfmUnitDocument.Create(const pBytes: TBytes; const pFileName: string);
@@ -997,6 +1097,50 @@ begin
       Inc(pPos);
     Inc(pPos);
   end;
+end;
+
+{ IFDEF of the directive that starts at pStart; '' for a comment. }
+function TDfmUnitDocument.DirectiveWord(pStart: Integer): string;
+var
+  VWord: Integer;
+begin
+  Result := '';
+  VWord := pStart + (if Bytes[pStart] = Ord('{') then 1 else PAREN_COMMENT_LENGTH);
+  if (Bytes[pStart] <> Ord('/')) and (VWord < Length(Bytes)) and (Bytes[VWord] = Ord(DIRECTIVE_MARK)) then
+    Result := Slice(VWord + 1, SkipWord(VWord + 1));
+end;
+{ The conditional branches that are open at a position, one `start:branch` each. }
+function TDfmUnitDocument.ConditionsAt(pPos: Integer): string;
+var
+  VComment: TDfmwToken;
+  VOpen: TArray<string>;
+begin
+  VOpen := nil;
+  for VComment in FConditionals do
+    if VComment.Pos >= pPos then
+      Break
+    else if MatchText(VComment.Text, CONDITIONAL_OPENS) then
+      VOpen := VOpen + [IntToStr(VComment.Pos)]
+    else if Length(VOpen) = 0 then
+      Continue
+    else if MatchText(VComment.Text, CONDITIONAL_BRANCHES) then
+      VOpen[High(VOpen)] := VOpen[High(VOpen)] + ':' + IntToStr(VComment.Pos)
+    else if MatchText(VComment.Text, CONDITIONAL_CLOSES) then
+      SetLength(VOpen, High(VOpen));
+  Result := string.Join(' ', VOpen);
+end;
+
+{ True when a line at pPos is compiled whenever the class header and the end of its published section are. }
+function TDfmUnitDocument.IsSafePlace(pHeader, pStop, pPos: Integer): Boolean;
+var
+  VComment: TDfmwToken;
+  VHeader: string;
+begin
+  for VComment in FComments do
+    if (VComment.Pos < pPos) and (pPos < VComment.Pos + VComment.Len) then
+      Exit(False);
+  VHeader := ConditionsAt(pHeader);
+  Result := (ConditionsAt(pPos) = VHeader) and (ConditionsAt(pStop) = VHeader);
 end;
 
 { The byte after the string literal at pPos (a multi-line literal starts with three or more quotes at a line end). }
@@ -1034,18 +1178,29 @@ end;
 
 procedure TDfmUnitDocument.Tokenize;
 var
-  VPos: Integer;
-  VTokens: TList<TDfmwToken>;
+  VPos, VStart: Integer;
+  VTokens, VComments: TList<TDfmwToken>;
   VToken: TDfmwToken;
 begin
   VTokens := TList<TDfmwToken>.Create;
+  VComments := TList<TDfmwToken>.Create;
   try
     VPos := BomLength;
     while VPos < Length(Bytes) do
     begin
+      VStart := VPos;
       if Bytes[VPos] <= LAST_BLANK then
         Inc(VPos)
-      else if not SkipComment(VPos) then
+      else if SkipComment(VPos) then
+      begin
+        VToken.Pos := VStart;
+        VToken.Len := VPos - VStart;
+        VToken.Text := DirectiveWord(VStart);
+        VComments.Add(VToken);
+        if MatchText(VToken.Text, CONDITIONAL_OPENS) or MatchText(VToken.Text, CONDITIONAL_BRANCHES) or MatchText(VToken.Text, CONDITIONAL_CLOSES) then
+          FConditionals := FConditionals + [VToken];
+      end
+      else
       begin
         VToken.Pos := VPos;
         VPos := if Bytes[VPos] = QUOTE then SkipString(VPos) else SkipWord(VPos);
@@ -1057,12 +1212,14 @@ begin
       end;
     end;
     FTokens := VTokens.ToArray;
+    FComments := VComments.ToArray;
   finally
+    VComments.Free;
     VTokens.Free;
   end;
 end;
 
-{ Index of the `class` token of the class's full declaration, -1 = none. }
+{ Index of the `class` token of the class's full declaration, -1 = none. Raises for a second one. }
 function TDfmUnitDocument.FindClassHeader(const pClass: string): Integer;
 var
   VI: Integer;
@@ -1071,7 +1228,11 @@ begin
   for VI := 1 to High(FTokens) - 2 do
     if (FTokens[VI].Text = '=') and SameText(FTokens[VI - 1].Text, pClass) and SameText(FTokens[VI + 1].Text, 'class')
       and (FTokens[VI + 2].Text <> ';') then
-      Exit(VI + 1);
+    begin
+      if Result >= 0 then
+        Fail('class ' + pClass + ' is declared more than once (conditional compilation?)');
+      Result := VI + 1;
+    end;
 end;
 
 { First token after `class`, `class(TForm, IFoo)` or `class sealed (...)`. }
@@ -1117,20 +1278,33 @@ begin
   Inc(pToken);
 end;
 
-function TDfmUnitDocument.Declarations(const pClass: string): TArray<TDfmwDecl>;
+{ The component declarations; pHeader = index of the `class` token, pStop = position of the first token after them. }
+function TDfmUnitDocument.ReadSection(const pClass: string; out pHeader, pStop: Integer): TArray<TDfmwDecl>;
 var
   VI: Integer;
 begin
   Result := nil;
-  VI := FindClassHeader(pClass);
-  if VI < 0 then
+  pStop := Length(Bytes);
+  pHeader := FindClassHeader(pClass);
+  if pHeader < 0 then
     Fail('class ' + pClass + ' is not declared in the unit');
-  VI := AfterAncestors(VI);
+  VI := AfterAncestors(pHeader);
+  if VI > High(FTokens) then
+    Fail('class ' + pClass + ' is not complete');
   while (VI <= High(FTokens)) and (not MatchText(FTokens[VI].Text, MEMBER_STOPS)) do
     if SameText(FTokens[VI].Text, 'published') then
       Inc(VI)
     else if not ReadDecl(VI, Result) then
       Exit;
+  if VI <= High(FTokens) then
+    pStop := FTokens[VI].Pos;
+end;
+
+function TDfmUnitDocument.Declarations(const pClass: string): TArray<TDfmwDecl>;
+var
+  VHeader, VStop: Integer;
+begin
+  Result := ReadSection(pClass, VHeader, VStop);
 end;
 
 function TDfmUnitDocument.UsesAny(const pUnits: TArray<string>): Boolean;
@@ -1153,6 +1327,20 @@ begin
       VNameStart := VToken.Pos + VToken.Len;
     end;
 end;
+
+function TDfmUnitDocument.NamesInString(const pName: string): Boolean;
+var
+  VToken: TDfmwToken;
+  VEntry: string;
+begin
+  Result := False;
+  for VToken in FTokens do
+    if VToken.Text.StartsWith('''') then
+      for VEntry in VToken.Text.DeQuotedString.Split([';']) do
+        if SameText(Trim(VEntry), pName) then
+          Exit(True);
+end;
+
 function TDfmUnitDocument.Mentions(const pText: string): Integer;
 var
   VToken: TDfmwToken;
@@ -1178,32 +1366,29 @@ end;
 procedure TDfmUnitDocument.AddField(const pClass, pName, pFieldClass: string; const pAfter: TArray<string>);
 var
   VDecls: TArray<TDfmwDecl>;
-  VI, VAnchor, VStart, VFinish: Integer;
+  VI, VPass, VHeader, VStop, VStart, VFinish: Integer;
   VIndent: string;
 begin
-  VDecls := Declarations(pClass);
-  if Length(VDecls) = 0 then
-  begin
-    VI := FindClassHeader(pClass);
-    VStart := FTokens[VI - 2].Pos;
-    VI := AfterAncestors(VI) - 1;  // dl:ok index-possibly-out-of-range@08e0 -- REVIEWED 2026-11-23 TT-DFMWRITE: the branch has at least one declaration / the class header FindClassHeader found (Declarations raised otherwise)
-    VFinish := FTokens[VI].Pos + FTokens[VI].Len;
-    VIndent := IndentAt(VStart) + STEP;
-  end
-  else
-  begin
-    VAnchor := High(VDecls);
+  VDecls := ReadSection(pClass, VHeader, VStop);
+  { the class header, when no declaration is a safe neighbour }
+  VStart := FTokens[VHeader - 2].Pos;
+  VI := AfterAncestors(VHeader) - 1;  // dl:ok index-possibly-out-of-range@d63d -- REVIEWED 2026-11-23 DFMWFIX: ReadSection raises when AfterAncestors is past the last token
+  VFinish := FTokens[VI].Pos + FTokens[VI].Len;
+  VIndent := if Length(VDecls) = 0 then IndentAt(VStart) + STEP else IndentAt(VDecls[0].Start);
+  { the last named declaration wins over the last of all }
+  for VPass := 0 to 1 do
     for VI := 0 to High(VDecls) do
-      if MatchText(VDecls[VI].Name, pAfter) then
-        VAnchor := VI;  // dl:ok index-possibly-out-of-range@9916 -- REVIEWED 2026-11-23 TT-DFMWRITE: the branch has at least one declaration / the class header FindClassHeader found (Declarations raised otherwise)
-    VStart := VDecls[VAnchor].Start;
-    VFinish := VDecls[VAnchor].Finish;
-    VIndent := IndentAt(VStart);
-  end;
+      if ((VPass = 0) or MatchText(VDecls[VI].Name, pAfter)) and IsSafePlace(FTokens[VHeader].Pos, VStop, LineEnd(VDecls[VI].Finish)) then
+      begin
+        VStart := VDecls[VI].Start;
+        VFinish := VDecls[VI].Finish;
+        VIndent := IndentAt(VStart);
+      end;
+  if not IsSafePlace(FTokens[VHeader].Pos, VStop, LineEnd(VFinish)) then
+    Fail('no place to declare ' + pName + ' that is outside a conditional ($IF..$ENDIF) or comment of ' + pClass);
   CheckLineOfItsOwn(VStart, VFinish, pName);
   Edit(LineEnd(VFinish), 0, VIndent + pName + ': ' + pFieldClass + ';' + EolAt(VFinish));
 end;
-
 procedure TDfmUnitDocument.RemoveField(const pClass, pName: string);
 var
   VDecls: TArray<TDfmwDecl>;

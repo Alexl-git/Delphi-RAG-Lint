@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.54.0-alpha",
   "summary": "Brings the persistent fields of a text DFM, and their declarations in its unit, in line with the field repository as a change set, dry run by default",
-  "intro": "Read this when a form should follow the field repository. drag-lint repo write-dfm prints the property changes of existing persistent fields and, for a field selection, the fields to add or remove; --apply or --select writes them with a backup. Every byte outside a planned change stays the same, the new text is checked by Delphi's own reader before it is written, and a binary DFM is refused.",
+  "intro": "Read this when a form should follow the field repository. drag-lint repo write-dfm prints the property changes of existing persistent fields and, for a field selection, the fields to add or remove; --apply or --select writes them with a backup, and a --select file must hold the plan id of the dry run its ids are from. Every byte outside a planned change stays the same, the new text is checked by Delphi's own reader before it is written, and a binary DFM is refused.",
   "wikiPage": "repo-write-dfm",
   "surfaces": [
     {

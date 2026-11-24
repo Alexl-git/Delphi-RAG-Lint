@@ -1,8 +1,8 @@
 program DfmWriteTests;
 
 { Self-contained console test runner (no DUnitX) for the byte-level editors of lane TT-DFMWRITE (drag-lint 1.54):
-  TDfmDocument, TDfmUnitDocument, the RTL-made literals and the field class of a repository row. One PASS/FAIL line per
-  case, a summary line, exit code 1 on any failure. The CLI (repository, files, backup, the compiled form) is
+  TDfmDocument, TDfmUnitDocument, ApplyDfmWrite on files (backup, undo), the RTL-made literals and the field class of a repository row. One PASS/FAIL line per
+  case, a summary line, exit code 1 on any failure. The CLI (repository, the compiled form) is
   run_fieldrepo_dfmwrite.ps1. }
 
 {$APPTYPE CONSOLE}
@@ -10,6 +10,8 @@ program DfmWriteTests;
 uses
   System.SysUtils,
   System.Classes,
+  System.IOUtils,
+  DRagLint.FieldRepo.ChangeSet in '..\..\src\sql\DRagLint.FieldRepo.ChangeSet.pas',
   DRagLint.FieldRepo.Kinds in '..\..\src\sql\DRagLint.FieldRepo.Kinds.pas',
   DRagLint.FieldRepo.DfmRead in '..\..\src\sql\DRagLint.FieldRepo.DfmRead.pas',
   DRagLint.FieldRepo.DfmWrite in '..\..\src\sql\DRagLint.FieldRepo.DfmWrite.pas',
@@ -141,6 +143,23 @@ begin
   end;
 end;
 
+{ Reads a text: a callback that did not run is a failure, not a skipped test. }
+procedure Inspect(const pName, pText: string; const pProc: TEditProc);
+var
+  VGot: string;
+begin
+  VGot := Edited(pText, pProc);
+  Check(pName + ' ran', not VGot.StartsWith('!'), VGot);
+end;
+
+procedure InspectUnit(const pName, pText: string; const pProc: TUnitProc);
+var
+  VGot: string;
+begin
+  VGot := EditedUnit(pText, pProc);
+  Check(pName + ' ran', not VGot.StartsWith('!'), VGot);
+end;
+
 function SetOn(const pText, pComp, pProp, pLiteral: string): string;
 begin
   Result := Edited(pText,
@@ -167,7 +186,7 @@ begin
   { every literal reads back through the RTL and through TryProp }
   VText := SetOn(FORM, 'TB', 'DisplayLabel', VText);
   Check('L6 a long label is written', VText.Contains('DisplayLabel = ' + NL + '        ''xxx'), VText);
-  Edited(VText,
+  Inspect('L7', VText,
     procedure(pDoc: TDfmDocument)
     var
       VGot: string;
@@ -179,7 +198,7 @@ begin
   begin
     VLong := StringOfChar('''', VI) + 'a' + StringOfChar('''', VI - 1);
     VText := SetOn(FORM, 'TB', 'DisplayLabel', '''' + VLong.Replace('''', '''''') + '''');
-    Edited(VText,
+    Inspect('L8', VText,
       procedure(pDoc: TDfmDocument)
       var
         VGot: string;
@@ -263,7 +282,7 @@ begin
   Check('T12 one component name twice is refused', Edited(
     'object F: TF' + NL + 'object A: TX' + NL + 'end' + NL + 'object A: TX' + NL + 'end' + NL + 'end' + NL,
     procedure(pDoc: TDfmDocument) begin pDoc.FindObject('A', ''); end).Contains('more than one component A'));
-  Edited(FORM,
+  Inspect('T13', FORM,
     procedure(pDoc: TDfmDocument)
     var
       VText: string;
@@ -274,7 +293,7 @@ begin
       Check('T15 references are found in collections, not in strings', string.Join(',', pDoc.ReferencesTo('TA')) = 'T.Items');
       Check('T16 no reference', Length(pDoc.ReferencesTo('TB')) = 0);
     end);
-  Edited(ANSI_FORM,
+  Inspect('T17', ANSI_FORM,
     procedure(pDoc: TDfmDocument)
     var
       VText: string;
@@ -282,14 +301,24 @@ begin
       pDoc.TryProp(1, 'Hint', VText);
       CheckText('T17 an ANSI string decodes', VText, 'caf'#233);
     end);
-  Edited(ANSI_FORM.Replace(#233, #$C3#$A9),
+  Inspect('T18', ANSI_FORM.Replace(#233, #$C3#$A9),
     procedure(pDoc: TDfmDocument)
     var
       VText: string;
     begin
       pDoc.TryProp(1, 'Hint', VText);
-      CheckText('T18 a UTF-8 string decodes', VText, 'caf'#233);
+      CheckText('T18 UTF-8 bytes without a BOM are ANSI, as Delphi reads them', VText, 'caf'#$C3#$A9);
     end);
+  Check('T18 the RTL reads the same', ToText(DfmTextToBinary(ToBytes(ANSI_FORM.Replace(#233, #$C3#$A9)))) = ToText(DfmTextToBinary(ToBytes(ANSI_FORM.Replace('caf'#233'''', 'caf''#195#169')))));
+  Inspect('T19', #$EF#$BB#$BF + ANSI_FORM.Replace(#233, #$C3#$A9),
+    procedure(pDoc: TDfmDocument)
+    var
+      VText: string;
+    begin
+      pDoc.TryProp(1, 'Hint', VText);
+      CheckText('T19 a UTF-8 string after a BOM decodes', VText, 'caf'#233);
+    end);
+  Check('T20 a text that is not ASCII is not written', SetOn(FORM, 'TA', 'Zzz', 'Caf'#233).Contains('not ASCII'));
 end;
 
 { ---- unit ---- }
@@ -304,7 +333,7 @@ const
 
 procedure TestUnits;
 begin
-  EditedUnit(CODE,
+  InspectUnit('U1', CODE,
     procedure(pUnit: TDfmUnitDocument)
     var
       VNames: string;
@@ -336,6 +365,280 @@ begin
     'unit U; interface' + NL + 'type' + NL + '  TF = class(TFrm)' + NL + '    N: TX;' + NL + '  end;' + NL + 'implementation' + NL + 'end.');
 end;
 
+{ ---- conditional compilation ---- }
+
+{ A unit whose form class has these lines. }
+function ClassUnit(const pHeader: string; const pLines: array of string): string;
+var
+  VLine: string;
+begin
+  Result := 'unit U;' + NL + 'interface' + NL + 'type' + NL + pHeader + NL;
+  for VLine in pLines do
+    Result := Result + VLine + NL;
+  Result := Result + '  end;' + NL + 'implementation' + NL + 'end.' + NL;
+end;
+
+function AddN(const pText: string; const pAfter: TArray<string>): string;
+begin
+  Result := EditedUnit(pText, procedure(pUnit: TDfmUnitDocument) begin pUnit.AddField('TF', 'N', 'TX', pAfter); end);
+end;
+
+{ The new line goes after pLine. }
+procedure CheckAdded(const pName, pText: string; const pAfter: TArray<string>; const pLine: string);
+begin
+  CheckText(pName, AddN(pText, pAfter), pText.Replace(pLine + NL, pLine + NL + '    N: TX;' + NL));
+end;
+
+procedure TestConditionals;
+const
+  HEADER = '  TF = class(TForm)';
+  PRIVATE_PART = '  private';
+  NOT_SAFE = 'conditional';
+begin
+  CheckAdded('I1 the last sibling is inside $IFDEF: after the one before it',
+    ClassUnit(HEADER, ['    T: TQ;', '    {$IFDEF DEMO}', '    C: TX;', '    {$ENDIF}', PRIVATE_PART]), ['T', 'C'], '    T: TQ;');
+  CheckAdded('I2 an anchor line that opens a conditional: after another declaration',
+    ClassUnit(HEADER, ['    T: TQ; {$IFDEF X}', '    C: TX;', '    {$ENDIF}', '    E: TX;', PRIVATE_PART]), ['T'], '    E: TX;');
+  CheckAdded('I3 every declaration is inside a conditional: after the class header',
+    ClassUnit(HEADER, ['{$IF X}', '    T: TQ;', '{$IFEND}', PRIVATE_PART]), ['T'], HEADER);
+  Check('I4 no safe place: refused', AddN(ClassUnit(HEADER + ' {$IFNDEF X}', ['    T: TQ;', '    {$ENDIF}', PRIVATE_PART]), ['T']).Contains(NOT_SAFE));
+  Check('I5 the class twice', AddN(ClassUnit('{$IFDEF A}' + NL + HEADER + NL + '    T: TQ;' + NL + '  end;' + NL + '{$ELSE}' + NL + HEADER,
+    ['    T: TQ;', '  end;', '{$ENDIF}', '  TG = class']), ['T']).Contains('more than once'));
+  CheckAdded('I6 a conditional around the whole class is no obstacle',
+    ClassUnit('{$IFDEF A}' + NL + HEADER, ['    T: TQ;', PRIVATE_PART, '  end;', '{$ENDIF}', '  TG = class']), ['T'], '    T: TQ;');
+  Check('I7 the section ends inside a conditional', AddN(ClassUnit(HEADER, ['    T: TQ;', '{$IFDEF X}', PRIVATE_PART, '{$ENDIF}', '    C: TX;']), ['T']).Contains(NOT_SAFE));
+  Check('I8 the header is inside a conditional that ends in the section',
+    AddN(ClassUnit('{$IFDEF X}' + NL + HEADER + NL + '{$ENDIF}', ['    T: TQ;', PRIVATE_PART]), ['T']).Contains(NOT_SAFE));
+  CheckAdded('I9 an $ELSE branch and the (*$ form',
+    ClassUnit(HEADER, ['(*$IFOPT D+*)', '    T: TQ;', '{$ELSE}', '    C: TX;', '(*$ENDIF*)', '    E: TX;', PRIVATE_PART]), ['T', 'C'], '    E: TX;');
+  CheckAdded('I10 other directives and comments are no obstacle',
+    ClassUnit(HEADER, ['{$REGION ''R''}', '    T: TQ; { IFDEF }', '{$ENDREGION}', '    E: TX;', PRIVATE_PART]), ['T'], '    T: TQ; { IFDEF }');
+  CheckAdded('I11 a comment that goes on on the next line: after another declaration',
+    ClassUnit(HEADER, ['    E: TX;', '    T: TQ; { note', '      goes on }', PRIVATE_PART]), ['T'], '    E: TX;');
+  CheckAdded('I12 closed conditionals before the class do not count',
+    ClassUnit('{$IFDEF A}' + NL + '  TE = class end;' + NL + '{$ENDIF}' + NL + HEADER, ['    T: TQ;', PRIVATE_PART]), ['T'], '    T: TQ;');
+  Check('I13 a declaration of a class declared twice is not removed', EditedUnit(ClassUnit('{$IFDEF A}' + NL + HEADER + NL + '    T: TQ;' + NL + '  end;' + NL + '{$ELSE}' + NL + HEADER,
+    ['    T: TQ;', '  end;', '{$ENDIF}', '  TG = class']),
+    procedure(pUnit: TDfmUnitDocument) begin pUnit.RemoveField('TF', 'T'); end).Contains('more than once'));
+end;
+
+{ ---- files ---- }
+
+const
+  WRITE_FORM = 'object F: TF' + NL + '  object T: TFDQuery' + NL + '    object TA: TIntegerField' + NL + '      FieldName = ''A''' + NL +
+    '    end' + NL + '  end' + NL + 'end' + NL;
+  WRITE_UNIT = 'unit U;' + NL + 'interface' + NL + 'type' + NL + '  TF = class(TForm)' + NL + '    T: TFDQuery;' + NL + '    TA: TIntegerField;' + NL +
+    '  end;' + NL + 'implementation' + NL + 'end.' + NL;
+  NEW_FORM = '    object TB: TIntegerField' + NL + '      FieldName = ''B''' + NL + '    end' + NL;
+  NEW_DECL = '    TB: TIntegerField;' + NL;
+  BACKUP_MARK = '.before-write-dfm-';
+  STAMP_SECONDS = 20; // the names a backup could get while the test runs
+  SECONDS_PER_DAY = 86400;
+
+var
+  GWork: string;
+
+function FileText(const pName: string): string;
+begin
+  Result := ToText(TFile.ReadAllBytes(TPath.Combine(GWork, pName)));
+end;
+
+procedure PutFile(const pName, pText: string);
+begin
+  TFile.WriteAllBytes(TPath.Combine(GWork, pName), ToBytes(pText));
+end;
+
+{ An empty folder for one case. }
+procedure NewWork;
+begin
+  if (GWork <> '') and TDirectory.Exists(GWork) then
+    TDirectory.Delete(GWork, True);
+  GWork := TPath.Combine(TPath.GetTempPath, 'dl-dfmwrite-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(GWork);
+end;
+
+{ Every file of the folder but the forms and units themselves. }
+function OtherFiles: TArray<string>;
+var
+  VFile: string;
+begin
+  Result := nil;
+  for VFile in TDirectory.GetFiles(GWork) do
+    if not (VFile.EndsWith('.dfm') or VFile.EndsWith('.pas')) then
+      Result := Result + [VFile];
+end;
+
+{ Plans one added field in each form pNames[i].dfm, whose unit has the text pUnits[i]. }
+function AddPlan(const pNames, pUnits: TArray<string>): TDfmwPlan;
+var
+  VI: Integer;
+  VFile: TDfmwFile;
+  VItem: TDfmwItem;
+  VChange: TFrChange;
+begin
+  Result := Default(TDfmwPlan);
+  for VI := 0 to High(pNames) do
+  begin
+    PutFile(pNames[VI] + '.dfm', WRITE_FORM);
+    PutFile(pNames[VI] + '.pas', pUnits[VI]);
+    VFile.DfmName := TPath.Combine(GWork, pNames[VI] + '.dfm');
+    VFile.DfmBytes := ToBytes(WRITE_FORM);
+    VFile.PasName := TPath.Combine(GWork, pNames[VI] + '.pas');
+    VFile.PasBytes := ToBytes(pUnits[VI]);
+    VFile.FormClass := 'TF';
+    VItem := Default(TDfmwItem);
+    VItem.FileIndex := VI;
+    VItem.Action := dwaInsert;
+    VItem.Dataset := 'T';
+    VItem.Component := 'TB';
+    VItem.FieldClass := 'TIntegerField';
+    VItem.Block := ['object TB: TIntegerField', '  FieldName = ''B''', 'end'];
+    VItem.Siblings := ['TA'];
+    VChange := Default(TFrChange);
+    VChange.Id := VI + 1;
+    VChange.Checked := True;
+    Result.Files := Result.Files + [VFile];
+    Result.Items := Result.Items + [VItem];
+    Result.ChangeSet.Changes := Result.ChangeSet.Changes + [VChange];
+  end;
+end;
+
+{ '' or the message of the failure. }
+function Applied(const pPlan: TDfmwPlan): string;
+begin
+  Result := '';
+  try
+    ApplyDfmWrite(pPlan, pPlan.ChangeSet.Changes);
+  except
+    on E: EDfmWriteError do
+      Result := E.Message;
+  end;
+end;
+
+function Added(const pUnit, pDecl: string): string;
+begin
+  Result := pUnit.Replace('    TA: TIntegerField;', '    TA: TIntegerField;' + pDecl);
+end;
+
+procedure CheckForm(const pName, pFile: string; pWritten: Boolean; const pUnit: string = WRITE_UNIT);
+begin
+  CheckText(pName + ' ' + pFile + '.dfm', FileText(pFile + '.dfm'),
+    if pWritten then WRITE_FORM.Replace('  end' + NL + 'end', NEW_FORM + '  end' + NL + 'end') else WRITE_FORM);
+  CheckText(pName + ' ' + pFile + '.pas', FileText(pFile + '.pas'),
+    if pWritten then pUnit.Replace('    TA: TIntegerField;' + NL, '    TA: TIntegerField;' + NL + NEW_DECL) else pUnit);
+end;
+
+procedure TestTwoForms;
+var
+  VPlan: TDfmwPlan;
+  VFile: string;
+begin
+  NewWork;
+  VPlan := AddPlan(['a', 'b'], [WRITE_UNIT, WRITE_UNIT]);
+  CheckText('F1 two forms', Applied(VPlan), '');
+  CheckForm('F1', 'a', True);
+  CheckForm('F1', 'b', True);
+  Check('F1 four backups, no other file', Length(OtherFiles) = 4);
+  for VFile in OtherFiles do
+    CheckText('F1 a backup holds the old bytes', FileText(ExtractFileName(VFile)), if VFile.Contains('.dfm.') then WRITE_FORM else WRITE_UNIT);
+end;
+
+procedure TestChangedFile;
+var
+  VPlan: TDfmwPlan;
+begin
+  NewWork;
+  VPlan := AddPlan(['a', 'b'], [WRITE_UNIT, WRITE_UNIT]);
+  PutFile('b.pas', WRITE_UNIT + '{ saved meanwhile }' + NL);
+  Check('F2 a file that changed since it was read is refused', Applied(VPlan).Contains('changed since it was read'));
+  CheckForm('F2', 'a', False);
+  CheckText('F2 the changed unit stays', FileText('b.pas'), WRITE_UNIT + '{ saved meanwhile }' + NL);
+  Check('F2 no backup', Length(OtherFiles) = 0);
+end;
+
+{ The last file can be opened for writing but not replaced: the files written before it get their old bytes back. }
+procedure TestRollback;
+var
+  VPlan: TDfmwPlan;
+  VHold: TFileStream;
+  VMessage: string;
+begin
+  NewWork;
+  VPlan := AddPlan(['a', 'b'], [WRITE_UNIT, WRITE_UNIT]);
+  VHold := TFileStream.Create(TPath.Combine(GWork, 'b.pas'), fmOpenRead or fmShareDenyNone);
+  try
+    VMessage := Applied(VPlan);
+  finally
+    VHold.Free;
+  end;
+  Check('F3 a write that fails is undone', VMessage.Contains('undone'), VMessage);
+  Check('F3 the message names the backups', VMessage.Contains('a.dfm' + BACKUP_MARK) and VMessage.Contains('b.pas' + BACKUP_MARK), VMessage);
+  CheckForm('F3', 'a', False);
+  CheckForm('F3', 'b', False);
+  Check('F3 only the backups are left', Length(OtherFiles) = 4, string.Join(' ', OtherFiles));
+end;
+
+procedure TestBackupNames;
+const
+  TAKEN = 'an older backup';
+var
+  VPlan: TDfmwPlan;
+  VI, VKept, VNumbered: Integer;
+  VFile: string;
+begin
+  NewWork;
+  VPlan := AddPlan(['a'], [WRITE_UNIT]);
+  for VI := 0 to STAMP_SECONDS do
+    PutFile('a.dfm' + BACKUP_MARK + FormatDateTime('yyyymmdd-hhnnss', Now + VI / SECONDS_PER_DAY), TAKEN);
+  CheckText('F4 applied', Applied(VPlan), '');
+  VKept := 0;
+  VNumbered := 0;
+  for VFile in OtherFiles do
+    if FileText(ExtractFileName(VFile)) = TAKEN then
+      Inc(VKept)
+    else if VFile.EndsWith('-1') and (FileText(ExtractFileName(VFile)) = WRITE_FORM) then
+      Inc(VNumbered);
+  Check('F4 no existing backup is overwritten', VKept = STAMP_SECONDS + 1, IntToStr(VKept));
+  Check('F4 the new one gets a number', VNumbered = 1, IntToStr(VNumbered));
+end;
+
+procedure TestUnitBytes;
+var
+  VText: string;
+begin
+  NewWork;
+  VText := WRITE_UNIT.Replace(NL, #10);
+  CheckText('F5 LF unit', Applied(AddPlan(['a'], [VText])), '');
+  CheckText('F5 LF line ends stay', FileText('a.pas'), Added(VText, #10'    TB: TIntegerField;'));
+  NewWork;
+  VText := WRITE_UNIT.Replace('unit U;', 'unit U; // caf'#233#232);
+  CheckText('F6 ANSI unit', Applied(AddPlan(['a'], [VText])), '');
+  CheckText('F6 high bytes stay', FileText('a.pas'), Added(VText, NL + '    TB: TIntegerField;'));
+  NewWork;
+  VText := #$EF#$BB#$BF + WRITE_UNIT.Replace('unit U;', 'unit U; // caf'#$C3#$A9);
+  CheckText('F7 UTF-8 unit', Applied(AddPlan(['a'], [VText])), '');
+  CheckText('F7 the BOM and the UTF-8 bytes stay', FileText('a.pas'), Added(VText, NL + '    TB: TIntegerField;'));
+  NewWork;
+  VText := #$FF#$FE'u'#0;
+  Check('F8 a UTF-16 unit is refused', Applied(AddPlan(['a'], [VText])).Contains('UTF-16'));
+  CheckForm('F8', 'a', False, VText);
+  Check('F8 no backup', Length(OtherFiles) = 0);
+end;
+
+procedure TestFiles;
+begin
+  try
+    TestTwoForms;
+    TestChangedFile;
+    TestRollback;
+    TestBackupNames;
+    TestUnitBytes;
+  finally
+    if TDirectory.Exists(GWork) then
+      TDirectory.Delete(GWork, True);
+  end;
+end;
+
 { ---- classes ---- }
 
 procedure TestClasses;
@@ -363,6 +666,8 @@ begin
     TestDfmEdits;
     TestDfmTexts;
     TestUnits;
+    TestConditionals;
+    TestFiles;
     TestClasses;
   except
     on E: Exception do

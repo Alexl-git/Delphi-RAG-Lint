@@ -16,6 +16,12 @@
     W9  usage: direction, selection, --select errors; --dry-run wins
     W10 needed changes, inherited and BDE datasets, SQL aliases, lookup wiring, changed kind, LF + ANSI forms
     W11 --json
+    W12 a lookup whose current dataset has no known table is never rewired (frames, modules, joins)
+    W13 a field the form or its unit binds by name is not removed
+    W14 --select needs the plan its ids are from
+    W15 the first persistent field of a dataset is unchecked
+    W16 conditional directives in the unit
+    W17 two forms, one form given twice
   Run: pwsh -File tests\autotest\run_fieldrepo_dfmwrite.ps1 [-Exe <drag-lint.exe>] [-SkipUnit] [-SkipForm]
        -SkipForm leaves out W6 and the load half of W7 (a machine without DevExpress).
 #>
@@ -47,6 +53,9 @@ function Hash($f) { (Get-FileHash -LiteralPath $f).Hash }
 function Text($f) { [IO.File]::ReadAllText($f, [Text.Encoding]::Latin1) }
 function Put($f, $t) { [IO.File]::WriteAllText($f, $t.Replace("`r`n", "`n").Replace("`n", "`r`n"), [Text.Encoding]::Latin1) }
 function IdOf($r, $pattern) { $m = [regex]::Match($r.Out, '(?m)^\[(\d+)\] ' + $pattern); if ($m.Success) { $m.Groups[1].Value } else { '' } }
+function PlanOf($r) { $m = [regex]::Match($r.Out, '(?m)^# plan ([0-9a-f]{16})$'); if ($m.Success) { $m.Groups[1].Value } else { 'none' } }
+# a --select file: the plan line of the dry run and the ids
+function PutSel($f, $r, $ids) { [IO.File]::WriteAllText($f, "# plan $(PlanOf $r)`n" + (@($ids) -join "`n")) }
 function Backups($dir) { @(Get-ChildItem -LiteralPath $dir -File | Where-Object { $_.Name -match '\.before-write-dfm-' }) }
 # a repository with edited values: $edit gets the backup text and returns the new one
 function EditRepo($from, $to, [scriptblock]$edit) {
@@ -87,7 +96,7 @@ try {
     $uc = $LASTEXITCODE
     $u | Where-Object { $_ -match '^FAIL' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     $sum = ($u | Where-Object { $_ -match '^Summary: ' } | Select-Object -Last 1)
-    Check "U1 unit tests ($sum)" (($uc -eq 0) -and ($sum -match 'pass=[1-9]\d* fail=0$')) $sum
+    Check "U1 unit tests ($sum), none skipped" (($uc -eq 0) -and ($sum -eq 'Summary: pass=130 fail=0')) $sum
   }
   # ---- part 2 ----
   $src = Join-Path $Repo 'tests\fixtures\fieldrepo\dfmwrite'
@@ -172,7 +181,7 @@ try {
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID,QTY,NOTE,USEDCOL') $rdfm
   $id = IdOf $r 'delete uAllKinds\.dfm memOrdersOLDCOL'
   $sel = Join-Path $work 'sel.txt'
-  [IO.File]::WriteAllText($sel, $id)
+  PutSel $sel $r $id
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID,QTY,NOTE,USEDCOL', '--select', $sel) $rdfm
   Check 'W7a --select removes block and declaration, nothing else' (($id -ne '') -and ($r.Code -eq 0) -and ((Text $rdfm) -ceq $oldDfm.Replace("    object memOrdersOLDCOL: TIntegerField`r`n      FieldName = 'OLDCOL'`r`n    end`r`n", '')) -and ((Text (Join-Path $rm 'uAllKinds.pas')) -ceq $oldPas.Replace("    memOrdersOLDCOL: TIntegerField;`r`n", ''))) $r.Out
   if (-not $SkipForm) {
@@ -205,7 +214,7 @@ try {
   Check 'W8e a read-only unit: nothing is written, not even the DFM' (($r.Code -eq 1) -and (Has $r 'cannot be written') -and ($h -eq (Hash $ndfm)) -and ((Backups $nd).Count -eq 0)) $r.Out
   # ---- usage ----
   $h = Hash $ndfm
-  [IO.File]::WriteAllText($sel, "999`n")
+  PutSel $sel (Write-Dfm @() $ndfm) '999'
   $codes = @(
     (Run @('repo', 'write-dfm', '--repo', $y, '--dfm', $ndfm, '--apply')).Code,
     (Run @('repo', 'write-dfm', '--repo', $y, '--dfm', $ndfm, '--direction', 'dfm-to-repo', '--apply')).Code,
@@ -219,9 +228,9 @@ try {
   Check 'W9 usage errors exit 2, failures 1, --dry-run wins; nothing written' (($codes -eq '2,2,2,2,2,2,1,0,1') -and ($h -eq (Hash $ndfm)) -and ((Backups $nd).Count -eq 0)) $codes
   # ---- the rest ----
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'all') $ndfm
-  [IO.File]::WriteAllText($sel, (IdOf $r 'insert uAllKinds\.dfm memOrdersTOOL:'))
+  PutSel $sel $r (IdOf $r 'insert uAllKinds\.dfm memOrdersTOOL:')
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'all', '--select', $sel) $ndfm
-  Check 'W10a a lookup without its key field is refused' (($r.Code -eq 1) -and ($r.Out -match 'change \d+ needs change \d+ \(select it too\)') -and ($h -eq (Hash $ndfm))) $r.Out
+  Check 'W10a a lookup without its key field is refused, a usage error' (($r.Code -eq 2) -and ($r.Out -match 'change \d+ needs change \d+ \(select it too\)') -and ($h -eq (Hash $ndfm))) $r.Out
   $od = Join-Path $work 'other'; [IO.Directory]::CreateDirectory($od) | Out-Null
   $odfm = Join-Path $od 'uOther.dfm'
   Put $odfm @'
@@ -274,10 +283,11 @@ end
   Check 'W10i lookup wiring follows the repository' ($r.Out -match 'memOrdersTOOL KeyFields: TOOLID -> QTY\n(?!  )') $r.Out
   Check 'W10j a changed kind is unchecked' ($r.Out -match 'memOrdersTOTAL FieldKind: fkCalculated -> fkData\n  \(unchecked\)') $r.Out
   Check 'W10k a property the class does not have is blocked' ($r.Out -match 'memOrdersNOTE DisplayFormat:  -> 0\.0\n  BLOCKED: TStringField has no property DisplayFormat') $r.Out
-  [IO.File]::WriteAllText($sel, (IdOf $r 'update uAllKinds\.dfm memOrdersTOTAL FieldKind'))
   $kd = NewForms 'kind'
   $kdfm = Join-Path $kd 'uAllKinds.dfm'
   Put $kdfm $newDfm; Put (Join-Path $kd 'uAllKinds.pas') $newPas
+  $r = Write-Dfm @() $kdfm $z
+  PutSel $sel $r (IdOf $r 'update uAllKinds\.dfm memOrdersTOTAL FieldKind')
   $r = Write-Dfm @('--select', $sel) $kdfm $z
   $kindWant = $newDfm.Replace("      FieldKind = fkCalculated`r`n      FieldName = 'TOTAL'`r`n      DisplayFormat = '0.00'`r`n      Calculated = True`r`n", "      FieldName = 'TOTAL'`r`n      DisplayFormat = '0.00'`r`n")
   Check 'W10l a chosen kind change rewrites FieldKind and Calculated only' (($r.Code -eq 0) -and ($kindWant -cne $newDfm) -and ((Text $kdfm) -ceq $kindWant)) ($r.Out + (Text $kdfm))
@@ -292,7 +302,129 @@ end
   Check 'W10n LF line ends and an ANSI byte stay' (($r.Code -eq 0) -and ((Text $kdfm) -ceq $lfWant)) $r.Out
   $o = & $Exe repo write-dfm --repo $y --dfm $ndfm --direction repo-to-dfm --dataset memOrders --names all --json 2>$null
   $j = ($o -join "`n") | ConvertFrom-Json
-  Check 'W11 --json: one object, the same change set' (($j.changeSet.direction -eq 'repo-to-dfm') -and ($j.changeSet.count -eq 16) -and ($j.applied -eq 0) -and ($j.datasets.Count -eq 1)) ($o -join "`n")
+  Check 'W11 --json: one object, the same change set, the plan id' (($j.plan -match '^[0-9a-f]{16}$') -and($j.changeSet.direction -eq 'repo-to-dfm') -and ($j.changeSet.count -eq 16) -and ($j.applied -eq 0) -and ($j.datasets.Count -eq 1)) ($o -join "`n")
+  # ---- H1: lookups ----
+  $ld = Join-Path $work 'look'; [IO.Directory]::CreateDirectory($ld) | Out-Null
+  $ldfm = Join-Path $ld 'uLook.dfm'
+  function LookForm($current, $datasets) {
+    Put $ldfm ("object frmLook: TfrmLook`n  object qryMain: TFDQuery`n    UpdateOptions.UpdateTableName = 'ORDERS'`n    object qryMainTOOLID: TIntegerField`n      FieldName = 'TOOLID'`n    end`n    object qryMainQTY: TIntegerField`n      FieldName = 'QTY'`n    end`n" +
+      "    object qryMainTOOL: TStringField`n      FieldKind = fkLookup`n      FieldName = 'TOOL'`n      LookupDataSet = $current`n      LookupKeyFields = 'ID'`n      LookupResultField = 'NAME'`n      KeyFields = 'QTY'`n      Size = 30`n      Lookup = True`n    end`n  end`n$datasets`nend`n")
+  }
+  $oneTool = "  object qryOneTool: TFDQuery`n    SQL.Strings = (`n      'SELECT ID, NAME FROM TOOLS WHERE ID = :ID')`n  end"
+  Put (Join-Path $ld 'uLook.pas') "unit uLook;`ninterface`nuses Data.DB;`ntype`n  TfrmLook = class(TForm)`n    qryMain: TFDQuery;`n  end;`nimplementation`nend.`n"
+  LookForm 'qryToolsJoin' "  object qryToolsJoin: TFDQuery`n    SQL.Strings = (`n      'SELECT T.ID, T.NAME FROM TOOLS T JOIN ORDERS O ON O.TOOLID = T.ID')`n  end`n$oneTool"
+  $r = Write-Dfm @() $ldfm
+  Check 'W12a a lookup into a join is not rewired' ($r.Out -match 'qryMainTOOL LookupDataSet: qryToolsJoin -> TOOLS\n  BLOCKED: the table of the current lookup dataset qryToolsJoin is not known: the SQL reads 2 tables') $r.Out
+  Check 'W12b nor is any part of its wiring' (($r.Out -match 'qryMainTOOL KeyFields: QTY -> TOOLID\n  BLOCKED: the table of') -and ($r.Out -notmatch '-> qryOneTool')) $r.Out
+  $h = Hash $ldfm
+  $r = Write-Dfm @('--apply') $ldfm
+  Check 'W12c --apply leaves it alone' (($r.Code -eq 0) -and ((Text $ldfm) -match 'LookupDataSet = qryToolsJoin\r\n') -and ((Text $ldfm) -match "KeyFields = 'QTY'\r\n")) $r.Out
+  LookForm 'tblTools' "  inherited tblTools: TFDTable`n    Left = 8`n  end`n$oneTool"
+  $r = Write-Dfm @() $ldfm
+  Check 'W12d an inherited table that does not restate TableName' ($r.Out -match 'LookupDataSet: tblTools -> TOOLS\n  BLOCKED: the table of the current lookup dataset tblTools is not known: no TableName') $r.Out
+  LookForm 'dmMain.tblTools' $oneTool
+  $r = Write-Dfm @() $ldfm
+  Check 'W12e a data module of another folder' ($r.Out -match 'LookupDataSet: dmMain\.tblTools -> TOOLS\n  BLOCKED: the current lookup dataset dmMain\.tblTools is not in the form') $r.Out
+  LookForm 'Frame1.tblTools' "  inline Frame1: TFrame1`n    object tblTools: TFDTable`n      TableName = 'TOOLS'`n    end`n  end`n$oneTool"
+  $r = Write-Dfm @() $ldfm
+  Check 'W12f a dataset in a frame is found by its qualified name: no change' (($r.Out -notmatch 'LookupDataSet') -and ($r.Out -match 'qryMainTOOL KeyFields: QTY -> TOOLID\n(?!  )')) $r.Out
+  LookForm 'qryOther' "  object qryOther: TFDQuery`n    SQL.Strings = (`n      'SELECT ID FROM ORDERS')`n  end`n$oneTool"
+  $r = Write-Dfm @() $ldfm
+  Check 'W12g control: a current dataset that reads another table is rewired' (($r.Out -match 'qryMainTOOL LookupDataSet: qryOther -> qryOneTool\n(?!  )') -and ($r.Out -match 'qryMainTOOL KeyFields: QTY -> TOOLID\n(?!  )')) $r.Out
+  LookForm 'qryOther' "  object qryOther: TFDQuery`n    SQL.Strings = (`n      'SELECT ID FROM ORDERS')`n  end`n  inline Frame1: TFrame1`n    object tblTools: TFDTable`n      TableName = 'TOOLS'`n    end`n  end"
+  $r = Write-Dfm @() $ldfm
+  Check 'W12h a dataset inside a frame is no new target' ($r.Out -match 'LookupDataSet: qryOther -> TOOLS\n  BLOCKED: the only dataset that reads TOOLS is inside a frame: Frame1\.tblTools') $r.Out
+  Put $ldfm "inherited frmLook: TfrmLook`n  inherited qryMain: TFDQuery`n    UpdateOptions.UpdateTableName = 'ORDERS'`n    inherited qryMainTOOL: TStringField`n      FieldKind = fkLookup`n      FieldName = 'TOOL'`n    end`n  end`n$oneTool`nend`n"
+  $r = Write-Dfm @() $ldfm
+  Check 'W12i an inherited lookup that states no wiring gets none' (($r.Code -eq 0) -and ($r.Out -notmatch 'LookupDataSet|KeyFields|LookupResult')) $r.Out
+  # ---- M1: by-name bindings ----
+  $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID') (Join-Path $nd 'uAllKinds.dfm')
+  Check 'W13a a column of a tree list binds NOTE, a grid QTY; OLDCOL is free' (($r.Out -match "delete uAllKinds\.dfm memOrdersNOTE: [^\n]*\n  BLOCKED: the DFM names 'NOTE': TreeNOTE\.DataBinding\.FieldName") -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersQTY: [^\n]*\n  BLOCKED: the DFM names') -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersOLDCOL: [^\n]*\n  \(unchecked\)')) $r.Out
+  $r = Write-Dfm @('--dataset', 'memTools', '--names', 'ID') $dfm
+  Check 'W13b the result field of a lookup' ($r.Out -match "delete uAllKinds\.dfm memToolsNAME: [^\n]*\n  BLOCKED: the DFM names 'NAME': memOrdersTOOL\.LookupResultField") $r.Out
+  $bd2 = Join-Path $work 'bind'; [IO.Directory]::CreateDirectory($bd2) | Out-Null
+  $bdf = Join-Path $bd2 'uBind.dfm'
+  $fields = (1..12 | ForEach-Object { "    object qryMainF$($_): TIntegerField`n      FieldName = 'F$($_)'`n    end`n" }) -join ''
+  Put $bdf ("object frmBind: TfrmBind`n  object dsMain: TDataSource`n    DataSet = qryMain`n  end`n  object Edit: TDBEdit`n    DataField = 'F1'`n    DataSource = dsMain`n  end`n  object Lbl: TLabel`n    Caption = 'F7'`n  end`n" +
+    "  object Grid: TDBGrid`n    Columns = <`n      item`n        Expanded = False`n        FieldName = 'F9'`n        Title.Caption = 'F8'`n      end>`n  end`n" +
+    "  object qryMain: TFDQuery`n    IndexFieldNames = 'F2:D;ID'`n    UpdateOptions.UpdateTableName = 'ORDERS'`n    object qryMainID: TIntegerField`n      FieldName = 'ID'`n    end`n$fields" +
+    "    object qryMainSUM: TAggregateField`n      FieldName = 'SUM'`n      Expression = 'SUM(F3)'`n    end`n    object qryMainLK: TStringField`n      FieldKind = fkLookup`n      FieldName = 'LK'`n      LookupDataSet = qryDet`n      LookupKeyFields = 'A;B'`n      LookupResultField = 'C'`n      KeyFields = 'ID;F4'`n    end`n  end`n" +
+    "  object qryDet: TFDQuery`n    MasterSource = dsMain`n    MasterFields = 'ID;F5'`n    SQL.Strings = (`n      'SELECT F8, X FROM DET'`n      'WHERE Y = :F6')`n    object qryDetF7: TIntegerField`n      FieldName = 'F7'`n      Origin = 'F12'`n    end`n  end`nend`n")
+  Put (Join-Path $bd2 'uBind.pas') "unit uBind;`ninterface`nuses Data.DB;`ntype`n  TfrmBind = class(TForm)`n  end;`nimplementation`nprocedure P;`nbegin`n  Q.Locate('ID;F10', V, []);`n  ShowMessage('F11 is a word of a text');`nend;`nend.`n"
+  $r = Write-Dfm @('--dataset', 'qryMain', '--names', 'ID') $bdf
+  $state = (1..12 | ForEach-Object { $m = [regex]::Match($r.Out, "delete uBind\.dfm qryMainF$($_): [^\n]*\n  (BLOCKED: [^\n]*|\(unchecked\))"); if (-not $m.Success) { '?' } elseif ($m.Value -match 'BLOCKED') { 'B' } else { '-' } }) -join ''
+  Check 'W13c DataField, IndexFieldNames, Expression, KeyFields, MasterFields, a SQL parameter, a grid column, Locate; not a caption, a selected column, the field of another dataset' ($state -eq 'BBBBBB--BB--') ($state + "`n" + $r.Out)
+  # ---- M2: the plan id ----
+  $pd = NewForms 'plan'
+  $pdfm = Join-Path $pd 'uAllKinds.dfm'; $ppas = Join-Path $pd 'uAllKinds.pas'
+  $names = @('--dataset', 'memOrders', '--names', 'ID,QTY,NOTE,USEDCOL')
+  $r = Write-Dfm $names $pdfm
+  $again = Write-Dfm $names $pdfm
+  $id = IdOf $r 'delete uAllKinds\.dfm memOrdersOLDCOL'
+  Check 'W14a the same files and repository: the same plan id' ((PlanOf $r) -eq (PlanOf $again) -and (PlanOf $r) -ne 'none') $r.Out
+  PutSel $sel $r $id
+  function Refused($what, $more, $repo) {
+    $h1 = Hash $pdfm; $h2 = Hash $ppas
+    $x1 = Write-Dfm ($more + @('--select', $sel)) $pdfm $repo
+    $x2 = Write-Dfm ($more + @('--apply', '--select', $sel)) $pdfm $repo
+    Check "W14b $what`: --select and --apply --select are refused, nothing written" (($x1.Code -eq 1) -and ($x2.Code -eq 1) -and ($x1.Out -match 'the plan is now') -and ($h1 -eq (Hash $pdfm)) -and ($h2 -eq (Hash $ppas)) -and ((Backups $pd).Count -eq 0)) ($x1.Out + $x2.Out)
+  }
+  Put $pdfm $oldDfm.Replace("'All field kinds'", "'All the field kinds'")
+  Refused 'the form changed' $names $y
+  Put $pdfm $oldDfm; Put $ppas ($oldPas + "{ }`r`n")
+  Refused 'the unit changed' $names $y
+  Put $ppas $oldPas
+  $y2 = Join-Path $work 'y2.dlrepo'
+  EditRepo $y $y2 { param($t) SetCol $t 'ORDERS|PRICE' 'DISPLAY_LABEL' 'Cost' }
+  Refused 'the repository changed, the change list did not' $names $y2
+  Refused 'another selection' @('--dataset', 'memOrders', '--names', 'ID,QTY,NOTE') $y
+  [IO.File]::WriteAllText($sel, $id)
+  $h = Hash $pdfm
+  $r = Write-Dfm ($names + @('--select', $sel)) $pdfm
+  Check 'W14c no plan line: a usage error, nothing written' (($r.Code -eq 2) -and (Has $r 'has no line') -and ($h -eq (Hash $pdfm)) -and ((Backups $pd).Count -eq 0)) $r.Out
+  PutSel $sel $again $id
+  $r = Write-Dfm ($names + @('--apply', '--select', $sel)) $pdfm
+  Check 'W14d control: the plan is the same again: written' (($r.Code -eq 0) -and (Has $r 'applied: 1 changes') -and ((Text $pdfm) -notmatch 'OLDCOL')) $r.Out
+  # ---- M3: the first persistent field ----
+  $fd = Join-Path $work 'first'; [IO.Directory]::CreateDirectory($fd) | Out-Null
+  $fdfm = Join-Path $fd 'uFirst.dfm'
+  Put $fdfm "object frmFirst: TfrmFirst`n  object qryPlain: TFDQuery`n    SQL.Strings = (`n      'SELECT ID, QTY FROM ORDERS')`n  end`nend`n"
+  Put (Join-Path $fd 'uFirst.pas') "unit uFirst;`ninterface`nuses Data.DB;`ntype`n  TfrmFirst = class(TForm)`n    qryPlain: TFDQuery;`n  end;`nimplementation`nend.`n"
+  $h = Hash $fdfm
+  $r = Write-Dfm @('--dataset', 'qryPlain', '--names', 'ID') $fdfm
+  Check 'W15a the first persistent field is unchecked, with a warning' (($r.Out -match "insert uFirst\.dfm qryPlainID: [^\n]*\n  \(unchecked\)") -and ($r.Out -match 'warning: uFirst\.dfm qryPlain: has no persistent field\. .*vanish')) $r.Out
+  PutSel $sel $r (IdOf $r 'insert uFirst\.dfm qryPlainID')
+  $ra = Write-Dfm @('--dataset', 'qryPlain', '--names', 'ID', '--apply') $fdfm
+  Check 'W15b --apply writes nothing' ((Has $ra 'applied: 0 changes') -and ($h -eq (Hash $fdfm))) $ra.Out
+  $ra = Write-Dfm @('--dataset', 'qryPlain', '--names', 'ID', '--select', $sel) $fdfm
+  Check 'W15c control: --select writes it' ((Has $ra 'applied: 1 changes') -and ((Text $fdfm) -match 'object qryPlainID: TIntegerField')) $ra.Out
+  $r = Write-Dfm @('--dataset', 'qryPlain', '--names', 'ID,QTY') $fdfm
+  Check 'W15d control: the second one is checked' ($r.Out -match "insert uFirst\.dfm qryPlainQTY: [^\n]*\n(?!  )") $r.Out
+  # ---- M4: directives ----
+  $cd2 = NewForms 'cond'
+  $cdfm = Join-Path $cd2 'uAllKinds.dfm'; $cpas = Join-Path $cd2 'uAllKinds.pas'
+  $used = "    memOrdersUSEDCOL: TIntegerField;`r`n"
+  $demo = $oldPas.Replace($used, "    {`$IFDEF DEMO}`r`n$used    {`$ENDIF}`r`n")
+  Put $cpas $demo
+  $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID,QTY,NOTE,OLDCOL,USEDCOL,FLAG', '--apply') $cdfm
+  Check 'W16a the new declaration goes outside $IFDEF' (($r.Code -eq 0) -and ((Text $cpas) -ceq $demo.Replace("    memOrdersOLDCOL: TIntegerField;`r`n", "    memOrdersOLDCOL: TIntegerField;`r`n    memOrdersFLAG: TBooleanField;`r`n"))) (Text $cpas)
+  Put $cdfm $oldDfm
+  Put $cpas ($oldPas.Replace('TfrmAllKinds = class(TForm)', 'TfrmAllKinds = class(TForm) {$IFNDEF X}').Replace("  private`r`n", "  {`$ENDIF}`r`n  private`r`n"))
+  $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID,QTY,NOTE,OLDCOL,USEDCOL,FLAG') $cdfm
+  Check 'W16b no safe place: blocked' ($r.Out -match 'insert uAllKinds\.dfm memOrdersFLAG: [^\n]*\n  BLOCKED: uAllKinds\.pas: no place to declare') $r.Out
+  # ---- two forms ----
+  $t1 = NewForms 'two1'; $t2 = NewForms 'two2'
+  $f1 = Join-Path $t1 'uAllKinds.dfm'; $f2 = Join-Path $t2 'uAllKinds.dfm'
+  $r = Write-Dfm @('--apply') "$f1;$f1"
+  Check 'W17a one form given twice is planned once' (($r.Code -eq 0) -and (Has $r 'applied: 6 changes') -and ((Text $f1) -ceq $want)) $r.Out
+  Put $f1 $oldDfm
+  $r = Write-Dfm @('--apply') "$f1;$f2"
+  Check 'W17b two forms are both written' (($r.Code -eq 0) -and (Has $r 'applied: 12 changes') -and ((Text $f1) -ceq $want) -and ((Text $f2) -ceq $want)) $r.Out
+  Put $f1 $oldDfm
+  $null = & $conv -i -b $f2 2>&1
+  $n1 = (Backups $t1).Count
+  $r = Write-Dfm @('--apply') "$f1;$f2"
+  Check 'W17c the second form cannot be written: the first one stays' (($r.Code -eq 1) -and ((Text $f1) -ceq $oldDfm) -and ((Backups $t1).Count -eq $n1)) $r.Out
 }
 finally {
   if ($env:DL_KEEP_WORKDIR -ne '1') { try { [IO.Directory]::Delete($work, $true) } catch { } } else { Write-Host "kept: $work" }

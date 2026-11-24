@@ -26,7 +26,9 @@ function IsRepoDfmWriteSub(const pSub: string): Boolean;
 /// error: no --dfm, --direction missing or not repo-to-dfm, a bad --names selection or --select file (nothing is
 /// written).</returns>
 /// <remarks>The default is a DRY RUN: no file changes. --apply writes the checked changes, --select exactly the ids
-/// its file names; --dry-run wins over both. Every changed file gets a backup beside it.</remarks>
+/// its file names; --dry-run wins over both. The --select file must hold the line `# plan ID` of the dry run its ids are
+/// from: without it exit 2, with another id than the plan now has exit 1; nothing is written then. Every changed file
+/// gets a backup beside it.</remarks>
 function RunRepoDfmWriteVerb(const pSub, pPath: string; pJson: Boolean): Integer;
 
 implementation
@@ -41,6 +43,7 @@ uses
   DRagLint.FieldRepo.ChangeSet,
   DRagLint.FieldRepo.DfmReadPlan,
   DRagLint.FieldRepo.DfmReadSelection,
+  DRagLint.FieldRepo.DfmWrite,
   DRagLint.FieldRepo.DfmWritePlan;
 
 const
@@ -48,7 +51,8 @@ const
   EXIT_FAIL = 1;
   EXIT_USAGE = 2;
   SUB_WRITE_DFM = 'write-dfm';
-  DRY_RUN_LINE = 'dry run: nothing written (add --apply, or --select <file>, to write)';
+  PLAN_MARK = '# plan ';
+  DRY_RUN_LINE = 'dry run: nothing written (add --apply, or --select <file> with the # plan line and the ids, to write)';
 
 type
   TRunOptions = record
@@ -127,6 +131,7 @@ begin
   end;
   for VLine in RenderChangeSetText(pRun.Plan.ChangeSet) do
     Writeln(VLine);
+  Writeln(PLAN_MARK, pRun.Plan.PlanId);
   for VLine in pRun.Plan.Warnings do
     Writeln('warning: ', VLine);
   for VLine in pRun.Log do
@@ -170,6 +175,7 @@ begin
   try
     VRoot.AddPair('datasets', DatasetsJson(pRun.Plan));
     VRoot.AddPair('changeSet', TJSONObject.ParseJSONValue(RenderChangeSetJson(pRun.Plan.ChangeSet)));
+    VRoot.AddPair('plan', pRun.Plan.PlanId);
     VRoot.AddPair('warnings', StringsJson(pRun.Plan.Warnings));
     VRoot.AddPair('applied', TJSONNumber.Create(pRun.Applied));
     VRoot.AddPair('log', StringsJson(pRun.Log));
@@ -179,14 +185,39 @@ begin
   end;
 end;
 
-function ChosenChanges(const pSet: TFrChangeSet; const pSelectFile: string): TArray<TFrChange>;
+{ Ids say nothing without the plan they were read from. }
+procedure CheckPlanLine(const pLines: TArray<string>; const pPlanId: string);
+var
+  VLine: string;
+  VFound: Boolean;
+begin
+  VFound := False;
+  for VLine in pLines do
+    if Trim(VLine).StartsWith(PLAN_MARK, True) then
+    begin
+      VFound := True;
+      if not SameText(Trim(Trim(VLine).Substring(Length(PLAN_MARK))), pPlanId) then
+        raise EDfmWriteError.Create('the --select file has ' + QuotedStr(Trim(VLine)) + ', the plan is now ' + pPlanId +
+          ': a form, its unit, the repository or the selection changed since the dry run. Nothing written: run it again and choose again');
+    end;
+  if not VFound then
+    raise EFrChangeSetError.Create('the --select file has no line ' + QuotedStr(PLAN_MARK + '<id>') +
+      ': copy it from the dry run the ids are from. Nothing written');
+end;
+
+function ChosenChanges(const pPlan: TDfmwPlan; const pSelectFile: string): TArray<TFrChange>;
 var
   VChange: TFrChange;
+  VLines: TArray<string>;
 begin
   if pSelectFile <> '' then
-    Exit(SelectChanges(pSet, TFile.ReadAllLines(pSelectFile)));
+  begin
+    VLines := TFile.ReadAllLines(pSelectFile);
+    CheckPlanLine(VLines, pPlan.PlanId);
+    Exit(SelectChanges(pPlan.ChangeSet, VLines));
+  end;
   Result := nil;
-  for VChange in pSet.Changes do
+  for VChange in pPlan.ChangeSet.Changes do
     if VChange.Checked and (VChange.Blocked = '') then
       Result := Result + [VChange];
 end;
@@ -205,7 +236,7 @@ begin
   end;
   if not pOptions.Write then
     Exit;
-  VChosen := ChosenChanges(Result.Plan.ChangeSet, pOptions.SelectFile);
+  VChosen := ChosenChanges(Result.Plan, pOptions.SelectFile);
   Result.Log := ApplyDfmWrite(Result.Plan, VChosen);
   Result.Applied := Length(VChosen);
 end;

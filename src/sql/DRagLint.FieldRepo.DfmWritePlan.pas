@@ -74,6 +74,9 @@ type
     Datasets: TArray<TDfmrDatasetReport>;
     /// <summary>Everything the repository holds that is not written, and every fact to look at.</summary>
     Warnings: TArray<string>;
+    /// <summary>Hash of the bytes of every DFM and unit that was read, of the repository's fields, domains and
+    /// constraints, and of the change list: two plans with one id mean the same by every change id.</summary>
+    PlanId: string;
   end;
 
   /// <summary>The new content of one file.</summary>
@@ -92,14 +95,16 @@ type
 /// <param name="pDataset">Dataset component name (case-insensitive); '' = every dataset of every file.</param>
 /// <param name="pFields">Field selection of the one dataset: FIELD_NAMEs or `all`; nil = no field is added or
 /// removed. ExpandSelection adds what the selected fields depend on.</param>
-/// <returns>The plan. Checked: property changes and added fields. Unchecked: removed fields, hidden fields and changed kinds.
-/// Blocked: everything that cannot be written so that the form still loads.</returns>
+/// <returns>The plan. Checked: property changes and added fields. Unchecked: removed fields, hidden fields, changed kinds and
+/// the first persistent fields of a dataset. Blocked: everything that cannot be written so that the form still loads, a
+/// lookup whose current dataset has no known table, and a removed field that the form or its unit names.</returns>
 /// <exception cref="EDfmWriteError">A binary DFM, or one that Delphi or the readers do not understand.</exception>
 /// <exception cref="EDfmWriteSelection">pFields without exactly one dataset with a table.</exception>
 /// <exception cref="EDfmReadError">A file or the dataset does not exist.</exception>
 /// <exception cref="EFrSelectionError">An unknown field in pFields.</exception>
 /// <exception cref="ERepoError">The repository is schema 1 (run repo migrate first).</exception>
-/// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids.</remarks>
+/// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids and the same PlanId. A
+/// file given twice is planned once. A file that is open in the IDE is read from disk.</remarks>
 function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
   const pFields: TArray<string>): TDfmwPlan;
 
@@ -107,8 +112,8 @@ function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const 
 /// <param name="pPlan">The plan.</param>
 /// <param name="pChosen">Changes to apply.</param>
 /// <returns>Only the files whose bytes change. Every new DFM was converted to binary by the RTL and read again.</returns>
-/// <exception cref="EDfmWriteError">A chosen change is blocked, needs a change that was not chosen, or the result does
-/// not read back as planned.</exception>
+/// <exception cref="EDfmWriteError">A chosen change is blocked, or the result does not read back as planned.</exception>
+/// <exception cref="EDfmWriteSelection">A chosen change needs one that was not chosen.</exception>
 /// <remarks>No file is read or written: the applier for an open designer uses this too.</remarks>
 function RenderDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>): TArray<TDfmwOutput>;
 
@@ -119,7 +124,8 @@ function RenderDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>
 /// <exception cref="EDfmWriteError">As RenderDfmWrite; a file changed since the plan; a file cannot be written (the
 /// files written before it are restored).</exception>
 /// <remarks>Everything is computed and checked before the first byte is written. Backup name:
-/// `FILE.before-write-dfm-yyyymmdd-hhnnss`, never an existing file.</remarks>
+/// `FILE.before-write-dfm-yyyymmdd-hhnnss`, never an existing file. A file is replaced by a complete new one, never
+/// written in place.</remarks>
 function ApplyDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>): TArray<string>;
 
 /// <summary>The TField class a repository field gets in a new persistent field.</summary>
@@ -135,10 +141,12 @@ function FieldClassForRow(pFieldType, pSubType, pScale: Integer; const pAsType, 
 implementation
 
 uses
+  Winapi.Windows,
   System.Classes,
   System.IOUtils,
   System.Math,
   System.StrUtils,
+  System.Hash,
   System.TypInfo,
   System.RegularExpressions,
   System.Generics.Collections,
@@ -161,8 +169,15 @@ const
   OBJECT_KIND = 'object';
   UNIT_DB = 'Data.DB';
   UNIT_OLD_DB = 'DB';
-  BACKUP_STAMP = '.before-write-dfm-';
   PROP_LABEL = 'DisplayLabel';
+  BACKUP_STAMP = '.before-write-dfm-';
+  NEW_FILE_STAMP = '.write-dfm-new';
+  PLAN_ID_LENGTH = 16; // hex digits
+  PROP_FIELD_NAME = 'FieldName';
+  { strings that are read by people or declare columns, not by-name bindings }
+  UNBOUND_PROPS: array[0..4] of string = ('Caption', 'Hint', PROP_LABEL, 'Lines', 'FieldDefs');
+  { tables the plan is made from }
+  PLAN_TABLES: array[0..3] of string = ('DL_FIELDS_INFO', 'DL_DOMAINS', 'DL_CONSTRAINTS', 'DL_CONSTRAINT_COLUMNS');
   PROP_FORMAT = 'DisplayFormat';
   PROP_EDIT_FORMAT = 'EditFormat';
   PROP_WIDTH = 'DisplayWidth';
@@ -266,7 +281,8 @@ type
 
   { A lookup's dataset. }
   TLookupTarget = record
-    RefName: string; // as the DFM names it: `tblTools`, `dmMain.tblTools`
+    RefName: string; // as the DFM names it: `tblTools`, `dmMain.tblTools`, `Frame1.tblTools`
+    InFrame: Boolean;
     Dataset: TDfmrDataset;
     Source: TSource;
   end;
@@ -291,7 +307,10 @@ type
     FSource: TSource;
     FPlanned: TList<TPlannedField>;
     FNewNames: TStringList;
+    FReads: TStringList; // file=hash of everything read from disk
     procedure LoadRows;
+    procedure NoteRead(const pFile: string; const pBytes: TBytes);
+    function PlanId: string;
     procedure OpenForm(const pFile: string);
     procedure CloseForm;
     procedure CheckReaders;
@@ -309,6 +328,7 @@ type
     procedure PlanLookup(const pField: TDfmrField; const pRow: TRepoField);
     procedure PlanSelection(const pFields: TArray<string>);
     procedure PlanInsert(const pRow: TRepoField);
+    procedure UncheckFirstFields(pFirst: Integer);
     procedure PlanDelete(const pField: TDfmrField);
     function Stated(const pField: TDfmrField; const pProp: string; out pText: string): Boolean;
     function IsOwn(const pField: TDfmrField): Boolean;
@@ -319,7 +339,9 @@ type
     function ColumnOf(const pDataset: TDfmrDataset; const pSource: TSource; const pName: string): string;
     function NameOf(const pDataset: TDfmrDataset; const pSource: TSource; const pColumn: string; out pBlocked: string): string;
     function PlannedName(const pColumn: string; out pId: Integer): string;
+    function FormTargets: TArray<TLookupTarget>;
     function TryCurrentTarget(const pName: string; out pTarget: TLookupTarget): Boolean;
+    function TargetOfLookup(const pField: TDfmrField; const pRow: TRepoField; out pTarget: TLookupTarget): string;
     function TargetsOf(const pTable: string): TArray<TLookupTarget>;
     function ModuleForms: TArray<TDfmrForm>;
     function LookupNamesReason(const pRow: TRepoField; const pTarget: TLookupTarget; pField: TField): string;
@@ -328,6 +350,7 @@ type
     function ClassOfRow(const pRow: TRepoField): string;
     function SizeOfRow(const pRow: TRepoField): Integer;
     function NewComponentName(const pField: string): string;
+    function BindingsOf(const pField: TDfmrField): string;
     function DeleteBlockReason(const pField: TDfmrField): string;
   public
     constructor Create(pRepo: TFDConnection);
@@ -532,11 +555,13 @@ begin
   FItems := TList<TDfmwItem>.Create;
   FPlanned := TList<TPlannedField>.Create;
   FNewNames := TStringList.Create;
+  FReads := TStringList.Create(dupIgnore, True, False);
 end;
 
 destructor TDfmWritePlanner.Destroy;
 begin
   CloseForm;
+  FReads.Free;
   FNewNames.Free;
   FPlanned.Free;
   FItems.Free;
@@ -605,6 +630,51 @@ begin
   end;
 end;
 
+procedure TDfmWritePlanner.NoteRead(const pFile: string; const pBytes: TBytes);
+var
+  VHash: THashSHA2;
+begin
+  VHash := THashSHA2.Create;  // dl:ok object-leak@1695 -- REVIEWED 2026-11-23 DFMWFIX: THashSHA2 is a record
+  VHash.Update(pBytes);
+  FReads.Add(LowerCase(pFile) + '=' + VHash.HashAsString);
+end;
+
+{ Every value of a table, in row order. }
+function TableText(pRepo: TFDConnection; const pTable: string): string;
+var
+  VQuery: TFDQuery;
+  VText: TStringBuilder;
+  VI: Integer;
+begin
+  VText := TStringBuilder.Create(pTable);
+  VQuery := TFDQuery.Create(nil);
+  try
+    VQuery.Connection := pRepo;
+    VQuery.Open('SELECT * FROM ' + QuoteRepoIdent(pTable) + ' ORDER BY 1, 2');  // dl:ok path-traversal@1c5d -- REVIEWED 2026-11-23 DFMWFIX: SQL text, not a path: a constant table name through QuoteRepoIdent
+    while not VQuery.Eof do
+    begin
+      VText.AppendLine;
+      for VI := 0 to VQuery.FieldCount - 1 do
+        VText.Append(if VQuery.Fields[VI].IsNull then '-' else '=' + VQuery.Fields[VI].AsString).Append(#9);
+      VQuery.Next;
+    end;
+    Result := VText.ToString;
+  finally
+    VQuery.Free;
+    VText.Free;
+  end;
+end;
+
+function TDfmWritePlanner.PlanId: string;
+var
+  VText, VTable: string;
+begin
+  VText := FReads.Text;
+  for VTable in PLAN_TABLES do
+    VText := VText + THashSHA2.GetHashString(TableText(FRepo, VTable)) + #10;
+  Result := THashSHA2.GetHashString(VText + RenderChangeSetJson(FPlan.ChangeSet)).Substring(0, PLAN_ID_LENGTH);
+end;
+
 { An instance of the class: its defaults and its published properties; nil = class not linked. }
 function TDfmWritePlanner.Sample(const pClass: string): TField;
 var
@@ -658,6 +728,7 @@ begin
   if not TFile.Exists(VFile.DfmName) then
     raise EDfmReadError.CreateFmt('the DFM does not exist: %s', [pFile]);
   VFile.DfmBytes := TFile.ReadAllBytes(VFile.DfmName);
+  NoteRead(VFile.DfmName, VFile.DfmBytes);
   FDoc := TDfmDocument.Create(VFile.DfmBytes, ExtractFileName(VFile.DfmName));
   FForm := LoadDfmForm(VFile.DfmName);
   CheckReaders;
@@ -667,6 +738,7 @@ begin
   begin
     VFile.PasName := VPas;
     VFile.PasBytes := TFile.ReadAllBytes(VPas);
+    NoteRead(VPas, VFile.PasBytes);
     FUnit := TDfmUnitDocument.Create(VFile.PasBytes, ExtractFileName(VPas));
   end;
   FFileIndex := Length(FPlan.Files);
@@ -714,6 +786,8 @@ begin
   FChanges.List[pIndex].Checked := False;
 end;
 
+procedure CheckUnit(const pBytes: TBytes; const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>); forward;
+
 { Adds a change and tries it alone: one that cannot be written is blocked with the reason. }
 function TDfmWritePlanner.AddItem(const pItem: TDfmwItem; pOp: TFrChangeOp; const pOld, pNew: string): Integer;
 var
@@ -741,6 +815,8 @@ begin
   try
     ApplyItem(FDoc, FUnit, FForm.FormClass, pItem);
     FDoc.Output;
+    if pItem.Action in [dwaInsert, dwaDelete] then
+      CheckUnit(FUnit.Output, FPlan.Files[FFileIndex], [pItem]);
   except
     on E: EDfmWriteError do
       Block(Result, E.Message);
@@ -906,6 +982,7 @@ begin
     if SameText(VFile, FForm.FileName) or (FUnit.Mentions(VUnit.Substring(VUnit.LastIndexOf('.') + 1)) = 0) then
       Continue;
     try
+      NoteRead(VFile, TFile.ReadAllBytes(VFile));
       Result := Result + [LoadDfmForm(VFile)];
     except
       on E: EDfmReadError do
@@ -914,14 +991,35 @@ begin
   end;
 end;
 
-procedure AddTarget(var pTargets: TArray<TLookupTarget>; const pRefName: string; const pDataset: TDfmrDataset);
+procedure AddTarget(var pTargets: TArray<TLookupTarget>; const pRefName: string; const pDataset: TDfmrDataset; pInFrame: Boolean = False);
 var
   VTarget: TLookupTarget;
 begin
   VTarget.RefName := pRefName;
+  VTarget.InFrame := pInFrame;
   VTarget.Dataset := pDataset;
   VTarget.Source := SourceOf(pDataset);
   pTargets := pTargets + [VTarget];
+end;
+
+{ The form's datasets; FForm.Datasets and FDoc.Objects are both in DFM order. One that is not a child of the root is in a frame. }
+function TDfmWritePlanner.FormTargets: TArray<TLookupTarget>;
+var
+  VDataset: TDfmrDataset;
+  VNext: Integer;
+  VInFrame: Boolean;
+begin
+  Result := nil;
+  VNext := 1;
+  for VDataset in FForm.Datasets do
+  begin
+    while (VNext < High(FDoc.Objects)) and not (SameText(FDoc.Objects[VNext].Name, VDataset.Name)
+      and SameText(FDoc.Objects[VNext].ObjClass, VDataset.DatasetClass)) do
+      Inc(VNext);
+    VInFrame := FDoc.Objects[VNext].Parent > 0;
+    AddTarget(Result, (if VInFrame then FDoc.Objects[FDoc.Objects[VNext].Parent].Name + '.' else '') + VDataset.Name, VDataset, VInFrame);
+    Inc(VNext);
+  end;
 end;
 
 { The datasets a lookup into pTable can use: this form's, or else those of the modules its unit names. }
@@ -929,11 +1027,12 @@ function TDfmWritePlanner.TargetsOf(const pTable: string): TArray<TLookupTarget>
 var
   VDataset: TDfmrDataset;
   VForm: TDfmrForm;
+  VTarget: TLookupTarget;
 begin
   Result := nil;
-  for VDataset in FForm.Datasets do
-    if SameText(SourceOf(VDataset).TableName, pTable) and (not SameText(VDataset.Name, FDataset.Name)) then
-      AddTarget(Result, VDataset.Name, VDataset);
+  for VTarget in FormTargets do
+    if SameText(VTarget.Source.TableName, pTable) and (not SameText(VTarget.Dataset.Name, FDataset.Name)) then
+      Result := Result + [VTarget];
   if Length(Result) > 0 then
     Exit;
   for VForm in ModuleForms do
@@ -950,9 +1049,7 @@ var
   VTargets: TArray<TLookupTarget>;
   VTarget: TLookupTarget;
 begin
-  VTargets := nil;
-  for VDataset in FForm.Datasets do
-    AddTarget(VTargets, VDataset.Name, VDataset);
+  VTargets := FormTargets;
   VForms := if pName.Contains('.') then ModuleForms else nil;
   for VForm in VForms do
     for VDataset in VForm.Datasets do
@@ -984,7 +1081,9 @@ begin
   if Length(pTargets) = 0 then
     Result := 'no dataset of the form (or of a module its unit names) reads ' + pTable
   else if Length(pTargets) > 1 then
-    Result := Format('%d datasets read %s: %s', [Length(pTargets), pTable, TargetNames(pTargets)]);
+    Result := Format('%d datasets read %s: %s', [Length(pTargets), pTable, TargetNames(pTargets)])
+  else if pTargets[0].InFrame then
+    Result := 'the only dataset that reads ' + pTable + ' is inside a frame: ' + pTargets[0].RefName;
 end;
 
 { The key column of the lookup table: DESTKEY, or its one-column primary key. }
@@ -1000,43 +1099,75 @@ begin
     Result := VPk[0];
 end;
 
+{ The dataset of a lookup after the plan: the current one, or the one that reads DESTTABLE. Returns why it is not
+  settled: a current dataset without a known table may be the right one, so it is never replaced. }
+function TDfmWritePlanner.TargetOfLookup(const pField: TDfmrField; const pRow: TRepoField; out pTarget: TLookupTarget): string;
+var
+  VFound: Boolean;
+  VTargets: TArray<TLookupTarget>;
+begin
+  Result := '';
+  VFound := TryCurrentTarget(pField.LookupDataSet, pTarget);
+  if VFound and SameText(pTarget.Source.TableName, pRow.DestTable) then
+    Exit;
+  if VFound and (pTarget.Source.TableName = '') then
+    Exit(Format('the table of the current lookup dataset %s is not known: %s', [pField.LookupDataSet, pTarget.Source.Reason]));
+  if (pField.LookupDataSet <> '') and not VFound then
+    Exit(Format('the current lookup dataset %s is not in the form or in a module its unit names: its table is not known',
+      [pField.LookupDataSet]));
+  VTargets := TargetsOf(pRow.DestTable);
+  Result := TargetReason(VTargets, pRow.DestTable);
+  if Result = '' then
+    pTarget := VTargets[0]; // TargetReason is '' for exactly one target
+end;
+
 procedure TDfmWritePlanner.PlanLookup(const pField: TDfmrField; const pRow: TRepoField);
 var
   VTarget: TLookupTarget;
-  VTargets: TArray<TLookupTarget>;
+  VReason: string;
+
+  { An inherited field states only what it overrides. }
+  function IsHere(const pProp: string): Boolean;
+  var
+    VText: string;
+  begin
+    Result := IsOwn(pField) or Stated(pField, pProp, VText);
+  end;
 
   { Compares in column space: the DFM names dataset fields, the repository columns. }
   procedure PlanColumnName(const pProp, pCurrent, pColumn: string; const pDataset: TDfmrDataset; const pSource: TSource);
   var
     VName, VBlocked: string;
   begin
-    if (pColumn = '') or SameText(ColumnOf(pDataset, pSource, pCurrent), pColumn) then
+    if (pColumn = '') or SameText(ColumnOf(pDataset, pSource, pCurrent), pColumn) or not IsHere(pProp) then
       Exit;
     VName := NameOf(pDataset, pSource, pColumn, VBlocked);
     if pCurrent.Contains(MULTI_FIELD) then
-      VBlocked := 'multi-field lookup key';
+      VBlocked := 'multi-field lookup key'
+    else if VReason <> '' then
+      VBlocked := VReason;
     SetItem(pField, pProp, pCurrent, if VName = '' then pColumn else VName, DfmStringLiteral(VName), VBlocked);
   end;
 
 begin
+  VReason := '';
+  VTarget := Default(TLookupTarget);
+  if (pRow.DestTable <> '') and IsHere(PROP_LOOKUP_DATASET) then
+    VReason := TargetOfLookup(pField, pRow, VTarget);
+  { with an unsettled dataset no part of the wiring changes }
   PlanColumnName('KeyFields', pField.KeyFields, pRow.SourceKey, FDataset, FSource);
-  if pRow.DestTable = '' then
+  if (pRow.DestTable = '') or not IsHere(PROP_LOOKUP_DATASET) then
     Exit;
-  if not (TryCurrentTarget(pField.LookupDataSet, VTarget) and SameText(VTarget.Source.TableName, pRow.DestTable)) then
+  if VReason <> '' then
+    SetItem(pField, PROP_LOOKUP_DATASET, pField.LookupDataSet, pRow.DestTable, pRow.DestTable, VReason)
+  else
   begin
-    VTargets := TargetsOf(pRow.DestTable);
-    if Length(VTargets) <> 1 then
-    begin
-      SetItem(pField, PROP_LOOKUP_DATASET, pField.LookupDataSet, pRow.DestTable, pRow.DestTable, TargetReason(VTargets, pRow.DestTable));
-      Exit;
-    end;
-    VTarget := VTargets[0];
-    SetItem(pField, PROP_LOOKUP_DATASET, pField.LookupDataSet, VTarget.RefName, VTarget.RefName, '');
+    if not SameText(VTarget.RefName, pField.LookupDataSet) then
+      SetItem(pField, PROP_LOOKUP_DATASET, pField.LookupDataSet, VTarget.RefName, VTarget.RefName, '');
+    PlanColumnName('LookupKeyFields', pField.LookupKeyFields, LookupKeyColumn(FRepo, pRow), VTarget.Dataset, VTarget.Source);
+    PlanColumnName('LookupResultField', pField.LookupResult, pRow.DestValue, VTarget.Dataset, VTarget.Source);
   end;
-  PlanColumnName('LookupKeyFields', pField.LookupKeyFields, LookupKeyColumn(FRepo, pRow), VTarget.Dataset, VTarget.Source);
-  PlanColumnName('LookupResultField', pField.LookupResult, pRow.DestValue, VTarget.Dataset, VTarget.Source);
 end;
-
 { ---- existing fields ---- }
 
 procedure TDfmWritePlanner.PlanField(const pField: TDfmrField; const pRow: TRepoField);
@@ -1302,6 +1433,41 @@ end;
 
 { ---- removed fields ---- }
 
+{ True when a string of the DFM names a field: the name as a word (a `;` list, an expression, a filter). In a SQL text
+  only a parameter of that name counts: it is filled from the field of a master dataset. }
+function NamesField(const pString: TDfmwString; const pFieldName: string): Boolean;
+var
+  VName, VProp: string;
+begin
+  if MatchText(pString.Prop, UNBOUND_PROPS) then
+    Exit(False);
+  for VProp in pString.ItemProp.Split(['.']) do
+    if MatchText(VProp, UNBOUND_PROPS) then
+      Exit(False);
+  VName := TRegEx.Escape(pFieldName) + '(?!\w)';
+  VName := (if ContainsText(pString.ItemProp, 'SQL') or ContainsText(pString.ItemProp, 'CommandText') then ':(OLD_|NEW_)?' else '(?<!\w)') + VName;
+  Result := TRegEx.IsMatch(pString.Text, VName, [roIgnoreCase]);
+end;
+
+{ Every place of the form that binds the field by its name. A persistent field of another dataset only has the same name. }
+function TDfmWritePlanner.BindingsOf(const pField: TDfmrField): string;
+var
+  VString: TDfmwString;
+  VObject: TDfmwObject;
+  VPlaces: TArray<string>;
+begin
+  VPlaces := nil;
+  for VString in FDoc.Strings do
+  begin
+    VObject := FDoc.Objects[VString.ObjectIndex];
+    if SameText(VObject.Name, pField.CompName) or (EndsText('Field', VObject.ObjClass)
+      and MatchText(VString.ItemProp, [PROP_FIELD_NAME, 'Origin'])) or not NamesField(VString, pField.FieldName) then
+      Continue;
+    VPlaces := VPlaces + [VObject.Name + '.' + VString.ItemProp];
+  end;
+  Result := string.Join(', ', VPlaces);
+end;
+
 { Why the form or its unit still needs the component. }
 function TDfmWritePlanner.DeleteBlockReason(const pField: TDfmrField): string;
 var
@@ -1314,12 +1480,15 @@ begin
   VRefs := FDoc.ReferencesTo(pField.CompName);
   if Length(VRefs) > 0 then
     Exit('used in the DFM: ' + string.Join(', ', VRefs));
+  Result := BindingsOf(pField);
+  if Result <> '' then
+    Exit('the DFM names ' + QuotedStr(pField.FieldName) + ': ' + Result);
   if FUnit = nil then
     Exit;
   VDeclared := if IndexOfDecl(FUnit.Declarations(FForm.FormClass), pField.CompName) >= 0 then 1 else 0;
   if FUnit.Mentions(pField.CompName) > VDeclared then
     Result := 'used in the code of the unit'
-  else if FUnit.Mentions(QuotedStr(pField.FieldName)) > 0 then
+  else if FUnit.NamesInString(pField.FieldName) then
     Result := 'the unit names ' + QuotedStr(pField.FieldName);
 end;
 
@@ -1327,7 +1496,6 @@ procedure TDfmWritePlanner.PlanDelete(const pField: TDfmrField);
 var
   VItem: TDfmwItem;
   VIndex: Integer;
-  VOther: TDfmrField;
   VReason: string;
 begin
   VItem := NewItem(dwaDelete, pField.CompName, pField.FieldClass);
@@ -1339,10 +1507,7 @@ begin
   end;
   VIndex := AddItem(VItem, fcoDelete, pField.FieldClass + '; FieldName = ' + QuotedStr(pField.FieldName), '');
   FChanges.List[VIndex].Checked := False;
-  for VOther in FDataset.Fields do
-    if (VOther.Kind = frkLookup) and (not SameText(VOther.CompName, pField.CompName))
-      and MatchText(pField.FieldName, VOther.KeyFields.Split([MULTI_FIELD])) then
-      VReason := 'KeyFields of ' + VOther.CompName + ' names it';
+
   Block(VIndex, VReason);
 end;
 
@@ -1421,6 +1586,25 @@ begin
   FPlan.Datasets := FPlan.Datasets + [VReport];
 end;
 
+{ The first persistent field of a dataset is never checked: from then on only persistent fields exist at run time. }
+procedure TDfmWritePlanner.UncheckFirstFields(pFirst: Integer);
+var
+  VI: Integer;
+  VAny: Boolean;
+begin
+  VAny := False;
+  for VI := pFirst to FChanges.Count - 1 do
+    if (FItems[VI].Action = dwaInsert) and (FChanges[VI].Blocked = '') then
+    begin
+      FChanges.List[VI].Checked := False;
+      VAny := True;
+    end;
+  if VAny then
+    FWarnings.Add(Format('%s %s: has no persistent field. With the first one only persistent fields exist at run time: the other ' +
+      'dynamic fields vanish, code and controls that name them fail. The added fields are unchecked',
+      [ExtractFileName(FForm.FileName), FDataset.Name]));
+end;
+
 procedure TDfmWritePlanner.PlanDataset(const pFields: TArray<string>);
 var
   VField: TDfmrField;
@@ -1451,6 +1635,8 @@ begin
     raise EDfmWriteSelection.CreateFmt('%s has no table: %s', [FDataset.Name, FSource.Reason]);
   VFirst := FChanges.Count;
   PlanSelection(pFields);
+  if (Length(FDataset.Fields) = 0) and (Length(FDataset.InheritedFields) = 0) then
+    UncheckFirstFields(VFirst);
   { a field that would be removed gets no property changes }
   for VI := VFirst to FChanges.Count - 1 do
     if FItems[VI].Action = dwaDelete then
@@ -1458,6 +1644,17 @@ begin
         if SameText(FItems[VJ].Component, FItems[VI].Component) and (FItems[VJ].FileIndex = FFileIndex)
           and SameText(FItems[VJ].Dataset, FDataset.Name) then
           Block(VJ, 'the field is not in the selection');
+end;
+
+{ Full paths; a file given twice stays once. }
+function UniquePaths(const pFiles: TArray<string>): TArray<string>;
+var
+  VFile: string;
+begin
+  Result := nil;
+  for VFile in pFiles do
+    if not MatchText(TPath.GetFullPath(VFile), Result) then
+      Result := Result + [TPath.GetFullPath(VFile)];
 end;
 
 function TDfmWritePlanner.Execute(const pFiles: TArray<string>; const pDataset: string; const pFields: TArray<string>): TDfmwPlan;
@@ -1470,7 +1667,7 @@ begin
   if (Length(pFields) > 0) and ((pDataset = '') or (Length(pFiles) <> 1)) then
     raise EDfmWriteSelection.Create('a field selection needs one form and one dataset');
   LoadRows;
-  for VFile in pFiles do
+  for VFile in UniquePaths(pFiles) do
   begin
     OpenForm(VFile);
     for VDataset in FForm.Datasets do
@@ -1485,6 +1682,7 @@ begin
   FPlan.ChangeSet.Changes := FChanges.ToArray;
   FPlan.Items := FItems.ToArray;
   FPlan.Warnings := FWarnings.ToStringArray;
+  FPlan.PlanId := PlanId;
   Result := FPlan;
 end;
 
@@ -1532,7 +1730,7 @@ begin
         raise EDfmWriteError.CreateFmt('change %d is chosen twice', [VChange.Id]);
       for VNeeded in pPlan.Items[VChange.Id - 1].Requires do
         if not IdChosen(pChosen, VNeeded) then
-          raise EDfmWriteError.CreateFmt('change %d needs change %d (select it too)', [VChange.Id, VNeeded]);
+          raise EDfmWriteSelection.CreateFmt('change %d needs change %d (select it too)', [VChange.Id, VNeeded]);
     end;
   finally
     VSeen.Free;
@@ -1545,7 +1743,7 @@ var
   VDoc: TDfmDocument;
   VItem: TDfmwItem;
   VObject: Integer;
-  VText, VLiteral: string;
+  VText: string;
   VOk: Boolean;
 begin
   VDoc := TDfmDocument.Create(pBytes, ExtractFileName(pFile.DfmName) + ' (as it would be written)');
@@ -1555,10 +1753,7 @@ begin
       VObject := VDoc.FindObject(VItem.Component, VItem.Dataset);
       VOk := (VObject >= 0) <> (VItem.Action = dwaDelete);
       if VOk and (VItem.Action = dwaSet) then
-      begin
-        VLiteral := Trim(VItem.Literal);
-        VOk := VDoc.TryProp(VObject, VItem.PropName, VText) and (VLiteral.StartsWith('''') or VLiteral.StartsWith('#') or (VText = VLiteral));
-      end
+        VOk := VDoc.TryProp(VObject, VItem.PropName, VText) and (VText = DfmLiteralText(VItem.Literal))
       else if VOk and (VItem.Action = dwaRemove) then
         VOk := not VDoc.TryProp(VObject, VItem.PropName, VText);
       if not VOk then
@@ -1656,21 +1851,39 @@ begin
   Result := (Length(pA) = Length(pB)) and ((Length(pA) = 0) or CompareMem(@pA[0], @pB[0], Length(pA)));
 end;
 
-function BackupName(const pFile: string): string;
+{ pName, or pName with a number when that file exists. }
+function FreeName(const pName: string): string;
 var
-  VBase: string;
   VNumber: Integer;
 begin
-  VBase := pFile + BACKUP_STAMP + FormatDateTime('yyyymmdd-hhnnss', Now);
-  Result := VBase;
+  Result := pName;
   VNumber := 0;
   while TFile.Exists(Result) do
   begin
     Inc(VNumber);
-    Result := VBase + '-' + IntToStr(VNumber);
+    Result := pName + '-' + IntToStr(VNumber);
   end;
 end;
 
+function BackupName(const pFile: string): string;
+begin
+  Result := FreeName(pFile + BACKUP_STAMP + FormatDateTime('yyyymmdd-hhnnss', Now));
+end;
+
+{ Writes a new file beside the old one and puts it in its place: a stopped process never leaves half a file. }
+procedure ReplaceBytes(const pFile: string; const pBytes: TBytes);
+var
+  VNew: string;
+begin
+  VNew := FreeName(pFile + NEW_FILE_STAMP);
+  try
+    TFile.WriteAllBytes(VNew, pBytes);
+    if not ReplaceFile(PChar(pFile), PChar(VNew), nil, 0, nil, nil) then
+      RaiseLastOSError;
+  finally
+    System.SysUtils.DeleteFile(VNew); // False when ReplaceFile took it
+  end;
+end;
 { Raises when a file cannot be opened for writing, before anything is written. }
 procedure CheckWritable(const pOutput: TDfmwOutput);
 var
@@ -1693,14 +1906,14 @@ begin
   Result := '';
   try
     if not SameBytes(TFile.ReadAllBytes(pOutput.FileName), pOutput.OldBytes) then
-      TFile.WriteAllBytes(pOutput.FileName, pOutput.OldBytes);
+      ReplaceBytes(pOutput.FileName, pOutput.OldBytes);
   except
     on E: Exception do
       Result := '; NOT restored (use its backup): ' + pOutput.FileName;
   end;
 end;
 
-{ Restores pOutputs[0..pLast]. }
+{ Restores pOutputs[0..pLast]; says so when every file has its old bytes. }
 function RestoreAll(const pOutputs: TArray<TDfmwOutput>; pLast: Integer): string;
 var
   VI: Integer;
@@ -1710,19 +1923,22 @@ begin
   for VI := 0 to pLast do
     VStates := VStates + [Restore(pOutputs[VI])];
   Result := string.Join('', VStates);
+  if Result = '' then
+    Result := ' -- undone';
 end;
 
 { Writes all files or none: a failure restores those already written. }
-procedure WriteAll(const pOutputs: TArray<TDfmwOutput>);
+procedure WriteAll(const pOutputs: TArray<TDfmwOutput>; const pBackups: TArray<string>);
 var
   VI: Integer;
 begin
   for VI := 0 to High(pOutputs) do
     try
-      TFile.WriteAllBytes(pOutputs[VI].FileName, pOutputs[VI].NewBytes);
+      ReplaceBytes(pOutputs[VI].FileName, pOutputs[VI].NewBytes);
     except
       on E: Exception do
-        raise EDfmWriteError.Create('the write failed and was undone: ' + E.Message + RestoreAll(pOutputs, VI));
+        raise EDfmWriteError.Create('the write of ' + pOutputs[VI].FileName + ' failed: ' + E.Message + RestoreAll(pOutputs, VI)
+          + '; ' + string.Join('; ', pBackups));
     end;
 end;
 function ApplyDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>): TArray<string>;
@@ -1743,7 +1959,7 @@ begin
     TFile.WriteAllBytes(VBackup, VOutput.OldBytes);
     VBackups := VBackups + ['backup ' + VBackup];
   end;
-  WriteAll(VOutputs);
+  WriteAll(VOutputs, VBackups);
   for VChange in pChosen do
     Result := Result + [ApplyLogLine(VChange)];
   Result := Result + VBackups;
