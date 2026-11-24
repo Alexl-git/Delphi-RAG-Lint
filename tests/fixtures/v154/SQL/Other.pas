@@ -10,4 +10,4 @@ begin
   DM.qTwo.Open;
   DM.qOut.SQL.Text := 'SELECT A FROM T WHERE X = :X';
 end;
-end.
+end.

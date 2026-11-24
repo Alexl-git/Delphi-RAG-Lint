@@ -8,6 +8,7 @@ type
     qOut: TFDQuery;
     qMissing: TFDQuery;
     qValued: TFDQuery;
+    qNullDecl: TFDQuery;
   published
     procedure Go;
   end;
@@ -25,5 +26,7 @@ begin
   qMissing.Open; // FIRE sql-param-mismatch
   qValued.ParamByName('A').AsInteger := 1;
   qValued.Open;
+  qNullDecl.ParamByName('B').AsInteger := 1;
+  qNullDecl.Open;
 end;
-end.
+end.

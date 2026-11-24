@@ -50,6 +50,7 @@ uses
   , System.StrUtils
   , System.Classes
   , System.Generics.Collections
+  , System.Generics.Defaults
   , System.RegularExpressions
   , FireDAC.Comp.Client
   , FireDAC.Stan.Param
@@ -312,12 +313,21 @@ begin
   Result:= AScan.OutsideReason(AData, False) = '';
 end;
 
+{ Parameters can be set where no dataset is named: through a cast or the event argument in a handler, or by a handler assigned in code.
+  Judged on the unit's text; a comment that looks like one only makes the rule quieter. }
+function HasEventSetters(const AFile: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(TEncoding.UTF8.GetString(TAstParseCache.Get(AFile).Src),
+    '(\)|\b(?i:Sender|DataSet|ADataSet|ASender))\s*\.\s*(?i:ParamByName|FindParam|Params)\b|\.\s*(On|Before|After)[A-Z]\w*\s*:=');
+end;
+
 { Every way to set a parameter is seen: only ParamByName with a literal, no positional values, no master. }
-function SettersSeen(const AScan: TSqlTextScan; const AData: TSqlDataset): Boolean;
+function SettersSeen(const AScan: TSqlTextScan; const AData: TSqlDataset; AEventSetters: Boolean): Boolean;
 var
   Site: TSqlSite;
   Any : Boolean;
 begin
+  if AEventSetters then Exit(False);
   Any:= False;
   for Site in AData.Sites do
   begin
@@ -347,11 +357,13 @@ end;
 
 function CheckSqlParams(const ACtx: TV151FileCtx; const AScan: TSqlTextScan): TArray<TLintFinding>;
 var
+  EventSetters: Boolean;
   Data   : TSqlDataset;
   Site   : TSqlSite;
   Missing: TArray<string>;
 begin
   Result:= nil;
+  EventSetters:= HasEventSetters(ACtx.Path);
   for Data in AScan.Datasets do
   begin
     if (not Data.Has([sskParam, sskRun])) or (not ParamsFollowSql(AScan, Data)) then Continue;
@@ -360,7 +372,7 @@ begin
          (not Site.Text.Contains(';')) then
         Result:= Result + [NewFinding(ACtx, RULE_SQL_PARAM, SEVERITY_WARNING,
           Format('ParamByName(''%s''): %s has no such parameter -- %s', [Site.Text, Data.Name, NameList(Data.Facts.ParamNames)]), Site)];
-    if not SettersSeen(AScan, Data) then Continue;
+    if not SettersSeen(AScan, Data, EventSetters) then Continue;
     Missing:= NeverSet(Data);
     if Length(Missing) = 0 then Continue;
     for Site in Data.Sites do
@@ -714,6 +726,12 @@ begin
       Result:= Result + [NewFinding(ACtx, RULE_FIELD_LOOP, SEVERITY_HINT,
         Format('ParamByName() looked up inside this loop (%s) -- keep the parameter reference(s) in locals before the loop',
           [string.Join(', ', Names[Key].ToStringArray)]), First[Key])];
+    TArray.Sort<TLintFinding>(Result, TComparer<TLintFinding>.Construct(
+      function(const A, B: TLintFinding): Integer
+      begin
+        Result:= A.StartLine - B.StartLine;
+        if Result = 0 then Result:= A.StartCol - B.StartCol;
+      end));
   finally
     First.Free;
     Names.Free;

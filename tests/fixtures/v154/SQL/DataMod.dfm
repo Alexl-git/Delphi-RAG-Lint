@@ -29,4 +29,14 @@ object DM: TDM
         Value = 5
       end>
   end
-end
+  object qNullDecl: TFDQuery
+    SQL.Strings = (
+      'SELECT A FROM T WHERE (:A IS NULL OR A = :A) AND B = :B')
+    ParamData = <
+      item
+        Name = 'A'
+        DataType = ftInteger
+        Value = Null
+      end>
+  end
+end

@@ -3,6 +3,7 @@ interface
 const
   SQL_SHARED = 'SELECT A FROM T WHERE ' + 'ID = :SHARED';
 type
+  TProc = procedure(DataSet: TObject) of object;
   TParam = class
     AsInteger: Integer;
   end;
@@ -26,6 +27,7 @@ type
     Params: TParams;
     ParamCheck: Boolean;
     MasterSource: TObject;
+    BeforeOpen: TProc;
     Connection: TFDConnection;
     constructor Create(O: TObject);
     function ParamByName(const N: string): TParam; virtual; abstract;
@@ -50,4 +52,4 @@ function GetQ: TFDQuery;
 begin
   Result := nil;
 end;
-end.
+end.
