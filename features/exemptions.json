@@ -12,7 +12,8 @@
     "Verify All Callers Pass an In-Range Index...": "structural: scaffold command of index-possibly-out-of-range, registered with Visible False (DragLint.Plugin.Cmd.IdxRange.pas) and never shown in 1.52; register it in v152-index-possibly-out-of-range and delete this line when it is made visible"
   },
   "exes": {
-    "sqlite3.dll": "structural: runtime dependency of drag-lint.exe (FireDAC loads it dynamically), shipped beside the engine so a machine without RAD Studio on PATH works; not a user-facing feature"
+    "sqlite3.dll": "structural: runtime dependency of drag-lint.exe (FireDAC loads it dynamically), shipped beside the engine so a machine without RAD Studio on PATH works; not a user-facing feature",
+      "vcruntime140.dll": "structural: the Microsoft C runtime the tree-sitter parser DLLs import, taken from the Visual Studio redist at pack time and shipped beside the engine; not a user-facing feature"
   },
   "verbs": {
     "shutdown": "hidden alias of stop-now (1.52 Q15REN, owner Q15): the entry shutdown registers the verb as stop-now; the alias is accepted for old installed callers and kept out of --help on purpose (docs-sync UndocumentedOnPurpose)"

@@ -113,6 +113,7 @@ Write-Ascii (Join-Path $g 'tools\featuregen-gate.ps1') "if (Test-Path -LiteralPa
 Copy-Item -LiteralPath (Join-Path $Repo 'tools\publish-wiki.ps1') -Destination (Join-Path $g 'tools\publish-wiki.ps1')
 New-Item -ItemType Directory -Path (Join-Path $g 'build') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $Repo 'build\pack-lint-release.ps1') -Destination (Join-Path $g 'build\pack-lint-release.ps1')
+foreach ($lib in 'VcRuntime.ps1', 'PeImports.ps1') { Copy-Item -LiteralPath (Join-Path $Repo "build\$lib") -Destination (Join-Path $g "build\$lib") }
 Write-Ascii (Join-Path $g 'docs\wiki\Home.md') "# stub`n"
 Write-Ascii (Join-Path $g 'WWW\help\dl\index.json') "[]`n"   # 1.52.2 fac6e68ee: pack refuses up front without it (WWW is its own repo)
 $wikiWork = Join-Path $WorkDir 'wiki-work'
