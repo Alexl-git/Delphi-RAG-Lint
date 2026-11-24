@@ -10,6 +10,11 @@
             holds is still unused; one named in code, a directive or a string is not.
             (1.53.0: CDocOnly was silent.)
     DI      item 4: a type two containers register the same way renders one `Registered as:` entry.
+    RESCAN  item 3: an attribute above a heading ([Inject] constructor ...) is not a tampered file; a doc
+            verb's in-process rescan of a tampered file re-parses that file only, with the project's own
+            build, so the index keeps its fingerprint. (1.53.0: every document run on such a unit, a dry
+            run too, re-parsed it as Win32 without the project's defines; document --project force-
+            reparsed the whole project per file.) Pass 2 after a reindex is a no-op.
     NOTE    item 5: a plain multi-line /// note keeps its line breaks in the <summary>, and the
             second pass is a no-op. A one-line note stays one line.
   Run from any CWD, pwsh 7.
@@ -214,6 +219,114 @@ end.
 $g = Run @('lint-all', '--db', $gdb, '--rule', 'unused-global', '--quiet')
 foreach ($n in 'CDocOnly', 'CBraceOnly') { Check "COMMENT $n (comments only) is reported" ($g -match "const $n \(") $g }
 foreach ($n in 'CDirective', 'CInString', 'CBound', 'CAfterUrl') { Check "COMMENT $n (code, directive or string) stays silent" ($g -notmatch "const $n \(") $g }
+
+# ---------------------------------------------------------------- RESCAN (item 3)
+$prj = Join-Path $WorkDir 'prj'; [void][IO.Directory]::CreateDirectory("$prj\_D-RAG"); $pdb = "$prj\_D-RAG\P.sqlite"
+Write-Ascii "$prj\P.dpr" @'
+program P;
+uses
+  uSvcA in 'uSvcA.pas',
+  uSvcB in 'uSvcB.pas';
+begin
+  Go;
+end.
+'@
+Write-Ascii "$prj\P.dproj" @'
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><MainSource>P.dpr</MainSource><Config Condition="'$(Config)'==''">Debug</Config><Platform Condition="'$(Platform)'==''">Win64</Platform></PropertyGroup>
+  <PropertyGroup Condition="'$(Config)'=='Debug'"><DCC_Define>MYDEBUG;$(DCC_Define)</DCC_Define></PropertyGroup>
+  <ItemGroup><DelphiCompile Include="P.dpr"><MainSource>MainSource</MainSource></DelphiCompile><DCCReference Include="uSvcA.pas"/><DCCReference Include="uSvcB.pas"/></ItemGroup>
+</Project>
+'@
+Write-Ascii "$prj\uSvcA.pas" @'
+unit uSvcA;
+
+interface
+
+type
+  InjectAttribute = class(TCustomAttribute)
+  end;
+
+  ESvcOne = class(TObject);
+
+  TSvcA = class
+  private
+    FName: string;
+  public
+    [Inject] // resolved by the container
+    { a brace comment between the attribute and its heading }
+    constructor Create(const AName: string);
+    [Inject]
+    procedure Log(const S: string);
+  end;
+
+implementation
+
+constructor TSvcA.Create(const AName: string);
+begin
+  FName:= AName;
+end;
+
+procedure TSvcA.Log(const S: string);
+begin
+  Writeln(FName, S);
+end;
+
+end.
+'@
+Write-Ascii "$prj\uSvcB.pas" @'
+unit uSvcB;
+
+interface
+
+procedure Go;
+procedure Helper(const S: string);
+
+implementation
+
+uses
+  uSvcA;
+
+procedure Helper(const S: string);
+var
+  A: TSvcA;
+begin
+  A:= TSvcA.Create(S);
+  A.Log(S);
+  A.Free;
+end;
+
+procedure Go;
+begin
+  Helper('x');
+end;
+
+end.
+'@
+function Fp { (& $Exe sql --db $pdb --query "select value from schema_meta where key='indexer_fingerprint'" 2>$null | Where-Object { $_ -match '^v=' }) -join '' }
+$ix = Run @('index', '--project', "$prj\P.dproj", '--db', $pdb)
+$fp0 = Fp
+Check 'RESCAN control: the project index carries its own build (win64, cfg)' ($fp0 -match 'plat=win64;cfg=debug;defs=') "$fp0 || $ix"
+$d1 = Run @('document', '--unit', "$prj\uSvcA.pas", '--db', $pdb)
+Check 'RESCAN an attribute line above a heading is not tampering (no WARN)' ($d1 -notmatch 'look unchanged by timestamp') $d1
+Check 'RESCAN control: the dry run still proposes docs' ($d1 -match 'insert after line') $d1
+Check 'RESCAN a dry run leaves the fingerprint of the project index alone' ((Fp) -eq $fp0) (Fp)
+# pass 1 over every unit, a reindex, pass 2
+foreach ($u in 'uSvcB', 'uSvcA') { [void](Run @('document', '--unit', "$prj\$u.pas", '--apply', '--no-backup', '--db', $pdb)) }
+[void](Run @('index', '--project', "$prj\P.dproj", '--db', $pdb))
+foreach ($u in 'uSvcB', 'uSvcA') { $o2 = Run @('document', '--unit', "$prj\$u.pas", '--db', $pdb); Check "RESCAN pass 2 of $u is a no-op after a reindex" ($o2 -match 'nothing to document') $o2 }
+# a genuine same-size edit with the mtime put back
+$sa = "$prj\uSvcA.pas"; $when = (Get-Item $sa).LastWriteTimeUtc
+[IO.File]::WriteAllText($sa, [IO.File]::ReadAllText($sa).Replace('ESvcOne', 'ESvcTwo'), [Text.Encoding]::ASCII); (Get-Item $sa).LastWriteTimeUtc = $when
+$d2 = Run @('document', '--project', "$prj\P.dproj", '--db', $pdb)
+Check 'RESCAN a genuine tamper still WARNs (control)' ($d2 -match 'look unchanged by timestamp' -and $d2 -match 'uSvcA') $d2
+Check 'RESCAN document --project re-parses the tampered file only' ($d2 -match 'uSvcA\.pas -> \d+ symbols' -and $d2 -notmatch 'uSvcB\.pas -> \d+ symbols') $d2
+Check 'RESCAN the rescan keeps the build fingerprint (--project)' ((Fp) -eq $fp0) (Fp)
+$when = (Get-Item $sa).LastWriteTimeUtc
+[IO.File]::WriteAllText($sa, [IO.File]::ReadAllText($sa).Replace('ESvcTwo', 'ESvcSix'), [Text.Encoding]::ASCII); (Get-Item $sa).LastWriteTimeUtc = $when
+$d3 = Run @('document', '--unit', $sa, '--db', $pdb)
+Check 'RESCAN control: --unit on a genuine tamper WARNs' ($d3 -match 'look unchanged by timestamp') $d3
+Check 'RESCAN the rescan keeps the build fingerprint (--unit)' ((Fp) -eq $fp0) (Fp)
 
 # ---------------------------------------------------------------- DI
 $di = Join-Path $WorkDir 'di'; [void][IO.Directory]::CreateDirectory($di); $ddb = Join-Path $WorkDir 'di.sqlite'

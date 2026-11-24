@@ -478,6 +478,7 @@ type
     // reverts to the prior raw all-branch behaviour.
     NoPreprocess : Boolean    ; // --no-preprocess  disable the in-process directive preprocessor for this index run
     BuildConfig  : string     ; // --build-config <name>  index: parse a PROJECT against this build config instead of its ACTIVE one ('' = the .dproj's Config marker)
+    IndexBuildProject: string ; // set by the doc verbs' in-process single-file reindex, not by a flag: the .dproj whose active build the file is parsed with; nothing is walked from it ('' = ProjectPath)
     // Task 5: create-enum-helper CLI verb (--qname reuses QName; --db/--apply/
     // --no-backup/--json already shared). EnumMethodsStr is the raw --methods
     // CSV ('' = default all 6, parsed by DoCreateEnumHelper); EnumToString is

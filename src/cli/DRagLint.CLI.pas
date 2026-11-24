@@ -6310,7 +6310,10 @@ begin
   // --no-preprocess reverts to the prior raw all-branch behaviour. Profile comes
   // from --project (a .dproj -> per-config defines) when given, else the platform
   // built-ins (--platform, else the project's active Platform, else Win32 -- ruling a3).
-  var IdxBuild: TActiveBuild:= ResolveIndexBuild(AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.BuildConfig);
+  // IndexBuildProject (INBOX-orm3-server-153 item 3): a doc verb re-indexing ONE file of a
+  // project DB parses it with that project's build, so the DB's fingerprint stays its own.
+  var BuildDproj: string:= if AArgs.ProjectPath <> '' then AArgs.ProjectPath else AArgs.IndexBuildProject;
+  var IdxBuild: TActiveBuild:= ResolveIndexBuild(BuildDproj, AArgs.CheckPlatform, AArgs.BuildConfig);
   var PpPlatform: string:= IdxBuild.Platform;
   var IdxCfgLimb: string:= IndexCfgLimb(IdxBuild);
   Indexer.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
@@ -17796,7 +17799,11 @@ begin
   // walked every loose .pas beside the unit into the index. A single-file index
   // is the endorsed incremental move: it cannot widen a scope and it leaves the
   // scan_type stamp alone. ExpandFileName: a bare `--unit foo.pas` is cwd-relative.
-  else IndexArgs.Path:= ExpandFileName(AFilePath);
+  else
+  begin
+    IndexArgs.Path:= ExpandFileName(AFilePath);
+    IndexArgs.IndexBuildProject:= ProjectOfDb(AArgs.DbPath);
+  end;
   Result:= DoIndexForDoc(AArgs, IndexArgs) = 0;
   if not Result then
     EmitStatusLine(AArgs, 'doc: the reindex FAILED. Nothing was written at the unverified coordinate(s).');
@@ -17889,6 +17896,10 @@ begin
     IndexArgs.IndexAll     := False;
     IndexArgs.ForceReparse := True;
     IndexArgs.Path         := ExpandFileName(F);
+    { one file, never the closure: with ProjectPath left set, `document --project` force-reparsed the WHOLE
+      project once per file that disagreed }
+    IndexArgs.ProjectPath      := '';
+    IndexArgs.IndexBuildProject:= if AArgs.ProjectPath <> '' then AArgs.ProjectPath else ProjectOfDb(AArgs.DbPath);
     if DoIndexForDoc(AArgs, IndexArgs) <> 0 then
       Writeln(ErrOutput, 'doc: WARN -- the rescan of ' + F + ' FAILED; the facts for it may still be stale.');
   end;

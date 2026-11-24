@@ -1082,7 +1082,8 @@ begin
       if J = 0 then Exit; // unbalanced (multi-line attribute)
       S:= Trim(Copy(S, J + 1, MaxInt));
     end;
-    if S <> '' then Exit(S);
+    { a comment between the attribute and its heading, or after the attribute, is not the heading }
+    if (S <> '') and not (S.StartsWith('//') or S.StartsWith('{') or S.StartsWith('(*')) then Exit(S);
   end;
 end;
 
