@@ -58,7 +58,10 @@ try-except-swallowed 298
 # A field (314) and a unit global (329) still fire even when read after the
 # try; the positive controls -- an inline local (343) and a value parameter
 # (354) -- do not.
-try-except-swallowed 314
-try-except-swallowed 329
+# v154 FPBATCH2 class 8 (ORM3 uPLANLIST): a FIELD (314) or unit GLOBAL (329) that receives E.Message records the failure where a caller can see it,
+# so it is handling. This REVERSES the 1.20.6 R22 expectation above (both used to fire); needs an owner OK. Unrelated writes still fire: see
+# tests\autotest\run_v154_FPBATCH2.ps1 (field := 1, local never read, other code only).
+!try-except-swallowed 314
+!try-except-swallowed 329
 !try-except-swallowed 343
 !try-except-swallowed 354
