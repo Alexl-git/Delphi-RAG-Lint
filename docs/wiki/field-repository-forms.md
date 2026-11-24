@@ -1,6 +1,6 @@
 # Fields of a form in the IDE
 
-`drag-lint > Field Repository` has three commands for the form in the editor. The active project names the repository
+The `Field Repository` submenu of the drag-lint menu has three commands for the form in the editor. The active project names the repository
 (`fieldRepository`); it must be schema 3. Nothing is written before you press Apply.
 
 | Command | What it does | CLI |
