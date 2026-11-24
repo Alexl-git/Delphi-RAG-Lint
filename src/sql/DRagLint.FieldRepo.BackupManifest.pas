@@ -67,7 +67,7 @@ procedure AddToBackupManifest(const pManifest: string; const pEntry: TFrBackupEn
 /// <summary>Name of the mutex a writer of the manifest holds.</summary>
 /// <param name="pManifest">The manifest file.</param>
 /// <returns>A mutex name of this Windows session.</returns>
-function BackupManifestLockName(const pManifest: string): string;  // dl:ok unused-public-symbol@8054 -- REVIEWED 2026-11-23 ALTERBK: the pure part is the test seam; testsieldrepoBackupTests.dpr (outside the indexed project) calls it
+function BackupManifestLockName(const pManifest: string): string;  // dl:ok unused-public-symbol@8054 -- REVIEWED 2026-11-23 ALTERBK: the pure part is the test seam; BackupTests.dpr (outside the indexed project) calls it
 
 /// <summary>Compares the file of an entry with what was recorded.</summary>
 /// <param name="pEntry">The entry.</param>
@@ -87,7 +87,7 @@ function TotalBackupSize(const pEntries: TArray<TFrBackupEntry>; out pFiles: Int
 /// <exception cref="EFrBackupError">pKeep is below 1.</exception>
 /// <remarks>Only reads the files' size and date. The newest fully verified backup of a database is always kept. A backup
 /// whose verification failed never counts as a kept one.</remarks>
-function PlanBackupPurge(const pEntries: TArray<TFrBackupEntry>; pKeep: Integer): TArray<TFrPurgeItem>;  // dl:ok unused-public-symbol@4f0f -- REVIEWED 2026-11-23 ALTERBK: the pure part is the test seam; testsieldrepoBackupTests.dpr (outside the indexed project) calls it
+function PlanBackupPurge(const pEntries: TArray<TFrBackupEntry>; pKeep: Integer): TArray<TFrPurgeItem>;  // dl:ok unused-public-symbol@4f0f -- REVIEWED 2026-11-23 ALTERBK: the pure part is the test seam; BackupTests.dpr (outside the indexed project) calls it
 
 /// <summary>Purges: deletes the files PlanBackupPurge names and drops their entries.</summary>
 /// <param name="pManifest">The manifest file.</param>

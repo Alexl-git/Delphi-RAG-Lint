@@ -47,7 +47,7 @@ type
 /// <summary>The host a connection string names, when it is not this machine.</summary>
 /// <param name="pConnection">The --connection value.</param>
 /// <returns>The host (or the protocol that is not supported); '' = this machine. Pure.</returns>
-function RemoteFbHost(const pConnection: string): string;  // dl:ok unused-public-symbol@3f08 -- REVIEWED 2026-11-23 ALTERBK: the pure part is the test seam; testsieldrepoBackupTests.dpr (outside the indexed project) calls it
+function RemoteFbHost(const pConnection: string): string;  // dl:ok unused-public-symbol@3f08 -- REVIEWED 2026-11-23 ALTERBK: the pure part is the test seam; BackupTests.dpr (outside the indexed project) calls it
 
 /// <summary>Refuses a connection string whose server is another machine.</summary>
 /// <param name="pConnection">The --connection value.</param>
