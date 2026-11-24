@@ -70,6 +70,10 @@ unit Shared.Ctl;
 
 interface
 
+const
+  CTextOnly = 2;
+  CTextDead = 3;
+
 var
   GLive: Integer;
   GDead: Integer;
@@ -117,6 +121,9 @@ implementation
 
 uses Shared.Ctl;
 
+{$IF CTextOnly > 1}
+{$IFEND}
+{ CTextDead }
 procedure RunTwo;
 begin
   Beat;
@@ -163,6 +170,8 @@ Check 'POSITIVE CONTROL: DeadBeat (dead in both) IS reported' ($u -match 'DeadBe
 Check 'POSITIVE CONTROL: GDead (dead in both) IS reported' ($u -match 'GDead') $u
 Check 'Beat (called only in P2) is NOT reported' ($u -notmatch '\bBeat\b') $u
 Check 'GLive (written only in P2) is NOT reported' ($u -notmatch 'GLive') $u
+Check 'CTextOnly (no ref: named only in a directive of P2) is NOT reported' ($u -notmatch 'CTextOnly') $u
+Check 'POSITIVE CONTROL: CTextDead (only a comment of P2 names it) IS reported' ($u -match 'CTextDead') $u
 Check 'fresh siblings: no withheld note (control)' ($u -notmatch 'withheld as undecidable') $u
 
 Write-Host 'undecided: P2 index stale' -ForegroundColor Cyan

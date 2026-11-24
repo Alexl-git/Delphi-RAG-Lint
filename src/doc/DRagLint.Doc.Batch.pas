@@ -756,19 +756,18 @@ const
   MAX_ATTR_LINES = 8; { as Doc.Facts.ReadDeclLine }
 begin
   Result:= True;
+  if not Trim(ALines[ALine - 1]).StartsWith('[') then Exit(ContainsText(ALines[ALine - 1], AName));
+  var Open: string:= ''; { closer of a comment that runs over a line end }
   for var I: Integer:= ALine - 1 to Min(ALine - 1 + MAX_ATTR_LINES, High(ALines)) do
   begin
-    var S: string:= Trim(ALines[I]);
-    var Decorated: Boolean:= I > ALine - 1;
+    var S: string:= SkipLeadingComments(ALines[I], Open);
     while S.StartsWith('[') do
     begin
       var GroupEnd: Integer:= SkipDeclAttributeGroup(S);
       if GroupEnd = 0 then Exit;
-      S:= Trim(Copy(S, GroupEnd + 1, MaxInt));
-      Decorated:= True;
+      S:= SkipLeadingComments(Copy(S, GroupEnd + 1, MaxInt), Open);
     end;
-    if Decorated and ((S = '') or S.StartsWith('//') or S.StartsWith('{')) then Continue;
-    Exit(ContainsText(S, AName));
+    if S <> '' then Exit(ContainsText(S, AName));
   end;
 end;
 

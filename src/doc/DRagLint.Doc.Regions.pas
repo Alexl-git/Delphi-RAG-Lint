@@ -3761,6 +3761,14 @@ function McIsBlankBody(const AText: string): Boolean;
 begin
   Result:= Trim(TDocMarkers.StripMark(AText)) = '';
 end;
+// INBOX-orm3-server-153 item 1, the heal: 1.53.0 turned a banner line (`//////`)
+// into a <summary> made of slashes alone, unmarked, so the next run kept it as a
+// human's. A body of slashes only says nothing and is blank; one letter beside
+// them is a human's text and stays.
+function McIsBlankSummary(const AText: string): Boolean;
+begin
+  Result:= McIsBlankBody(StringReplace(TDocMarkers.StripMark(AText), '/', '', [rfReplaceAll]));
+end;
 // The engine's own declared-type baseline is regenerable, not a human's
 // meaning -- decided LEXICALLY by its marker. See AUTO_TYPE for why this is a
 // marker test and not a content comparison against a freshly built type.
@@ -4322,7 +4330,7 @@ begin
   // harvested summary (if any) gets its chance below, and otherwise no tag is
   // written at all.
   if C.StandaloneSummary.HasSummaryTag and (not McIsEngineOwnedRegardlessOfContent(C.SummaryRaw))
-     and (not McIsBlankBody(C.SummaryRaw)) then
+     and (not McIsBlankSummary(C.SummaryRaw)) then
   begin
     var Untagged: string:= McEmitUntaggedSummary(C);
     if Untagged = '' then
@@ -4371,7 +4379,7 @@ begin
   // breaks are not reflowed to the engine's column budget.
   else if C.StandaloneSummary.HasSummaryTag and TDocMarkers.IsManagedText(C.SummaryRaw)
      and (not TDocMarkers.IsEngineSummaryBody(C.SummaryRaw))
-     and (not McIsBlankBody(C.SummaryRaw)) then
+     and (not McIsBlankSummary(C.SummaryRaw)) then
     C.Sb.AppendLine(McEmitTagged(C, '<summary>', Trim(TDocMarkers.StripMark(C.SummaryRaw)), '</summary>'));
   // else: engine-owned-and-EMPTY, or genuinely absent, and nothing
   // harvested -- omit the tag entirely (v(ADP3 T3), narrowed above from

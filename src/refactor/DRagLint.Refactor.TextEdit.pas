@@ -661,6 +661,14 @@ procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
 /// </remarks>
 function EditAtomKey(const AEdit: TTextEdit): string;
 
+/// <summary>Drops the comments AText starts with, reading on across lines inside one that is still open.</summary>
+/// <param name="AText">One source line, or the rest of one after its attribute groups.</param>
+/// <param name="AOpenCloser">In/out: the closer of a comment still open ('' = none), carried from line to line.</param>
+/// <returns>The first text after the comments, trimmed; '' when the line holds nothing else.</returns>
+/// <remarks>Pure. A compiler directive counts as a comment. The text between a decorated declaration's
+/// attribute and its heading: the stale-anchor guard here and Doc.Batch's tamper test read it alike.</remarks>
+function SkipLeadingComments(const AText: string; var AOpenCloser: string): string;
+
 implementation
 
 uses
@@ -1065,25 +1073,47 @@ begin
   Result:= 0;
 end;
 
+function SkipLeadingComments(const AText: string; var AOpenCloser: string): string;
+begin
+  Result:= Trim(AText);
+  while Result <> '' do
+  begin
+    if AOpenCloser = '' then
+    begin
+      if Result.StartsWith('//') then Exit('');
+      if Result.StartsWith('{') then AOpenCloser:= '}'
+      else if Result.StartsWith('(*') then AOpenCloser:= '*)'
+      else Exit;
+      Result:= Copy(Result, (if AOpenCloser = '}' then Length('{') else Length('(*')) + 1, MaxInt);
+    end;
+    var At: Integer:= Pos(AOpenCloser, Result);
+    if At = 0 then Exit('');
+    Result:= Trim(Copy(Result, At + Length(AOpenCloser), MaxInt));
+    AOpenCloser:= '';
+  end;
+end;
+
 function TextAfterAttributes(ALines: TStrings; AIdx: Integer): string;
 const
   MAX_ATTR_LINES = 8;
 var
   I, J: Integer;
   S   : string ;
+  Open: string ;
 begin
   Result:= '';
+  Open:= '';
   for I:= AIdx to Min(AIdx + MAX_ATTR_LINES, ALines.Count) - 1 do
   begin
-    S:= Trim(ALines[I]);
+    { a comment between the attribute and its heading, or after the attribute, is not the heading }
+    S:= SkipLeadingComments(ALines[I], Open);
     while (S <> '') and (S[1] = '[') do
     begin
       J:= AttributeGroupEnd(S);
       if J = 0 then Exit; // unbalanced (multi-line attribute)
-      S:= Trim(Copy(S, J + 1, MaxInt));
+      S:= SkipLeadingComments(Copy(S, J + 1, MaxInt), Open);
     end;
-    { a comment between the attribute and its heading, or after the attribute, is not the heading }
-    if (S <> '') and not (S.StartsWith('//') or S.StartsWith('{') or S.StartsWith('(*')) then Exit(S);
+    if S <> '' then Exit(S);
   end;
 end;
 

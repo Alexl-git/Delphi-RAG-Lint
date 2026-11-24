@@ -936,7 +936,7 @@ end;
 
 function FindDocRegionAbove(ADocRegions: System.Generics.Collections.TList<TDocCommentRegion>;
   ASymStartLine: Integer; AAllowGap: Integer; ACaptureLoose: Boolean;
-  const ASymStartLines: TArray<Integer>): TDocCommentRegion;
+  const ASymStartLines: TArray<Integer>; const ALines: TArray<string>): TDocCommentRegion;
 var
   I      : Integer          ;
   Best   : TDocCommentRegion;
@@ -951,7 +951,7 @@ begin
     // DocRegionInGapWindow (DRagLint.Core.Model) -- same arithmetic, one
     // declaration. Control flow deliberately unchanged: pick the last region
     // satisfying the window, THEN apply the declaration guard to it below.
-    if DocRegionInGapWindow(ADocRegions[I].EndLine, ASymStartLine, AAllowGap) then
+    if DocRegionInGapWindow(EndPastBanners(ALines, ADocRegions[I].EndLine), ASymStartLine, AAllowGap) then
     begin
       Best:= ADocRegions[I];
       HasBest:= True;
@@ -1074,7 +1074,7 @@ begin
     // and strip paths, but only Doc.Strip actually read it -- so setting it to 2
     // would have widened `--strip` alone, silently recreating the very
     // apply/strip asymmetry this task exists to prevent.
-    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines);
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines, SourceLines(Src));
     if (Region.Kind <> TDocCommentKind(-1)) and (not RegionGluedToCode(Src, Region)) then
     begin
       Result := TDocCommentParser.Dispatch(Region);
@@ -1197,7 +1197,7 @@ begin
     // and strip paths, but only Doc.Strip actually read it -- so setting it to 2
     // would have widened `--strip` alone, silently recreating the very
     // apply/strip asymmetry this task exists to prevent.
-    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines);
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines, SourceLines(Src));
     if Region.Kind <> TDocCommentKind(-1) then
     begin
       if RegionGluedToCode(Src, Region) then

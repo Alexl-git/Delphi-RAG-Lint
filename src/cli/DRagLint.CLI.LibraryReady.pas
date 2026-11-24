@@ -93,6 +93,19 @@ function LibraryReadinessToken(AState: TLibraryReadiness): string;
 /// </remarks>
 function ProbeLibraryReadiness(const ALibDb, APlatform: string; out AWhy, AStampFp: string): TLibraryReadiness;
 
+/// <summary>One limb of a stored fingerprint: the text after APrefix up to the next ';'.</summary>
+/// <param name="AFingerprint">E.g. 'v=1.26.0-alpha;schema=23;pp=1;plat=win64'.</param>
+/// <param name="APrefix">E.g. 'plat=' (matched at a limb start).</param>
+/// <returns>The limb value, or '' when absent.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.ClassifyLibraryStamps (DRagLint.CLI.LibraryReady.pas)</para>
+/// <para>Calls: Copy</para>
+/// <para>Returns: ''</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function FingerprintLimbValue(const AFingerprint, APrefix: string): string;
+
 /// <summary>The platform a project binds its library against, project-authoritative (plan s.2.1).</summary>
 /// <param name="APlatformArg">--platform, wins when given.</param>
 /// <param name="AProjectFingerprint">The project DB's own indexer_fingerprint ('' when never completed).</param>
@@ -158,17 +171,6 @@ begin
   end;
 end;
 
-/// <summary>One limb of a stored fingerprint: the text after APrefix up to the next ';'.</summary>
-/// <param name="AFingerprint">E.g. 'v=1.26.0-alpha;schema=23;pp=1;plat=win64'.</param>
-/// <param name="APrefix">E.g. 'plat=' (matched at a limb start).</param>
-/// <returns>The limb value, or '' when absent.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.ClassifyLibraryStamps (DRagLint.CLI.LibraryReady.pas)</para>
-/// <para>Calls: Copy</para>
-/// <para>Returns: ''</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
 function FingerprintLimbValue(const AFingerprint, APrefix: string): string;
 begin
   Result:= '';
