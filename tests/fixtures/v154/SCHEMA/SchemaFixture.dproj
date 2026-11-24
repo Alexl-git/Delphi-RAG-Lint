@@ -1,0 +1,13 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>SchemaFixture.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="UnknownCols.pas"/>
+    <DCCReference Include="TypeCases.pas"/>
+    <DCCReference Include="InsertCases.pas"/>
+    <DCCReference Include="LocalNames.pas"/>
+    <DCCReference Include="OtherUnit.pas"/>
+    <DCCReference Include="DataMod.pas"><Form>dmMain</Form><FormType>dfm</FormType></DCCReference>
+  </ItemGroup>
+</Project>
