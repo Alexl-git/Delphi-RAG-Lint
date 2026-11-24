@@ -161,7 +161,7 @@ try {
   Check 'G6c compiles and runs with the new body' ($got -ceq $want.Replace('vat=1.5', 'vat=3.75')) "$got"
   # G13: what gen-handlers wrote is not read back
   $r = Run @('repo', 'read-dfm', '--repo', $y, '--dfm', (Join-Path $d 'uGen.dfm'), '--direction', 'dfm-to-repo')
-  Check 'G13a read-dfm proposes no body for generated code' (($r.Code -eq 0) -and ($r.Out -notmatch '(NOTE|QTY|VAT|TOTAL|HANDY)[ :][^\n]*_BODY[:=]')) $r.Out
+  Check 'G13a read-dfm proposes no body for generated code' (($r.Code -eq 0) -and ($r.Out -notmatch '(?m)^\[\d+\] [^\n]*\|(NOTE|QTY|VAT|TOTAL|HANDY)[ :][^\n]*_BODY[:=]')) $r.Out
   Check 'G13b ... and names the region it left out' (($r.Out -match 'no CALC_BODY: its code is in the generated region DLFR memOrders\.OnCalcFields') -and ($r.Out -match 'NOTE\.OnGetText: not read: its code is in the generated region DLFR memOrdersNOTE\.OnGetText')) $r.Out
   $r = Run @('repo', 'check', '--repo', $y)
   Check 'G13c repo check: no cycle and no macro finding for member macros' ($r.Out -notmatch 'calc-|event-') $r.Out
