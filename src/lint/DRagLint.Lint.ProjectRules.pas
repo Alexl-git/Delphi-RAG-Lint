@@ -1659,6 +1659,49 @@ var
     Result:= LowerCase(Result);
   end;
 
+  { FPBATCH2 class 6 (v154): the names a declaration signature REFERENCES -- words that are
+    neither keywords / built-in types, nor numbers, nor a declarator (a word followed by ':'
+    or ',', i.e. a record field). NormSig compares declaration TEXT only, so two textually
+    equal signatures that name Z141Rec can still mean different things in each unit; the
+    message must not call such a pair identical. Returns '' when nothing is referenced. }
+  function ReferencedNames(const ASig: string): string;
+  const
+    CWord = ['a'..'z', 'A'..'Z', '0'..'9', '_'];
+    CKnown: array[0..43] of string = ('integer', 'string', 'boolean', 'byte', 'word', 'cardinal',
+      'int64', 'uint64', 'smallint', 'shortint', 'longint', 'longword', 'double', 'single', 'real',
+      'extended', 'currency', 'char', 'ansichar', 'widechar', 'ansistring', 'widestring',
+      'unicodestring', 'shortstring', 'pointer', 'variant', 'tdatetime', 'array', 'of', 'record',
+      'end', 'packed', 'set', 'true', 'false', 'nil', 'nativeint', 'nativeuint', 'pchar',
+      'pansichar', 'pwidechar', 'const', 'var', 'tobject');
+  var
+    I, S, E: Integer;
+    W      : string ;
+    Nx     : Integer;
+  begin
+    Result:= '';
+    I:= 1;
+    while I <= Length(ASig) do
+    begin
+      if not CharInSet(ASig[I], CWord) then
+      begin
+        Inc(I);
+        Continue;
+      end;
+      S:= I;
+      while (I <= Length(ASig)) and CharInSet(ASig[I], CWord) do Inc(I);
+      E:= I - 1;
+      W:= LowerCase(Copy(ASig, S, E - S + 1));
+      if CharInSet(W[1], ['0'..'9']) or ((S > 1) and (ASig[S - 1] = '$')) or (IndexStr(W, CKnown) >= 0) then Continue;
+      Nx:= I;
+      while (Nx <= Length(ASig)) and CharInSet(ASig[Nx], [' ', #9, #13, #10]) do Inc(Nx);
+      if (Nx <= Length(ASig)) and CharInSet(ASig[Nx], [':', ',']) then Continue;
+      if not ContainsText(Result, Copy(ASig, S, E - S + 1)) then
+      begin
+        if Result <> '' then Result:= Result + ', ';
+        Result:= Result + Copy(ASig, S, E - S + 1);
+      end;
+    end;
+  end;
   { The library tier proper. Appends to AFindings; never raises.
 
     Which library units count as "used": every entry of the declaring file's
@@ -1940,6 +1983,14 @@ begin
             'depends on uses order. Almost always the same name ported twice and then edited ' +
             'apart; decide which is correct and delete the other rather than renaming it',
             [Rows[I].Name, NFiles, Kinds, Sites, Sigs])
+        else if (Trim(Rows[I].Signature) = '') or (ReferencedNames(Rows[I].Signature) <> '') then
+          F.Message:= Format(
+            '%s is declared at interface level in %d units as %s (%s) -- the declaration text ' +
+            'matches, but it names other declarations (%s) that are NOT compared and may differ ' +
+            'per unit, so these are not proven identical; this is almost always the same thing ' +
+            'ported twice -- check the referenced declarations, then delete one and re-point the uses',
+            [Rows[I].Name, NFiles, Kinds, Sites,
+             if Trim(Rows[I].Signature) = '' then 'its members, which carry no signature' else ReferencedNames(Rows[I].Signature)])
         else
           F.Message:= Format(
             '%s is declared at interface level in %d units as %s (%s) -- the declarations are ' +
@@ -5081,7 +5132,7 @@ begin
     { read-never-assigned (owner request #5b, 1.40 lane flow): OptedIn-gated like unused-enum-value --
       a refs read per file plus source text, whole-project by nature (one unit cannot prove "never"). }
     if WantRule(READ_NEVER_ASSIGNED_RULE) and OptedIn(READ_NEVER_ASSIGNED_RULE) then
-      for var Rn in CollectReadNeverAssigned(AStore, ALibraryStore) do Findings.Add(Rn);
+      for var Rn in CollectReadNeverAssigned(AStore, ALibraryStore, Shared) do Findings.Add(Rn);
     Lap('read-never-assigned');
     { datamodule-form-global (1.42 lane ruleset; ON since 1.52 DEFAULTS): whole-project by nature (both ends live in the index). }
     if WantRule(INIT_ORDER_HAZARD_RULE) and OptedIn(INIT_ORDER_HAZARD_RULE) then
