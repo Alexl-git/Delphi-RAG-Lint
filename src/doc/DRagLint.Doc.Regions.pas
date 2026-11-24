@@ -2861,7 +2861,13 @@ begin
   begin
     var DiPart: string:= '';
     var DsPart: string:= '';
+    var Shown: TArray<string>:= [];
     for var WEntry in AFacts.Wiring.Split(['; ']) do
+    begin
+      { INBOX-orm3-server-153 item 4: two containers registering one type store the
+        same entry twice (one di_bindings row per registration); it is ONE fact. }
+      if MatchStr(WEntry, Shown) then Continue;
+      Shown:= Shown + [WEntry];
       if StartsStr('di:', WEntry) then
       begin
         if DiPart <> '' then DiPart:= DiPart + ', ';
@@ -2872,6 +2878,7 @@ begin
         if DsPart <> '' then DsPart:= DsPart + ', ';
         DsPart:= DsPart + Copy(WEntry, 4, MaxInt);  // dl:ok magic-literal@1cf7 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       end;
+    end;
     if DiPart <> '' then ALines.Add('Registered as: ' + EscXml(DiPart));
     if DsPart <> '' then ALines.Add('Dataset: ' + EscXml(DsPart));
   end;
