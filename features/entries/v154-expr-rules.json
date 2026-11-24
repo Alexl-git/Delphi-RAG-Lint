@@ -1,0 +1,19 @@
+{
+  "id": "v154-expr-rules",
+  "title": "Lint rules for repeated, impossible and misleading expressions and source text",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Warns about a repeated operand in an and / or chain, comparisons that cannot all hold, a Boolean comparison with the wrong precedence, a function that reads its own name, warnings switched off for good and look-alike letters inside identifiers",
+  "intro": "Read this to see what each of the six expression and source-text rules reports, what it leaves alone and how often it was wrong on real code.",
+  "wikiPage": "v154-expr-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas> --rule contradictory-condition"
+    }
+  ],
+  "audience": "both"
+}
