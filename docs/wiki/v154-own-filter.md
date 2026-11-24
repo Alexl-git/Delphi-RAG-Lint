@@ -64,6 +64,7 @@ report file), and in `--json` a second note row, rule `own-roots-malformed`, sev
 
 * A file you name (`lint <file>`, the editor, the LSP, VS Code) is always reported, third-party or not.
 * A `--fix` run keeps to the own roots (the project folder when none is declared): it skips an unmarked file
-  outside them, also one that `own_paths` names, instead of rewriting it, and says so. `document`, `exceptions-sync` and the refactorings use
+  outside them, also one that `own_paths` names or `--lint-third-party` shows, instead of rewriting it, and says so
+  (`--lint-third-party` widens the report only, never the write scope). `document`, `exceptions-sync` and the refactorings use
   the own roots as before.
 * An index with no project folder (a copy outside `_D-RAG`, no `--project`) is not filtered; a note says so.

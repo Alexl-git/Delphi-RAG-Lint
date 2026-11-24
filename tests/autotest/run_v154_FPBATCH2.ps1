@@ -328,7 +328,9 @@ interface
 
 implementation
 
-procedure FpFilledUpToHigh(const PlanCols: TArray<Integer>);
+{ INT3: the ORM3 shape fills over ANOTHER array (PlanCols); an empty PlanCols stores nothing, so the read is a true
+  positive (the rule cannot see the read loop has the same bound). Only a bound over the read array itself is exempt. }
+procedure TpFilledOverOtherHigh(const PlanCols: TArray<Integer>);
 var
   Fields: array[0..3] of TObject;
   I, J: Integer;
@@ -336,17 +338,37 @@ begin
   for I:= 0 to High(PlanCols) do
     Fields[I]:= TObject(PlanCols[I]);
   for J:= 0 to High(PlanCols) do
-    Writeln(Integer(Fields[J]));
+    Writeln(Integer(Fields[J])); // TP
 end;
 
-procedure FpFilledUpToLength(const PlanCols: TArray<Integer>);
+procedure FpFilledUpToHighOfItself;
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  for I:= 0 to High(Fields) do
+    Fields[I]:= nil;
+  Writeln(Integer(Fields[0]));
+end;
+
+procedure FpFilledUpToLength;
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  for I:= 0 to Length(Fields) - 1 do
+    Fields[I]:= nil;
+  Writeln(Integer(Fields[0]));
+end;
+
+procedure TpFilledOverOtherLength(const PlanCols: TArray<Integer>);
 var
   Fields: array[0..3] of TObject;
   I: Integer;
 begin
   for I:= 0 to Length(PlanCols) - 1 do
     Fields[I]:= TObject(PlanCols[I]);
-  Writeln(Integer(Fields[0]));
+  Writeln(Integer(Fields[0])); // TP
 end;
 
 procedure TpNoStoreAnywhere;
@@ -491,7 +513,7 @@ var
   Fields: array[0..3] of TObject;
   I: Integer;
 begin
-  for I:= 0 to High(PlanCols) do
+  for I:= 0 to High(Fields) do
     Fields[I]:= nil;
   if Flag then
   begin
@@ -505,7 +527,7 @@ var
   I: Integer;
 begin
   begin
-    for I:= 0 to High(PlanCols) do
+    for I:= 0 to High(Fields) do
       Fields[I]:= nil;
   end;
   Writeln(Integer(Fields[0]));
@@ -518,7 +540,7 @@ var
 begin
   if Flag then
   begin
-    for I:= 0 to High(PlanCols) do
+    for I:= 0 to High(Fields) do
       Fields[I]:= nil;
     Writeln(Integer(Fields[0]));
   end;
@@ -530,7 +552,7 @@ var
   I: Integer;
 begin
   try
-    for I:= 0 to High(PlanCols) do
+    for I:= 0 to High(Fields) do
       Fields[I]:= nil;
     Writeln(Integer(Fields[0]));
   finally

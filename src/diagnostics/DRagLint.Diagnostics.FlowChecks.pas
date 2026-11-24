@@ -2267,8 +2267,8 @@ end;
   DOMINATES the read -- it is an earlier member of the read's own statement list or
   of one that encloses it (a bare begin..end is looked through; a loop under an if /
   case / try, inside another loop, in the other branch or in a nested routine is
-  not) --, whose bound mentions
-  High( or Length(, and whose body holds, as one of its own top-level statements
+  not) --, whose bound is High( or Length( OF AName ITSELF (a bound over another array may be an
+  empty range, so nothing would have been stored), and whose body holds, as one of its own top-level statements
   and before any Break / Continue / Exit, an assignment whose target is an element of AName (AName[..]);
   a store under an if / case or behind a jump may be skipped and stays reported. A read with no such store anywhere before it, a store
   outside a loop, and a loop whose bound is neither High nor Length all stay
@@ -2342,7 +2342,8 @@ var
         C := N.NamedChild(I);
         if (C = StartN) or (C = BodyN) then Continue;
         Bound := TRegEx.Replace(LowerCase(NodeStr(C, ASrc)), '\s+', '');
-        if Bound.Contains('high(') or Bound.Contains('length(') then Sized := True;
+        { sized only by the very array that is read: a bound over ANOTHER (dynamic / open) array may be an empty range }
+        if TRegEx.IsMatch(Bound, '(high|length)\(' + TRegEx.Escape(LowerCase(AName)) + '\)') then Sized := True;
       end;
       Exit(Sized and StoresElement(BodyN));
     end;
