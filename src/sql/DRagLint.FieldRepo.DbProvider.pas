@@ -101,6 +101,8 @@ type
     Dependencies: TArray<TFrDependency>;
     /// <summary>Active user triggers that fire on UPDATE.</summary>
     UpdateTriggers: TArray<string>;
+    /// <summary>Longest index key of the database in bytes; 0 = unknown (not checked then).</summary>
+    MaxIndexKey: Integer;
     /// <summary>Finds a column (case-insensitive).</summary>
     /// <param name="pName">Column name.</param>
     /// <param name="pColumn">The column; empty when not found.</param>

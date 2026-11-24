@@ -609,6 +609,68 @@ begin
   end;
 end;
 
+{ M5 (1.53.1): a second backup over the same file replaces it in one step; a failed one leaves the old file and no .tmp. }
+procedure TestBackupOverExisting;
+var
+  vConn: TFDConnection;
+  vDir, vOut, vFail: string;
+  vOld, vNew: TBytes;
+  vHeld: TFileStream;
+
+  function Run: string;
+  begin
+    Result := '';
+    try
+      BackupRepository(vConn, vOut);
+    except
+      on E: Exception do
+        Result := E.ClassName + ': ' + E.Message;
+    end;
+  end;
+
+  function OnlyTheBackup: Boolean;
+  begin
+    Result := Length(TDirectory.GetFileSystemEntries(vDir)) = 1;
+  end;
+
+begin
+  vDir := TPath.Combine(GDir, 'over');
+  TDirectory.CreateDirectory(vDir);
+  vOut := TPath.Combine(vDir, 'twice.dlrepo.txt');
+  vConn := NewRepo;
+  try
+    RestoreRepository(vConn, Fixture('golden.dlrepo.txt'), False);
+    vFail := Run;
+    Check('25a control: the first backup writes a new file', (vFail = '') and TFile.Exists(vOut), vFail);
+    vOld := TFile.ReadAllBytes(vOut);
+    RestoreRepository(vConn, Fixture('edge.dlrepo.txt'), True);
+    vFail := Run;
+    vNew := TFile.ReadAllBytes(vOut);
+    Check('25b a second backup over the same file replaces it', (vFail = '') and BytesEqual(TFile.ReadAllBytes(Fixture('edge.dlrepo.txt')), vNew), vFail);
+    Check('25c and leaves nothing else in the folder', OnlyTheBackup);
+    Check('25d control: the two contents differ', not BytesEqual(vOld, vNew));
+    RestoreRepository(vConn, Fixture('golden.dlrepo.txt'), True);
+    vHeld := TFileStream.Create(vOut, fmOpenRead or fmShareDenyWrite);
+    try
+      vFail := Run;
+    finally
+      vHeld.Free;
+    end;
+    Check('25e a file in use: the backup fails, the old file is as it was', (vFail <> '') and BytesEqual(vNew, TFile.ReadAllBytes(vOut)), vFail);
+    Check('25f and leaves no temporary file', OnlyTheBackup);
+    TFile.SetAttributes(vOut, [TFileAttribute.faReadOnly]);
+    vFail := Run;
+    TFile.SetAttributes(vOut, [TFileAttribute.faNormal]);
+    Check('25g a read-only file: the same', (vFail <> '') and BytesEqual(vNew, TFile.ReadAllBytes(vOut)) and OnlyTheBackup, vFail);
+    TFile.WriteAllText(vOut + '.tmp', 'somebody else''s');
+    vFail := Run;
+    Check('25h a file that happens to be called <backup>.tmp is not touched', (vFail = '') and (TFile.ReadAllText(vOut + '.tmp') = 'somebody else''s'), vFail);
+    Check('25i control: released, the backup replaces the file', BytesEqual(vOld, TFile.ReadAllBytes(vOut)));
+  finally
+    vConn.Free;
+  end;
+end;
+
 begin
   GDir := TPath.Combine(TPath.GetTempPath, 'dl-fieldrepo-TTC-' + IntToStr(GetCurrentProcessId));
   if TDirectory.Exists(GDir) then
@@ -626,6 +688,7 @@ begin
     TestReplace;
     TestDefaultsDoNotLeak;
     TestV2;
+    TestBackupOverExisting;
   except
     on E: Exception do
     begin

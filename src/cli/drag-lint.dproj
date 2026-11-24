@@ -442,6 +442,8 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.AlterFacts.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.AlterApply.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.AlterReport.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.BackupManifest.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.FbBackup.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.SchemaHook.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.SchemaHookMicronite.pas"/>
         <DCCReference Include="DRagLint.CLI.CheckInit.pas"/>
@@ -458,6 +460,7 @@
         <DCCReference Include="DRagLint.CLI.RepoHandlers.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoFib.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoAlter.pas"/>
+        <DCCReference Include="DRagLint.CLI.RepoBackup.pas"/>
         <DCCReference Include="DRagLint.CLI.Explain.pas"/>
         <DCCReference Include="DRagLint.CLI.ConfigAnchor.pas"/>
         <DCCReference Include="DRagLint.CLI.RuleScope.pas"/>
