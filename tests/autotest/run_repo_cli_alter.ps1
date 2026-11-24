@@ -178,28 +178,6 @@ COMMIT;
   Check 'L6c --apply --select converts it, position and values kept' (($r.Code -eq 0) -and ((Shape) -eq 'ID:8:0,A:37:20,N:8:0,U:37:10,X:8:0') -and ((Q 'SELECT ID || N FROM T ORDER BY ID') -eq '17,212')) "$(Shape) $(Q 'SELECT ID || N FROM T ORDER BY ID')`n$($r.Out)"
   $r = Alter @('--order', 'ID,X', '--apply')
   Check 'L6d --order moves the column' (($r.Code -eq 0) -and ((Shape) -eq 'ID:8:0,X:8:0,A:37:20,N:8:0,U:37:10')) "$(Shape)`n$($r.Out)"
-  # R8: the view column, by --select
-  $j = JsonOf (Alter @('--json'))
-  $u = @($j.changes | Where-Object { $_.target -eq 'T.U' })[0]
-  [IO.File]::WriteAllText($sel, "plan $($j.plan_hash)`r`n$($u.id)`r`n")
-  $r = Alter @('--apply', '--select', $sel, '--verify', 'quick')
-  Check 'R8 --select takes the widening of a column a view uses; the view still answers; --verify quick' (($r.Code -eq 0) -and ((Shape) -match 'U:37:30') -and ((Q 'SELECT COUNT(U) FROM V') -eq '2') -and
-    ($r.Out -match 'verified quick\)')) "$(Shape)`n$($r.Out)"
-  # R7: the repository loses X and widens A: all takes the widening, never the drop
-  [IO.File]::WriteAllText($ddl, "CREATE TABLE T (ID INTEGER NOT NULL, A VARCHAR(25), N INTEGER, U VARCHAR(30), CONSTRAINT PK_T PRIMARY KEY (ID));`r`n")
-  $null = Run @('repo', 'refresh-schema', '--ddl', $ddl, '--repo', $repo, '--apply')
-  $j = JsonOf (Alter @('--json'))
-  $drop = @($j.changes | Where-Object { $_.kind -eq 'drop' })
-  if ($drop.Count -eq 1) {
-    [IO.File]::WriteAllText($sel, "plan $($j.plan_hash)`r`nall`r`n")
-    $r = Alter @('--apply', '--select', $sel, '--verify', 'quick')
-    Check 'R7a all applies the rest and leaves the drop' (($r.Code -eq 0) -and ((Shape) -match 'X:8:0') -and ((Shape) -match 'A:37:25') -and ($r.Out -match 'not applied: ')) "$(Shape)`n$($r.Out)"
-    $j = JsonOf (Alter @('--json'))
-    $drop = @($j.changes | Where-Object { $_.kind -eq 'drop' })
-    [IO.File]::WriteAllText($sel, "plan $($j.plan_hash)`r`n$($drop[0].id)`r`n")
-    $r = Alter @('--apply', '--select', $sel, '--verify', 'quick')
-    Check 'R7b the drop by its own id' (($r.Code -eq 0) -and ((Shape) -notmatch 'X:8:0')) "$(Shape)`n$($r.Out)"
-  } else { Check 'R7 the plan offers the drop' $false ($j | ConvertTo-Json -Depth 5) }
   $r = Alter @('--hook', 'micronite')
   $r2 = Alter @('--hook', 'nope')
   Check 'L7 --hook micronite adds its notes; an unknown hook -> exit 1' (($r.Code -eq 0) -and ($r.Out -match 'update-orm --table T') -and ($r2.Code -eq 1) -and ($r2.Out -match 'generic, micronite')) "$($r.Out)`n$($r2.Out)"
@@ -215,6 +193,29 @@ COMMIT;
   Check 'L10c a flag in the place of a value -> exit 1' (($r.Code -eq 1) -and ((Shape) -eq $shape1)) "$(Shape)`n$($r.Out)"
   $r = Alter @('--apply')
   Check 'L10d positive control: the change was there to apply; what was left out is named' (($r.Code -eq 0) -and ((Shape) -match 'A:37:40') -and ($r.Out -match 'not applied: ')) "$(Shape)`n$($r.Out)"
+  # R8: the view column, by --select
+  $j = JsonOf (Alter @('--json'))
+  $u = @($j.changes | Where-Object { $_.target -eq 'T.U' })[0]
+  [IO.File]::WriteAllText($sel, "plan $($j.plan_hash)`r`n$($u.id)`r`n")
+  $r = Alter @('--apply', '--select', $sel, '--verify', 'quick')
+  Check 'R8 --select takes the widening of a column a view uses; the view still answers; --verify quick' (($r.Code -eq 0) -and ((Shape) -match 'U:37:30') -and ((Q 'SELECT COUNT(U) FROM V') -eq '2') -and
+    ($r.Out -match 'verified quick\)')) "$(Shape)`n$($r.Out)"
+  # R7: the repository loses X and widens A: all takes the widening, never the drop
+  [IO.File]::WriteAllText($ddl, "CREATE TABLE T (ID INTEGER NOT NULL, A VARCHAR(45), N INTEGER, U VARCHAR(30), CONSTRAINT PK_T PRIMARY KEY (ID));`r`n")
+  [IO.File]::WriteAllText($all, "all`r`n")   # a vanished row goes only when it is selected
+  $null = Run @('repo', 'refresh-schema', '--ddl', $ddl, '--repo', $repo, '--select', $all)
+  $j = JsonOf (Alter @('--json'))
+  $drop = @($j.changes | Where-Object { $_.kind -eq 'drop' })
+  if ($drop.Count -eq 1) {
+    [IO.File]::WriteAllText($sel, "plan $($j.plan_hash)`r`nall`r`n")
+    $r = Alter @('--apply', '--select', $sel, '--verify', 'quick')
+    Check 'R7a all applies the rest and leaves the drop' (($r.Code -eq 0) -and ((Shape) -match 'X:8:0') -and ((Shape) -match 'A:37:45') -and ($r.Out -match 'not applied: ')) "$(Shape)`n$($r.Out)"
+    $j = JsonOf (Alter @('--json'))
+    $drop = @($j.changes | Where-Object { $_.kind -eq 'drop' })
+    [IO.File]::WriteAllText($sel, "plan $($j.plan_hash)`r`n$($drop[0].id)`r`n")
+    $r = Alter @('--apply', '--select', $sel, '--verify', 'quick')
+    Check 'R7b the drop by its own id' (($r.Code -eq 0) -and ((Shape) -notmatch 'X:8:0')) "$(Shape)`n$($r.Out)"
+  } else { Check 'R7 the plan offers the drop' $false ($j | ConvertTo-Json -Depth 5) }
   $cs0 = $cs
   $cs = "$cs0;OpenMode=OpenOrCreate"
   $r = Alter @()

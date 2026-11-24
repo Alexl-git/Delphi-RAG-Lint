@@ -47,7 +47,7 @@ type
 /// <summary>The host a connection string names, when it is not this machine.</summary>
 /// <param name="pConnection">The --connection value.</param>
 /// <returns>The host (or the protocol that is not supported); '' = this machine. Pure.</returns>
-function RemoteFbHost(const pConnection: string): string;
+function RemoteFbHost(const pConnection: string): string;  // dl:ok unused-public-symbol@3f08 -- REVIEWED 2026-11-23 ALTERBK: the pure part is the test seam; testsieldrepoBackupTests.dpr (outside the indexed project) calls it
 
 /// <summary>Refuses a connection string whose server is another machine.</summary>
 /// <param name="pConnection">The --connection value.</param>
@@ -73,7 +73,6 @@ uses
   System.IOUtils,
   System.StrUtils,
   System.DateUtils,
-  Data.DB,
   FireDAC.Stan.Option,
   FireDAC.Comp.Client,
   FireDAC.Phys.FB,
@@ -313,7 +312,7 @@ end;
 
 function RemoteFbHost(const pConnection: string): string;
 const
-  LOCAL_HOSTS: array[0..4] of string = ('', 'localhost', '127.0.0.1', '::1', '[::1]');
+  LOCAL_HOSTS: array[0..4] of string = ('', 'localhost', '127.0.0.1', '::1', '[::1]');  // dl:ok hardcoded-ip-address@2bf6 -- REVIEWED 2026-11-23 ALTERBK: the loopback names are what "this machine" means; nothing to configure
 var
   VTarget: TFbTarget;
 begin
