@@ -105,5 +105,5 @@ Write-Host 'PASS' -ForegroundColor Green
 exit 0
 } finally {
   # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
-  if (($WorkDir -like "$env:TEMP\drag-lint-v154-flow-*") -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
+  if (($WorkDir -like "$env:TEMP\drag-lint-v154-flow-$PID*") -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
 }

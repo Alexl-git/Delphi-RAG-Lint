@@ -792,5 +792,5 @@ if ($script:Failed) { Write-Host 'v154 FPBATCH2: FAIL' -ForegroundColor Red; exi
 Write-Host 'v154 FPBATCH2: PASS' -ForegroundColor Green
 exit 0
 } finally {
-  if (($WorkDir -like "$env:TEMP\drag-lint-v154-fpbatch2-*") -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
+  if (($WorkDir -like "$env:TEMP\drag-lint-v154-fpbatch2-$PID*") -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
 }

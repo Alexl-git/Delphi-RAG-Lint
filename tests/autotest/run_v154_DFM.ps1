@@ -103,5 +103,5 @@ if ($script:Failed) { Write-Host "FAIL ($script:Passed passed)" -ForegroundColor
 Write-Host "PASS ($script:Passed checks)" -ForegroundColor Green
 exit 0
 } finally {
-  if (($WorkDir -like "$env:TEMP\drag-lint-v154-dfm-*") -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
+  if (($WorkDir -like "$env:TEMP\drag-lint-v154-dfm-$PID*") -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
 }
