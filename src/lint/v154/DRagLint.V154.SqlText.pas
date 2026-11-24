@@ -192,7 +192,7 @@ type
     FOwner    : string;                           // class of the method being walked
     FRoutine  : Cardinal;
     FList0    : UInt64;                           // statement list being walked
-    FStoreKey : string;                           // store pointer + its database file; '' without a SQLite store
+    FAnswers  : TDictionary<string, string>;      // this scan's store answers: OutsideReason text, or 1/0 for a table
     FHasRecv  : Boolean;                          // the index has ref_receivers, ref_types and dfm_properties
     FRefs     : TDictionary<string, TPair<Int64, string>>;  // line:col:name -> symbol id and static type; nil until asked
     function Txt(const ANode: TTSNode): string;
@@ -645,7 +645,7 @@ end;
 
 { ---- caches shared by every scan of the process ----
   Lint runs files in parallel lanes: every access holds GCacheLock. A form's parsed datasets depend on the .dfm only (path + write time);
-  what the store answers is keyed on the store (its pointer and its database file), so two DBs never mix. }
+  what the store answers is NOT cached across scans (a reindex must be seen): a scan keeps its own answers. }
 
 type
   TDfmEntry = record
@@ -658,7 +658,6 @@ type
 var
   GCacheLock: TObject;
   GDfmCache : TDictionary<string, TDfmEntry>;
-  GAnswers  : TDictionary<string, string>;    // store|what -> answer: OutsideReason text, or 1/0 for a table that exists / does not
 
 function DfmCacheGet(const AKey: string; out AEntry: TDfmEntry): Boolean;
 begin
@@ -680,25 +679,6 @@ begin
   end;
 end;
 
-function StoreCacheGet(const AKey: string; out AAnswer: string): Boolean;
-begin
-  TMonitor.Enter(GCacheLock);
-  try
-    Result:= GAnswers.TryGetValue(AKey, AAnswer);
-  finally
-    TMonitor.Exit(GCacheLock);
-  end;
-end;
-
-procedure StoreCachePut(const AKey, AAnswer: string);
-begin
-  TMonitor.Enter(GCacheLock);
-  try
-    GAnswers.AddOrSetValue(AKey, AAnswer);
-  finally
-    TMonitor.Exit(GCacheLock);
-  end;
-end;
 { ---- TSqlTextScan ---- }
 
 constructor TSqlTextScan.Create(const AFile: string; const AStore: ISymbolStore; AFileId: Int64);
@@ -719,6 +699,7 @@ begin
   FUnitVars:= TDictionary<string, string>.Create;
   FConsts  := TDictionary<string, TTSNode>.Create;
   FFields  := TDictionary<string, string>.Create;
+  FAnswers := TDictionary<string, string>.Create;
   FDfms    := TDictionary<string, TArray<TSqlDfmDataset>>.Create;
   FDfmRoots:= TDictionary<string, string>.Create;
   FDfmNotes:= TDictionary<string, string>.Create;
@@ -726,8 +707,6 @@ begin
   Parsed:= TAstParseCache.Get(AFile);
   if Parsed.Tree = nil then Exit;
   FSrc    := Parsed.Src;
-  if FStore is TSQLiteSymbolStore then
-    FStoreKey:= Format('%p|%s', [Pointer(FStore), (FStore as TSQLiteSymbolStore).GetConnection.Params.Database]);
   FHasRecv:= TableExists('ref_receivers') and TableExists('ref_types') and TableExists('dfm_properties');
   CollectUnit(Parsed.Tree.RootNode, '');
   Walk(Parsed.Tree.RootNode);
@@ -742,6 +721,7 @@ begin
   FRefs.Free;
   FLate.Free;
   FDfmNotes.Free;
+  FAnswers.Free;
   FDfmRoots.Free;
   FDfms.Free;
   FFields.Free;
@@ -771,7 +751,7 @@ var
 begin
   Result:= False;
   if FStore is not TSQLiteSymbolStore then Exit;
-  if StoreCacheGet(FStoreKey + '|table|' + AName, Answer) then Exit(Answer = '1');
+  if FAnswers.TryGetValue('table|' + AName, Answer) then Exit(Answer = '1');
   Query:= NewQuery('SELECT COUNT(*) FROM sqlite_master WHERE type = ''table'' AND name = :n') as TFDQuery;
   try
     Query.ParamByName('n').AsString:= AName;
@@ -780,7 +760,7 @@ begin
   finally
     Query.Free;
   end;
-  StoreCachePut(FStoreKey + '|table|' + AName, IfThen(Result, '1', '0'));
+  FAnswers.Add('table|' + AName, IfThen(Result, '1', '0'));
 end;
 
 { ---- declarations ---- }
@@ -1701,6 +1681,7 @@ end;
 procedure TSqlTextScan.LoadDfm(const ADfm: string);
 var
   Key  : string;
+  Full : string;  // canonical key of the process-wide cache
   Entry: TDfmEntry;
   Stamp: TDateTime;
 begin
@@ -1710,12 +1691,13 @@ begin
   FDfmRoots.Add(Key, '');
   if not TFile.Exists(ADfm) then Exit;
   Stamp:= TFile.GetLastWriteTime(ADfm);
-  if (not DfmCacheGet(Key, Entry)) or (not SameValue(Entry.Stamp, Stamp)) then
+  Full := LowerCase(TPath.GetFullPath(ADfm));
+  if (not DfmCacheGet(Full, Entry)) or (not SameValue(Entry.Stamp, Stamp)) then
   begin
     Entry:= Default(TDfmEntry);
     Entry.Stamp:= Stamp;
     ReadDfm(ADfm, Entry);
-    DfmCachePut(Key, Entry);
+    DfmCachePut(Full, Entry);
   end;
   FDfmRoots[Key]:= Entry.Root;
   FDfms[Key]    := Entry.Items;
@@ -1776,12 +1758,12 @@ function TSqlTextScan.OutsideReason(const AData: TSqlDataset; AParams: Boolean):
 var
   Key: string;
 begin
-  if (AData.Scope in [ssLocal, ssParameter]) or (FStoreKey = '') or (AData.SymbolId = 0) or (not FHasRecv) then
+  if (AData.Scope in [ssLocal, ssParameter]) or (FStore = nil) or (AData.SymbolId = 0) or (not FHasRecv) then
     Exit(AskOutside(AData, AParams));
-  Key:= Format('%s|outside|%d|%d|%d|%s|%s', [FStoreKey, AData.SymbolId, FFileId, Ord(AParams), BoolToStr(AData.InDfm), AData.Dfm.Name]);
-  if StoreCacheGet(Key, Result) then Exit;
+  Key:= Format('outside|%d|%d|%d|%s|%s', [AData.SymbolId, FFileId, Ord(AParams), BoolToStr(AData.InDfm), AData.Dfm.Name]);
+  if FAnswers.TryGetValue(Key, Result) then Exit;
   Result:= AskOutside(AData, AParams);
-  StoreCachePut(Key, Result);
+  FAnswers.Add(Key, Result);
 end;
 
 function TSqlTextScan.AskOutside(const AData: TSqlDataset; AParams: Boolean): string;
@@ -1940,10 +1922,8 @@ end;
 initialization
   GCacheLock:= TObject.Create;
   GDfmCache := TDictionary<string, TDfmEntry>.Create;
-  GAnswers  := TDictionary<string, string>.Create;
 
 finalization
-  GAnswers.Free;
   GDfmCache.Free;
   GCacheLock.Free;
 
