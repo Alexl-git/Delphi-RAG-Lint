@@ -249,7 +249,7 @@ begin
   Result.Json := pJson;
   Result.Files := CommandLineList('--dfm', ';');
   Result.Dataset := CommandLineValue('--dataset');
-  Result.Fields := CommandLineList('--names', ',');
+  Result.Fields := CommandLineList('--names', ',');  // dl:ok duplicate-code@0d02 -- REVIEWED 2026-11-24 INT-W2: twin of read-dfm: same flags, other plan types
   Result.SelectFile := CommandLineValue('--select');
   Result.Write := (CommandLineFlag('--apply') or (Result.SelectFile <> '')) and not CommandLineFlag('--dry-run');
   VDirection := CommandLineValue('--direction');

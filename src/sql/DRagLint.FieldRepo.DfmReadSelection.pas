@@ -1,4 +1,4 @@
-unit DRagLint.FieldRepo.DfmReadSelection;  // dl:ok unit-used-by-no-unit@b68d -- REVIEWED 2026-11-23 TT-DFMREAD: spec 4.4 engine side of the field-selection dialog (a later lane); tests/fieldrepo/DfmReadTests.dpr uses it
+unit DRagLint.FieldRepo.DfmReadSelection;
 
 { drag-lint 1.54 -- lane TT-DFMREAD: the per-dataset field selection rules (design
   2026-11-22-field-repository-v2-design.md section 4.4). The selection itself lives in the DFM (its persistent
@@ -35,7 +35,7 @@ type
 /// <remarks>S1: a calc / internal-calc / aggregate field adds its CalcDependencies transitively (a cycle ends, it is
 /// not an error here); a lookup field adds its SOURCEKEY. S2: the result always contains pSelected, so unselecting a
 /// field removes nothing else. S3: expanding an expanded selection gives the same selection. Pure.</remarks>
-function ExpandSelection(const pSelected: TArray<string>;  // dl:ok unused-public-symbol@487e -- REVIEWED 2026-11-23 TT-DFMREAD: spec 4.4 engine side of the field-selection dialog (a later lane); tests/fieldrepo/DfmReadTests.dpr calls it
+function ExpandSelection(const pSelected: TArray<string>;
   const pAllFieldsOfTable: TArray<TFrSelectionField>): TArray<string>;
 
 implementation

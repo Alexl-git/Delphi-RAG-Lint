@@ -8,7 +8,7 @@ interface
 uses
   System.JSON,
   DRagLint.FieldRepo.Alter,
-  DRagLint.FieldRepo.AlterApply;
+  DRagLint.FieldRepo.AlterApply;  // dl:ok uses-global-census@95f9 -- REVIEWED 2026-11-24 INT-W2: the report prints the state names the apply step defines
 
 const
   /// <summary>Starts the line of a report (and of a --select file) that holds the plan hash.</summary>

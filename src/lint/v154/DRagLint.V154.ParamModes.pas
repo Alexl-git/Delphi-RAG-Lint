@@ -61,7 +61,7 @@ type
 /// when a name is not an identifier, or when AMutatesParams names a parameter the signature does not
 /// declare with that mode.</returns>
 /// <remarks>Pure; safe from any thread.</remarks>
-function V154ParamsOf(const ASignature, AMutatesParams: string; AFactsKnown: Boolean): TV154ParamList;
+function V154ParamsOf(const ASignature, AMutatesParams: string; AFactsKnown: Boolean): TV154ParamList;  // dl:ok unused-public-symbol@8ebe -- REVIEWED 2026-11-24 INT-W2: test seam, called by tests/V154ParamModesTests.dpr
 
 /// <summary>Reads the modes of an indexed routine and cross-checks them with its facts.</summary>
 /// <param name="AStore">The index ARoutine comes from; nil = no cross-check.</param>

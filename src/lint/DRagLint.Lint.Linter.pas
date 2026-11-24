@@ -471,7 +471,7 @@ begin
     Callee:= SqlNodeText(Ent, ASrc);
     if not SqlCalleeOnlyReads(Callee) then
       for I:= 0 to N.ChildCount - 1 do
-        if (N.Child(I) = Ent) = False and SqlMentions(N.Child(I), AName, ASrc) then
+        if (not (N.Child(I) = Ent)) and SqlMentions(N.Child(I), AName, ASrc) then
         begin
           Inc(AUnsafe);
           Break;

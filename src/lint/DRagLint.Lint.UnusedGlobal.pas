@@ -257,7 +257,7 @@ var
   begin
     try
       Text:= TFile.ReadAllText(APath, TEncoding.ANSI);
-    except   // dl:ok try-except-swallowed@3756 -- an unreadable file must keep every suspect silent, never abort the run
+    except   // dl:ok try-except-swallowed@d905 -- REVIEWED 2026-11-24 INT-W2: an unreadable file must keep every suspect silent, never abort the run
       on Exception do
       begin
         for var Pair in AHits do Pair.Value.AddOrSetValue(AFileId, UNREADABLE_HITS);

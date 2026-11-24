@@ -48,7 +48,7 @@ implementation
 
 uses
   DRagLint.V154.SqlText
-  , DRagLint.V154.SQL.Support
+  , DRagLint.V154.SQL.Support  // dl:ok uses-global-census@9abd -- REVIEWED 2026-11-24 INT-W2: the Support unit of the lane holds the rule ids; the pair travels together
   ;
 
 class procedure TV154SQLRules.Catalog(const ADecls: TList<TV151RuleDecl>);

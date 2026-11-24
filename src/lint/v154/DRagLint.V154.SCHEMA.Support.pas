@@ -818,11 +818,9 @@ begin
   if (Rule = '') or (not ACtx.Wants(Rule)) or Excepted(AFacts, Rule, FormKeyOf(ACtx.Path, Data.Name), Table, Column) or
      (not IsFixed(ACtx.Store, ACtx.Path, AForm.Root, Data.Name)) then
     Exit;
-  if Rule = RULE_TYPE then
-    Result:= [FindingAt(RULE_TYPE, Format('%s is a %s, but %s.%s is %s (field repository) -- the dataset does not open',
-      [AField.Name, AField.ClassName, Table, Column, Fact.TypeText]), ACtx.DfmPath, AField.Line, AField.Col, AField.Col)]
-  else
-    Result:= [FindingAt(RULE_UNKNOWN, Format('%s names column %s, which table %s does not have (field repository) -- the dataset does not open',
+  Result:= [if Rule = RULE_TYPE then FindingAt(RULE_TYPE, Format('%s is a %s, but %s.%s is %s (field repository) -- the dataset does not open',
+      [AField.Name, AField.ClassName, Table, Column, Fact.TypeText]), ACtx.DfmPath, AField.Line, AField.Col, AField.Col)
+    else FindingAt(RULE_UNKNOWN, Format('%s names column %s, which table %s does not have (field repository) -- the dataset does not open',
     [AField.Name, Column, Table]), ACtx.DfmPath, AField.NameLine, AField.NameCol, AField.NameCol)];
 end;
 

@@ -303,7 +303,7 @@ procedure ValidateRepository(pConnection: TFDConnection);  // dl:ok unused-publi
 /// <exception cref="ERepoError">The table is not a repository table.</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoInfo (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.Schema.RepoIsEmpty (DRagLint.FieldRepo.Schema.pas)</para>
+/// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoInfo (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.ConstGen.CountConstRows (DRagLint.FieldRepo.ConstGen.pas), DRagLint.FieldRepo.ConstMark.ConstTableMarks (DRagLint.FieldRepo.ConstMark.pas), DRagLint.FieldRepo.Schema.RepoIsEmpty (DRagLint.FieldRepo.Schema.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.FieldRepo.Schema.FindRepoTable, DRagLint.FieldRepo.Schema.QuoteRepoIdent</para>
 /// <para>Returns: pConnection.ExecSQLScalar('SELECT COUNT(*) FROM ' + QuoteRepoIdent(Tab.Name))</para>
 /// <seealso cref="DRagLint.FieldRepo.Schema.FindRepoTable"/>
@@ -385,7 +385,7 @@ uses
   FireDAC.Phys,
   FireDAC.Phys.SQLite,
   FireDAC.DApt,
-  DRagLint.FieldRepo.Kinds;
+  DRagLint.FieldRepo.Kinds;  // dl:ok uses-global-census@379a -- REVIEWED 2026-11-24 INT-W2: FR_EVENT_COLUMNS is the one list of event columns
 
 const
   MAX_BYTE = 255;

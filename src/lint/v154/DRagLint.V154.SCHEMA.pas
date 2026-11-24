@@ -49,9 +49,9 @@ implementation
 
 uses
   DRagLint.V154.SqlText
-  , DRagLint.V154.SCHEMA.Support
+  , DRagLint.V154.SCHEMA.Support  // dl:ok uses-global-census@ffcb -- REVIEWED 2026-11-24 INT-W2: the Support unit of the lane holds the rule ids; the pair travels together
   , DRagLint.FieldRepo.SchemaFactsEx
-  , DRagLint.Lint.SchemaRules
+  , DRagLint.Lint.SchemaRules  // dl:ok uses-global-census@99a0 -- REVIEWED 2026-11-24 INT-W2: host rule ids: the const in SchemaRules is the one spelling
   ;
 
 class procedure TV154SCHEMARules.Catalog(const ADecls: TList<TV151RuleDecl>);

@@ -42,11 +42,6 @@ function IsDbAccessClass(const AClass: string): Boolean;
 /// <returns>True for Button1 of TButton, cxButton3 of TcxButton, FDQuery2 of TFDQuery.</returns>
 function HasDefaultName(const AObj: TDfmObj): Boolean;
 
-/// <summary>True when the object or one of its ancestors is hidden (Visible = False).</summary>
-/// <param name="AObj">Form-file object.</param>
-/// <returns>True when the object cannot be reached by the user.</returns>
-function IsHiddenInDfm(const AObj: TDfmObj): Boolean;
-
 /// <summary>True when the object has the property and it is the identifier False / True.</summary>
 /// <param name="AObj">Form-file object.</param>
 /// <param name="AName">Property name.</param>
@@ -115,10 +110,10 @@ begin
       Inc(I);
       while I <= Length(S) do
       begin
-        if S[I] <> '''' then Result:= Result + S[I]
+        if S[I] <> '''' then Result:= Result + S[I]  // dl:ok concat-in-loop@d90d -- REVIEWED 2026-11-24 INT-W2: one caption literal, tens of characters
         else if (I < Length(S)) and (S[I + 1] = '''') then
         begin
-          Result:= Result + '''';
+          Result:= Result + '''';  // dl:ok concat-in-loop@5cd2 -- REVIEWED 2026-11-24 INT-W2: one caption literal, tens of characters
           Inc(I);
         end
         else Break;
@@ -135,7 +130,7 @@ begin
       var Start: Integer:= I;
       while (I <= Length(S)) and (CharInSet(S[I], ['0'..'9']) or (Hex and CharInSet(S[I], ['a'..'f', 'A'..'F']))) do Inc(I);
       var Code: Integer:= StrToIntDef(IfThen(Hex, '$', '') + Copy(S, Start, I - Start), -1);
-      if Code >= 0 then Result:= Result + Char(Code);
+      if Code >= 0 then Result:= Result + Char(Code);  // dl:ok concat-in-loop@2523 -- REVIEWED 2026-11-24 INT-W2: one caption literal, tens of characters
     end
     else if CharInSet(C, [' ', '+', #10, #13, #9]) then Inc(I)
     else Exit('');  { an identifier or a number: not a literal }
@@ -208,17 +203,6 @@ end;
 function BoolPropIs(const AObj: TDfmObj; const AName: string; AValue: Boolean): Boolean;
 begin
   Result:= AObj.Has(AName) and SameText(Trim(AObj.Val(AName)), IfThen(AValue, 'True', 'False'));
-end;
-
-function IsHiddenInDfm(const AObj: TDfmObj): Boolean;
-begin
-  Result:= False;
-  var O: TDfmObj:= AObj;
-  while O <> nil do
-  begin
-    if BoolPropIs(O, 'Visible', False) then Exit(True);
-    O:= O.Parent;
-  end;
 end;
 
 function HintIsInactive(const AObj: TDfmObj): Boolean;

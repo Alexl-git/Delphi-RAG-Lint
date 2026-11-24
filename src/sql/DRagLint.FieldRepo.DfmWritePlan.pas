@@ -93,10 +93,10 @@ type
 /// <exception cref="EDfmWriteError">A binary DFM, or one that Delphi or the readers do not understand.</exception>
 /// <exception cref="EDfmWriteSelection">pFields without exactly one dataset with a table.</exception>
 /// <exception cref="EDfmReadError">A file or the dataset does not exist.</exception>
-/// <exception cref="EFrSelectionError">An unknown field in pFields.</exception>
 /// <exception cref="ERepoError">The repository is schema 1 (run repo migrate first).</exception>
 /// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids and the same PlanId. A
-/// file given twice is planned once. A file that is open in the IDE is read from disk.</remarks>
+/// file given twice is planned once. A file that is open in the IDE is read from disk. An unknown field in pFields ends in
+/// the EFrSelectionError of ExpandSelection.</remarks>
 function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
   const pFields: TArray<string>): TDfmwPlan;
 
@@ -279,7 +279,7 @@ type
     Source: TSource;
   end;
 
-  TDfmWritePlanner = class
+  TDfmWritePlanner = class  // dl:ok god-class@e649, high-response@e649 -- REVIEWED 2026-11-24 INT-W2: one planner over one plan; splitting it is a design change for a later release
   strict private
     FRepo: TFDConnection;
     FPlan: TDfmwPlan;
@@ -444,7 +444,7 @@ end;
 
 { ---- sources (the rules of DfmReadPlan.SourceOf / FieldSource) ---- }
 
-function SourceOf(const pDataset: TDfmrDataset): TSource;
+function SourceOf(const pDataset: TDfmrDataset): TSource;  // dl:ok duplicate-code@9fe4 -- REVIEWED 2026-11-24 INT-W2: twin of the read planner: same walk, other target
 begin
   Result := Default(TSource);
   Result.HasSql := (pDataset.TableName = '') and (pDataset.Sql <> '');

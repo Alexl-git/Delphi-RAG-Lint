@@ -2262,7 +2262,7 @@ begin
             SetLength(ResolvedRows, Length(ResolvedRows) + 1);
             ResolvedRows[High(ResolvedRows)]:= RRow;
           end;
-        end; // dl:ok duplicate-code@4b27 -- the resolved and the by-name caller rows are parsed by two near-identical loops on purpose (different required field); moved verbatim from FetchHoverBundle
+        end;
 
     if RObj.TryGetValue<TJSONArray>('nameCallers', JArr) then
       for i:= 0 to JArr.Count - 1 do
@@ -2609,7 +2609,7 @@ begin
   Result:= GetActiveEditorInfo(U, L, C) and SameText(U, AUri) and (L = ALine) and (C = ACol);
 end;
 
-procedure DoCompletion(ASilent: Boolean); // dl:ok too-many-exit-points@1c31 -- guard clauses of an async reply handler: timeout, moved caret, no items, silent empty list
+procedure DoCompletion(ASilent: Boolean); // dl:ok too-many-exit-points@42bd -- guard clauses of an async reply handler: timeout, moved caret, no items, silent empty list
 { 2026-10-29: ASYNC -- the list pops when the answer arrives, if the caret has
   not moved. The silent '.'-trigger is not even sent while the engine is busy:
   it would only queue behind the request the engine is stuck on. }
@@ -6219,7 +6219,7 @@ end;
 procedure InvokeGoToDefinition(Sender: TObject);
 { 2026-10-29: ASYNC; the jump (or the pick list) happens when the answer arrives. }
 var
-  Uri   : string; Line, Col: Integer; // dl:ok duplicate-code@5799 -- the request/try/finally shape every async LSP command shares; each callback differs
+  Uri   : string; Line, Col: Integer;
   Client: TDragLintLspClient        ;
   Params: TJSONObject               ;
   Late  : Boolean                   ; { set by the lrsTimeout notice; captured by the callback }

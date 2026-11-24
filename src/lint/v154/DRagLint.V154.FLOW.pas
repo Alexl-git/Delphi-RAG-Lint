@@ -50,7 +50,7 @@ implementation
 
 uses
   System.StrUtils
-  , DRagLint.V154.FLOW.Support
+  , DRagLint.V154.FLOW.Support  // dl:ok uses-global-census@f2aa -- REVIEWED 2026-11-24 INT-W2: the Support unit of the lane holds the rule ids; the pair travels together
   ;
 
 const

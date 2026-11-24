@@ -4014,7 +4014,7 @@ begin
   Result := if AVar.Kind = vkParamOut then 'Out parameter' else 'Local';
 end;
 
-class function TFlowChecker.Check(const AFile: string; const AStore: ISymbolStore;  // dl:ok method-too-long@ff3c, too-many-exit-points@b70c, cyclomatic-complexity@b7e3, cognitive-complexity@7e23 -- REVIEWED 2026-11-21 SLZ-S04: measured 122 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+class function TFlowChecker.Check(const AFile: string; const AStore: ISymbolStore;  // dl:ok method-too-long@0534, too-many-exit-points@b70c, cyclomatic-complexity@822d, cognitive-complexity@23dd -- REVIEWED 2026-11-21 SLZ-S04: measured 122 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain); REVIEWED 2026-11-24 INT-W2: measured again after FPBATCH2; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   AFileId: Int64; const ALibStore: ISymbolStore;
   const AKeep: TFunc<string, Boolean>): TArray<TLintFinding>;
 var
@@ -4202,7 +4202,7 @@ var
       end;
   end;
 
-  procedure CheckRoutine(const AProc: TTSNode);  // dl:ok too-many-locals@42fe, method-too-long@f31e, deep-nesting@dbd0, cyclomatic-complexity@53e0, cognitive-complexity@5220 -- REVIEWED 2026-11-21 SLZ-S04: measured 626 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+  procedure CheckRoutine(const AProc: TTSNode);  // dl:ok too-many-locals@42fe, method-too-long@1085, deep-nesting@dbd0, cyclomatic-complexity@47fc, cognitive-complexity@bf0c -- REVIEWED 2026-11-21 SLZ-S04: measured 626 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain); REVIEWED 2026-11-24 INT-W2: measured again after FPBATCH2; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Cfg: TCfg; Vars: TRoutineVarTable; Ana: IDataFlowAnalysis<TDefAsgnVal>;
     AIn, AOut: TArray<TDefAsgnVal>; ExitVal: TDefAsgnVal;

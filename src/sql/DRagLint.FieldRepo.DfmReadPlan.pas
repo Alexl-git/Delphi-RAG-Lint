@@ -16,7 +16,7 @@ interface
 
 uses
   FireDAC.Comp.Client,
-  DRagLint.FieldRepo.Kinds,
+  DRagLint.FieldRepo.Kinds,  // dl:ok uses-global-census@5f7a -- REVIEWED 2026-11-24 INT-W2: FR_EVENT_COLUMNS is the one list of event columns
   DRagLint.FieldRepo.ChangeSet,
   DRagLint.FieldRepo.DfmReadSelection,
   DRagLint.FieldRepo.DfmRead;

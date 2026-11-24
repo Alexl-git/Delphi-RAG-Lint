@@ -187,12 +187,12 @@ uses
   DRagLint.Parser.DFM,
   DRagLint.Parser.DFMProps,
   DRagLint.LSP.SyntaxTree,
-  DRagLint.FieldRepo.Kinds,
+  DRagLint.FieldRepo.Kinds,  // dl:ok uses-global-census@5f7a -- REVIEWED 2026-11-24 INT-W2: FR_EVENT_COLUMNS is the one list of event columns
   DRagLint.FieldRepo.SchemaFacts,
   DRagLint.FieldRepo.DfmRead,
   DRagLint.FieldRepo.DfmReadSql,
   DRagLint.FieldRepo.DfmReadPlan,
-  DRagLint.FieldRepo.HandlersRegions;
+  DRagLint.FieldRepo.HandlersRegions;  // dl:ok uses-global-census@41ef -- REVIEWED 2026-11-24 INT-W2: DLFR_CRLF is the line end the region hash is made over
 
 const
   LF = #10;

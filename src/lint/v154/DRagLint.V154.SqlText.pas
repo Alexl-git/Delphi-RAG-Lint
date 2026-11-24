@@ -308,7 +308,6 @@ const
   SELF_NAME = 'self';
   CREATE_NAME = 'create';
   KIND_LIST = 'list';
-  KIND_COLLECTION = 'collection';
   KIND_ITEM = 'item';
   MAX_PLAIN_LINKS = 2;       // Unit-level dataset path: Form.Query
   BINARY_DFM_BYTE = $FF;

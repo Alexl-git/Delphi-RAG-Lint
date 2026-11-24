@@ -19653,7 +19653,7 @@ end;
 /// <param name="AArgs">Parsed CLI args.</param>
 /// <returns>RunUnwith's code; 2 on a usage error.</returns>
 /// <remarks>Opens the DB read-only; a stale DB refuses. The platform library comes from --library-db, else the manifest.</remarks>
-function DoUnwith(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@c87f -- one guard per refused flag combination, in the order --help names them
+function DoUnwith(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@b63b -- REVIEWED 2026-11-24 INT-W2: one guard per refused flag combination, in the order --help names them
 begin
   if AArgs.Apply = AArgs.Plan then
   begin
@@ -22284,7 +22284,7 @@ end;
 
 { Lane 144 item 3: the tail every rename path shares. --plan reports and exits 0; a dry run lists the proved edits and
   notes the rest; --apply refuses whatever is not proved, exit 2, and writes only through the compile gate. }
-function FinishRename(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pApply: Boolean; const pReach: TRenameReach): Integer; // dl:ok too-many-exit-points@b3f2 -- one Exit per outcome of the verb, each with its own exit code
+function FinishRename(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pApply: Boolean; const pReach: TRenameReach): Integer; // dl:ok too-many-exit-points@22fc -- REVIEWED 2026-11-24 INT-W2: one Exit per outcome of the verb, each with its own exit code
 const
   CRefused = 'ERROR: cannot rename -- ';
 begin
@@ -22390,7 +22390,7 @@ end;
 // v0.24: drag-lint rename --qname Foo.TBar.Baz --to NewName
 //   [--db PATH] [--dry-run] [--no-backup]
 // Resolves the symbol, proves every occurrence (RenameProof), then reports, or applies through the compile gate.
-function DoRename(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@65a5, cyclomatic-complexity@d74f, cognitive-complexity@1e69 -- the rename verb, one Exit per refusal, read top to bottom; splitting it is not for a release branch
+function DoRename(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@96b9, cyclomatic-complexity@d74f, cognitive-complexity@80cf -- the rename verb, one Exit per refusal, read top to bottom; splitting it is not for a release branch; REVIEWED 2026-11-24 INT-W2: the rename verb, one Exit per refusal, read top to bottom; splitting it is not for a release branch
 var
   Store: ISymbolStore;
   Proof: TRenameProof;

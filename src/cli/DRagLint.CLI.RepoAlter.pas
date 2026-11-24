@@ -35,8 +35,8 @@ uses
   DRagLint.FieldRepo.Alter,
   DRagLint.FieldRepo.AlterFacts,
   DRagLint.FieldRepo.AlterApply,
-  DRagLint.FieldRepo.AlterReport,
-  DRagLint.FieldRepo.FbBackup,
+  DRagLint.FieldRepo.AlterReport,  // dl:ok uses-global-census@ef16 -- REVIEWED 2026-11-24 INT-W2: PLAN_PREFIX is the plan line the report writes and --select reads
+  DRagLint.FieldRepo.FbBackup,  // dl:ok uses-global-census@a247 -- REVIEWED 2026-11-24 INT-W2: FB_IDENTITY_SQL is the one query that names a database
   DRagLint.FieldRepo.SchemaHook,
   DRagLint.CLI.RepoBackup,
   DRagLint.FieldRepo.SchemaHookMicronite; // registers --hook micronite

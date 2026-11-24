@@ -111,12 +111,6 @@ function MakeOwnFilter(const ASetup: TOwnFilterSetup): IOwnFilter;
 /// <returns>The scope for TOwnFilterSetup.Libraries.</returns>
 function MakeLibraryScope(const AAll, ADeclared: TArray<string>; const AProjectFile: string): TLibraryScope;
 
-/// <summary>The folder names treated as vendored: the built-in ones plus "vendored_folders".</summary>
-/// <param name="AConfigured">The config list; "-name" takes a name out.</param>
-/// <returns>Lower-case names.</returns>
-/// <remarks>"vendor" is deliberately not built in: in business code a vendor is a supplier.</remarks>
-function VendoredFolderNames(const AConfigured: TArray<string>): TArray<string>;
-
 implementation
 
 uses
@@ -126,7 +120,7 @@ uses
   System.RegularExpressions,
   System.StrUtils,
   Winapi.Windows,
-  DRagLint.Core.Model;
+  DRagLint.Core.Model;  // dl:ok uses-global-census@1abd -- REVIEWED 2026-11-24 INT-W2: DRAG_HOME_DIR is the one spelling of the project home folder
 
 const
   VENDORED_DEFAULTS: array [0..6] of string =
@@ -142,7 +136,7 @@ type
     Findings: Integer    ;
   end;
 
-  TOwnFilter = class(TInterfacedObject, IOwnFilter)
+  TOwnFilter = class(TInterfacedObject, IOwnFilter)  // dl:ok high-response@6efe -- REVIEWED 2026-11-24 INT-W2: one ladder of ownership tests, read top to bottom
   strict private
     FSetup      : TOwnFilterSetup                ;
     FNames      : TArray<string>                 ;
@@ -198,6 +192,8 @@ begin
   end;
 end;
 
+{ The folder names treated as vendored: the built-in ones plus "vendored_folders" ("-name" takes one out), lower case.
+  "vendor" is deliberately not built in: in business code a vendor is a supplier. }
 function VendoredFolderNames(const AConfigured: TArray<string>): TArray<string>;
 begin
   Result:= nil;
@@ -417,7 +413,7 @@ begin
   JVal:= TJSONObject.ParseJSONValue(Text);
   try
     if JVal = nil then FFault:= 'is not valid JSON'
-    else if not (JVal is TJSONObject) then FFault:= 'has a root that is not a JSON object';
+    else if JVal is not TJSONObject then FFault:= 'has a root that is not a JSON object';
   finally
     JVal.Free;
   end;

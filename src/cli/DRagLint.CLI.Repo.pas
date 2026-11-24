@@ -68,9 +68,9 @@ uses
   DRagLint.CLI.RepoConstGen,
   DRagLint.CLI.RepoSchema,
   DRagLint.CLI.RepoDfm,
-  DRagLint.CLI.RepoDfmWrite,
-  DRagLint.CLI.RepoHandlers,
-  DRagLint.CLI.RepoFib,
+  DRagLint.CLI.RepoDfmWrite,  // dl:ok uses-global-census@1292 -- REVIEWED 2026-11-24 INT-W2: the sub-verb list of the unit that runs them
+  DRagLint.CLI.RepoHandlers,  // dl:ok uses-global-census@edaf -- REVIEWED 2026-11-24 INT-W2: the sub-verb list of the unit that runs them
+  DRagLint.CLI.RepoFib,  // dl:ok uses-global-census@00d5 -- REVIEWED 2026-11-24 INT-W2: the sub-verb list of the unit that runs them
   DRagLint.CLI.RepoAlter,
   DRagLint.CLI.RepoBackup
   ;

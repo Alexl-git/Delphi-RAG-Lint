@@ -341,7 +341,7 @@ end;
 { The interval of ABound holds no value. }
 function RangeEmpty(const ABound: TBound): Boolean;
 begin
-  Result:= ABound.HasLo and ABound.HasHi and ((ABound.Lo > ABound.Hi)
+  Result:= ABound.HasLo and ABound.HasHi and ((ABound.Lo > ABound.Hi)  // dl:ok boolean-expression-complexity@55a7 -- REVIEWED 2026-11-24 INT-W2: the definition of an empty interval in one expression
     or (SameNum(ABound.Lo, ABound.Hi) and (ABound.LoStrict or ABound.HiStrict)));
 end;
 
@@ -352,7 +352,7 @@ var
 begin
   Result:= False;
   for V in ABound.Eq do
-    if (ABound.HasLo and ((V < ABound.Lo) or (SameNum(V, ABound.Lo) and ABound.LoStrict)))
+    if (ABound.HasLo and ((V < ABound.Lo) or (SameNum(V, ABound.Lo) and ABound.LoStrict)))  // dl:ok boolean-expression-complexity@d342 -- REVIEWED 2026-11-24 INT-W2: below lo, above hi, excluded or different: the four ways of one conflict
       or (ABound.HasHi and ((V > ABound.Hi) or (SameNum(V, ABound.Hi) and ABound.HiStrict)))
       or ABound.Ne.Contains(V) or (not SameNum(V, ABound.Eq[0])) then Result:= True;
 end;

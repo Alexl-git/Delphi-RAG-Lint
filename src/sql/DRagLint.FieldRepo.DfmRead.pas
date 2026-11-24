@@ -9,7 +9,7 @@ interface
 
 uses
   System.SysUtils,
-  DRagLint.FieldRepo.Kinds;
+  DRagLint.FieldRepo.Kinds;  // dl:ok uses-global-census@379a -- REVIEWED 2026-11-24 INT-W2: FR_EVENT_COLUMNS is the one list of event columns
 
 type
   /// <summary>Raised when a DFM cannot be read (missing file, no object in it).</summary>

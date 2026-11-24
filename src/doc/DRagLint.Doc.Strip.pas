@@ -195,7 +195,7 @@ uses
   // functions only (its own uses clause is System.SysUtils alone), so this does
   // NOT give the unit an index dependency -- the property the unit header calls
   // out is preserved.
-  DRagLint.Core.Model,
+  DRagLint.Core.Model,  // dl:ok uses-global-census@744f -- REVIEWED 2026-11-24 INT-W2: DOC_ALLOW_GAP is the DocInsight scanner's own constant; the stripper needs the same value
   DRagLint.Doc.Harvest; { IsBannerSlashLine, EndPastBanners: pure text }
 
 // True when S is a doc-comment line: its trimmed form starts with '///' and it is

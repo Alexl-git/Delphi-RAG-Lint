@@ -1697,8 +1697,8 @@ var
       if (Nx <= Length(ASig)) and CharInSet(ASig[Nx], [':', ',']) then Continue;
       if not ContainsText(Result, Copy(ASig, S, E - S + 1)) then
       begin
-        if Result <> '' then Result:= Result + ', ';
-        Result:= Result + Copy(ASig, S, E - S + 1);
+        if Result <> '' then Result:= Result + ', ';  // dl:ok concat-in-loop@788e -- REVIEWED 2026-11-24 INT-W2: a handful of names in one message
+        Result:= Result + Copy(ASig, S, E - S + 1);  // dl:ok concat-in-loop@cca9 -- REVIEWED 2026-11-24 INT-W2: a handful of names in one message
       end;
     end;
   end;
@@ -1976,7 +1976,7 @@ begin
           damage it has already done, which is a message concern. Escalating the
           SEVERITY on `Differ` would also make the rule's severity depend on
           NormSig being perfect, and NormSig has now been wrong once. }
-        if Differ then  // dl:ok ifthen-to-if-expression@1e05 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
+        if Differ then
           F.Message:= Format(
             '%s is declared at interface level in %d units as %s (%s) -- and THE DECLARATIONS ' +
             'DIFFER (%s), so you are compiling one of two different things and which one ' +

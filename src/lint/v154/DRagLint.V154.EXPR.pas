@@ -49,7 +49,7 @@ type
 implementation
 
 uses
-  DRagLint.V154.EXPR.Support
+  DRagLint.V154.EXPR.Support  // dl:ok uses-global-census@b1e4 -- REVIEWED 2026-11-24 INT-W2: the Support unit of the lane holds the rule ids; the pair travels together
   ;
 
 class procedure TV154EXPRRules.Catalog(const ADecls: TList<TV151RuleDecl>);

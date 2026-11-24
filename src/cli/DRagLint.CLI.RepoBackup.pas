@@ -57,7 +57,7 @@ uses
   System.JSON,
   FireDAC.ConsoleUI.Wait, // the services need a wait-cursor factory; a connection does not
   DRagLint.Core.ContextDefaults,
-  DRagLint.FieldRepo.BackupManifest,
+  DRagLint.FieldRepo.BackupManifest,  // dl:ok uses-global-census@e975 -- REVIEWED 2026-11-24 INT-W2: the state names the manifest writes are the names the verb prints
   DRagLint.FieldRepo.FbBackup;
 
 const

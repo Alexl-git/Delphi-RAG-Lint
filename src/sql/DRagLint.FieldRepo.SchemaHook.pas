@@ -9,7 +9,7 @@ interface
 
 uses
   System.SysUtils,
-  DRagLint.FieldRepo.Alter,
+  DRagLint.FieldRepo.Alter,  // dl:ok uses-global-census@bc9e -- REVIEWED 2026-11-24 INT-W2: BLOCK_HOOK is the block code the planner knows
   DRagLint.FieldRepo.DbProvider;
 
 const

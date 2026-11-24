@@ -106,7 +106,7 @@ type
   end;
 
   /// <summary>A text DFM.</summary>
-  TDfmDocument = class(TDfmwBuffer)
+  TDfmDocument = class(TDfmwBuffer)  // dl:ok high-response@3b22 -- REVIEWED 2026-11-24 INT-W2: byte-exact document: reader, editor and writer share one buffer
   strict private
     FObjects: TArray<TDfmwObject>;
     FUtf8: Boolean;
@@ -200,7 +200,7 @@ type
   end;
 
   /// <summary>The unit of a form: only its component declarations are edited.</summary>
-  TDfmUnitDocument = class(TDfmwBuffer)
+  TDfmUnitDocument = class(TDfmwBuffer)  // dl:ok high-response@308a -- REVIEWED 2026-11-24 INT-W2: byte-exact document: reader, editor and writer share one buffer
   strict private
     FTokens: TArray<TDfmwToken>;
     FComments: TArray<TDfmwToken>; // directives included
@@ -278,7 +278,7 @@ type
 
 var
   /// <summary>Test seam: fault injection for WriteOutputs. nil (always, outside the unit tests) = Windows.</summary>
-  DfmwReplaceFileHook: TDfmwReplaceFile;
+  DfmwReplaceFileHook: TDfmwReplaceFile;  // dl:ok read-never-assigned@d737 -- REVIEWED 2026-11-24 INT-W2: test seam, set by tests/fieldrepo/DfmWriteTests.dpr only
 
 /// <summary>The bytes of a text DFM as a binary DFM, converted by the RTL: proof that Delphi can read the text.</summary>
 /// <param name="pText">Text DFM bytes.</param>
@@ -537,9 +537,12 @@ begin
 end;
 
 function TDfmwBuffer.LineStart(pPos: Integer): Integer;
+var
+  VFirst: Integer;
 begin
   Result := pPos;
-  while (Result > BomLength) and (FBytes[Result - 1] not in [LF, CR]) do
+  VFirst := BomLength;
+  while (Result > VFirst) and (FBytes[Result - 1] not in [LF, CR]) do
     Dec(Result);
 end;
 
