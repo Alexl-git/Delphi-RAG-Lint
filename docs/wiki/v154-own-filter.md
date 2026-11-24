@@ -23,7 +23,7 @@ The first line that matches a file decides. **When none matches, the file is you
 | 5 | under a declared `ownRoots` folder, or under the project folder when none is declared | yours |
 | 6 | `ownRoots` is declared and the file is outside it | skipped |
 | 7 | under an `include` folder of the manifest's Library section | skipped |
-| 8 | under an IDE library path, and the project file does not list the unit | skipped |
+| 8 | under an IDE library path, and the project file does not list the unit (an `.inc` counts as listed when it lies in the folder of a listed file) | skipped |
 | 9 | nothing matched | yours |
 
 So a `COMMON` folder beside the project, shared by several projects, is reported without any declaration. It
@@ -64,6 +64,6 @@ report file), and in `--json` a second note row, rule `own-roots-malformed`, sev
 
 * A file you name (`lint <file>`, the editor, the LSP, VS Code) is always reported, third-party or not.
 * A `--fix` run keeps to the own roots (the project folder when none is declared): it skips an unmarked file
-  outside them instead of rewriting it, and says so. `document`, `exceptions-sync` and the refactorings use
+  outside them, also one that `own_paths` names, instead of rewriting it, and says so. `document`, `exceptions-sync` and the refactorings use
   the own roots as before.
 * An index with no project folder (a copy outside `_D-RAG`, no `--project`) is not filtered; a note says so.

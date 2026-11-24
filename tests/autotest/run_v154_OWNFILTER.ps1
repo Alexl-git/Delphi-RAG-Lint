@@ -12,7 +12,7 @@
     app\vendor\UVend.pas       'vendor' is not a default name (a vendor is also a supplier)
     lib\ULib.pas               under a manifest Library "include" folder
     reglib\UReg.pas            app2: under a registry library path, reached by the search path, not listed
-    reglib\URegListed.pas      same folder, listed in App.dpr and Reg.dpr
+    reglib\URegListed.pas      same folder, listed in App.dpr and Reg.dpr; includes RegInc.inc
   Run with pwsh 7 from any cwd.
 #>
 [CmdletBinding()]
@@ -45,7 +45,9 @@ W "$app\thirdparty\UTpIn.pas" (Unit 'UTpIn')
 W "$app\vendor\UVend.pas" (Unit 'UVend')
 W "$repo\lib\ULib.pas" (Unit 'ULib')
 W "$repo\reglib\UReg.pas" (Unit 'UReg')
-W "$repo\reglib\URegListed.pas" (Unit 'URegListed')
+# the include beside a listed unit carries its own unused local
+W "$repo\reglib\RegInc.inc" "procedure IncludedDead;`nvar`n  IdleInInc: Integer;`nbegin`nend;`n"
+W "$repo\reglib\URegListed.pas" ((Unit 'URegListed') -replace "implementation`n", "implementation`n`n{`$I RegInc.inc}`n")
 W "$app\App.dpr" @"
 program App;
 
@@ -176,9 +178,17 @@ foreach ($f in "$repo\third_party\UTp.pas", "$repo\lib\ULib.pas") {
 
 Write-Host 'G. --fix never writes outside the own roots by default' -ForegroundColor Cyan
 $before = [IO.File]::ReadAllText("$repo\COMMON\UCommon.pas")
-$g = LintAll @('--fix', '--rule', 'unused-local')
+$g = LintAll @('--fix', '--apply', '--no-compile-gate', '--rule', 'unused-local')
 Check 'G1 a fix run keeps to the project folder' (($g -notmatch 'UCommon\.pas') -and ($g -match 'outside the own roots \(a --fix run')) $g
 Check 'G2 the file is unchanged' ([IO.File]::ReadAllText("$repo\COMMON\UCommon.pas") -eq $before)
+
+$afterG = [IO.File]::ReadAllText("$app\UApp.pas")
+Check 'G3 CONTROL the own unit was rewritten by the fix run' (-not $afterG.Contains('Idle: Integer')) $afterG
+W $cfg '{ "own_paths": ["*\\COMMON\\*"] }'
+$g4 = LintAll @('--fix', '--apply', '--no-compile-gate', '--rule', 'unused-local')
+Check 'G4 own_paths does not widen the write scope: the file outside the own roots is unchanged' ([IO.File]::ReadAllText("$repo\COMMON\UCommon.pas") -eq $before) $g4
+Check 'G5 CONTROL without --fix own_paths still reports the file' ((Hits (LintAll) 'UCommon') -eq 2)
+W $cfg '{}'
 
 Write-Host 'H. registry library path' -ForegroundColor Cyan
 # a project of its own: UReg comes in over the .dproj search path (unlisted), URegListed is listed
@@ -197,6 +207,7 @@ $env:DRAGLINT_TEST_BDS_REGISTRY = $regFix
 try { $h = LintAll } finally { $env:DRAGLINT_TEST_BDS_REGISTRY = '' }
 Check 'H2 a unit under a library path, not listed by the project, is dropped' (((Hits $h 'UReg') -eq 0) -and ($h -match 'library path .*reglib: 1 file')) $h
 Check 'H3 a LISTED unit of the same folder stays own' ((Hits $h 'URegListed') -eq 2) "n=$(Hits $h 'URegListed')"
+Check 'H5 the include beside a listed unit stays own' ($h -match 'RegInc\.inc:\d+:\d+\s+\[\w+\]\s+unused-local') $h
 $wide = @{ 'Search Path' = "$repo"; 'Browsing Path' = '' }
 W $regFix (@{ '37.0' = @{ RootDir = 'C:\NoStudio'; Library = @{ Win32 = $wide; Win64 = $wide }; 'Environment Variables' = @{} } } | ConvertTo-Json -Depth 6)
 $env:DRAGLINT_TEST_BDS_REGISTRY = $regFix
@@ -217,8 +228,67 @@ Check 'I5 a non-object root warns too' ((LintAll) -match 'defaulted to the proje
 W $decl '{ "ownRoots": [".."] }'
 $ic = LintAll
 Check 'I6 CONTROL a valid declaration: no warning' (($ic -notmatch 'malformed') -and (@((Json) | Where-Object { $_.rule -eq 'own-roots-malformed' }).Count -eq 0))
+[IO.File]::WriteAllText($decl, '{ "excludeRoots": ["../COMMON"] }', [Text.UTF8Encoding]::new($true))
+$ib = LintAll
+Check 'I8 a UTF-8 BOM declaration with only excludeRoots is not malformed' ($ib -notmatch 'malformed') $ib
+Check 'I9 CONTROL and it is honoured' ($ib -match 'excludeRoots .*COMMON: 1 file') $ib
 NoDecl
 Check 'I7 CONTROL no declaration: no warning' ((LintAll) -notmatch 'malformed')
+
+Write-Host 'J. a listed unit with a non-ASCII name' -ForegroundColor Cyan
+$nm = 'UReg' + [char]0xE4 + 'b'
+$app3 = Join-Path $repo 'app3'
+[IO.File]::WriteAllText("$repo\reglib\$nm.pas", ((Unit $nm) -replace "`n", "`r`n"), [Text.UTF8Encoding]::new($true))
+foreach ($bom in $true, $false) {
+  if ([IO.Directory]::Exists($app3)) { [IO.Directory]::Delete($app3, $true) }
+  [IO.Directory]::CreateDirectory($app3) | Out-Null
+  [IO.File]::WriteAllText("$app3\Uni.dpr", "program Uni;`r`n`r`nuses`r`n  $nm in '..\reglib\$nm.pas';`r`n`r`nbegin`r`nend.`r`n", [Text.UTF8Encoding]::new($bom))
+  $db = Join-Path $app3 '_D-RAG\Uni.sqlite'
+  $ji = Run @('index', '--project', "$app3\Uni.dpr", '--db', $db)
+  W $regFix (@{ '37.0' = @{ RootDir = 'C:\NoStudio'; Library = @{ Win32 = $lib; Win64 = $lib }; 'Environment Variables' = @{} } } | ConvertTo-Json -Depth 6)
+  $ctlJ = LintAll
+  $env:DRAGLINT_TEST_BDS_REGISTRY = $regFix
+  try { $j = LintAll } finally { $env:DRAGLINT_TEST_BDS_REGISTRY = '' }
+  $jRe = 'UReg.{1,8}b\.pas:\d+:\d+\s+\[\w+\]\s+unused-local'
+  Check "J1 CONTROL (BOM $bom) the unit is indexed and reported" ($ctlJ -match $jRe) "$ji $ctlJ"
+  Check "J2 (BOM $bom) a listed non-ASCII unit under a library path stays own" ($j -match $jRe) $j
+}
+
+Write-Host 'K. --project on a shared index counts only the files of that project' -ForegroundColor Cyan
+$shared = Join-Path $WorkDir 'shared'
+W "$shared\one\UOne.pas" (Unit 'UOne')
+W "$shared\third_party\UVendored.pas" (Unit 'UVendored')
+W "$shared\one\One.dpr" "program One;`n`nuses`n  UOne in 'UOne.pas';`n`nbegin`nend.`n"
+W "$shared\two\UTwo.pas" (Unit 'UTwo')
+W "$shared\two\Two.dpr" "program Two;`n`nuses`n  UTwo in 'UTwo.pas',`n  UVendored in '..\third_party\UVendored.pas';`n`nbegin`nend.`n"
+$db = Join-Path $WorkDir 'sharedidx\All.sqlite'
+[IO.Directory]::CreateDirectory((Split-Path -Parent $db)) | Out-Null
+$ki = Run @('index', $shared, '--db', $db)
+$k1 = LintAll @('--project', "$shared\one\One.dpr")
+Check 'K1 CONTROL the project is linted' ((Hits $k1 'UOne') -eq 2) "$ki $k1"
+Check 'K2 a vendored file outside the closure is not counted' (($k1 -notmatch 'third-party: ') -and ($k1 -notmatch 'third-party file\(s\) skipped') -and ($k1 -notmatch 'own roots skipped')) $k1
+$k2 = LintAll @('--project', "$shared\two\Two.dpr")
+Check 'K3 CONTROL the project that compiles it counts it' ($k2 -match 'third-party: 1 file\(s\) not scanned, 1 project-wide finding\(s\) dropped|third-party: 1 file\(s\) not scanned, 2 project-wide finding\(s\) dropped') $k2
+W $cfg '{ "exclude_paths": ["*\\two\\*", "*\\third_party\\*"] }'
+$k4 = LintAll @('--project', "$shared\one\One.dpr")
+Check 'K4 exclude_paths outside the closure is not counted' (($k4 -notmatch 'skipped by exclude_paths') -and ($k4 -notmatch 'exclude_paths: \d+ file')) $k4
+Check 'K5 CONTROL inside the closure it is' ((LintAll @('--project', "$shared\two\Two.dpr")) -match '2 file\(s\) skipped by exclude_paths|3 file\(s\) skipped by exclude_paths')
+W $cfg '{}'
+
+Write-Host 'L. capture_rule_baseline.ps1 counts findings, not note rows' -ForegroundColor Cyan
+$fake = Join-Path $WorkDir 'fake-engine.ps1'
+W $fake @"
+if (`$args[0] -eq 'lint-all') {
+  '[{"rule":"unused-local","severity":"warning","file_path":"C:\\x.pas","start_line":3},{"rule":"third-party-skipped","severity":"info","file_path":"C:\\x","start_line":0},{"rule":"own-roots-malformed","severity":"info","file_path":"C:\\x","start_line":0}]'
+} elseif (`$args[0] -eq 'sql') { 'v=1;schema=1' } else { '[]' }
+"@
+$capOut = Join-Path $WorkDir 'cap'
+W "$WorkDir\fake.sqlite" 'x'
+$cap = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File "$PSScriptRoot\..\..\tools\measure\capture_rule_baseline.ps1" -Tag before -Exe $fake -OutDir $capOut -CorpusDb "$WorkDir\fake.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-String)
+$rows = if (Test-Path "$capOut\rule_counts_before.csv") { @(Import-Csv "$capOut\rule_counts_before.csv") } else { @() }
+Check 'L1 CONTROL the finding is counted' (@($rows | Where-Object { $_.rule -eq 'unused-local' -and $_.count -eq '1' }).Count -eq 1) $cap
+Check 'L2 no note row is counted as a rule' (($rows.Count -gt 0) -and (@($rows | Where-Object { $_.rule -match 'third-party-skipped|own-roots-malformed' }).Count -eq 0)) ($rows | Out-String)
+Check 'L3 nor in the total' (@($rows | Where-Object { $_.rule -eq '__TOTAL__' -and $_.count -eq '1' }).Count -eq 1) ($rows | Out-String)
 Write-Host ''
 Write-Host ("{0} check(s)" -f $script:N)
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0 }

@@ -2263,8 +2263,11 @@ end;
 
   for I := 0 to High(PlanCols) do Fields[I] := .. stores element by element, and
   the compiler-style definite assignment cannot know the loop ran, so a later
-  Fields[J] read is flagged. Recognised only when ALL of: the read sits AFTER a
-  complete for statement (its end precedes the read), whose bound mentions
+  Fields[J] read is flagged. Recognised only when ALL of: a complete for statement
+  DOMINATES the read -- it is an earlier member of the read's own statement list or
+  of one that encloses it (a bare begin..end is looked through; a loop under an if /
+  case / try, inside another loop, in the other branch or in a nested routine is
+  not) --, whose bound mentions
   High( or Length(, and whose body holds, as one of its own top-level statements
   and before any Break / Continue / Exit, an assignment whose target is an element of AName (AName[..]);
   a store under an if / case or behind a jump may be skipped and stays reported. A read with no such store anywhere before it, a store
@@ -2317,7 +2320,9 @@ var
     end;
   end;
 
-  function Walk(const N: TTSNode): Boolean;
+  { True when N, run to its end, has stored the elements: the sized for statement itself, or a bare
+    begin..end / statement list holding one as its own member. }
+  function Fills(const N: TTSNode): Boolean;
   var
     I      : Integer;
     StartN : TTSNode;
@@ -2327,8 +2332,7 @@ var
     Sized  : Boolean;
   begin
     Result := False;
-    if N.IsNull or (N.StartByte >= AItem.StartByte) then Exit;
-    if (N.NodeType = 'for') and (N.EndByte <= AItem.StartByte) then
+    if N.NodeType = 'for' then
     begin
       StartN := N.ChildByField('start');
       BodyN  := N.ChildByField('body');
@@ -2340,15 +2344,42 @@ var
         Bound := TRegEx.Replace(LowerCase(NodeStr(C, ASrc)), '\s+', '');
         if Bound.Contains('high(') or Bound.Contains('length(') then Sized := True;
       end;
-      if Sized and StoresElement(BodyN) then Exit(True);
+      Exit(Sized and StoresElement(BodyN));
     end;
+    if (N.NodeType <> 'block') and (N.NodeType <> 'statements') then Exit;
     for I := 0 to N.NamedChildCount - 1 do
-      if Walk(N.NamedChild(I)) then Exit(True);
+      if Fills(N.NamedChild(I)) then Exit(True);
   end;
 
+  { True when a member of AList that ends before AStmt fills the array. }
+  function EarlierMemberFills(const AList, AStmt: TTSNode): Boolean;
+  var
+    I: Integer;
+  begin
+    Result := False;
+    for I := 0 to AList.NamedChildCount - 1 do
+    begin
+      if AList.NamedChild(I).EndByte > AStmt.StartByte then Exit;
+      if Fills(AList.NamedChild(I)) then Exit(True);
+    end;
+  end;
+
+var
+  Stmt: TTSNode;
+  List: TTSNode;
 begin
+  Result := False;
+  if ARoutine.IsNull then Exit;
   Prefix := LowerCase(AName) + '[';
-  Result := (not ARoutine.IsNull) and Walk(ARoutine);
+  Stmt   := AItem;
+  while (not Result) and (not Stmt.IsNull) do
+  begin
+    if Stmt = ARoutine then Break;
+    List := Stmt.Parent;
+    if (not List.IsNull) and ((List.NodeType = 'block') or (List.NodeType = 'statements')) then
+      Result := EarlierMemberFills(List, Stmt);
+    Stmt := List;
+  end;
 end;
 { SHAPE 1b of used-before-assignment: `AStream.Read(pb[0], 2)`.
 
