@@ -4,11 +4,29 @@ unit FlowOverlay;
 
 interface
 
+type
+  TRoot = class
+  end;
+
 var
+  GRoot: TRoot;
+  GSame: TObject absolute GRoot;
   GBytes: array[0..3] of Byte;
   GAlias: Integer absolute GBytes; // FIRE absolute-overlay
 
+type
+  TShape = class
+  end;
+  TCircle = class(TShape)
+  public
+    R: Integer;
+  end;
+  TSize4 = record
+    W: Integer;
+  end;
+
 procedure Typed(var N: Integer);
+procedure Refs(AShape: TShape; const AObject: TObject);
 procedure Raw(var Buf; const Src);
 
 implementation
@@ -21,6 +39,17 @@ var
 begin
   L := 1;
   W[0] := I and $FF;
+end;
+
+procedure Refs(AShape: TShape; const AObject: TObject);
+var
+  LCircle: TCircle absolute AShape;
+  LOther: TCircle absolute AObject;
+  LSize: TSize4 absolute AShape; // FIRE absolute-overlay
+  LAddress: NativeUInt absolute AObject; // FIRE absolute-overlay
+begin
+  if AShape is TCircle then LCircle.R := LSize.W;
+  if LAddress > 0 then LOther.R := 1;
 end;
 
 procedure Raw(var Buf; const Src);

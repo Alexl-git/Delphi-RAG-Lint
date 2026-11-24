@@ -79,13 +79,16 @@ class function TV154FLOWRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintF
 var
   Run: TFlowRun;
 
+  { True when this run reports ARule; the unit's nodes are collected for the first such rule. }
   function Wanted(const ARule: string): Boolean;
   begin
     Result:= ACtx.Wants(ARule) and ((not MatchStr(ARule, OFF_RULES)) or SameText(ACtx.NarrowRule, ARule) or ACtx.Cfg.ShouldKeep(ARule, True));
+    if Result and (Run = nil) then Run:= TFlowRun.Create(ACtx);
   end;
 
 begin
-  Run:= TFlowRun.Create(ACtx);
+  Result:= nil;
+  Run   := nil;
   try
     if Wanted(RULE_RESULT_FIRST) then Run.CheckResults;
     if Wanted(RULE_SAME_VAR) then Run.CheckArguments;
@@ -95,12 +98,11 @@ begin
     if Wanted(RULE_CONST_RETURN) then Run.CheckConstants;
     if Wanted(RULE_FIELD_INIT) then Run.CheckFieldInits;
     if Wanted(RULE_OVERLAY) then Run.CheckOverlays;
-    Result:= Run.Findings;
+    if Run <> nil then Result:= Run.Findings;
   finally
     Run.Free;
   end;
 end;
-
 class function TV154FLOWRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@bde6 -- REVIEWED 2026-11-24 v154 FLOW: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;

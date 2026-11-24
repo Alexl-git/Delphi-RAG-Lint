@@ -88,6 +88,7 @@ type
     function VariableText(const AArg: TTSNode): string;
     procedure CheckCallArgs(const ACall: TTSNode);
     function NestedOwner(const ANode: TTSNode; const AName: string): TTSNode;
+    function ThroughAsm(const AExpr: TTSNode): Boolean;
     function RoutineSymbol(const ARoutine: TTSNode; out ASymbol: TSymbol): Boolean;
     function SignatureFixed(const ASymbol: TSymbol): Boolean;
     function MethodFixed(const ASymbol: TSymbol): Boolean;
@@ -107,7 +108,9 @@ type
     function PlainValue(const ANode, ARoutine: TTSNode; var AOutside: Boolean): Boolean;
     function PlainInherited(const ANode, ARoutine: TTSNode; var AOutside: Boolean): Boolean;
     procedure CheckConstructor(const ARoutine: TTSNode);
-    function OverUntyped(const AOverlay, ATarget: TTSNode): Boolean;
+    function TargetDecl(const AOverlay, ATarget: TTSNode): TTSNode;
+    function ClassLike(const AType: string): Boolean;
+    function OverlayExpected(const AOverlay, ATarget: TTSNode): Boolean;
   public
     /// <summary>Collects the routines, calls, addresses, overlays and types of the unit.</summary>
     /// <param name="ACtx">The file; Store may be nil.</param>
@@ -161,6 +164,9 @@ const
   IF_NODES: array[0..1] of string = ('if', 'ifElse');
   MANAGED_TYPES: array[0..10] of string = ('string', 'unicodestring', 'ansistring', 'widestring', 'rawbytestring', 'utf8string', 'variant',
     'olevariant', 'iinterface', 'iunknown', 'tbytes');
+  PLAIN_TYPES: array[0..26] of string = ('integer', 'cardinal', 'byte', 'word', 'smallint', 'shortint', 'int64', 'uint64', 'longint', 'longword', 'nativeint',
+    'nativeuint', 'single', 'double', 'real', 'extended', 'currency', 'comp', 'boolean', 'bytebool', 'wordbool', 'longbool', 'char', 'ansichar',
+    'widechar', 'pointer', 'shortstring');
   { calls that take a variable by value although its name alone stands in the argument list }
   READ_CALLS: array[0..19] of string = ('length', 'high', 'low', 'copy', 'pos', 'trim', 'uppercase', 'lowercase', 'sametext', 'assigned',
     'ord', 'sizeof', 'inttostr', 'writeln', 'abs', 'chr', 'succ', 'pred', 'odd', 'quotedstr');
@@ -897,20 +903,35 @@ begin
   end;
 end;
 
+{ The address AExpr is handed to a routine of the unit that calls it from asm, with the frame pushed by hand (Vcl.Menus.IterateMenus). }
+function TFlowRun.ThroughAsm(const AExpr: TTSNode): Boolean;
+var
+  Call, Routine: TTSNode;
+  Name: string;
+begin
+  Result:= False;
+  Call  := CallOfArgument(AExpr);
+  if Call.IsNull then Exit;
+  Name:= Lower(Call.ChildByField('entity'));
+  for Routine in FRoutines do
+    if (LastName(Lower(Header(Routine).ChildByField('name'))) = Name) and HasNode(Routine, ASM_NODES) then Exit(True);
+end;
+
 procedure TFlowRun.CheckNestedAddresses;
 var
   Node, Name, Owner: TTSNode;
-  Sites: TList<TTSNode>;
+  Sites: TList<TTSNode>;   // the address expressions: @X, Addr(X)
 begin
   Sites:= TList<TTSNode>.Create;
   try
     for Node in FAddresses do
-      if IsAddressOf(Node) then Sites.Add(Node.NamedChild(Node.NamedChildCount - 1));
+      if IsAddressOf(Node) then Sites.Add(Node);
     for Node in FCalls do
-      if (Lower(Node.ChildByField('entity')) = 'addr') and (Length(CallArguments(Node)) = 1) then Sites.Add(CallArguments(Node)[0]);
-    for Name in Sites do
+      if (Lower(Node.ChildByField('entity')) = 'addr') and (Length(CallArguments(Node)) = 1) then Sites.Add(Node);
+    for Node in Sites do
     begin
-      if Name.NodeType <> 'identifier' then Continue;
+      Name:= if Node.NodeType = 'exprCall' then CallArguments(Node)[0] else Node.NamedChild(Node.NamedChildCount - 1);
+      if (Name.NodeType <> 'identifier') or ThroughAsm(Node) then Continue;
       Owner:= NestedOwner(Name, Lower(Name));
       if Owner.IsNull then Continue;
       Emit(RULE_NESTED_ADDR, SEVERITY_WARNING, Format('Address of the nested routine %s: a call through the pointer lacks the hidden frame of %s ' +
@@ -1312,18 +1333,42 @@ end;
 
 { ---- absolute-overlay ---- }
 
-{ The target is an untyped parameter: the overlay is the only way to give it a type. }
-function TFlowRun.OverUntyped(const AOverlay, ATarget: TTSNode): Boolean;
+{ The declaration of the parameter or local variable an overlay names; null when it is something else. }
+function TFlowRun.TargetDecl(const AOverlay, ATarget: TTSNode): TTSNode;
 var
-  Routine, Decl: TTSNode;
+  Routine: TTSNode;
 begin
-  Result := False;
+  Result := Default(TTSNode);
   Routine:= Enclosing(AOverlay);
-  while not Routine.IsNull do
+  while (not Routine.IsNull) and (not Declares(Routine, Text(ATarget), FSrc, Result)) do Routine:= Enclosing(Routine);
+end;
+
+{ A class type, or a type name nobody knows. AType is flat text, '' = not known. }
+function TFlowRun.ClassLike(const AType: string): Boolean;
+var
+  Decl  : TTSNode;
+  Symbol: TSymbol;
+  Store : ISymbolStore;
+begin
+  if MatchStr(AType, PLAIN_TYPES) or MatchStr(AType, MANAGED_TYPES) or TRegEx.IsMatch(AType, '[\[^(]|^(array|set)of') then Exit(False);
+  if FTypes.TryGetValue(AType, Decl) then Exit(HasNode(Decl, ['declClass']) and (not HasNode(Decl, ['kRecord', 'kObject'])));
+  for Store in [FCtx.Store, FCtx.LibStore] do
   begin
-    if Declares(Routine, Text(ATarget), FSrc, Decl) then Exit((Decl.NodeType = 'declArg') and Decl.ChildByField('type').IsNull);
-    Routine:= Enclosing(Routine);
+    if Store = nil then Continue;
+    for Symbol in Store.FindSymbolsByExactName(AType) do
+      if Symbol.Kind in [skClass, skInterface, skRecord, skEnum, skTypeAlias, skClassRef] then Exit(Symbol.Kind = skClass);
   end;
+  Result:= True;
+end;
+
+{ An untyped parameter (the overlay is the way to give it a type), or one object reference over another (an unchecked cast, same size). }
+function TFlowRun.OverlayExpected(const AOverlay, ATarget: TTSNode): Boolean;
+var
+  Decl: TTSNode;
+begin
+  Decl:= TargetDecl(AOverlay, ATarget);
+  if (not Decl.IsNull) and (Decl.NodeType = 'declArg') and Decl.ChildByField('type').IsNull then Exit(True);
+  Result:= ClassLike(Flat(AOverlay.ChildByField('type'))) and (Decl.IsNull or ClassLike(Flat(Decl.ChildByField('type'))));
 end;
 
 procedure TFlowRun.CheckOverlays;
@@ -1336,7 +1381,7 @@ begin
     Target:= Default(TTSNode);
     for I:= 0 to Overlay.NamedChildCount - 2 do
       if Overlay.NamedChild(I).NodeType = 'kAbsolute' then Target:= Overlay.NamedChild(I + 1);
-    if Target.IsNull or OverUntyped(Overlay, Target) then Continue;
+    if Target.IsNull or OverlayExpected(Overlay, Target) then Continue;
     for Name in DeclaredNames(Overlay) do
       Emit(RULE_OVERLAY, SEVERITY_HINT, Format('%s (%s) shares the memory of %s through absolute: no conversion and no size check', [Text(Name),
         Text(Overlay.ChildByField('type')), Text(Target)]), Name);

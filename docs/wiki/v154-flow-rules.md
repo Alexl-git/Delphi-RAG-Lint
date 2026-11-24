@@ -56,13 +56,15 @@ fields or indexes (`A[I]`, `A[J]`), and when the two arguments are not written t
 a call through the pointer arrive shifted even when the nested routine uses no outer local (`EnumWindows(@Nested, 42)` gave
 32767 for the 42); on both platforms the first use of an outer local is an access violation.
 
-Silent for unit routines, methods and variables, and when a parameter or local variable hides the routine's name.
+Silent for unit routines, methods and variables, and when a parameter or local variable hides the routine's name, and
+when the address goes to a routine of the unit that holds `asm`.
 
 ## absolute-overlay
 
 `GAlias: Integer absolute GBytes`: two names for one memory cell, no conversion and no size check. A hint, for review.
 
-Silent when the target is an untyped parameter (`absolute Buf` on `var Buf`): that is the way to give it a type.
+Silent when the target is an untyped parameter (`absolute Buf` on `var Buf`): that is the way to give it a type; or when both sides are object references
+(or type names nobody knows).
 
 ## constant-return (OFF)
 
@@ -99,4 +101,21 @@ unmanaged results only; H2077 does not see any of them.
 
 ## Measured
 
-@MEASURED@
+2026-11-24, copies of project indexes and a private index of the Delphi 37 `source\vcl` folder, one rule at a time.
+
+| corpus | result-first | same-var | nested | overlay | constant | field-init | var-unwritten | value-set |
+|---|---|---|---|---|---|---|---|---|
+| drag-lint (448 files) | 1 | 1 | 0 | 0 | 2 | 12 | 10 | 46 |
+| Micronite2027 (583 units) | 0 | 0 | 0 | 7 | 0 | 43 | 0 | 40 |
+| Loader2025 | 0 | 0 | 0 | 1 | 0 | 2 | 0 | 0 |
+| TableTools370P | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 12 |
+| YADF GuardTest | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 2 |
+| VCL (126 files) | 6 | 0 | 5 | 27 | 0 | 23 | 7 | 420 |
+
+* `managed-result-read-first`: 7 of 7 right (read in source; a test program shows the old value for string, array, interface and
+  Variant on Win32 and Win64). `same-variable-two-var-params`: 1 of 1 right (the `const` text arrives empty). Both ON.
+* `address-of-nested-routine`: the 5 of the VCL go through an `asm` thunk that pushes the frame; that shape is silent now. ON.
+* `absolute-overlay`: the VCL and 4 of 7 Micronite findings were one object reference over another (a cast without a check);
+  that shape is silent now, the rest are right. ON. The last two changes are not re-measured.
+* `constant-return`: 1 of 2 is a command handler with a uniform signature: OFF. `var-param-never-written`: 1 of 17 reads a field the callee
+  changes on the way, 2 unsure: OFF. `redundant-field-init`: no false one found, style only: OFF. `value-param-assigned`: OFF, 420 in one corpus.

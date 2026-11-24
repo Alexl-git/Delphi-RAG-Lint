@@ -17,6 +17,11 @@ begin
   if P = nil then UnitProc;
 end;
 
+procedure Thunk(P: Pointer; N: Integer);
+asm
+  NOP
+end;
+
 procedure UnitProc;
 begin
 end;
@@ -52,6 +57,7 @@ begin
   P := @UnitProc;
   Take(@Local);
   Take(@Go);
+  Thunk(@Inner, 1);
   Inner;
   if Assigned(F) then Take(P);
 end;
