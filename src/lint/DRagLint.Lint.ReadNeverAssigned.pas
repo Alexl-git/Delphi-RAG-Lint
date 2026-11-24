@@ -40,6 +40,7 @@ interface
 uses
   DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  , DRagLint.Lint.SharedScope { TSharedScope -- a shared unit is judged by every project that lists it }
   ;
 
 const
@@ -51,6 +52,10 @@ const
 /// <param name="ALibStore">The platform library index, or nil. It answers
 /// whether a library callee takes an argument by var / out; with nil a callee
 /// the project does not declare counts as a possible write (no finding).</param>
+/// <param name="AShared">v154 FPBATCH2: SHARED-UNIT-SCOPE. A field or global declared in a unit that other projects
+/// also list is silenced when ANY of those sibling indexes holds a write ref of the same name; a listing
+/// project whose index is missing or stale withholds the finding (it is noted as undecided). nil: the own
+/// index alone decides, as before.</param>
 /// <returns>One 'read-never-assigned' warning per field or global variable
 /// that a ref READS and that has no write evidence anywhere in the project (see
 /// the unit comment for the evidence and the exempt shapes), anchored at the
@@ -78,7 +83,7 @@ const
 /// <seealso cref="DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.GlobalExempt"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function CollectReadNeverAssigned(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
+function CollectReadNeverAssigned(const AStore, ALibStore: ISymbolStore; const AShared: TSharedScope = nil): TArray<TLintFinding>;
 
 implementation
 
@@ -87,6 +92,7 @@ uses
   , System.Math
   , System.IOUtils
   , System.StrUtils
+  , System.RegularExpressions
   , System.Generics.Collections
   , System.Generics.Defaults
   , FireDAC.Comp.Client
@@ -763,7 +769,7 @@ begin
   end;
 end;
 
-function CollectReadNeverAssigned(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
+function CollectReadNeverAssigned(const AStore, ALibStore: ISymbolStore; const AShared: TSharedScope): TArray<TLintFinding>;
 var
   Cand       : TDictionary<Int64, TSymbol>;
   CandNames  : TDictionary<string, Boolean>;
@@ -921,6 +927,56 @@ var
       for var V in Others do
         if (V.Id <> ASym.Id) and NamesAsAbsoluteTarget(Coll.DeclLine(V), ASym.Name) then Exit(True);
   end;
+  { v154 FPBATCH2 class 3: True when the finding must be withheld because a SIBLING project that lists
+    the symbol's unit may write it: a bound 'write' ref of the name, or a member-access / read ref whose
+    source text is followed by := (O.X := v, the same shape pass 2 reads in the own project), in any
+    listing index. Also True, noted as undecided, when no verdict can be reached because a listing index
+    is missing or stale. Name-based on purpose: a same-named write in the sibling silences. }
+  function SiblingMayWrite(const ASym: TSymbol): Boolean;
+  begin
+    Result:= False;
+    if AShared = nil then Exit;
+    var UPath: string:= AStore.GetFilePath(ASym.FileId);
+    var Low  : string:= LowerCase(ASym.Name);
+    var Projs: string;
+    case AShared.Judge(UPath,
+           function(const S: ISymbolStore): Boolean
+           begin
+             Result:= False;
+             var Cache: TDictionary<Int64, TArray<string>>:= TDictionary<Int64, TArray<string>>.Create;
+             try
+               for var R in S.FindRefsNamingInFiles(S.GetAllFileIds, [Low]) do
+               begin
+                 if SameText(R.Kind, REF_WRITE) then Exit(True);
+                 if not (SameText(R.Kind, REF_READ) or SameText(R.Kind, REF_MEMBER_ACCESS)) or (R.StartLine < 1) then Continue;
+                 var Src: TArray<string>;
+                 if not Cache.TryGetValue(R.FileId, Src) then
+                 begin
+                   try
+                     Src:= TFile.ReadAllLines(S.GetFilePath(R.FileId));
+                   except
+                     Src:= nil;  { unreadable: counts as no write evidence from this file }
+                   end;
+                   Cache.Add(R.FileId, Src);
+                 end;
+                 if R.StartLine > Length(Src) then Continue;
+                 var At: Integer:= Src[R.StartLine - 1].ToLower.IndexOf(Low, Max(0, R.StartCol - 2));
+                 if At < 0 then Continue;
+                 if TRegEx.IsMatch(Copy(Src[R.StartLine - 1], At + Length(Low) + 1, MaxInt), '^(\s*(\[[^\]]*\]|\.\w+|\^))*\s*:=') then Exit(True);
+               end;
+             finally
+               Cache.Free;
+             end;
+           end, Projs) of
+      svUsedElsewhere: Result:= True;
+      svUndecided:
+        begin
+          NoteUndecidedSite(UPath, ASym.StartLine, READ_NEVER_ASSIGNED_RULE);
+          Result:= True;
+        end;
+    end;
+  end;
+
   procedure Report(const ASym: TSymbol; AIsField: Boolean);
   var
     Owner: TSymbol;
@@ -1031,6 +1087,7 @@ begin
             var IsField: Boolean:= S.Kind = skField;
             if not IsField and GlobalExempt(S) then Continue;
 
+            if SiblingMayWrite(S) then Continue;
             Report(S, IsField);
           end;
         finally

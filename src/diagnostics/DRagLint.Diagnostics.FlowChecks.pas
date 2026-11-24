@@ -2259,6 +2259,72 @@ begin
   end;
 end;
 
+{ SHAPE 2b of used-before-assignment (v154 FPBATCH2 class 4): an ARRAY FILLED IN A LOOP.
+
+  or I := 0 to High(PlanCols) do Fields[I] := .. stores element by element, and
+  the compiler-style definite assignment cannot know the loop ran, so a later
+  Fields[J] read is flagged. Recognised only when ALL of: the read sits AFTER a
+  complete or statement (its end precedes the read), whose bound mentions
+  High( or Length(, and whose body holds an assignment whose target is an element
+  of AName (AName[..]). A read with no such store anywhere before it, a store
+  outside a loop, and a loop whose bound is neither High nor Length all stay
+  reported. Weaker than a proof on purpose (the loop may not run), the same trade
+  ReadIsCountBoundedElement makes; the array part of the triage only. }
+function ReadIsLoopFilledElement(const AItem, ARoutine: TTSNode; const AName: string;
+  const ASrc: TBytes): Boolean;
+var
+  Prefix: string;
+
+  function StoresElement(const N: TTSNode): Boolean;
+  var
+    I: Integer;
+    L: TTSNode;
+  begin
+    Result := False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'assignment' then
+    begin
+      L := N.ChildByField('lhs');
+      if (not L.IsNull)
+         and TRegEx.Replace(LowerCase(NodeStr(L, ASrc)), '\s+', '').StartsWith(Prefix) then Exit(True);
+    end;
+    for I := 0 to N.NamedChildCount - 1 do
+      if StoresElement(N.NamedChild(I)) then Exit(True);
+  end;
+
+  function Walk(const N: TTSNode): Boolean;
+  var
+    I      : Integer;
+    StartN : TTSNode;
+    BodyN  : TTSNode;
+    C      : TTSNode;
+    Bound  : string;
+    Sized  : Boolean;
+  begin
+    Result := False;
+    if N.IsNull or (N.StartByte >= AItem.StartByte) then Exit;
+    if (N.NodeType = 'for') and (N.EndByte <= AItem.StartByte) then
+    begin
+      StartN := N.ChildByField('start');
+      BodyN  := N.ChildByField('body');
+      Sized  := False;
+      for I := 0 to N.NamedChildCount - 1 do
+      begin
+        C := N.NamedChild(I);
+        if (C = StartN) or (C = BodyN) then Continue;
+        Bound := TRegEx.Replace(LowerCase(NodeStr(C, ASrc)), '\s+', '');
+        if Bound.Contains('high(') or Bound.Contains('length(') then Sized := True;
+      end;
+      if Sized and StoresElement(BodyN) then Exit(True);
+    end;
+    for I := 0 to N.NamedChildCount - 1 do
+      if Walk(N.NamedChild(I)) then Exit(True);
+  end;
+
+begin
+  Prefix := LowerCase(AName) + '[';
+  Result := (not ARoutine.IsNull) and Walk(ARoutine);
+end;
 { SHAPE 1b of used-before-assignment: `AStream.Read(pb[0], 2)`.
 
   A METHOD call cannot be resolved by name, so the parameter-mode oracle is
@@ -4368,6 +4434,7 @@ var
                     ReadIsCountBoundedElement / ReadsOnlyFieldsAssignedEarlier.
                     Shape 3 is MAY-arm only; shape 2 applies to both. }
                   if ReadIsCountBoundedElement(It.Node, V.Name, PF.Src) then Continue;
+                  if ReadIsLoopFilledElement(It.Node, Cfg.RoutineNode, V.Name, PF.Src) then Continue;
                   if ReadIsStreamFillArg(It.Node, V.Name, PF.Src) then Continue;
                   if AStore <> nil then
                   begin
