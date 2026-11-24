@@ -48,6 +48,10 @@ Lane DFM (lane/v154-dfm):
 
 - NEW rules ON: `dfm-duplicate-tab-order`, `dfm-conflicting-accelerator`, `dfm-conflicting-shortcut`, `dfm-action-and-onclick`; OFF: `db-component-on-form`, `dfm-default-component-name`, `dfm-hint-inactive`. `disallowed-dfm-property` ships a default policy (`Connected = True` on a connection, `Active = True` on a query or table). Wiki page v154-dfm-form-rules. Rule count 439 -> 452, 359 -> 369 on by default (with lane EXPR).
 
+Lane FPBATCH2 (lane/v154-fpbatch2; ORM3 server lint, batch 2):
+
+- Fewer false positives: `sql-injection-concat` drops a splice of a local that only holds IntToStr / literal text; `dataset-open-without-close` ignores `Active := True` on a class that is no dataset; `read-never-assigned` consults the sibling projects of a shared unit; `used-before-assignment` accepts an array filled in a `for .. to High(x)` / `Length(x)` loop. `duplicate-global-decl` no longer says identical when the signature names other declarations. (Class 8, `try-except-swallowed` with E.Message kept in a field or global, is held back for an owner ruling.)
+
 Lane TT-GOLDEN (lane/v154-tt-golden), test side only:
 
 - The param-array and ORM goldens share one known-drift list format (`tests\autotest\lib\GoldenDrift.ps1`), and the param-array golden is now gated.

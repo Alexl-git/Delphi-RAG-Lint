@@ -17,13 +17,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = 'C:\TEMP\claude\lanes\v154\FPBATCH2\engine\drag-lint.exe',
+  [string]$Exe     = '',
   [string]$Rules   = '',
   [string]$WorkDir = ''
 )
 $ErrorActionPreference = 'Stop'
 if (-not $Rules)   { $Rules   = (Resolve-Path "$PSScriptRoot\..\..\rules").Path }
-if (-not $WorkDir) { $WorkDir = "C:\TEMP\claude\lanes\v154\FPBATCH2\scratch\v154-run-$PID" }
+if (-not $Exe)     { $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $WorkDir) { $WorkDir = "$env:TEMP\drag-lint-v154-fpbatch2-$PID" }
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   $s = if ($Ok) { 'PASS' } else { 'FAIL' }
@@ -62,6 +63,7 @@ function Check-Exact([string]$Title, $Findings, [string]$Rule, [string]$File) {
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: engine not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
 [void][IO.Directory]::CreateDirectory($WorkDir)
+try {
 
 # ---------------------------------------------------------------- 1 sql-injection-concat
 Write-Host 'class 1: sql-injection-concat' -ForegroundColor Cyan
@@ -520,3 +522,6 @@ Write-Host ''
 if ($script:Failed) { Write-Host 'v154 FPBATCH2: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'v154 FPBATCH2: PASS' -ForegroundColor Green
 exit 0
+} finally {
+  if (($WorkDir -like "$env:TEMP\drag-lint-v154-fpbatch2-*") -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
+}
