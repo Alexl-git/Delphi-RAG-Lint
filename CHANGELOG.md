@@ -5,7 +5,9 @@ breaking changes** until v2.0.
 
 ## v1.54.0-alpha -- 2026-11-24
 
-Released 2026-11-24. Contains 1.53.1, 1.53.0 and 1.52.3 (sections below; they have no tags of their own). No re-parse from 1.53.x: extractor and resolver versions unchanged. From 1.52.2: one re-parse (see 1.53.0).
+Released 2026-11-24. Contains 1.53.1, 1.53.0 and 1.52.3 (sections below; they have no tags of their own).
+
+**Re-parse:** no re-parse when coming from 1.53.0; coming from 1.52.2 or older the index is re-parsed (extractor 1.42.0-alpha -> 1.43.0-alpha, resolver 1.30.0-alpha -> 1.31.0-alpha), hours of heavy CPU on large projects.
 
 The setup and the zips carry the Microsoft C runtime (`vcruntime140.dll`) beside the engine, so a clean machine needs no VC++ redistributable; the setup also installs `casts.castlib`, the starter rule books and the IDE help line's feature list.
 

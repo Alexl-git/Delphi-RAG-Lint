@@ -172,7 +172,7 @@ of the repository; the binary `.dlrepo` is not committed.
 ## Connection strings
 
 `--connection` is a FireDAC list separated by `;`, for example
-`"Database=host:D:\data\myapp.fdb;User=SYSDBA;Password=...;DriverID=FB"`. `DriverID=FB` and
+`"Database=host:D:\data\sample.fdb;User=SYSDBA;Password=...;DriverID=FB"`. `DriverID=FB` and
 `CharacterSet=UTF8` are added when missing. The password is never printed or stored; the
 repository keeps only the `Database` value (`source_database`).
 

@@ -37,9 +37,9 @@
     "build": "1.28.3-alpha"
   },
   "verified": {
-    "date": "2026-10-21",
-    "by": "CHARTS",
-    "build": "1.33.0-alpha",
+    "date": "2026-11-24",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha",
     "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
   }
 }

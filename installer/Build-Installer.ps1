@@ -27,6 +27,7 @@ param(
   [string] $VcRedistDir = '',  # folder of vcruntime140.dll (x64); '' = the newest Visual Studio redist folder
   [string] $EngineSha256 = '', # when given, the engine must have exactly this hash
   [string] $Iscc        = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+  [string] $IsccLog     = '',  # when given, ISCC runs verbosely and its output (one line per packed file) goes there
   [switch] $DryRun,
   [switch] $LayoutV2
 )
@@ -114,8 +115,8 @@ if ($DryRun) { 'dry run: all sources present, ISCC not run'; return }
 
 if (-not (Test-Path -LiteralPath $Iscc -PathType Leaf)) { throw "Inno Setup compiler not found: $Iscc" }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-$isccArgs = @($defines.GetEnumerator() | ForEach-Object { "/D$($_.Key)=$($_.Value)" }) + @('/Qp', (Join-Path $PSScriptRoot 'drag-lint.iss'))
-& $Iscc @isccArgs
+$isccArgs = @($defines.GetEnumerator() | ForEach-Object { "/D$($_.Key)=$($_.Value)" }) + @(Join-Path $PSScriptRoot 'drag-lint.iss')
+if ($IsccLog -ne '') { & $Iscc @isccArgs *> $IsccLog } else { & $Iscc '/Qp' @isccArgs }
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
 $setup = Join-Path $OutDir "drag-lint-setup-$version.exe"
 "built: $setup ({0:N1} MB)" -f ((Get-Item -LiteralPath $setup).Length / 1MB)
