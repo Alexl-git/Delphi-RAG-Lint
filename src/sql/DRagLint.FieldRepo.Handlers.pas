@@ -887,27 +887,35 @@ begin
 end;
 
 { '' or why a new region may double code: a top-level block that can be a region whose markers were deleted. Only the
-  blocks that assign one of the fields count in a handler of a whole dataset. }
+  blocks that assign one of the fields count in a handler of a whole dataset. The parser leaves out branches of a
+  conditional, so the code without its directives is read too. }
 function UnmarkedProblem(const pText, pFile: string; const pJob: TFrhJob): string;
 var
   VFound: Boolean;
+
+  procedure Look(const pCode: string);
+  begin
+    WithMethodBlock(pCode, pFile, pJob.Method,
+      procedure(pBlock: TTSNode)
+      var
+        VI: Integer;
+        VCode, VName: string;
+      begin
+        for VI := 0 to Integer(pBlock.NamedChildCount) - 1 do
+          if pBlock.NamedChild(VI).NodeType = N_BLOCK then
+          begin
+            VCode := ScanPascal(NodeText(pCode, pBlock.NamedChild(VI))).Code;
+            VFound := VFound or (pJob.Assigns = nil);
+            for VName in pJob.Assigns do
+              VFound := VFound or Rx('\b' + VName + PAT_ASSIGNED).IsMatch(VCode);
+          end;
+      end);
+  end;
+
 begin
   VFound := False;
-  WithMethodBlock(pText, pFile, pJob.Method,
-    procedure(pBlock: TTSNode)
-    var
-      VI: Integer;
-      VCode, VName: string;
-    begin
-      for VI := 0 to Integer(pBlock.NamedChildCount) - 1 do
-        if pBlock.NamedChild(VI).NodeType = N_BLOCK then
-        begin
-          VCode := ScanPascal(NodeText(pText, pBlock.NamedChild(VI))).Code;
-          VFound := VFound or (pJob.Assigns = nil);
-          for VName in pJob.Assigns do
-            VFound := VFound or Rx('\b' + VName + PAT_ASSIGNED).IsMatch(VCode);
-        end;
-    end);
+  Look(pText);
+  Look(ScanPascal(pText).Code);
   Result := if VFound then
     'the handler holds a begin .. end block that may be this region without its markers: delete the block or put the markers back'
     else '';

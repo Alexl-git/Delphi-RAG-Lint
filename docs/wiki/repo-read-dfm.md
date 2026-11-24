@@ -47,7 +47,7 @@ field whose code is in a region of the handler, and an event handler that holds 
 code beside the region included; the other fields of an OnCalcFields handler are read as usual.
 
 **Grid columns.** One `DL_GRID_COLUMNS` row per form + grid view + column component: the table and field behind it and its
-0-based `COLUMN_INDEX` (the order of the columns in the DFM, for a banded view too; band positions are not stored). An unbound
+0-based `COLUMN_INDEX` (the order of the columns in the DFM, a stated `Index` applied as at load, for a banded view too; band positions are not stored). An unbound
 (drawn) column has no table and no field. A column of a join, a computed SELECT item or an unknown data source keeps its
 DataBinding.FieldName without a table. Card, layout and other views, inherited views and columns without a name are listed,
 not stored. A stored column that is gone from a form that was read completely is an UNCHECKED delete; `--dataset` limits the read to

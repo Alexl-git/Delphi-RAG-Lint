@@ -200,6 +200,35 @@ begin
   CheckDeps('K4h a comparison is no assignment', 'if {{T}}.AsFloat = 1 then {{T}}.AsFloat := 2;', 'T');
   CheckDeps('K4i another field''s member target stays a dependency', '{{X}}.AsFloat := 1; {{T}}.AsFloat := 2;', 'X');
   CheckDeps('K4j a member of a member is a read', '{{T}}.DataSet.Tag := 1;', 'T');
+
+  { a read behind a write that may not have run }
+  CheckDeps('K5a a write under if is no write', 'if {{Q}}.AsInteger > 0 then {{T}}.AsFloat := 1; {{X}}.AsFloat := {{T}}.AsFloat;', 'Q,X,T');
+  CheckDeps('K5b both branches write', 'if {{Q}}.IsNull then {{T}}.Clear else {{T}}.AsFloat := 1; if {{T}}.AsFloat > 9 then {{T}}.AsFloat := 9;', 'Q');
+  CheckDeps('K5c one of two branches writes', 'if {{Q}}.IsNull then {{T}}.Clear else {{X}}.Clear; if {{T}}.AsFloat > 9 then Beep;', 'Q,X,T');
+  CheckDeps('K5d a begin block writes', 'begin {{T}}.AsFloat := 1; end; Show({{T}}.AsString);', '');
+  CheckDeps('K5e a read behind the write in the same branch', 'if {{Q}}.IsNull then begin {{T}}.AsFloat := 1; Show({{T}}.AsString); end;', 'Q');
+  CheckDeps('K5f a read in the else of the branch that writes', 'if {{Q}}.IsNull then {{T}}.AsFloat := 1 else Show({{T}}.AsString);', 'Q,T');
+  CheckDeps('K5g a loop body may not run', 'while {{Q}}.AsInteger > I do {{T}}.AsFloat := 1; Show({{T}}.AsString);', 'Q,T');
+  CheckDeps('K5h a for body may not run', 'for var I := 1 to 3 do begin {{T}}.AsFloat := I; end; Show({{T}}.AsString);', 'T');
+  CheckDeps('K5i a case without else', 'case {{Q}}.AsInteger of 1: {{T}}.AsFloat := 1; 2, 3: begin {{T}}.AsFloat := 2; end; end; Show({{T}}.AsString);', 'Q,T');
+  CheckDeps('K5j a case whose branches and else all write', 'case {{Q}}.AsInteger of 1: {{T}}.AsFloat := 1; 2, 3: begin {{T}}.AsFloat := 2; end; else {{T}}.Clear; end; Show({{T}}.AsString);', 'Q');
+  CheckDeps('K5k a case branch that does not write', 'case {{Q}}.AsInteger of 1: {{T}}.AsFloat := 1; 2: Beep; else {{T}}.Clear; end; Show({{T}}.AsString);', 'Q,T');
+  CheckDeps('K5l a read behind try .. finally', 'try {{T}}.AsFloat := 1; finally Done; end; Show({{T}}.AsString);', '');
+  CheckDeps('K5m a read in finally', 'try {{T}}.AsFloat := 1; finally Show({{T}}.AsString); end;', 'T');
+  CheckDeps('K5n an except part that does not write', 'try {{T}}.AsFloat := Calc; except Beep; end; Show({{T}}.AsString);', 'T');
+  CheckDeps('K5o an except part that writes', 'try {{T}}.AsFloat := Calc; except {{T}}.Clear; end; Show({{T}}.AsString);', '');
+  CheckDeps('K5p a ternary is an expression', '{{T}}.AsFloat := if {{Q}}.IsNull then 1 else 2; Show({{T}}.AsString);', 'Q');
+  CheckDeps('K5q a ternary in a branch', 'if {{Q}}.IsNull then {{T}}.AsFloat := if (if A then B else C) then 1 else 2 else {{T}}.Clear; Show({{T}}.AsString);', 'Q');
+  CheckDeps('K5r an anonymous method may not run', 'Run(procedure begin {{T}}.AsFloat := 1; end); Show({{T}}.AsString);', 'T');
+  CheckDeps('K5s a with block runs', 'with X do begin {{T}}.AsFloat := 1; end; Show({{T}}.AsString);', '');
+  CheckDeps('K5t repeat may be left early', 'repeat if A then Break; {{T}}.AsFloat := 1; until B; Show({{T}}.AsString);', 'T');
+  CheckDeps('K5u a nested if binds its else', 'if A then if B then {{T}}.AsFloat := 1 else {{T}}.AsFloat := 2; Show({{T}}.AsString);', 'T');
+  CheckDeps('K5v unbalanced text ends', 'end; if then else {{T}}.Clear; end end case', '');
+  { one scanner for macros and statements }
+  CheckDeps('K6a a semicolon in a multi-line string ends no statement', '{{T}}.AsString := ''''''' + #13#10 + '  it''s; a' + #13#10 + '  ''''''' + ' + {{T}}.AsString;', 'T');
+  CheckDeps('K6b a comment between the field and := is skipped', '{{T}} { total } := {{Q}};', 'Q');
+  CheckDeps('K6c a write in a comment is none', '// {{T}}.AsFloat := 1;' + #13#10 + 'Show({{T}}.AsString);', 'T');
+  CheckDeps('K6d a keyword in a string is none', '{{T}}.AsString := ''if then''; Show({{T}}.AsString);', '');
 end;
 
 { ---- task 4: migrate ---------------------------------------------------------- }
@@ -233,6 +262,24 @@ begin
   { TStringList.Text ends with a line break; the split left one empty last element, so the join is exact }
   Result := Result.Substring(0, Length(Result) - Length(sLineBreak))
     + '#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10 + '#end DL_GRID_COLUMNS 0' + #13#10;
+end;
+
+{ The backup of a new v3 repository that pFile (in the work folder) was restored into. }
+function RestoredIntoV3(const pFile: string): string;
+var
+  vPath: string;
+  vConn: TFDConnection;
+begin
+  vPath := NewPath;
+  CreateRepository(vPath);
+  vConn := OpenRepository(vPath, False);
+  try
+    RestoreRepository(vConn, TPath.Combine(GDir, pFile), False);
+    BackupRepository(vConn, vPath + '.txt');
+  finally
+    vConn.Free;
+  end;
+  Result := FileBytesText(vPath + '.txt');
 end;
 
 procedure TestMigrate;
@@ -293,6 +340,7 @@ begin
   Check('M2g backup(migrated) starts with #DLREPO 3 and ends with the empty trailers',
     vText.StartsWith('#DLREPO 3' + #13#10) and vText.EndsWith('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10 + '#end DL_GRID_COLUMNS 0' + #13#10));
   vExpect := ExpectedMigrated(vV1Text);
+  Check('M2i the v1 backup restored into a v3 file = the migrated file', RestoredIntoV3('v1-before.txt') = vText, RestoredIntoV3('v1-before.txt'));
   Check('M2h the migrated backup differs from the v1 backup ONLY by magic, schema_version, FIELD_KIND 2 and the trailers',
     vText = vExpect, 'lengths ' + IntToStr(Length(vText)) + ' vs ' + IntToStr(Length(vExpect)));  vRes2 := MigrateRepository(vPath, True);
   Check('M3a a second run says already current and writes no backup', vRes2.AlreadyCurrent and (vRes2.BackupFile = ''));
@@ -309,6 +357,50 @@ begin
       + ' |Text := ''T'';' + #13#10)
     .Replace('[DL_LAYOUT_EVENTS ORDERS|TOTAL|Field|OnGetText]' + #13#10 + 'EVENT_CODE:' + #13#10 + ' |Text := ''T'';' + #13#10 + #13#10, '')
     .Replace('#end DL_LAYOUT_EVENTS 5', '#end DL_LAYOUT_EVENTS 4') + '#end DL_GRID_COLUMNS 0' + #13#10;
+end;
+
+{ A data step that fails restores nothing. }
+procedure TestRestoreFailure;
+var
+  vPath, vBefore: string;
+  vConn: TFDConnection;
+begin
+  vPath := NewPath;
+  CreateRepository(vPath);
+  vConn := OpenRepository(vPath, False);
+  try
+    vConn.ExecSQL('INSERT INTO "DL_FIELDS_INFO" ("TABLE_NAME","FIELD_NAME") VALUES (''KEEP'',''F'')');
+    vConn.ExecSQL('CREATE TRIGGER t1 BEFORE UPDATE ON "DL_FIELDS_INFO" BEGIN SELECT RAISE(ABORT, ''no''); END');
+    BackupRepository(vConn, vPath + '.1');
+    vBefore := FileBytesText(vPath + '.1');
+    Check('M6a a data step of a restore that fails raises', RaisedClass(procedure begin RestoreRepository(vConn, TPath.Combine(GDir, 'v2-before.txt'), True); end) <> '');
+    BackupRepository(vConn, vPath + '.2');
+    Check('M6b ... and the repository keeps its rows', FileBytesText(vPath + '.2') = vBefore);
+  finally
+    vConn.Free;
+  end;
+end;
+
+{ A migration that fails after some DDL ran leaves the v2 file byte for byte as it was. }
+procedure TestMigrateFailure;
+var
+  vPath: string;
+  vConn: TFDConnection;
+  vBefore, vAfter: TBytes;
+begin
+  vPath := NewPath;
+  CreateRepository(vPath, 2);
+  vConn := OpenRepository(vPath, False);
+  try
+    RestoreRepository(vConn, Fixture('golden_v2.txt'), False);
+    vConn.ExecSQL('CREATE TABLE "DL_GRID_COLUMNS" (X INTEGER)');
+  finally
+    vConn.Free;
+  end;
+  vBefore := TFile.ReadAllBytes(vPath);
+  Check('M7a a migration whose CREATE TABLE fails behind the ADD COLUMNs raises', RaisedMessage(procedure begin MigrateRepository(vPath, True); end).Contains('DL_GRID_COLUMNS'));
+  vAfter := TFile.ReadAllBytes(vPath);
+  Check('M7b ... and the v2 file is byte-identical', (Length(vBefore) = Length(vAfter)) and CompareMem(@vBefore[0], @vAfter[0], Length(vBefore)));
 end;
 
 { EVCOLS: schema 2 -> 3. }
@@ -353,6 +445,15 @@ begin
   Check('M5e nothing else changed: the migrated backup is the v2 backup with the moved event, the cleared ALIGNMENT, the new trailer',
     FileBytesText(TPath.Combine(GDir, 'v3-after.txt')) = ExpectedFromV2(vText));
   Check('M5f a second run is already current', MigrateRepository(vPath, True).AlreadyCurrent);
+  Check('M5j a #DLREPO 2 backup restored into a v3 file = the migrated file', RestoredIntoV3('v2-before.txt') = FileBytesText(TPath.Combine(GDir, 'v3-after.txt')),
+    RestoredIntoV3('v2-before.txt'));
+  vText := FileBytesText(TPath.Combine(GDir, 'v3-after.txt')).Replace('FG_COLOR=false' + #13#10 + 'UNIQUE', 'FG_COLOR=false' + #13#10
+    + 'ALIGNMENT=-2' + #13#10 + 'UNIQUE', []);
+  TFile.WriteAllText(TPath.Combine(GDir, 'v3-odd.txt'), vText, TEncoding.ASCII);
+  Check('M5k control: a #DLREPO 3 backup is restored as it is, ALIGNMENT -2 and a Field event included',
+    vText.Contains('ALIGNMENT=-2') and (RestoredIntoV3('v3-odd.txt') = vText));
+  TestRestoreFailure;
+  TestMigrateFailure;
   { a failure inside the transaction rolls everything back }
   vPath := NewPath;
   CreateRepository(vPath, 2);

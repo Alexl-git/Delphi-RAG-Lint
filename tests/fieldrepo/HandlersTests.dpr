@@ -418,6 +418,11 @@ begin
   Check('H41c a block of another field is hand code', VState = fhsInserted, VReason);
   VOut := Apply(FormUnit(L(['begin', '  if b then', '  begin', '    tA.AsFloat := 5;', '  end;', 'end;'])), VJob, VState, VReason);
   Check('H41d a block of a statement is hand code, noted', (VState = fhsInserted) and ContainsText(GNotes, 'assigns tA'), VReason + GNotes);
+  VIn := FormUnit(L(['begin', '{$IFDEF X}', '  a;', '{$ELSE}', '  begin // A', '    tA.AsFloat := 5;', '  end;', '{$ENDIF}', 'end;']));
+  Refused('H41e ... in the else branch of a conditional, calc', VIn, VJob, 'markers');
+  Refused('H41f ... event', VIn, Job, 'markers');
+  VOut := Apply(VIn.Replace('tA', 'tZ').Replace('// A', '// Z'), VJob, VState, VReason);
+  Check('H41g ... of another field: hand code', VState = fhsInserted, VReason);
   VJob := Job('begin' + NL + '  if b then Exit;' + NL + 'end;' + NL);
   VOut := Apply(FormUnit(L(['begin', 'end;'])), VJob, VState, VReason);
   Check('H42 Exit in the region, nothing behind it: no note', (VState = fhsInserted) and (GNotes = ''), GNotes);

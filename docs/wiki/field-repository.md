@@ -242,7 +242,7 @@ drag-lint repo check (--repo <file> | --project <project file>) [--json]
 
 Read-only. Reports kind/flag mismatches, lookup wiring that is incomplete or points at an unknown table
 or field (a `DESTKEY` that is not the lookup table's primary key is a warning), calc macros that name an
-unknown field, calc dependency cycles (named once, `A -> B -> A`), event code (columns and layout events) whose macros are
+unknown field, calc dependency cycles (named once, `A -> B -> A`; a read of the own field counts unless every path before it has written the field), event code (columns and layout events) whose macros are
 malformed or name an unknown field, layout-event rows for an unknown field; as warnings an `ALIGNMENT` outside NULL / 0 / 1 / 2 and
 a grid column that names a field without a row. Exit 0 when clean, 1 when there are findings.
 
@@ -250,8 +250,8 @@ a grid column that names a field without a row. Exit 0 when clean, 1 when there 
 
 A schema-3 repository writes `#DLREPO 3` (`DL_GRID_COLUMNS` last); a schema-2 file writes `#DLREPO 2` and a schema-1 file
 `#DLREPO 1`, byte for byte as before. Restoring an older backup into a newer repository is accepted (new tables empty, new
-columns NULL; the rows are restored as they are: `repo check` names an `ALIGNMENT` -2 or a `Field` event in them);
-restoring a newer backup into an older file is refused with exit 2 ("migrate first"); restoring into a missing file creates
+columns NULL); into a schema-3 file its rows get the row changes of `repo migrate` (FIELD_KIND 2, `ALIGNMENT` -2 to NULL,
+`Field` events into the event columns) in the same transaction, so the result is the migrated file; restoring a newer backup into an older file is refused with exit 2 ("migrate first"); restoring into a missing file creates
 the file at the backup's own version.
 
 ### Lint exceptions

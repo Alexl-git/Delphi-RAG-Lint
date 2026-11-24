@@ -270,6 +270,13 @@ end
   [IO.File]::WriteAllText($sel, '1')
   $r = Dfm @('--select', $sel) $g $q
   Check 'D18e the delete by its id' (($r.Code -eq 0) -and (Has $r 'applied: 1 changes') -and (Has (Dfm @() $g $q) 'direction dfm-to-repo, 0 changes')) $r.Out
+  [IO.File]::WriteAllText($g, [IO.File]::ReadAllText($g).Replace("object colQty2: TcxGridDBColumn$([char]13)$([char]10)", "object colQty2: TcxGridDBColumn$([char]13)$([char]10)        Index = 0$([char]13)$([char]10)"))
+  $r = Dfm @() $g $q
+  Check 'D18g a stated Index moves the column, the others close up' ((Has $r 'direction dfm-to-repo, 4 changes, 0 blocked') -and (Has $r "view1|colQty2 COLUMN_INDEX: 3 -> 0$([char]10)") -and (Has $r "view1|colQty COLUMN_INDEX: 0 -> 1$([char]10)") -and (Has $r "view1|colTotal COLUMN_INDEX: 1 -> 2$([char]10)") -and (Has $r "view1|colDraw COLUMN_INDEX: 2 -> 3$([char]10)")) $r.Out
+  [IO.File]::WriteAllText($g, [IO.File]::ReadAllText($g).Replace('Index = 0', 'Index = 99'))
+  $r = Dfm @() $g $q
+  Check 'D18h an Index behind the columns read so far moves nothing' (Has $r 'direction dfm-to-repo, 0 changes') $r.Out
+  [IO.File]::WriteAllText($g, $gt.Replace($blk, '').Replace('      object colDraw: ', $blk + '      object colDraw: ').Replace($blkJ, ''))
   $rd = Dfm @('--dataset', 'tblO') $g $q
   Check 'D18f --dataset proposes no delete for other views' (Has $rd 'direction dfm-to-repo, 0 changes') $rd.Out
   $v2 = Join-Path $work 'v2.dlrepo'

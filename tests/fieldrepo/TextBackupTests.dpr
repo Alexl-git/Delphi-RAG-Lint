@@ -564,8 +564,8 @@ begin
     RestoreRepository(vV2, Fixture('golden_v2.txt'), True);
     vOut := TPath.Combine(GDir, 'out-v2-in-v3.txt');
     BackupRepository(vV2, vOut);
-    Check('25d #DLREPO 2 restores into a v3 repository: the v2 text with #DLREPO 3 and an empty DL_GRID_COLUMNS',
-      TEncoding.ASCII.GetString(TFile.ReadAllBytes(vOut)) = TEncoding.ASCII.GetString(TFile.ReadAllBytes(Fixture('golden_v2.txt'))).Replace('#DLREPO 2', '#DLREPO 3')
+    Check('25d #DLREPO 2 restores into a v3 repository: the v2 text with #DLREPO 3, schema_version 3 and an empty DL_GRID_COLUMNS',
+      TEncoding.ASCII.GetString(TFile.ReadAllBytes(vOut)) = TEncoding.ASCII.GetString(TFile.ReadAllBytes(Fixture('golden_v2.txt'))).Replace('#DLREPO 2', '#DLREPO 3').Replace('META_VALUE=2', 'META_VALUE=3')
         + '#end DL_GRID_COLUMNS 0' + #13#10);
     RestoreRepository(vV2, Fixture('golden.dlrepo.txt'), True);
     Check('25e #DLREPO 1 restores into a v3 repository', ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO"', vNull) = '6');

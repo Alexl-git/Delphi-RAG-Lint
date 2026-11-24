@@ -89,7 +89,8 @@ function ParseMacros(const pBody: string): TArray<TFrMacro>;
 /// <summary>The fields a calc body depends on.</summary>
 /// <param name="pBody">The CALC_BODY text.</param>
 /// <param name="pSelf">The field that owns the body; a macro of that name that is written (`:=`, `.Member :=` or
-/// `.Clear` follows) is not a dependency, and neither is a read of it behind the end of a statement that writes it.</param>
+/// `.Clear` follows) is not a dependency, and neither is a read of it behind a statement that has written it on every
+/// path: a write in some branches only, in a loop body or in an anonymous method does not count.</param>
 /// <returns>Distinct field names (compared case-insensitively) in order of first appearance, as written.</returns>
 /// <exception cref="EFrKindError">As ParseMacros.</exception>
 /// <remarks>CalcDependencies('{{TOTAL}}.AsFloat := {{QTY}}.AsInteger * {{PRICE}}.AsFloat;', 'TOTAL') = [QTY, PRICE]. A
@@ -115,9 +116,23 @@ const
   MACRO_CLOSE = '}}';
   MACRO_OPEN_LEN = 2;
   MACRO_CLOSE_LEN = 2;
+  { what the walk over the statements of a body looks at }
+  PAT_BODY_TOKEN = '\{\{[^}]*\}\}|\.\s*&?[A-Za-z_]\w*|&?[A-Za-z_]\w*|:=|[;:]';
+  WORD_BEGIN = 'begin';
+  WORD_DO = 'do';
+  WORD_ELSE = 'else';
+  WORD_END = 'end';
+  WORD_EXCEPT = 'except';
+  WORD_FINALLY = 'finally';
+  WORD_IF = 'if';
+  WORD_OF = 'of';
+  WORD_THEN = 'then';
+  WORD_UNTIL = 'until';
+  STATEMENT_END = ';';
+  LABEL_END = ':';
+  STATEMENT_STOPS: array[0..5] of string = (STATEMENT_END, WORD_END, WORD_ELSE, WORD_UNTIL, WORD_FINALLY, WORD_EXCEPT);
   ASSIGN_OP = ':=';
   MEMBER_CLEAR = 'Clear';
-  QUOTE = '''';
   { a string over several lines, a string, a comment, or the two braces that open a macro }
   PAT_MACRO_TOKEN = '(?s)(''''''(?:'''')*)(?=[ \t]*\r?\n).*?\n[ \t]*\1(?!'')|''(?:''''|[^''\r\n])*''?|//[^\r\n]*' +
     '|\(\*.*?(?:\*\)|\z)|\{\{|\{.*?(?:\}|\z)';
@@ -186,14 +201,13 @@ begin
   Result := pKind in [frkCalc, frkInternalCalc, frkAggregate];
 end;
 
-function ParseMacros(const pBody: string): TArray<TFrMacro>;
+{ The text with every string and comment blanked, offsets and line breaks kept; a macro is copied as it is. }
+function BlankStringsAndComments(const pBody: string): string;
 var
-  VPos, VClose, VI: Integer;
-  VInner: string;
-  VMacro: TFrMacro;
+  VPos, VI: Integer;
   VToken: TMatch;
 begin
-  Result := nil;
+  Result := pBody;
   VPos := 1;
   while VPos <= Length(pBody) do
   begin
@@ -201,15 +215,36 @@ begin
     if not VToken.Success then
       Break;
     Inc(VPos, VToken.Index - 1);
-    if VToken.Value <> MACRO_OPEN then
+    if VToken.Value = MACRO_OPEN then
     begin
-      Inc(VPos, VToken.Length); // a string or a comment
+      VPos := Pos(MACRO_CLOSE, pBody, VPos + MACRO_OPEN_LEN);
+      if VPos = 0 then
+        Break;
+      Inc(VPos, MACRO_CLOSE_LEN);
       Continue;
     end;
-    VClose := Pos(MACRO_CLOSE, pBody, VPos + MACRO_OPEN_LEN);
+    for VI := VPos to VPos + VToken.Length - 1 do
+      if not CharInSet(Result[VI], [#13, #10]) then
+        Result[VI] := ' ';
+    Inc(VPos, VToken.Length);
+  end;
+end;
+
+function ParseMacros(const pBody: string): TArray<TFrMacro>;
+var
+  VPos, VClose, VI: Integer;
+  VCode, VInner: string;
+  VMacro: TFrMacro;
+begin
+  Result := nil;
+  VCode := BlankStringsAndComments(pBody);
+  VPos := Pos(MACRO_OPEN, VCode);
+  while VPos > 0 do
+  begin
+    VClose := Pos(MACRO_CLOSE, VCode, VPos + MACRO_OPEN_LEN);
     if VClose = 0 then
       raise EFrKindError.CreateFmt('unterminated {{ at offset %d', [VPos]);
-    VInner := Copy(pBody, VPos + MACRO_OPEN_LEN, VClose - VPos - MACRO_OPEN_LEN);
+    VInner := Copy(VCode, VPos + MACRO_OPEN_LEN, VClose - VPos - MACRO_OPEN_LEN);
     if VInner = '' then
       raise EFrKindError.CreateFmt('empty macro {{}} at offset %d', [VPos]);
     if VInner.Contains('.') then
@@ -223,7 +258,7 @@ begin
     VMacro.Offset := VPos;
     VMacro.Len := VClose + MACRO_CLOSE_LEN - VPos;
     Result := Result + [VMacro];
-    VPos := VClose + MACRO_CLOSE_LEN;
+    VPos := Pos(MACRO_OPEN, VCode, VClose + MACRO_CLOSE_LEN);
   end;
 end;
 
@@ -234,7 +269,8 @@ begin
     Inc(Result);
 end;
 
-{ True when the macro is written: ':=', '.Member :=' or '.Clear' follows, blanks skipped. }
+{ True when the macro is written: ':=', '.Member :=' or '.Clear' follows, blanks skipped; pBody has no strings or
+  comments. }
 function IsWriteTarget(const pBody: string; const pMacro: TFrMacro): Boolean;
 var
   VPos, VFirst: Integer;
@@ -253,66 +289,266 @@ begin
   Result := Result or (Copy(pBody, VPos, Length(ASSIGN_OP)) = ASSIGN_OP);
 end;
 
-{ Offset behind a string or comment that starts at pPos; pPos itself when none does. }
-function SkipTrivia(const pText: string; pPos: Integer): Integer;
+type
+  TSelfUse = (suNone, suRead, suWrite);
 
-  function Behind(const pClose: string; pOpenLen: Integer): Integer;
-  begin
-    Result := Pos(pClose, pText, pPos + pOpenLen);
-    Result := if Result = 0 then Length(pText) + 1 else Result + Length(pClose);
+  TBodyToken = record
+    Text: string;
+    Offset: Integer;
+    Use: TSelfUse;
   end;
 
+  { Walks the statements of a body and finds the first read of one field that no statement before it has written on
+    every path. Exit and raise are plain statements: a write behind one counts. }
+  TSelfWalk = record
+  private
+    FTokens: TArray<TBodyToken>;
+    FPos: Integer;
+    FWritten: Boolean;
+    FFirstRead: Integer;
+    function IsAt(const pWords: array of string): Boolean;
+    procedure Skip;
+    procedure SkipMethodHead;
+    procedure Expression(const pStops: array of string);
+    procedure Statement;
+    procedure Statements(const pStops: array of string);
+    procedure Branch;
+    procedure IfStatement;
+    procedure CaseStatement;
+    procedure TryStatement;
+    procedure RepeatStatement;
+  public
+    function FirstRead(const pCode, pSelf: string): Integer;
+  end;
+
+function SelfUse(const pCode, pSelf: string; const pToken: TBodyToken): TSelfUse;
+var
+  VMacro: TFrMacro;
 begin
-  Result := pPos;
-  if pText[pPos] = QUOTE then
-    Result := Behind(QUOTE, 1)
-  else if (pText[pPos] = '{') and (Copy(pText, pPos, MACRO_OPEN_LEN) <> MACRO_OPEN) then
-    Result := Behind('}', 1)
-  else if Copy(pText, pPos, 2) = '(*' then
-    Result := Behind('*)', 2)
-  else if Copy(pText, pPos, 2) = '//' then
-    Result := Behind(#10, 2);
+  if not SameText(pToken.Text, MACRO_OPEN + pSelf + MACRO_CLOSE) then
+    Exit(suNone);
+  VMacro.Offset := pToken.Offset;
+  VMacro.Len := Length(pToken.Text);
+  Result := if IsWriteTarget(pCode, VMacro) then suWrite else suRead;
 end;
 
-{ True when a statement ends between two offsets: a semicolon outside strings and comments. }
-function StatementEnds(const pBody: string; pFirst, pLast: Integer): Boolean;
+{ 1-based offset of that read, 0 = none. pCode has no strings or comments. }
+function TSelfWalk.FirstRead(const pCode, pSelf: string): Integer;
 var
-  VPos, VNext: Integer;
+  VMatch: TMatch;
+  VToken: TBodyToken;
 begin
-  VPos := pFirst;
-  while VPos < pLast do
+  Self := Default(TSelfWalk);
+  for VMatch in TRegEx.Matches(pCode, PAT_BODY_TOKEN) do
   begin
-    if pBody[VPos] = ';' then
-      Exit(True);
-    VNext := SkipTrivia(pBody, VPos);
-    VPos := if VNext > VPos then VNext else VPos + 1;
+    VToken.Text := VMatch.Value;
+    VToken.Offset := VMatch.Index;
+    VToken.Use := SelfUse(pCode, pSelf, VToken);
+    FTokens := FTokens + [VToken];
   end;
-  Result := False;
+  Statements([]);
+  Result := FFirstRead;
+end;
+
+function TSelfWalk.IsAt(const pWords: array of string): Boolean;
+begin
+  Result := (FPos < Length(FTokens)) and MatchText(FTokens[FPos].Text, pWords);
+end;
+
+procedure TSelfWalk.Skip;
+begin
+  if (FPos < Length(FTokens)) and (FTokens[FPos].Use = suRead) and (not FWritten) and (FFirstRead = 0) then
+    FFirstRead := FTokens[FPos].Offset;
+  Inc(FPos);
+end;
+
+{ To the begin of an anonymous method: its declarations hold semicolons. }
+procedure TSelfWalk.SkipMethodHead;
+begin
+  while (FPos < Length(FTokens)) and not IsAt([WORD_BEGIN]) do
+    Skip;
+end;
+
+{ Up to one of pStops; the then and else of a ternary belong to the expression. A field it writes is written at its end. }
+procedure TSelfWalk.Expression(const pStops: array of string);
+var
+  VTernaries: Integer;
+  VWrites: Boolean;
+begin
+  VTernaries := 0;
+  VWrites := False;
+  while (FPos < Length(FTokens)) and ((not IsAt(pStops)) or ((VTernaries > 0) and IsAt([WORD_THEN, WORD_ELSE]))) do
+  begin
+    if IsAt(['procedure', 'function']) then
+      SkipMethodHead;
+    if IsAt([WORD_BEGIN]) then
+    begin
+      Branch;
+      Continue;
+    end;
+    if IsAt([WORD_IF]) then
+      Inc(VTernaries)
+    else if IsAt([WORD_ELSE]) then
+      Dec(VTernaries);
+    VWrites := VWrites or ((FPos < Length(FTokens)) and (FTokens[FPos].Use = suWrite));
+    Skip;
+  end;
+  FWritten := FWritten or VWrites;
+end;
+
+{ A statement that may not run. }
+procedure TSelfWalk.Branch;
+var
+  VBefore: Boolean;
+begin
+  VBefore := FWritten;
+  Statement;
+  FWritten := VBefore;
+end;
+
+procedure TSelfWalk.Statements(const pStops: array of string);
+var
+  VStart: Integer;
+begin
+  while (FPos < Length(FTokens)) and not IsAt(pStops) do
+  begin
+    VStart := FPos;
+    Statement;
+    if FPos = VStart then
+      Skip;
+  end;
+end;
+
+procedure TSelfWalk.Statement;
+begin
+  if IsAt([WORD_BEGIN]) then
+  begin
+    Skip;
+    Statements([WORD_END]);
+    Skip;
+  end
+  else if IsAt([WORD_IF]) then
+    IfStatement
+  else if IsAt(['case']) then
+    CaseStatement
+  else if IsAt(['try']) then
+    TryStatement
+  else if IsAt(['repeat']) then
+    RepeatStatement
+  else if IsAt(['while', 'for', 'on']) then
+  begin
+    Expression([WORD_DO]);
+    Skip;
+    Branch;
+  end
+  else if IsAt(['with']) then
+  begin
+    Expression([WORD_DO]);
+    Skip;
+    Statement;
+  end
+  else
+    Expression(STATEMENT_STOPS);
+end;
+
+procedure TSelfWalk.IfStatement;
+var
+  VBefore, VThen: Boolean;
+begin
+  Skip;
+  Expression([WORD_THEN]);
+  Skip;
+  VBefore := FWritten;
+  Statement;
+  VThen := FWritten;
+  FWritten := VBefore;
+  if not IsAt([WORD_ELSE]) then
+    Exit;
+  Skip;
+  Statement;
+  FWritten := FWritten and VThen;
+end;
+
+procedure TSelfWalk.CaseStatement;
+var
+  VBefore, VAll, VElse: Boolean;
+begin
+  Expression([WORD_OF]);
+  Skip;
+  VBefore := FWritten;
+  VAll := True;
+  while (FPos < Length(FTokens)) and not IsAt([WORD_END, WORD_ELSE]) do
+  begin
+    if IsAt([STATEMENT_END]) then
+    begin
+      Skip;
+      Continue;
+    end;
+    Expression([LABEL_END, WORD_END, WORD_ELSE]);
+    if IsAt([LABEL_END]) then
+      Skip;
+    FWritten := VBefore;
+    Statement;
+    VAll := VAll and FWritten;
+  end;
+  FWritten := VBefore;
+  VElse := IsAt([WORD_ELSE]);
+  if VElse then
+    Skip;
+  Statements([WORD_END]);
+  Skip;
+  FWritten := VBefore or (VElse and VAll and FWritten);
+end;
+
+procedure TSelfWalk.TryStatement;
+var
+  VBefore, VTry, VSelective: Boolean;
+begin
+  Skip;
+  VBefore := FWritten;
+  Statements([WORD_FINALLY, WORD_EXCEPT, WORD_END]);
+  VTry := FWritten;
+  FWritten := VBefore;
+  if IsAt([WORD_FINALLY]) then
+  begin
+    Skip;
+    Statements([WORD_END]);
+    FWritten := FWritten or VTry;
+  end
+  else if IsAt([WORD_EXCEPT]) then
+  begin
+    Skip;
+    VSelective := IsAt(['on']);
+    Statements([WORD_END]);
+    FWritten := if VSelective then VBefore else FWritten and VTry;
+  end;
+  Skip;
+end;
+
+{ Break may leave the loop before the write. }
+procedure TSelfWalk.RepeatStatement;
+var
+  VBefore: Boolean;
+begin
+  VBefore := FWritten;
+  Skip;
+  Statements([WORD_UNTIL]);
+  Skip;
+  Expression(STATEMENT_STOPS);
+  FWritten := VBefore;
 end;
 
 function CalcDependencies(const pBody, pSelf: string): TArray<string>;
 var
   VMacro: TFrMacro;
-  VWritten: Integer; // behind the first write of pSelf, 0 = none yet
+  VWalk: TSelfWalk;
+  VSelfRead: Integer;
 begin
   Result := nil;
-  VWritten := 0;
+  VSelfRead := VWalk.FirstRead(BlankStringsAndComments(pBody), pSelf);
   for VMacro in ParseMacros(pBody) do
-  begin
-    if SameText(VMacro.Name, pSelf) then
-    begin
-      if IsWriteTarget(pBody, VMacro) then
-      begin
-        if VWritten = 0 then
-          VWritten := VMacro.Offset + VMacro.Len;
-        Continue;
-      end;
-      if (VWritten > 0) and StatementEnds(pBody, VWritten, VMacro.Offset) then
-        Continue;
-    end;
-    if not MatchText(VMacro.Name, Result) then
+    if (not SameText(VMacro.Name, pSelf) or (VMacro.Offset = VSelfRead)) and not MatchText(VMacro.Name, Result) then
       Result := Result + [VMacro.Name];
-  end;
 end;
 
 end.

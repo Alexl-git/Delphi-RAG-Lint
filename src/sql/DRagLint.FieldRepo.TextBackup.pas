@@ -109,7 +109,8 @@ procedure BackupRepositoryToStrings(pConnection: TFDConnection; pLines: TStrings
 procedure BackupRepository(pConnection: TFDConnection; const pFileName: string);
 
 /// <summary>Parses and validates the lines, then replaces every row of the repository in
-/// one transaction. A column omitted in the text is inserted as NULL, never as its default.</summary>
+/// one transaction. A column omitted in the text is inserted as NULL, never as its default. An older backup restored
+/// into a repository of schema REPO_SCHEMA_VERSION gets the data steps of `repo migrate`.</summary>
 /// <param name="pConnection">Open read-write repository connection.</param>
 /// <param name="pLines">Backup text lines without terminators.</param>
 /// <param name="pReplace">Must be True when the repository already holds rows.</param>
@@ -922,6 +923,8 @@ begin
     pConnection.StartTransaction;
     try
       InsertRows(pConnection, VParser);
+      if (VParser.Version < REPO_SCHEMA_VERSION) and (RepoSchemaVersion(pConnection) = REPO_SCHEMA_VERSION) then
+        MigrateRepoRows(pConnection, VParser.Version);
       pConnection.Commit;
     except
       on Exception do

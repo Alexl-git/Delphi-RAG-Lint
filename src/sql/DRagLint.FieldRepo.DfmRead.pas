@@ -97,7 +97,7 @@ type
     ObjKind: string;
     /// <summary>DataController.DataSource as written (dsX or dmX.dsX); '' = none.</summary>
     DataSource: string;
-    /// <summary>Columns in DFM order: the order of the column's Index.</summary>
+    /// <summary>Columns in item order: DFM order, a column that states Index moved there as it is when the form loads.</summary>
     Columns: TArray<TDfmrGridColumn>;
   end;
 
@@ -503,6 +503,15 @@ begin
   Result.Events := ReadEvents(pRows, pObject, True);
 end;
 
+{ The grid streams its columns in item order; a stated Index is applied as the loader does, to the columns read so far. }
+procedure AddColumn(const pRows: TDfmRows; pObject: Integer; var pColumns: TArray<TDfmrGridColumn>);
+var
+  VAt: Integer;
+begin
+  VAt := StrToIntDef(pRows.Prop(pObject, 'Index'), Length(pColumns));
+  Insert([ReadColumn(pRows, pObject)], pColumns, EnsureRange(VAt, 0, Length(pColumns)));
+end;
+
 function IsView(const pClass: string): Boolean;
 begin
   Result := StartsText(VIEW_CLASS_PREFIX, pClass) and EndsText(VIEW_CLASS_SUFFIX, pClass);
@@ -530,7 +539,7 @@ begin
   while (VI < Length(pRows.Objects)) and (pRows.Objects[VI].Depth > VRow.Depth) do
   begin
     if (pRows.Objects[VI].Depth = VRow.Depth + 1) and EndsText(COLUMN_SUFFIX, pRows.Objects[VI].ClassName) then
-      Result.Columns := Result.Columns + [ReadColumn(pRows, VI)];
+      AddColumn(pRows, VI, Result.Columns);
     Inc(VI);
   end;
 end;

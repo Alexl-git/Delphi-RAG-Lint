@@ -34,16 +34,16 @@ Amends `2026-11-22-field-repository-v2-design.md`. Status: rulings recorded, EVC
 
 * Migration 1 -> 3 and 2 -> 3 in one transaction, old-schema text backup first: new columns and tables, ALIGNMENT -2 -> NULL,
   layout-type `Field` events moved into the columns (a row without field row or column stays; `repo check` names it).
-* Text backup `#DLREPO 3`; v1 / v2 repositories write what they wrote; older backups restore into v3 row for row (no data change).
+* Text backup `#DLREPO 3`; v1 / v2 repositories write what they wrote; an older backup restored into v3 gets the same row changes as a migrated file.
 * Open details decided conservatively (owner may overrule):
   1. The grid key is the form NAME; two projects on one repository with equal form names share rows.
-  2. Order is stored for TcxGridDBTableView and TcxGridDBBandedTableView (DFM order; band positions not stored); card, layout
+  2. Order is stored for TcxGridDBTableView and TcxGridDBBandedTableView (DFM order, a stated Index applied; band positions not stored); card, layout
      and tree views, VCL DBGrids, inherited and frame views are reported or ignored.
   3. A column gone from a form read completely is an UNCHECKED delete (fields are still never deleted by a read).
   4. Column events are stored for TcxGridDBTableView only; an event of a column whose field has no row makes no row.
   5. A field component as a whole is a macro too, except a calculated field's in OnCalcFields code (BLOCKED: the callee may write it).
      `DataSet['X']` and `FieldByName('X').Value` become `.AsVariant`.
   6. Handlers that hold a generated DLFR region are not read for the code in it; an event handler with a region is not read at all.
-  7. A read of the own field behind a statement that assigned it is no cycle; an internal-calc field may read itself.
+  7. A read of the own field behind statements that assigned it on every path is no cycle (a conditional write does not count); an internal-calc field may read itself.
   8. read-dfm and gen-handlers refuse schema 1 and 2 ("run repo migrate").
   9. GRID_* bodies are stored, not generated (no generator asked for them yet).

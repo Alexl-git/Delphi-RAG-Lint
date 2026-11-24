@@ -44,28 +44,13 @@ implementation
 uses
   System.SysUtils,
   FireDAC.Comp.Client,
-  DRagLint.FieldRepo.Kinds,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.TextBackup;
 
 const
   FIELDS_TABLE = 'DL_FIELDS_INFO';
   KIND_VERSION = 2; // the schema that introduced FIELD_KIND 2 for ISCALCULATED rows
-  WHERE_CALC = ' WHERE "ISCALCULATED" = 1 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1)';
-  WHERE_ALIGNMENT = ' WHERE "ALIGNMENT" = -2';
-  SELECT_COUNT = 'SELECT COUNT(*) FROM ';
   FIELDS_SQL = '"DL_FIELDS_INFO"';
-  EVENTS_SQL = '"DL_LAYOUT_EVENTS"';
-  { A Field event of one kind that has its field row; %s = event name. }
-  WHERE_EVENT = ' WHERE "LAYOUT_TYPE" = ''' + REPO_LAYOUT_FIELD + ''' AND "EVENT_NAME" = ''%s'' AND EXISTS (SELECT 1 FROM ' +
-    FIELDS_SQL + ' F WHERE F."TABLE_NAME" = ' + EVENTS_SQL + '."TABLE_NAME" AND F."FIELD_NAME" = ' + EVENTS_SQL + '."FIELD_NAME")';
-  DELETE_EVENT = 'DELETE FROM ' + EVENTS_SQL + WHERE_EVENT;  // dl:ok sql-injection-concat@e420 -- REVIEWED 2026-11-23 EVCOLS: a constant made of constants, formatted with the event names of FR_EVENT_COLUMNS
-  { %0:s = column, %1:s = event name. }
-  MOVE_EVENT = 'UPDATE ' + FIELDS_SQL + ' SET "%0:s" = (SELECT E."EVENT_CODE" FROM ' + EVENTS_SQL + ' E WHERE E."TABLE_NAME" = ' +
-    FIELDS_SQL + '."TABLE_NAME" AND E."FIELD_NAME" = ' + FIELDS_SQL + '."FIELD_NAME" AND E."LAYOUT_TYPE" = ''' + REPO_LAYOUT_FIELD +
-    ''' AND E."EVENT_NAME" = ''%1:s'') WHERE EXISTS (SELECT 1 FROM ' + EVENTS_SQL + ' E WHERE E."TABLE_NAME" = ' + FIELDS_SQL +
-    '."TABLE_NAME" AND E."FIELD_NAME" = ' + FIELDS_SQL + '."FIELD_NAME" AND E."LAYOUT_TYPE" = ''' + REPO_LAYOUT_FIELD +
-    ''' AND E."EVENT_NAME" = ''%1:s'')';
 
 { New columns and tables are derived from the two table sets, so one that a lane adds to a schema migrates with no edit
   here. }
@@ -107,33 +92,6 @@ begin
       Result := Result + [VTable];
 end;
 
-function Count(pConn: TFDConnection; const pFromWhere: string): Integer;
-begin
-  Result := Integer(pConn.ExecSQLScalar(SELECT_COUNT + pFromWhere));
-end;
-
-function CountEvents(pConn: TFDConnection): Integer;
-var
-  VEvent: TFrEventColumn;
-begin
-  Result := 0;
-  for VEvent in FR_EVENT_COLUMNS do
-    if not VEvent.IsGrid then
-      Inc(Result, Count(pConn, EVENTS_SQL + Format(WHERE_EVENT, [VEvent.Event])));
-end;
-
-procedure MoveEvents(pConn: TFDConnection);
-var
-  VEvent: TFrEventColumn;
-begin
-  for VEvent in FR_EVENT_COLUMNS do
-    if not VEvent.IsGrid then
-    begin
-      pConn.ExecSQL(Format(MOVE_EVENT, [VEvent.Column, VEvent.Event]));
-      pConn.ExecSQL(Format(DELETE_EVENT, [VEvent.Event]));
-    end;
-end;
-
 procedure ApplyMigration(pConn: TFDConnection; pFrom: Integer);
 var
   VTable: TRepoTable;
@@ -145,12 +103,7 @@ begin
       pConn.ExecSQL('ALTER TABLE ' + FIELDS_SQL + ' ADD COLUMN ' + ColumnDdl(VCol, False));
     for VTable in NewTables(pFrom) do
       pConn.ExecSQL(RepoTableDdl(VTable));
-    if pFrom < KIND_VERSION then
-      pConn.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "FIELD_KIND" = 2' + WHERE_CALC)
-    else
-      MoveEvents(pConn);
-    pConn.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "ALIGNMENT" = NULL' + WHERE_ALIGNMENT);
-    SetRepoMeta(pConn, 'schema_version', IntToStr(REPO_SCHEMA_VERSION));
+    MigrateRepoRows(pConn, pFrom);
     pConn.ExecSQL('PRAGMA user_version = ' + IntToStr(REPO_SCHEMA_VERSION));
     pConn.Commit;
   except
@@ -185,6 +138,7 @@ function MigrateRepository(const pFileName: string; pApply: Boolean): TFrMigrate
 var
   VConn: TFDConnection;
   VFrom: Integer;
+  VRows: TRepoRowChanges;
 begin
   Result := Default(TFrMigrateResult);
   VConn := OpenRepository(pFileName, not pApply);
@@ -195,11 +149,10 @@ begin
       Result.AlreadyCurrent := True;
       Exit;
     end;
-    Result.AlignmentRows := Count(VConn, FIELDS_SQL + WHERE_ALIGNMENT);
-    if VFrom < KIND_VERSION then
-      Result.CalcRows := Count(VConn, FIELDS_SQL + WHERE_CALC)
-    else
-      Result.EventRows := CountEvents(VConn);
+    VRows := CountRepoRowChanges(VConn, VFrom);
+    Result.CalcRows := VRows.CalcRows;
+    Result.AlignmentRows := VRows.AlignmentRows;
+    Result.EventRows := VRows.EventRows;
     Result.Plan := PlanText(VFrom, Result);
     if not pApply then
       Exit;

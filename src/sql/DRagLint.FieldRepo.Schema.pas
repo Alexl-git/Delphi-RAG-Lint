@@ -45,6 +45,16 @@ const
   REPO_META_TABLE = 'DL_META';
 
 type
+  /// <summary>Number of rows each data step of a migration changes.</summary>
+  TRepoRowChanges = record
+    /// <summary>ISCALCULATED rows whose FIELD_KIND is NULL or 1.</summary>
+    CalcRows: Integer;
+    /// <summary>Rows with ALIGNMENT -2.</summary>
+    AlignmentRows: Integer;
+    /// <summary>DL_LAYOUT_EVENTS rows of layout type Field that have an event column and a field row.</summary>
+    EventRows: Integer;
+  end;
+
   /// <summary>Base class of every repository error (missing / existing file, unknown table).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -347,6 +357,19 @@ procedure SetRepoMeta(pConnection: TFDConnection; const pKey, pValue: string);
 /// </remarks>
 function GetRepoMeta(pConnection: TFDConnection; const pKey: string): string;
 
+/// <summary>Counts the rows MigrateRepoRows changes.</summary>
+/// <param name="pConnection">Open repository connection.</param>
+/// <param name="pFrom">Schema version the rows were written with.</param>
+/// <returns>The counts; a step that schema does not need counts 0.</returns>
+function CountRepoRowChanges(pConnection: TFDConnection; pFrom: Integer): TRepoRowChanges;
+
+/// <summary>Brings rows of an older schema to REPO_SCHEMA_VERSION: FIELD_KIND 2 for ISCALCULATED rows (from schema 1),
+/// Field events into the event columns (from schema 2), ALIGNMENT -2 to NULL, DL_META schema_version.</summary>
+/// <param name="pConnection">Open read-write connection whose tables have the columns of REPO_SCHEMA_VERSION.</param>
+/// <param name="pFrom">Schema version the rows were written with, below REPO_SCHEMA_VERSION.</param>
+/// <remarks>Runs in the caller's transaction, for a migrated file and for an older text backup that is restored.</remarks>
+procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer);
+
 implementation
 
 uses
@@ -361,7 +384,8 @@ uses
   FireDAC.Stan.Param,
   FireDAC.Phys,
   FireDAC.Phys.SQLite,
-  FireDAC.DApt;
+  FireDAC.DApt,
+  DRagLint.FieldRepo.Kinds;
 
 const
   MAX_BYTE = 255;
@@ -372,6 +396,22 @@ const
   SIDE_TABLES: array[0..7] of string = (REPO_META_TABLE, REPO_TABLE_LAYOUT_EVENTS, REPO_TABLE_EXCEPTIONS,
     REPO_TABLE_DOMAINS, REPO_TABLE_CONSTRAINTS, REPO_TABLE_CONSTRAINT_COLUMNS, REPO_TABLE_GENERATORS,
     REPO_TABLE_GRID_COLUMNS);
+  META_SCHEMA_VERSION = 'schema_version';
+  WHERE_CALC = ' WHERE "ISCALCULATED" = 1 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1)';
+  WHERE_ALIGNMENT = ' WHERE "ALIGNMENT" = -2';
+  SELECT_COUNT = 'SELECT COUNT(*) FROM ';
+  FIELDS_SQL = '"DL_FIELDS_INFO"';
+  EVENTS_SQL = '"DL_LAYOUT_EVENTS"';
+  { A Field event of one kind that has its field row; %s = event name. }
+  WHERE_EVENT = ' WHERE "LAYOUT_TYPE" = ''' + REPO_LAYOUT_FIELD + ''' AND "EVENT_NAME" = ''%s'' AND EXISTS (SELECT 1 FROM ' +
+    FIELDS_SQL + ' F WHERE F."TABLE_NAME" = ' + EVENTS_SQL + '."TABLE_NAME" AND F."FIELD_NAME" = ' + EVENTS_SQL + '."FIELD_NAME")';
+  DELETE_EVENT = 'DELETE FROM ' + EVENTS_SQL + WHERE_EVENT;  // dl:ok sql-injection-concat@e420 -- REVIEWED 2026-11-23 EVCOLS: a constant made of constants, formatted with the event names of FR_EVENT_COLUMNS
+  { %0:s = column, %1:s = event name. }
+  MOVE_EVENT = 'UPDATE ' + FIELDS_SQL + ' SET "%0:s" = (SELECT E."EVENT_CODE" FROM ' + EVENTS_SQL + ' E WHERE E."TABLE_NAME" = ' +
+    FIELDS_SQL + '."TABLE_NAME" AND E."FIELD_NAME" = ' + FIELDS_SQL + '."FIELD_NAME" AND E."LAYOUT_TYPE" = ''' + REPO_LAYOUT_FIELD +
+    ''' AND E."EVENT_NAME" = ''%1:s'') WHERE EXISTS (SELECT 1 FROM ' + EVENTS_SQL + ' E WHERE E."TABLE_NAME" = ' + FIELDS_SQL +
+    '."TABLE_NAME" AND E."FIELD_NAME" = ' + FIELDS_SQL + '."FIELD_NAME" AND E."LAYOUT_TYPE" = ''' + REPO_LAYOUT_FIELD +
+    ''' AND E."EVENT_NAME" = ''%1:s'')';
 
 function Col(const pName: string; pKind: TRepoColKind; pMaxLen: Integer; pNotNull: Boolean;
   const pDefault: string; pPk: Integer): TRepoColumn;
@@ -744,7 +784,7 @@ begin
     try
       for Tab in Tables do
         Conn.ExecSQL(RepoTableDdl(Tab));
-      SetRepoMeta(Conn, 'schema_version', IntToStr(pVersion));
+      SetRepoMeta(Conn, META_SCHEMA_VERSION, IntToStr(pVersion));
       Conn.Commit;
     except
       Conn.Rollback;
@@ -859,6 +899,54 @@ begin
   finally
     Q.Free;
   end;
+end;
+
+{ One row change per step; CountRepoRowChanges and MigrateRepoRows use the same conditions. }
+function CountRows(pConn: TFDConnection; const pFromWhere: string): Integer;
+begin
+  Result := Integer(pConn.ExecSQLScalar(SELECT_COUNT + pFromWhere));
+end;
+
+function CountEvents(pConn: TFDConnection): Integer;
+var
+  VEvent: TFrEventColumn;
+begin
+  Result := 0;
+  for VEvent in FR_EVENT_COLUMNS do
+    if not VEvent.IsGrid then
+      Inc(Result, CountRows(pConn, EVENTS_SQL + Format(WHERE_EVENT, [VEvent.Event])));
+end;
+
+procedure MoveEvents(pConn: TFDConnection);
+var
+  VEvent: TFrEventColumn;
+begin
+  for VEvent in FR_EVENT_COLUMNS do
+    if not VEvent.IsGrid then
+    begin
+      pConn.ExecSQL(Format(MOVE_EVENT, [VEvent.Column, VEvent.Event]));
+      pConn.ExecSQL(Format(DELETE_EVENT, [VEvent.Event]));
+    end;
+end;
+
+function CountRepoRowChanges(pConnection: TFDConnection; pFrom: Integer): TRepoRowChanges;
+begin
+  Result := Default(TRepoRowChanges);
+  Result.AlignmentRows := CountRows(pConnection, FIELDS_SQL + WHERE_ALIGNMENT);
+  if pFrom < VERSION_MODEL then
+    Result.CalcRows := CountRows(pConnection, FIELDS_SQL + WHERE_CALC)
+  else
+    Result.EventRows := CountEvents(pConnection);
+end;
+
+procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer);
+begin
+  if pFrom < VERSION_MODEL then
+    pConnection.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "FIELD_KIND" = 2' + WHERE_CALC)
+  else
+    MoveEvents(pConnection);
+  pConnection.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "ALIGNMENT" = NULL' + WHERE_ALIGNMENT);
+  SetRepoMeta(pConnection, META_SCHEMA_VERSION, IntToStr(REPO_SCHEMA_VERSION));
 end;
 
 end.
