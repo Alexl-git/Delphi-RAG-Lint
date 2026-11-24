@@ -21018,21 +21018,22 @@ begin
     if MatchText(ExtractFileExt(PasPath), ['.pas', '.dpr', '.dpk', '.inc'])
        and TFile.Exists(PasPath) then
     begin
+      { 1.54 OWNFILTER: a file outside --project's closure is the scope filter's business: on a shared index it is
+        neither an exclude_paths nor a third-party skip of THIS project }
+      if (ScopeSet <> nil) and not ScopeSet.ContainsKey(ScopeKey(PasPath)) then Continue;
       if Cfg.IsPathExcluded(PasPath) then
       begin
         Inc(ExcludedCount);
         OwnFilter.NoteFile(PasPath, srExcludePaths);
         Continue;
       end;
-      { 1.54 OWNFILTER: a file outside --project's closure is the scope filter's business, not a third-party skip }
-      if (ScopeSet <> nil) and not ScopeSet.ContainsKey(ScopeKey(PasPath)) and (OwnFilter.Judge(PasPath) = srOwn) then Continue;
       OwnFilter.NoteFile(PasPath, OwnFilter.Judge(PasPath));
       if OwnFilter.Judge(PasPath) <> srOwn then
         begin
           SkippedThird:= SkippedThird + [PasPath];
           Continue;
         end;
-      if (ScopeSet = nil) or ScopeSet.ContainsKey(ScopeKey(PasPath)) then FilePaths:= FilePaths + [PasPath];
+      FilePaths:= FilePaths + [PasPath];
     end;
   end;
   { The banner is prose: on --json / --format sarif it belongs on stderr, or the
@@ -21778,7 +21779,7 @@ begin
           Kept[KeptCount]:= F;
           Inc(KeptCount);
         end
-        else OwnFilter.NoteFinding(F.FilePath, F.RuleId, srExcludePaths);
+        else if (ScopeSet = nil) or ScopeSet.ContainsKey(ScopeKey(F.FilePath)) then OwnFilter.NoteFinding(F.FilePath, F.RuleId, srExcludePaths);
       end;
       SetLength(Kept, KeptCount);
       Findings:= Kept;
@@ -21813,7 +21814,7 @@ begin
         Ours[OursCount]:= F;
         Inc(OursCount);
       end
-      else OwnFilter.NoteFinding(F.FilePath, F.RuleId, OwnFilter.Judge(F.FilePath));
+      else if (ScopeSet = nil) or ScopeSet.ContainsKey(ScopeKey(F.FilePath)) then OwnFilter.NoteFinding(F.FilePath, F.RuleId, OwnFilter.Judge(F.FilePath));
     end;
     SetLength(Ours, OursCount);
     Findings:= Ours;

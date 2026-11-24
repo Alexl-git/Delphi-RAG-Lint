@@ -405,11 +405,13 @@ uses
   (literal + identifier). It cannot see that the identifier only ever holds
   digits: F:= IntToStr(Id); Q.SQL.Text:= 'DELETE FROM T WHERE ID=' + F carries
   no text from outside, so there is nothing to parameterise. This post-filter
-  drops a candidate only when the spliced identifier is a LOCAL of the enclosing
-  routine and EVERY assignment to it in that routine is IntToStr(..) / IntToHex(..)
-  or a string literal. A parameter, a field, a global, a compound assignment
-  (F:= F + AParam), any other right-hand side, or no assignment at all keeps the
-  finding -- unknown fails towards reporting. }
+  drops a candidate only when EVERY operand of the whole + chain it starts is a
+  string literal, sLineBreak, IntToStr(..) / IntToHex(..), or a LOCAL of the
+  enclosing routine whose EVERY assignment there is IntToStr(..) / IntToHex(..) or
+  a string literal (the finding stands for the chain: 'ID=' + F + AUser is
+  reported for AUser). A parameter, a field, a global, a compound assignment
+  (F:= F + AParam), a for-in variable, any other right-hand side, or no assignment
+  at all keeps the finding -- unknown fails towards reporting. }
 function SqlNodeText(const N: TTSNode; const ASrc: TBytes): string;
 begin
   Result:= '';
@@ -417,17 +419,37 @@ begin
   Result:= Trim(TEncoding.UTF8.GetString(ASrc, Integer(N.StartByte), Integer(N.EndByte - N.StartByte)));
 end;
 
-function SqlDeclaresLocal(const N: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+{ True when an identifier that is a direct child of the declaration N is AName. }
+function SqlDeclNames(const N: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  for I:= 0 to N.NamedChildCount - 1 do
+    if (N.NamedChild(I).NodeType = 'identifier') and SameText(SqlNodeText(N.NamedChild(I), ASrc), AName) then Exit(True);
+end;
+
+{ True when the statement list the inline declaration N stands in also holds AUse, after N. }
+function SqlInlineCovers(const N, AUse: TTSNode): Boolean;
+var
+  P: TTSNode;
+begin
+  P:= N.Parent;
+  while (not P.IsNull) and (P.NodeType <> 'block') and (P.NodeType <> 'statements') do P:= P.Parent;
+  Result:= (not P.IsNull) and (N.EndByte <= AUse.StartByte) and (P.StartByte <= AUse.StartByte) and (P.EndByte >= AUse.EndByte);
+end;
+
+{ True when AName is declared by a var section of the routine or by an inline var in scope at AUse. }
+function SqlDeclaresLocal(const N, AUse: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
 var
   I: Integer;
 begin
   Result:= False;
   if N.IsNull then Exit;
-  if N.NodeType = 'declVar' then
-    for I:= 0 to N.NamedChildCount - 1 do
-      if (N.NamedChild(I).NodeType = 'identifier') and SameText(SqlNodeText(N.NamedChild(I), ASrc), AName) then Exit(True);
+  if (N.NodeType = 'declVar') and SqlDeclNames(N, AName, ASrc) then Exit(True);
+  if ((N.NodeType = 'varAssignDef') or (N.NodeType = 'varDef')) and SqlDeclNames(N, AName, ASrc) and SqlInlineCovers(N, AUse) then Exit(True);
   for I:= 0 to N.ChildCount - 1 do
-    if (N.Child(I).NodeType <> 'defProc') and SqlDeclaresLocal(N.Child(I), AName, ASrc) then Exit(True);
+    if (N.Child(I).NodeType <> 'defProc') and SqlDeclaresLocal(N.Child(I), AUse, AName, ASrc) then Exit(True);
 end;
 
 { True when an identifier named AName occurs anywhere under N (an argument expression). }
@@ -453,15 +475,49 @@ begin
   for S in READERS do
     if SameText(ACallee, S) then Exit(True);
 end;
+{ True when AExpr is text no outside value can reach: a string literal, or IntToStr(..) / IntToHex(..). }
+function SqlSafeValue(const AExpr: TTSNode; const ASrc: TBytes): Boolean;
+var
+  Callee: string;
+begin
+  Result:= False;
+  if AExpr.IsNull then Exit;
+  if AExpr.NodeType = 'literalString' then Exit(True);
+  if AExpr.NodeType <> 'exprCall' then Exit;
+  Callee:= SqlNodeText(AExpr.ChildByField('entity'), ASrc);
+  Result:= SameText(Callee, 'IntToStr') or SameText(Callee, 'IntToHex');
+end;
+
+{ True when ATarget (an assignment's left side, a for-in iterator) is AName itself, AName declared
+  inline (var F:= ..), or an element of it (F[1]:= ..). }
+function SqlTargets(const ATarget: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+begin
+  Result:= False;
+  if ATarget.IsNull then Exit;
+  if ATarget.NodeType = 'identifier' then Result:= SameText(SqlNodeText(ATarget, ASrc), AName)
+  else if ATarget.NodeType = 'varAssignDef' then Result:= SqlDeclNames(ATarget, AName, ASrc)
+  else if ATarget.NodeType = 'exprSubscript' then Result:= SqlTargets(ATarget.ChildByField('entity'), AName, ASrc);
+end;
+
+{ The places other than an assignment or a call where AName gets a value the scan cannot see: the
+  iterator of a for-in, its address taken (@F), and a parameter of a lambda or nested routine that
+  carries the same name (inside it F is that parameter). }
+function SqlUnseenWrite(const N: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+begin
+  Result:= False;
+  if N.NodeType = 'foreach' then Result:= SqlTargets(N.ChildByField('iterator'), AName, ASrc)
+  else if N.NodeType = 'declArg' then Result:= SqlDeclNames(N, AName, ASrc)
+  else if N.NodeType = 'exprUnary' then Result:= SameText(SqlNodeText(N, ASrc), '@' + AName);
+end;
+
 procedure SqlScanAssigns(const N: TTSNode; const AName: string; const ASrc: TBytes; var ASafe, AUnsafe: Integer);
 var
   I     : Integer;
-  Lhs   : TTSNode;
-  Rhs   : TTSNode;
   Ent   : TTSNode;
   Callee: string;
 begin
   if N.IsNull then Exit;
+  if SqlUnseenWrite(N, AName, ASrc) then Inc(AUnsafe);
   { A call that takes the identifier as an argument may bind it to a var / out parameter and
     rewrite it with anything, so it counts as an unknown assignment. Calls that only read it
     (IntToStr, Length, Trim, Write, Writeln) do not. }
@@ -477,18 +533,10 @@ begin
           Break;
         end;
   end;
-  if N.NodeType = 'assignment' then
+  if (N.NodeType = 'assignment') and SqlTargets(N.ChildByField('lhs'), AName, ASrc) then
   begin
-    Lhs:= N.ChildByField('lhs');
-    if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(SqlNodeText(Lhs, ASrc), AName) then
-    begin
-      Rhs:= N.ChildByField('rhs');
-      Callee:= '';
-      if (not Rhs.IsNull) and (Rhs.NodeType = 'exprCall') then Callee:= SqlNodeText(Rhs.ChildByField('entity'), ASrc);
-      if SameText(Callee, 'IntToStr') or SameText(Callee, 'IntToHex')
-         or ((not Rhs.IsNull) and (Rhs.NodeType = 'literalString')) then Inc(ASafe)
-      else Inc(AUnsafe);
-    end;
+    if SqlSafeValue(N.ChildByField('rhs'), ASrc) then Inc(ASafe)
+    else Inc(AUnsafe);
   end;
   for I:= 0 to N.ChildCount - 1 do SqlScanAssigns(N.Child(I), AName, ASrc, ASafe, AUnsafe);
 end;
@@ -504,13 +552,37 @@ begin
   Safe:= 0;
   Unsafe:= 0;
   SqlScanAssigns(ARoutine, Name, ASrc, Safe, Unsafe);
-  Result:= (Safe > 0) and (Unsafe = 0) and SqlDeclaresLocal(ARoutine, Name, ASrc);
+  Result:= (Safe > 0) and (Unsafe = 0) and SqlDeclaresLocal(ARoutine, ARhs, Name, ASrc);
 end;
 
 { True when N is a real node of the given type. }
 function SqlNodeIs(const N: TTSNode; const AType: string): Boolean;
 begin
   Result:= (not N.IsNull) and (N.NodeType = AType);
+end;
+
+{ The root of the + chain N belongs to (parentheses inside the chain included). }
+function SqlChainRoot(const N: TTSNode): TTSNode;
+var
+  P: TTSNode;
+begin
+  Result:= N;
+  P:= N.Parent;
+  while SqlNodeIs(P, 'exprParens') or (SqlNodeIs(P, 'exprBinary') and SqlNodeIs(P.ChildByField('operator'), 'kAdd')) do
+  begin
+    Result:= P;
+    P:= P.Parent;
+  end;
+end;
+
+{ True when every operand of the + chain N is safe. }
+function SqlChainIsSafe(const ARoutine, N: TTSNode; const ASrc: TBytes): Boolean;
+begin
+  if SqlNodeIs(N, 'exprParens') and (N.NamedChildCount = 1) then Result:= SqlChainIsSafe(ARoutine, N.NamedChild(0), ASrc)
+  else if SqlNodeIs(N, 'exprBinary') and SqlNodeIs(N.ChildByField('operator'), 'kAdd') then
+    Result:= SqlChainIsSafe(ARoutine, N.ChildByField('lhs'), ASrc) and SqlChainIsSafe(ARoutine, N.ChildByField('rhs'), ASrc)
+  else if SqlNodeIs(N, 'identifier') and not SameText(SqlNodeText(N, ASrc), 'sLineBreak') then Result:= SqlRhsIsDigitsOnly(ARoutine, N, ASrc)
+  else Result:= SqlNodeIs(N, 'identifier') or SqlSafeValue(N, ASrc);
 end;
 
 procedure SqlWalkConcats(const N, ARoutine: TTSNode; const ASrc: TBytes; ALine: Integer; var AFound, ABad: Integer);
@@ -532,7 +604,7 @@ begin
     if SqlNodeIs(Op, 'kAdd') and SqlNodeIs(Lhs, 'literalString') and SqlNodeIs(Rhs, 'identifier') then
     begin
       Inc(AFound);
-      if not SqlRhsIsDigitsOnly(Routine, Rhs, ASrc) then Inc(ABad);
+      if not SqlChainIsSafe(Routine, SqlChainRoot(N), ASrc) then Inc(ABad);
     end;
   end;
   for I:= 0 to N.ChildCount - 1 do SqlWalkConcats(N.Child(I), Routine, ASrc, ALine, AFound, ABad);

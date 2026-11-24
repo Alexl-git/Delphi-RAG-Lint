@@ -156,6 +156,164 @@ begin
   Mutate(AText);
   S:= 'DELETE FROM T WHERE ID=' + F;
 end;
+
+{ FIXA (v154 review): the report covers the WHOLE + chain, and every way another value reaches F. }
+procedure TpChainTail(Id: Integer; AUser: string);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  S:= 'SELECT * FROM T WHERE ID=' + F + ' AND N=''' + AUser; // TP
+end;
+
+procedure TpChainTailClosed(Id: Integer; AUser: string);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  S:= 'SELECT * FROM T WHERE ID=' + F + ' AND N=''' + AUser + ''''; // TP
+end;
+
+procedure TpChainInParens(Id: Integer; AUser: string);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  S:= AUser + ('SELECT * FROM T WHERE ID=' + F); // TP
+end;
+
+procedure TpChainCallTail(Id: Integer; AUser: string);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  S:= 'SELECT * FROM T WHERE ID=' + F + ' AND N=' + Trim(AUser); // TP
+end;
+
+procedure FpChainAllSafe(Id, Jd: Integer);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  S:= 'SELECT * FROM T WHERE ID=' + F + ' AND J=' + IntToStr(Jd) + sLineBreak + (' ORDER BY ' + F);
+end;
+
+procedure TpForIn(Id: Integer; const AList: TArray<string>);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  for F in AList do
+    S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
+
+procedure TpForVarInShadow(Id: Integer; const AList: TArray<string>);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  for var F in AList do
+    S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
+
+procedure FpForTo(N: Integer);
+var
+  F, S: string;
+  I: Integer;
+begin
+  for I:= 0 to N do
+  begin
+    F:= IntToStr(I);
+    S:= 'DELETE FROM T WHERE ID=' + F;
+  end;
+end;
+
+procedure TpInlineShadow(Id: Integer; AUser: string);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  if F <> '' then
+  begin
+    var F: string:= AUser;
+    S:= 'DELETE FROM T WHERE ID=' + F; // TP
+  end;
+end;
+
+procedure FpInlineVar(Id: Integer);
+var
+  S: string;
+begin
+  var F:= IntToStr(Id);
+  S:= 'DELETE FROM T WHERE ID=' + F;
+end;
+
+procedure TpInlineVarUser(AUser: string);
+var
+  S: string;
+begin
+  var F:= AUser;
+  S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
+
+procedure TpInlineVarOutOfScope(Id: Integer);
+var
+  S: string;
+begin
+  if Id > 0 then
+  begin
+    var F:= IntToStr(Id);
+  end;
+  S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
+
+procedure TpLambdaParam(Id: Integer);
+var
+  F, S: string;
+  P: TProc<string>;
+begin
+  F:= IntToStr(Id);
+  P:= procedure(F: string)
+    begin
+      S:= 'DELETE FROM T WHERE ID=' + F; // TP
+    end;
+end;
+
+procedure TpVarParam(var F: string);
+var
+  S: string;
+begin
+  F:= IntToStr(1);
+  S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
+
+procedure TpOutArgOfMethod(Id: Integer; AObj: TFiller);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  AObj.Fill(F);
+  S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
+
+procedure TpElementStore(Id: Integer; AChar: Char);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  F[1]:= AChar;
+  S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
+
+procedure TpAddressTaken(Id: Integer);
+var
+  F, S: string;
+  P: PString;
+begin
+  F:= IntToStr(Id);
+  P:= @F;
+  S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
 end.
 '@
 Check-Exact 'sql-injection-concat' (Run-Lint $f1 'sql-injection-concat') 'sql-injection-concat' $f1
@@ -273,6 +431,110 @@ begin
   begin
     Writeln(Integer(Fields[I])); // TP
     Fields[I]:= nil;
+  end;
+end;
+
+{ FIXA (v154 review): the filling loop must dominate the read. No fixture for a loop in a nested routine: a local that
+  a nested routine captures is never reported, loop or not. }
+procedure TpLoopInsideIf(Flag: Boolean; const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  if Flag then
+    for I:= 0 to High(PlanCols) do
+      Fields[I]:= nil;
+  Writeln(Integer(Fields[0])); // TP
+end;
+
+procedure TpLoopInsideIfBlock(Flag: Boolean; const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  if Flag then
+  begin
+    for I:= 0 to High(PlanCols) do
+      Fields[I]:= nil;
+  end;
+  Writeln(Integer(Fields[0])); // TP
+end;
+
+procedure TpLoopInTheOtherBranch(Flag: Boolean; const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  if Flag then
+  begin
+    for I:= 0 to High(PlanCols) do
+      Fields[I]:= nil;
+  end
+  else
+    Writeln(Integer(Fields[0])); // TP
+end;
+
+procedure TpLoopInCaseBranch(Kind: Integer; const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  case Kind of
+    1: for I:= 0 to High(PlanCols) do
+         Fields[I]:= nil;
+  end;
+  Writeln(Integer(Fields[0])); // TP
+end;
+
+procedure FpReadInsideLaterIf(Flag: Boolean; const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  for I:= 0 to High(PlanCols) do
+    Fields[I]:= nil;
+  if Flag then
+  begin
+    Writeln(Integer(Fields[0]));
+  end;
+end;
+
+procedure FpLoopInPlainBlock(const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  begin
+    for I:= 0 to High(PlanCols) do
+      Fields[I]:= nil;
+  end;
+  Writeln(Integer(Fields[0]));
+end;
+
+procedure FpBothInOneBranch(Flag: Boolean; const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  if Flag then
+  begin
+    for I:= 0 to High(PlanCols) do
+      Fields[I]:= nil;
+    Writeln(Integer(Fields[0]));
+  end;
+end;
+
+procedure FpTryBodyThenFinally(const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  try
+    for I:= 0 to High(PlanCols) do
+      Fields[I]:= nil;
+    Writeln(Integer(Fields[0]));
+  finally
+    Writeln(0);
   end;
 end;
 

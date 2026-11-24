@@ -40,8 +40,11 @@ type
     Declared: TArray<string>;
     /// <summary>The IDE's library paths (registry). Inferred: a unit the project file LISTS stays own.</summary>
     Registry: TArray<string>;
-    /// <summary>The .pas file names the project file lists, lower case, without a folder.</summary>
+    /// <summary>The .pas and .inc file names the project file lists, lower case, without a folder.</summary>
     Listed: TArray<string>;
+    /// <summary>The folders of those files, with a trailing delimiter: an include file there is as own as
+    /// the unit beside it. A folder spelled with a macro is not known.</summary>
+    ListedDirs: TArray<string>;
   end;
 
   /// <summary>Judges files of one lint run and counts what the judgement dropped.</summary>
@@ -120,6 +123,7 @@ uses
   System.RegularExpressions,
   System.StrUtils,
   Winapi.Windows,
+  DRagLint.Core.Encoding,
   DRagLint.Core.Model;  // dl:ok uses-global-census@1abd -- REVIEWED 2026-11-24 INT-W2: DRAG_HOME_DIR is the one spelling of the project home folder
 
 const
@@ -155,6 +159,7 @@ type
     function ConfigFile: string;
     function Classify(const APath: string; out AWhere: string): TSkipReason;
     function VendoredName(const APath: string): string;
+    function ListedByProject(const APath: string): Boolean;
     function LibraryRoot(const APath: string): string;
     function GroupText(const AFilePath: string; AReason: TSkipReason): string;
     procedure Bump(const AGroup: string; AReason: TSkipReason; AFiles, AFindings: Integer);
@@ -203,7 +208,8 @@ begin
     if (Trim(C) <> '') and not C.StartsWith('-') then Result:= Result + [LowerCase(Trim(C))];
 end;
 
-{ The file's text, or False when it cannot be opened (a locked project file is no lint failure). }
+{ The file's text, decoded as the indexer decodes a source (BOM, UTF-8, else ANSI), or False when it cannot be
+  opened (a locked project file is no lint failure). }
 function TryReadText(const AFile: string; out AText: string): Boolean;
 var
   Handle: THandle;
@@ -218,13 +224,25 @@ begin
     FileSeek(Handle, 0, Ord(soBeginning));
     { Bytes[0], never Bytes: the untyped buffer parameter takes the VARIABLE, so the file text would overwrite the array pointer }
     if Length(Bytes) > 0 then FileRead(Handle, Bytes[0], Length(Bytes));
-    AText:= TEncoding.ANSI.GetString(Bytes);
+    AText:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(Bytes));
   finally
     FileClose(Handle);
   end;
 end;
 
+{ ADirs plus ADir, the folder a file is listed with ('' = the project folder AProjectDir itself). }
+function AddListedDir(const ADirs: TArray<string>; const AProjectDir, ADir: string): TArray<string>;
+begin
+  Result:= ADirs;
+  if ADir.Contains('$(') then Exit;
+  var Rooted: Boolean:= (ExtractFileDrive(ADir) <> '') or ADir.StartsWith('\');
+  var Dir: string:= FullPath(if Rooted then ADir else AProjectDir + ADir);
+  if not MatchText(Dir, Result) then Result:= Result + [Dir];
+end;
+
 function MakeLibraryScope(const AAll, ADeclared: TArray<string>; const AProjectFile: string): TLibraryScope;
+const
+  NAME_GROUP = 2;
 begin
   Result:= Default(TLibraryScope);
   Result.Declared:= ADeclared;
@@ -241,8 +259,11 @@ begin
     { unreadable: what the project lists is unknown, so the inferred roots are no signal }
     if not TryReadText(F, Text) then Result.Registry:= nil;
     { `X in '..\a\X.pas'` in the program file, Include="..\a\X.pas" in the .dproj }
-    for var M: TMatch in TRegEx.Matches(Text, '([^\\/''"<>|]+\.pas)[''"]', [roIgnoreCase]) do
-      Result.Listed:= Result.Listed + [LowerCase(M.Groups[1].Value)];
+    for var M: TMatch in TRegEx.Matches(Text, '([^''"<>|\r\n]*[\\/])?([^\\/''"<>|\r\n]+\.(?:pas|inc))[''"]', [roIgnoreCase]) do
+    begin
+      Result.Listed    := Result.Listed + [LowerCase(M.Groups[NAME_GROUP].Value)];
+      Result.ListedDirs:= AddListedDir(Result.ListedDirs, ExtractFilePath(F), M.Groups[1].Value);
+    end;
   end;
 end;
 
@@ -288,6 +309,13 @@ begin
   end;
 end;
 
+{ True when the project file lists APath, or APath is an include file in the folder of a file it lists. }
+function TOwnFilter.ListedByProject(const APath: string): Boolean;
+begin
+  Result:= MatchText(ExtractFileName(APath), FLib.Listed)
+    or (SameText(ExtractFileExt(APath), '.inc') and MatchText(ExtractFilePath(APath), FLib.ListedDirs));
+end;
+
 { The library root that holds APath, or ''. A root that also holds the project is no signal; a registry
   root yields to the project file listing the unit (COMMON on the IDE library path is still own). }
 function TOwnFilter.LibraryRoot(const APath: string): string;
@@ -299,8 +327,15 @@ begin
   end;
   var Anchor: string:= IncludeTrailingPathDelimiter(FullPath(FSetup.Own.Anchor));
   Result:= HoldingDir(APath, FLib.Declared);
-  if (Result = '') and not MatchText(ExtractFileName(APath), FLib.Listed) then Result:= HoldingDir(APath, FLib.Registry);
+  if (Result = '') and not ListedByProject(APath) then Result:= HoldingDir(APath, FLib.Registry);
   if (Result <> '') and StartsText(Result, Anchor) then Result:= '';
+end;
+
+{ The answer for a file a --fix run must not rewrite. }
+function OutsideFixScope(out AWhere: string): TSkipReason;
+begin
+  AWhere:= 'outside the own roots (a --fix run writes only inside them)';
+  Result:= srOutsideFixScope;
 end;
 
 { The order is the contract (wiki page): explicit exclusion, explicit ownership, inferred signals, own. }
@@ -318,7 +353,12 @@ begin
     AWhere:= 'excludeRoots ' + ExcludeTrailingPathDelimiter(Excluded);
     Exit(srExcludeRoots);
   end;
-  if TLintConfig.MatchesAnyGlob(APath, FSetup.Cfg.OwnPaths) then Exit;
+  { own_paths widens the REPORT only: the write scope stays the own roots (design decision 1) }
+  if TLintConfig.MatchesAnyGlob(APath, FSetup.Cfg.OwnPaths) then
+  begin
+    if FSetup.FixRun and (HoldingDir(APath, FSetup.Own.Roots) = '') then Result:= OutsideFixScope(AWhere);
+    Exit;
+  end;
   Vendored:= VendoredName(APath);
   if Vendored <> '' then
   begin
@@ -337,11 +377,7 @@ begin
     AWhere:= 'library path ' + ExcludeTrailingPathDelimiter(Lib);
     Result:= srLibraryPath;
   end
-  else if FSetup.FixRun then
-  begin
-    AWhere:= 'outside the own roots (a --fix run writes only inside them)';
-    Result:= srOutsideFixScope;
-  end;
+  else if FSetup.FixRun then Result:= OutsideFixScope(AWhere);
 end;
 
 function TOwnFilter.Judge(const AFilePath: string): TSkipReason;

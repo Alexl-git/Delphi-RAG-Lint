@@ -33,7 +33,9 @@ param(
   # Measure the still-off rules' VOLUME. That is a SEPARATE question from the
   # reindex comparison and a slow one (missing-doc / magic-literal on ORM3), so
   # it is opt-in and deliberately not part of the before/after pair.
-  [switch]$MeasureOffRules
+  [switch]$MeasureOffRules,
+  # Measure only this index (the runner's fixture); '' = the three corpora below.
+  [string]$CorpusDb = ''
 )
 $ErrorActionPreference = 'Stop'
 New-Item -ItemType Directory -Force $OutDir | Out-Null
@@ -43,6 +45,7 @@ $corpora = @(
   @{ key='client'; db='C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite' },
   @{ key='server'; db='C:\Projects\DB\ORM3\SERVER\_D-RAG\MicroniteMW1Service.sqlite' }
 )
+if ($CorpusDb) { $corpora = @(@{ key='only'; db=$CorpusDb }) }
 
 # RULES THAT ARE OFF BY DEFAULT AND MUST STILL BE TRACKED. `lint-all` does not
 # run these, so a default-only capture records NOTHING for them -- and a missing
@@ -130,6 +133,9 @@ foreach ($c in $corpora) {
     Write-Host "  $($c.key): NO JSON ARRAY -- lint-all failed?" -ForegroundColor Red; continue
   }
   $findings = $txt.Substring($i, $j - $i + 1) | ConvertFrom-Json
+
+  # A report may end with NOTE ROWS that are not findings (1.54 OWNFILTER): they are no rule and no part of a total.
+  $findings = @($findings | Where-Object { @('third-party-skipped', 'own-roots-malformed') -notcontains $_.rule })
 
   $counts = @{}
   foreach ($f in $findings) {
