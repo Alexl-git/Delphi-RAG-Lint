@@ -1832,6 +1832,10 @@ begin
     end
     { 1.52 TTGEN: repo gen-orm / update-orm / gen-dataservice read these values with ParamStr (CLI.Repo) }
     else if (Result.Command = 'repo') and (A = '--code-dir') and (i < ParamCount) then Inc(i)
+    { 1.54 ALTERBK: repo backup / alter-table; DRagLint.CLI.RepoBackup reads the values with ParamStr }
+    else if (Result.Command = 'repo') and (A = '--backup-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--verify') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--keep') and (i < ParamCount) then Inc(i)
     else if (Result.Command = 'repo') and (A = '--server-dir') and (i < ParamCount) then Inc(i)
     else if (Result.Command = 'repo') and (A = '--client-dir') and (i < ParamCount) then Inc(i)
     else if (Result.Command = 'repo') and (A = '--save-form') and (i < ParamCount) then Inc(i) { --table: the gen-param-array branch above already consumes it }

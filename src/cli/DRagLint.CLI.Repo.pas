@@ -71,7 +71,8 @@ uses
   DRagLint.CLI.RepoDfmWrite,
   DRagLint.CLI.RepoHandlers,
   DRagLint.CLI.RepoFib,
-  DRagLint.CLI.RepoAlter
+  DRagLint.CLI.RepoAlter,
+  DRagLint.CLI.RepoBackup
   ;
 
 const
@@ -441,6 +442,7 @@ function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile
 begin
   if SameText(pSub, 'gen-param-array') then Exit(RunGenParamArray(pProject, pInFile, pJson)); // reads no repository: dispatched before ResolveRepoPath
   if IsRepoFibSub(pSub) then Exit(RunRepoFibVerb(pSub, pProject, pOutFile, pJson)); // 1.54 TT-FIB: reads no repository either
+  if IsRepoDbBackup(pSub, pConnection) then Exit(RunRepoDbBackup(pRepo, pConnection, pJson)); // 1.54 ALTERBK: a database backup needs no repository
   if not IsImplementedSub(pSub) then
   begin
     Writeln(ErrOutput, 'repo: unknown sub-verb "', pSub, '"; use one of: ', SUB_VERBS);
