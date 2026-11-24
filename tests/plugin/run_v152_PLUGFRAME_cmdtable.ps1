@@ -28,8 +28,8 @@
 param(
   # 7833a66b7 = main at 1.51.2-alpha (67823450c + the RPT Reports item factory, merged into 1.52 by INT15)
   [string]$BaseRef = '7833a66b7',
-  [string[]]$EnabledIds = @('field-repository', 'field-repository-02-refresh', 'field-repository-03-orm', 'field-repository-04-dataservice', 'field-repository-05-memtable', 'field-repository-06-paramarray', 'check-init'),   # TTIDE (INT 1.52); 03/04/06 enabled by BK-TTFINISH (B33); check-init enabled by HBIDE
-  [int]$ExactCount = 8,   # headless rows: check-init + idx-range + 6 field-repository; ToolsAPI units left out (H5)
+  [string[]]$EnabledIds = @('field-repository', 'field-repository-02-refresh', 'field-repository-03-orm', 'field-repository-04-dataservice', 'field-repository-05-memtable', 'field-repository-06-paramarray', 'field-repository-07-read-dataset', 'field-repository-08-read-form', 'field-repository-09-select-fields', 'check-init'),   # TTIDE (INT 1.52); 03/04/06 enabled by BK-TTFINISH (B33); check-init enabled by HBIDE
+  [int]$ExactCount = 11,   # headless rows: check-init + idx-range + 9 field-repository (3 of them 1.54 TT-DIALOG); ToolsAPI units left out (H5)
   [string]$WorkDir = "$env:TEMP\drag-lint-v152-plugframe-$PID"
 )
 # H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.

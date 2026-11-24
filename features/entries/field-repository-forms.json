@@ -1,0 +1,36 @@
+{
+  "id": "field-repository-forms",
+  "title": "Field repository: fields of a form in the IDE",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Reads the datasets of the form in the editor into the field repository, and selects the persistent fields of a dataset from it, each as a change list to check before anything is written",
+  "intro": "Read this when the fields of the form you have open should go to the field repository, or should come from it. Each command is a dry run first; a list shows every change old and new, blocked changes cannot be checked, and only the checked changes are written.",
+  "wikiPage": "field-repository-forms",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Field Repository > Read Fields from Dataset...",
+      "steps": ["Open the form (and the project that has the field repository); select the dataset in the designer, or pick it from the list", "Choose drag-lint > Field Repository > Read Fields from Dataset...", "Check the changes you want and press Apply (repo read-dfm --dataset --select)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Field Repository > Read Fields of All Datasets of Form...",
+      "steps": ["Open the form", "Choose drag-lint > Field Repository > Read Fields of All Datasets of Form...", "Check the changes you want and press Apply (repo read-dfm --select)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Field Repository > Select Fields of Dataset...",
+      "steps": ["Open the form; select the dataset in the designer, or pick it from the list", "Choose drag-lint > Field Repository > Select Fields of Dataset...", "Check the fields the dataset should have and press Preview...", "Check the changes you want and press Apply (repo write-dfm --names --select); the form is reloaded"]
+    }
+  ],
+  "audience": "both",
+  "related": ["field-repository", "repo-read-dfm"],
+  "questions": [
+    {
+      "ask": "How do I choose the persistent fields of a dataset from the field repository?",
+      "steps": ["Select the dataset in the form designer", "Choose drag-lint > Field Repository > Select Fields of Dataset..."]
+    }
+  ]
+}
