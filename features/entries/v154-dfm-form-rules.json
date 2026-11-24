@@ -1,0 +1,19 @@
+{
+  "id": "v154-dfm-form-rules",
+  "title": "Lint rules for form files: tab order, accelerators, shortcuts, actions, hints",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Reports duplicate TabOrder, clashing Alt letters and shortcuts, a control with an Action and its own OnClick, and (off by default) database components on a form, default component names and hints that never show; ships a default for disallowed-dfm-property",
+  "intro": "Read this to see what each form file check compares, which controls and containers it leaves alone, and how often it fired on real projects.",
+  "wikiPage": "v154-dfm-form-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <form-unit.pas> --rule dfm-conflicting-shortcut"
+    }
+  ],
+  "audience": "both"
+}
