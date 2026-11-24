@@ -48,6 +48,16 @@ Lane DFM (lane/v154-dfm):
 
 - NEW rules ON: `dfm-duplicate-tab-order`, `dfm-conflicting-accelerator`, `dfm-conflicting-shortcut`, `dfm-action-and-onclick`; OFF: `db-component-on-form`, `dfm-default-component-name`, `dfm-hint-inactive`. `disallowed-dfm-property` ships a default policy (`Connected = True` on a connection, `Active = True` on a query or table). Wiki page v154-dfm-form-rules. Rule count 439 -> 452, 359 -> 369 on by default (with lane EXPR).
 
+Lane FLOW (lane/v154-flow):
+
+- NEW rules ON: `managed-result-read-first`, `same-variable-two-var-params`, `address-of-nested-routine`; OFF: `absolute-overlay`, `constant-return`, `redundant-field-init`, `var-param-never-written`, `value-param-assigned`. Wiki page v154-flow-rules.
+
+Lane SCHEMA (lane/v154-schema):
+
+- NEW rules on the field repository's schema facts, ON: `schema-unknown-column`, `schema-type-mismatch`; OFF: `schema-required-not-set`. `schema-maxlen-drift` / `schema-length-bound` get the option `schema_rules.local_naming_match`. Wiki page v154-schema-rules. Rule count 452 -> 463, 369 -> 374 on by default (with lane FLOW).
+
+1.53.1 (lane/v153-1531 beb317768) is merged: see its section below.
+
 Lane FPBATCH2 (lane/v154-fpbatch2; ORM3 server lint, batch 2):
 
 - Fewer false positives: `sql-injection-concat` drops a splice of a local that only holds IntToStr / literal text; `dataset-open-without-close` ignores `Active := True` on a class that is no dataset; `read-never-assigned` consults the sibling projects of a shared unit; `used-before-assignment` accepts an array filled in a `for .. to High(x)` / `Length(x)` loop. `duplicate-global-decl` no longer says identical when the signature names other declarations. (Class 8, `try-except-swallowed` with E.Message kept in a field or global, is held back for an owner ruling.)

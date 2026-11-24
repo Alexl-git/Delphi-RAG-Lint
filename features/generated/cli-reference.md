@@ -1297,6 +1297,7 @@ Described in:
 * [Fast one-file lint on a large index](../../docs/wiki/one-file-lint-speed.md)
 * [Lint rules for form files: tab order, accelerators, shortcuts, actions, hints](../../docs/wiki/v154-dfm-form-rules.md)
 * [Lint rules for repeated, impossible and misleading expressions and source text](../../docs/wiki/v154-expr-rules.md)
+* [Lint rules for results, parameters, nested addresses and overlays](../../docs/wiki/v154-flow-rules.md)
 * [Lint rules sql-param-mismatch and query-in-loop](../../docs/wiki/v154-sql-rules.md)
 
 ### lint-all
@@ -1371,6 +1372,7 @@ Described in:
 * [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
 * [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](../../docs/wiki/v152-proj2.md)
 * [parameter-type-too-wide ON by default, with an autofix](../../docs/wiki/v152-ptw.md)
+* [Lint rules schema-unknown-column, -type-mismatch and -required-not-set](../../docs/wiki/v154-schema-rules.md)
 
 ### lint-project
 

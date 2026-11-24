@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.54.0-alpha",
-  "summary": "Eight rules: a managed Result read before it is set, one variable in two var parameters, the address of a nested routine, absolute overlays, unused var parameters, assigned value parameters, constant returns, redundant field initialisation",
+  "summary": "Eight rules: a managed Result read too early, one variable in two var parameters, nested routine addresses, overlays, parameters, constant returns",
   "intro": "Read this to see what each of the eight rules reports, when it stays silent, and which four you have to turn on.",
   "wikiPage": "v154-flow-rules",
   "surfaces": [
@@ -15,5 +15,11 @@
       "example": "drag-lint lint <file.pas> --rule managed-result-read-first --db <index.sqlite>"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-24",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha",
+    "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
+  }
 }

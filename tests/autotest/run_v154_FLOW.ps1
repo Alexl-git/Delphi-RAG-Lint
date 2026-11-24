@@ -45,8 +45,14 @@ function Get-Wanted([string]$Rule) {
     Get-Content $f.FullName | ForEach-Object { $n++; if ($_ -match "// FIRE $Rule\b") { "{0}:{1} {2}" -f $f.Name, $n, $Rule } } })
 }
 
-# positive-control: managed-result-read-first, same-variable-two-var-params, address-of-nested-routine, var-param-never-written
-# positive-control: value-param-assigned, constant-return, redundant-field-init, absolute-overlay
+# positive-control: managed-result-read-first
+# positive-control: same-variable-two-var-params
+# positive-control: address-of-nested-routine
+# positive-control: var-param-never-written
+# positive-control: value-param-assigned
+# positive-control: constant-return
+# positive-control: redundant-field-init
+# positive-control: absolute-overlay
 $AllRules = 'managed-result-read-first', 'same-variable-two-var-params', 'address-of-nested-routine', 'var-param-never-written',
   'value-param-assigned', 'constant-return', 'redundant-field-init', 'absolute-overlay'
 $NeedIndex = 'same-variable-two-var-params', 'var-param-never-written', 'constant-return'

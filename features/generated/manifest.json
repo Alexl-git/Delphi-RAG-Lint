@@ -5236,6 +5236,31 @@
       }
     },
     {
+      "id": "v154-flow-rules",
+      "title": "Lint rules for results, parameters, nested addresses and overlays",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.54.0-alpha",
+      "summary": "Eight rules: a managed Result read too early, one variable in two var parameters, nested routine addresses, overlays, parameters, constant returns",
+      "intro": "Read this to see what each of the eight rules reports, when it stays silent, and which four you have to turn on.",
+      "wikiPage": "v154-flow-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule managed-result-read-first --db <index.sqlite>"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-24",
+        "by": "ENGINE",
+        "build": "1.54.0-alpha",
+        "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
+      }
+    },
+    {
       "id": "ref-type-rules",
       "title": "Lint rules on the static type of a reference",
       "group": "linting",
@@ -5258,6 +5283,31 @@
         "by": "ENGINE",
         "build": "1.50.0-alpha",
         "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
+      }
+    },
+    {
+      "id": "v154-schema-rules",
+      "title": "Lint rules schema-unknown-column, -type-mismatch and -required-not-set",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.54.0-alpha",
+      "summary": "Warns about fields, SQL columns and accessors that do not fit the tables of the field repository, and (off by default) INSERTs that leave out a required column",
+      "intro": "Read this to see which datasets and SQL texts the rules understand, what counts as a known table, when they stay silent, and the opt-in local naming match (schema_rules.local_naming_match).",
+      "wikiPage": "v154-schema-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all"
+        }
+      ],
+      "audience": "both",
+      "related": ["schema-lint", "v154-sql-rules"],
+      "verified": {
+        "date": "2026-11-24",
+        "by": "ENGINE",
+        "build": "1.54.0-alpha",
+        "surfaceHash": "563d6196bbf11d9e058857f5620b69f23c822d22ea12b0326457de84c8a42b71"
       }
     },
     {
@@ -6279,9 +6329,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-23",
+        "date": "2026-11-24",
         "by": "ENGINE",
-        "build": "1.53.0-alpha",
+        "build": "1.54.0-alpha",
         "surfaceHash": "563d6196bbf11d9e058857f5620b69f23c822d22ea12b0326457de84c8a42b71"
       }
     },
@@ -16105,7 +16155,7 @@
         "date": "2026-11-24",
         "by": "ENGINE",
         "build": "1.54.0-alpha",
-        "surfaceHash": "ec6118a1ba740de7f8f297f56ecbc054b57a082f52f244dfb4f2cf731c30a278"
+        "surfaceHash": "e090e159382a47797a8ca6bbd728ee4984b514ef2a48ef3bad7ff7f6e4746a31"
       }
     },
     {
@@ -17047,6 +17097,26 @@
   "families": {
     "lint-rules": [
       {
+        "id": "rule.absolute-overlay",
+        "title": "absolute-overlay",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Variable declared absolute over another variable (bug-patterns, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule absolute-overlay"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "absolute-overlay"
+      },
+      {
         "id": "rule.abstract-method-instantiation",
         "title": "abstract-method-instantiation",
         "group": "linting",
@@ -17085,6 +17155,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "address-of-local-returned"
+      },
+      {
+        "id": "rule.address-of-nested-routine",
+        "title": "address-of-nested-routine",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Address of a nested routine taken (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule address-of-nested-routine"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "address-of-nested-routine"
       },
       {
         "id": "rule.ancestor-not-in-project",
@@ -18045,6 +18135,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "constant-index-out-of-range"
+      },
+      {
+        "id": "rule.constant-return",
+        "title": "constant-return",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Function whose every assignment to Result is the same literal (data-flow, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule constant-return"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "constant-return"
       },
       {
         "id": "rule.constructor-call-on-instance",
@@ -22067,6 +22177,26 @@
         "wikiAnchor": "magic-literal"
       },
       {
+        "id": "rule.managed-result-read-first",
+        "title": "managed-result-read-first",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Result of a string, dynamic array, interface or Variant function read before it is set (data-flow, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule managed-result-read-first"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "managed-result-read-first"
+      },
+      {
         "id": "rule.managed-type-raw-memory",
         "title": "managed-type-raw-memory",
         "group": "linting",
@@ -23647,6 +23777,26 @@
         "wikiAnchor": "redundant-continue-exit"
       },
       {
+        "id": "rule.redundant-field-init",
+        "title": "redundant-field-init",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Constructor sets a field to the value a new object already has (refactoring, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule redundant-field-init"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "redundant-field-init"
+      },
+      {
         "id": "rule.redundant-not-not",
         "title": "redundant-not-not",
         "group": "linting",
@@ -23987,6 +24137,26 @@
         "wikiAnchor": "rule-skipped-budget"
       },
       {
+        "id": "rule.same-variable-two-var-params",
+        "title": "same-variable-two-var-params",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "One variable passed to two parameters that can change it (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule same-variable-two-var-params"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "same-variable-two-var-params"
+      },
+      {
         "id": "rule.schema-length-bound",
         "title": "schema-length-bound",
         "group": "linting",
@@ -24025,6 +24195,66 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "schema-maxlen-drift"
+      },
+      {
+        "id": "rule.schema-required-not-set",
+        "title": "schema-required-not-set",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "An INSERT that leaves out a NOT NULL column without default, trigger or sequence (field repository) (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule schema-required-not-set"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "schema-required-not-set"
+      },
+      {
+        "id": "rule.schema-type-mismatch",
+        "title": "schema-type-mismatch",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A field accessor or persistent field class that clashes with the column type in the field repository (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule schema-type-mismatch"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "schema-type-mismatch"
+      },
+      {
+        "id": "rule.schema-unknown-column",
+        "title": "schema-unknown-column",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A field, select item or INSERT column that the table does not have in the field repository (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule schema-unknown-column"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "schema-unknown-column"
       },
       {
         "id": "rule.self-as-interface-in-constructor",
@@ -25725,6 +25955,46 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "uses-movable-to-implementation"
+      },
+      {
+        "id": "rule.value-param-assigned",
+        "title": "value-param-assigned",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "By-value parameter used as a local variable (refactoring, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule value-param-assigned"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "value-param-assigned"
+      },
+      {
+        "id": "rule.var-param-never-written",
+        "title": "var-param-never-written",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "var parameter that is never written (refactoring, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule var-param-never-written"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "var-param-never-written"
       },
       {
         "id": "rule.virtual-method-in-constructor",

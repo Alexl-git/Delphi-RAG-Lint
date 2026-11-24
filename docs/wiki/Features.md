@@ -143,13 +143,13 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**452 rules. 131 have an auto-fix. 369 are on by default.** 339 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**463 rules. 131 have an auto-fix. 374 are on by default.** 350 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 166 | 40 |
+| bug-patterns | 169 | 40 |
 | complexity | 15 | 2 |
-| data-flow | 11 | 3 |
+| data-flow | 13 | 3 |
 | dead-code | 23 | 15 |
 | documentation | 7 | 4 |
 | firedac | 5 | 3 |
@@ -159,13 +159,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | other | 17 | 4 |
 | platform | 16 | 4 |
 | policy | 6 | - |
-| project-wide | 55 | 9 |
-| refactoring | 27 | 11 |
+| project-wide | 58 | 9 |
+| refactoring | 30 | 11 |
 | resource-lifetime | 22 | 9 |
 | review-markers | 6 | 2 |
 | security | 28 | 2 |
 | structure | 20 | 9 |
-| **Total** | **452** | **131** |
+| **Total** | **463** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -212,10 +212,12 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules for form files: tab order, accelerators, shortcuts, actions, hints](v154-dfm-form-rules) | `lint` |  |
 | [Lint rules for repeated, impossible and misleading expressions and source text](v154-expr-rules) | `lint` |  |
+| [Lint rules for results, parameters, nested addresses and overlays](v154-flow-rules) | `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
+| [Lint rules schema-unknown-column, -type-mismatch and -required-not-set](v154-schema-rules) | `lint-all` |  |
 | [Lint rules sql-param-mismatch and query-in-loop](v154-sql-rules) | `lint` |  |
 | [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
-| [Lint rules](rules) | 452 rules, 131 fixable; `rules` |  |
+| [Lint rules](rules) | 463 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |

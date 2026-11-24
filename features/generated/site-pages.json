@@ -308,7 +308,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "62e780604f4d4ef8404b4132f4505367695518be16a56c5ddf822d97b75afee8",
+    "hash": "2499c8df7d29ca86ae060fbabbcf5d1db52e2cca0d0e8ac7db20aa3a01ef9f83",
     "version": "1.54.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -400,7 +400,7 @@
     "version": "1.54.0-alpha"
   },
   "features/field-repository.md": {
-    "hash": "263dcaac40ea0364b1f8c9d0c4804af919938307cf22635504a3e4781084841e",
+    "hash": "2e116f1182bd4d599e38b81a04011c3e73e3ddbecd4eee9ea34b7a47d126e41d",
     "version": "1.54.0-alpha"
   },
   "features/finalization-after-dependency.md": {
@@ -436,7 +436,7 @@
     "version": "1.52.0-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "2e342cc5f2d04eb123a7becb9b7e84f0bd41df1b431f8ee7a468c11fdb85cc25",
+    "hash": "af6980d4384202f7e650ca3448f8b21fef419d964daab97cd007da8d3f2a42dc",
     "version": "1.54.0-alpha"
   },
   "features/fix-all-reliability.md": {
@@ -444,7 +444,7 @@
     "version": "1.52.0-alpha"
   },
   "features/fix-it.md": {
-    "hash": "e3c5578fbb0501546b160c3b7d52047478e92c2e397ed3ce40613c68bd31df41",
+    "hash": "099f0df2a0a573ddcf164f21698ef4efc996296db1324c87f84152e2c3da70b9",
     "version": "1.54.0-alpha"
   },
   "features/flow-out-arg-rules.md": {
@@ -604,7 +604,7 @@
     "version": "1.52.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "56980a175a979f8d0f279a0dd271a8544f773721c925b47ae217b6dff4e480db",
+    "hash": "86a928aa06f02ad967187cd30707639a3e5a7d0775d36fa2b449a4714b4c5fc5",
     "version": "1.54.0-alpha"
   },
   "features/lint-tree.md": {
@@ -840,7 +840,7 @@
     "version": "1.52.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "feb99548808bfcf3adb96188ae9b243901f48ca89b1be2f6b725decfc7750855",
+    "hash": "5c270053f61e6cfa4c3f3ee26fd8b0946e798a891cbbf830727c78668fbfa778",
     "version": "1.54.0-alpha"
   },
   "features/safe-delete.md": {
@@ -852,8 +852,8 @@
     "version": "1.46.0-alpha"
   },
   "features/schema-lint.md": {
-    "hash": "af42d2ff0f3f9e67f58b88e76595bf5e74214fbf04b76991fa4f7668af32d75e",
-    "version": "1.53.0-alpha"
+    "hash": "710ab0d33cb9ea26240992ec5c93908e5ec8fbe2a8cbcb5e6f3f1a528782f6b9",
+    "version": "1.54.0-alpha"
   },
   "features/schema.md": {
     "hash": "b50dafd3774c17be7eb93d38b8c75f90f69378cffd2e903ba5394c38dc4f8d03",
@@ -1151,8 +1151,16 @@
     "hash": "9f9d8b433c9af70cb9de8272c69433088e5738c5548967f6a78210c91d103602",
     "version": "1.54.0-alpha"
   },
+  "features/v154-flow-rules.md": {
+    "hash": "98969d3a45aadd7b6ae27b4048cdaf87551ff533c3b336746ea211770637a5e9",
+    "version": "1.54.0-alpha"
+  },
+  "features/v154-schema-rules.md": {
+    "hash": "8498c8960d815e4cda40f2380163711ee1de130c7a2b9efbc741e16df92156b4",
+    "version": "1.54.0-alpha"
+  },
   "features/v154-sql-rules.md": {
-    "hash": "47e54e1be7d9116f0471774b2a4c00ea6620e221c9b6ac8a52d65acd4a7bbaf5",
+    "hash": "ed9725484f9bf99bc17a8f5f2d970110ea0f6d7472c36ed1f143e053ff677ea8",
     "version": "1.54.0-alpha"
   },
   "features/vscode-extension.md": {
@@ -1160,7 +1168,7 @@
     "version": "1.51.1-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "d3e33791977e030c6618f72b01f30232587ccd8f41f0cb30208b5a17453820cd",
+    "hash": "12f855403dcd5f69e52deac82c556878521b5cda26a3236d42d3bfe0bf4605f3",
     "version": "1.54.0-alpha"
   },
   "features/wiki-blocks-authoring.md": {

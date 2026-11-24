@@ -890,7 +890,7 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 19 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 38 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 82 (+ 452 rules, 131 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 84 (+ 463 rules, 131 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 13 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 24 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 25 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
@@ -1070,7 +1070,7 @@ Win64 build.
 
 #### Lint
 
-**452 rules across 18 categories -- 339 built-in + 113 external `.scm`, 369
+**463 rules across 18 categories -- 350 built-in + 113 external `.scm`, 374
 enabled by default, 131 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -1344,11 +1344,11 @@ CLI-only verbs).
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 | `check_init` | Is a unit variable or field set before it is used: SET, NEVER-SET or MAY-BE-UNSET (scaffold answer in 1.52 until the happens-before solver lands) |
 
-### Lint rule pack (452 rules)
+### Lint rule pack (463 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.53.0-alpha: **452 rules across 18 categories -- 339
-built-in and 113 external `.scm`, 369 enabled by default, and 131 with an
+external `.scm`). As of v1.54.0-alpha: **463 rules across 18 categories -- 350
+built-in and 113 external `.scm`, 374 enabled by default, and 131 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |
