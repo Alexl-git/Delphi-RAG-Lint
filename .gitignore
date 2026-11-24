@@ -208,3 +208,6 @@ src/tools/project-setup/tests/*.exe
 src/tools/project-setup/*.smoke.txt
 # Website: its own local repo (owner 2026-11-20: not on GitHub)
 /WWW/
+
+# Per-user IDE plugin settings (%APPDATA%\drag-lint); private paths, never in git
+drag-lint-plugin.ini

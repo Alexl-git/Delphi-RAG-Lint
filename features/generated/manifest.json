@@ -913,7 +913,7 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`. Read-only: a DB that is not built yet stays on stdout as a bare path, with a stderr NOTE that marks it (missing) and prints the exact index command."],
+      "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`. Read-only: a DB that is not built yet stays on stdout as a bare path, with a stderr NOTE that marks it (missing) and prints the exact index command.", "The IDE plugin can add one per-user reference index (since 1.54): %APPDATA%\\drag-lint\\drag-lint-plugin.ini, section [Databases], keys ReferenceDb (the file) and ReferenceDbFor (a part of the path of the project index it applies to). Missing file, key or database = off; the CLI does not read it."],
       "questions": [
         {
           "ask": "Which index database will drag-lint use for this project?",
@@ -925,10 +925,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-23",
+        "date": "2026-11-24",
         "by": "ENGINE",
-        "build": "1.53.0-alpha",
-        "surfaceHash": "114b4503d5e5be415d7beb7ce0d7f897905e73234774f281a99b7ad8d555e784"
+        "build": "1.54.0-alpha",
+        "surfaceHash": "742a45780206266f5b9c9e070bed0d51496cd2a1cdb6a6302e2326b533af7860"
       }
     },
     {

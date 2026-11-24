@@ -258,7 +258,7 @@ function PrimaryDbForProject(const AProjPath: string; const ASettings: TDragLint
 /// filtered. Duplicates removed.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Cmd.FindUsagesScope.FindUsagesIn (DragLint.Plugin.Cmd.FindUsagesScope.pas), DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas) (+11 more)</para>
-/// <para>Calls: DRagLint.Plugin.DbProbe.PickProjectDb, DragLint.Plugin.DbResolver.AddUnique, DragLint.Plugin.DbResolver.DiscoverSiblings, DragLint.Plugin.DbResolver.FindAncestorDb, DragLint.Plugin.DbResolver.FindOwningProject, DragLint.Plugin.DbResolver.GetActiveEditorFilePath, DragLint.Plugin.DbResolver.GetActiveProjectFilePath, DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPath, DragLint.Plugin.DbResolver.ManifestReadDbs, DragLint.Plugin.Telemetry.DLT, ExtractFileName, ExtractFilePath, Format, Pos</para>
+/// <para>Calls: DRagLint.Plugin.DbProbe.PickProjectDb, DragLint.Plugin.DbResolver.AddUnique, DragLint.Plugin.DbResolver.DiscoverSiblings, DragLint.Plugin.DbResolver.FindAncestorDb, DragLint.Plugin.DbResolver.FindOwningProject, DragLint.Plugin.DbResolver.GetActiveEditorFilePath, DragLint.Plugin.DbResolver.GetActiveProjectFilePath, DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPath, DragLint.Plugin.DbResolver.ManifestReadDbs, DragLint.Plugin.ReferenceDb.PluginIniPath, DragLint.Plugin.ReferenceDb.ReferenceDbFor, DragLint.Plugin.Telemetry.DLT, ExtractFileName, ExtractFilePath, Format</para>
 /// <para>Complexity: 19 (cyclomatic, outer body), 138 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Plugin.DbProbe.PickProjectDb"/>
@@ -394,6 +394,7 @@ uses
   DragLint.Plugin.IndexJob
   , DRagLint.Core.ContextDefaults
   , DragLint.Plugin.ManifestPaths { layout v2 phase 3: every manifest lookup }
+  , DragLint.Plugin.ReferenceDb
   ;
 
 function ActiveProjectWriteDb(out AProjectFile, AWhy: string): string;
@@ -941,8 +942,6 @@ begin
 end; // function
 
 function ResolveActiveIndexDbs(const ASettings: TDragLintSettings): TArray<string>;
-const
-  M2022DbPath = 'C:\Projects\.drag-lint\M2022.sqlite';
 var
   EditorPath: string;
   ProjPath  : string;
@@ -952,6 +951,7 @@ var
   P         : string;
   LibPath   : string;
   ManifestDb: string;
+  RefDb     : string;
 begin
   SetLength(Result, 0);
 
@@ -1000,15 +1000,11 @@ begin
     for P in ReadDbs do
       if TFile.Exists(P) then AddUnique(Result, P);
 
-    { v0.95+: auto-include M2022.sqlite as reference DB when working on ORM3\CLIENT files.
-      Brought-in units from Micronite2022 need symbol resolution from the source project
-      for unknown symbols/types/uses. This enables "hover-to-find-definition" on 2022
-      symbols without explicit --db flag. }
-    if Pos('ORM3', ManifestDb) > 0 then
-    begin
-      if TFile.Exists(M2022DbPath) then
-        AddUnique(Result, M2022DbPath);
-    end;
+    { v0.95+: a reference DB for a project ported from an older code base -- units brought in
+      from it need symbol resolution from the source project for unknown symbols/types/uses.
+      Which DB, for which projects, is the user's own drag-lint-plugin.ini (1.54). }
+    RefDb:= ReferenceDbFor(PluginIniPath(GetEnvironmentVariable('APPDATA')), ManifestDb);
+    if RefDb <> '' then AddUnique(Result, RefDb);
 
     for P in ASettings.IndexDbs do
       if TFile.Exists(P) then AddUnique(Result, P);

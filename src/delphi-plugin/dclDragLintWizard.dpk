@@ -118,6 +118,7 @@ contains
   DragLint.Plugin.UsesDepsFrame in 'DragLint.Plugin.UsesDepsFrame.pas',
   DragLint.Plugin.ExeResolver in 'DragLint.Plugin.ExeResolver.pas',
   DragLint.Plugin.ManifestPaths in 'DragLint.Plugin.ManifestPaths.pas',
+  DragLint.Plugin.ReferenceDb in 'DragLint.Plugin.ReferenceDb.pas',
   DragLint.Plugin.FixCommand in 'DragLint.Plugin.FixCommand.pas',
   DragLint.Plugin.SeverityGlyph in 'DragLint.Plugin.SeverityGlyph.pas',
   DragLint.Plugin.Fonts in 'DragLint.Plugin.Fonts.pas',

@@ -159,6 +159,7 @@
         <DCCReference Include="DragLint.Plugin.UsesDepsFrame.pas"/>
         <DCCReference Include="DragLint.Plugin.ExeResolver.pas"/>
         <DCCReference Include="DragLint.Plugin.ManifestPaths.pas"/>
+        <DCCReference Include="DragLint.Plugin.ReferenceDb.pas"/>
         <DCCReference Include="DragLint.Plugin.FixCommand.pas"/>
         <DCCReference Include="DragLint.Plugin.SeverityGlyph.pas"/>
         <DCCReference Include="DragLint.Plugin.Fonts.pas"/>
