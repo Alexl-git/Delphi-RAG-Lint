@@ -3,8 +3,8 @@ unit DRagLint.FieldRepo.DfmWrite;
 { drag-lint 1.54 -- lane TT-DFMWRITE: the byte-level editors of the repository -> DFM text engine (design
   2026-11-22-field-repository-v2-design.md section 9): a text DFM and the published field list of its unit. Both
   record edits against the bytes they were created from; every byte outside an edit is copied unchanged, whatever its
-  encoding, line end or indentation. Generated text is 7-bit ASCII and is produced by the RTL itself. Nothing here
-  reads or writes a file. }
+  encoding, line end or indentation. Generated text is 7-bit ASCII and is produced by the RTL itself. Only
+  WriteOutputs touches files. }
 
 interface
 
@@ -258,11 +258,21 @@ type
     procedure RemoveField(const pClass, pName: string);
   end;
 
+  /// <summary>The new content of one file.</summary>
+  TDfmwOutput = record
+    /// <summary>Path.</summary>
+    FileName: string;
+    /// <summary>The bytes the plan was made from.</summary>
+    OldBytes: TBytes;
+    /// <summary>The bytes to write.</summary>
+    NewBytes: TBytes;
+  end;
+
 /// <summary>The bytes of a text DFM as a binary DFM, converted by the RTL: proof that Delphi can read the text.</summary>
 /// <param name="pText">Text DFM bytes.</param>
 /// <returns>Binary DFM bytes.</returns>
 /// <exception cref="EDfmWriteError">The RTL refuses the text; its message is kept.</exception>
-function DfmTextToBinary(const pText: TBytes): TBytes;
+function DfmTextToBinary(const pText: TBytes): TBytes;  // dl:ok unused-public-symbol@ff0a -- REVIEWED 2026-11-23 DFMWFIX: tests/fieldrepo/DfmWriteTests.dpr calls it; outside this project index
 
 /// <summary>A DFM string literal as the IDE writes it (quotes, #nnn, continuation lines).</summary>
 /// <param name="pValue">The string.</param>
@@ -280,6 +290,14 @@ function DfmLiteralText(const pLiteral: string): string;
 /// <returns>Lines without line breaks, from the `object` line to its `end`.</returns>
 function DfmBlockOfStream(const pBinary: TBytes): TArray<string>;
 
+/// <summary>Writes all files or none, with a backup of every file beside it.</summary>
+/// <param name="pOutputs">New contents.</param>
+/// <returns>The backup of each file. Backup name: `FILE.before-write-dfm-yyyymmdd-hhnnss`, never an existing file.</returns>
+/// <exception cref="EDfmWriteError">A file does not have its OldBytes any more, or cannot be written; the files written
+/// before it have their old bytes again and the message names the backups.</exception>
+/// <remarks>Every file is checked before the first byte is written, and replaced by a complete new one.</remarks>
+function WriteOutputs(const pOutputs: TArray<TDfmwOutput>): TArray<string>;
+
 /// <summary>Index of a declaration.</summary>
 /// <param name="pDecls">Declarations.</param>
 /// <param name="pName">Field name (case-insensitive).</param>
@@ -289,7 +307,9 @@ function IndexOfDecl(const pDecls: TArray<TDfmwDecl>; const pName: string): Inte
 implementation
 
 uses
+  Winapi.Windows,
   System.Classes,
+  System.IOUtils,
   System.StrUtils;
 
 const
@@ -317,6 +337,8 @@ const
   PROBE_HEAD = 'object A: TB' + CRLF + '  ' + PROBE_PROP + ' ';
   PROBE_TAIL = CRLF + WORD_END + CRLF;
   REFERENCE_BREAKS: array[0..11] of Char = (' ', '.', '=', '(', ')', '[', ']', '<', '>', ',', #13, #10);
+  BACKUP_STAMP = '.before-write-dfm-';
+  NEW_FILE_STAMP = '.write-dfm-new';
   DIRECTIVE_MARK = '$';
   PAREN_COMMENT_LENGTH = 2; // (* and //
   CONDITIONAL_OPENS: array[0..3] of string = ('IF', 'IFDEF', 'IFNDEF', 'IFOPT');
@@ -1403,6 +1425,119 @@ begin
   CheckWholeLine(VDecls[VIdx].Start, VDecls[VIdx].Finish, 'the declaration of ' + pName);
   VStart := LineStart(VDecls[VIdx].Start);
   Edit(VStart, LineEnd(VDecls[VIdx].Finish) - VStart, '');
+end;
+
+{ ---- files ---- }
+
+function SameBytes(const pA, pB: TBytes): Boolean;
+begin
+  Result := (Length(pA) = Length(pB)) and ((Length(pA) = 0) or CompareMem(@pA[0], @pB[0], Length(pA)));
+end;
+
+{ pName, or pName with a number when that file exists. }
+function FreeName(const pName: string): string;
+var
+  VNumber: Integer;
+begin
+  Result := pName;
+  VNumber := 0;
+  while TFile.Exists(Result) do
+  begin
+    Inc(VNumber);
+    Result := pName + '-' + IntToStr(VNumber);
+  end;
+end;
+
+function BackupName(const pFile: string): string;
+begin
+  Result := FreeName(pFile + BACKUP_STAMP + FormatDateTime('yyyymmdd-hhnnss', Now));
+end;
+
+{ Writes a new file beside the old one and puts it in its place: a stopped process never leaves half a file. }
+procedure ReplaceBytes(const pFile: string; const pBytes: TBytes);
+var
+  VNew: string;
+begin
+  VNew := FreeName(pFile + NEW_FILE_STAMP);
+  try
+    TFile.WriteAllBytes(VNew, pBytes);
+    if not ReplaceFile(PChar(pFile), PChar(VNew), nil, 0, nil, nil) then
+      RaiseLastOSError;
+  finally
+    System.SysUtils.DeleteFile(VNew); // False when ReplaceFile took it
+  end;
+end;
+{ Raises when a file cannot be opened for writing, before anything is written. }
+procedure CheckWritable(const pOutput: TDfmwOutput);
+var
+  VFile: TFileStream;
+begin
+  if not SameBytes(TFile.ReadAllBytes(pOutput.FileName), pOutput.OldBytes) then
+    raise EDfmWriteError.Create('the file changed since it was read: ' + pOutput.FileName);
+  try
+    VFile := TFileStream.Create(pOutput.FileName, fmOpenReadWrite or fmShareDenyWrite);
+    VFile.Free;
+  except
+    on E: EStreamError do
+      raise EDfmWriteError.Create('the file cannot be written: ' + pOutput.FileName + ' (' + E.Message + ')');
+  end;
+end;
+
+{ Puts the old bytes back; '' or what went wrong. }
+function Restore(const pOutput: TDfmwOutput): string;
+begin
+  Result := '';
+  try
+    if not SameBytes(TFile.ReadAllBytes(pOutput.FileName), pOutput.OldBytes) then
+      ReplaceBytes(pOutput.FileName, pOutput.OldBytes);
+  except
+    on E: Exception do
+      Result := '; NOT restored (use its backup): ' + pOutput.FileName;
+  end;
+end;
+
+{ Restores pOutputs[0..pLast]; says so when every file has its old bytes. }
+function RestoreAll(const pOutputs: TArray<TDfmwOutput>; pLast: Integer): string;
+var
+  VI: Integer;
+  VStates: TArray<string>;
+begin
+  VStates := nil;
+  for VI := 0 to pLast do
+    VStates := VStates + [Restore(pOutputs[VI])];
+  Result := string.Join('', VStates);
+  if Result = '' then
+    Result := ' -- undone';
+end;
+
+{ Writes all files or none: a failure restores those already written. }
+procedure WriteAll(const pOutputs: TArray<TDfmwOutput>; const pBackups: TArray<string>);
+var
+  VI: Integer;
+begin
+  for VI := 0 to High(pOutputs) do
+    try
+      ReplaceBytes(pOutputs[VI].FileName, pOutputs[VI].NewBytes);
+    except
+      on E: Exception do
+        raise EDfmWriteError.Create('the write of ' + pOutputs[VI].FileName + ' failed: ' + E.Message + RestoreAll(pOutputs, VI)
+          + '; ' + string.Join('; ', pBackups));
+    end;
+end;
+
+function WriteOutputs(const pOutputs: TArray<TDfmwOutput>): TArray<string>;
+var
+  VOutput: TDfmwOutput;
+begin
+  Result := nil;
+  for VOutput in pOutputs do
+    CheckWritable(VOutput);
+  for VOutput in pOutputs do
+  begin
+    Result := Result + [BackupName(VOutput.FileName)];
+    TFile.WriteAllBytes(Result[High(Result)], VOutput.OldBytes);
+  end;
+  WriteAll(pOutputs, Result);
 end;
 
 end.

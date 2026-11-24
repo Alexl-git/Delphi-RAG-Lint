@@ -22,6 +22,7 @@
     W15 the first persistent field of a dataset is unchecked
     W16 conditional directives in the unit
     W17 two forms, one form given twice
+    W18 the parts of one lookup wiring are written together
   Run: pwsh -File tests\autotest\run_fieldrepo_dfmwrite.ps1 [-Exe <drag-lint.exe>] [-SkipUnit] [-SkipForm]
        -SkipForm leaves out W6 and the load half of W7 (a machine without DevExpress).
 #>
@@ -312,6 +313,8 @@ end
   }
   $oneTool = "  object qryOneTool: TFDQuery`n    SQL.Strings = (`n      'SELECT ID, NAME FROM TOOLS WHERE ID = :ID')`n  end"
   Put (Join-Path $ld 'uLook.pas') "unit uLook;`ninterface`nuses Data.DB;`ntype`n  TfrmLook = class(TForm)`n    qryMain: TFDQuery;`n  end;`nimplementation`nend.`n"
+  $plainTool = "  object qryTools: TFDQuery`n    SQL.Strings = (`n      'SELECT ID, NAME FROM TOOLS WHERE NAME <> '':x'' /* :y */')`n  end"
+  $other = "  object qryOther: TFDQuery`n    SQL.Strings = (`n      'SELECT ID FROM ORDERS')`n  end`n"
   LookForm 'qryToolsJoin' "  object qryToolsJoin: TFDQuery`n    SQL.Strings = (`n      'SELECT T.ID, T.NAME FROM TOOLS T JOIN ORDERS O ON O.TOOLID = T.ID')`n  end`n$oneTool"
   $r = Write-Dfm @() $ldfm
   Check 'W12a a lookup into a join is not rewired' ($r.Out -match 'qryMainTOOL LookupDataSet: qryToolsJoin -> TOOLS\n  BLOCKED: the table of the current lookup dataset qryToolsJoin is not known: the SQL reads 2 tables') $r.Out
@@ -328,15 +331,73 @@ end
   LookForm 'Frame1.tblTools' "  inline Frame1: TFrame1`n    object tblTools: TFDTable`n      TableName = 'TOOLS'`n    end`n  end`n$oneTool"
   $r = Write-Dfm @() $ldfm
   Check 'W12f a dataset in a frame is found by its qualified name: no change' (($r.Out -notmatch 'LookupDataSet') -and ($r.Out -match 'qryMainTOOL KeyFields: QTY -> TOOLID\n(?!  )')) $r.Out
-  LookForm 'qryOther' "  object qryOther: TFDQuery`n    SQL.Strings = (`n      'SELECT ID FROM ORDERS')`n  end`n$oneTool"
+  LookForm 'qryOther' "  object qryOther: TFDQuery`n    SQL.Strings = (`n      'SELECT ID FROM ORDERS')`n  end`n$plainTool"
   $r = Write-Dfm @() $ldfm
-  Check 'W12g control: a current dataset that reads another table is rewired' (($r.Out -match 'qryMainTOOL LookupDataSet: qryOther -> qryOneTool\n(?!  )') -and ($r.Out -match 'qryMainTOOL KeyFields: QTY -> TOOLID\n(?!  )')) $r.Out
+  Check 'W12g control: a current dataset that reads another table is rewired' (($r.Out -match 'qryMainTOOL LookupDataSet: qryOther -> qryTools\n(?!  )') -and ($r.Out -match 'qryMainTOOL KeyFields: QTY -> TOOLID\n(?!  )')) $r.Out
   LookForm 'qryOther' "  object qryOther: TFDQuery`n    SQL.Strings = (`n      'SELECT ID FROM ORDERS')`n  end`n  inline Frame1: TFrame1`n    object tblTools: TFDTable`n      TableName = 'TOOLS'`n    end`n  end"
   $r = Write-Dfm @() $ldfm
-  Check 'W12h a dataset inside a frame is no new target' ($r.Out -match 'LookupDataSet: qryOther -> TOOLS\n  BLOCKED: the only dataset that reads TOOLS is inside a frame: Frame1\.tblTools') $r.Out
+  Check 'W12h a dataset inside a frame is no new target' ($r.Out -match 'LookupDataSet: qryOther -> TOOLS\n  BLOCKED: the only dataset that reads TOOLS, Frame1\.tblTools, is inside a frame') $r.Out
   Put $ldfm "inherited frmLook: TfrmLook`n  inherited qryMain: TFDQuery`n    UpdateOptions.UpdateTableName = 'ORDERS'`n    inherited qryMainTOOL: TStringField`n      FieldKind = fkLookup`n      FieldName = 'TOOL'`n    end`n  end`n$oneTool`nend`n"
   $r = Write-Dfm @() $ldfm
   Check 'W12i an inherited lookup that states no wiring gets none' (($r.Code -eq 0) -and ($r.Out -notmatch 'LookupDataSet|KeyFields|LookupResult')) $r.Out
+  $param = 'the only dataset that reads TOOLS, qryOneTool, has SQL parameters'
+  LookForm 'qryOther' ($other + $oneTool)
+  $r = Write-Dfm @() $ldfm
+  Check 'W12j a query with parameters is no new target' ($r.Out -match "LookupDataSet: qryOther -> TOOLS\n  BLOCKED: $param") $r.Out
+  $bound = "  object dsMain: TDataSource`n    DataSet = qryMain`n  end`n  object tblTools: TFDTable`n    MasterSource = dsMain`n    TableName = 'TOOLS'`n  end"
+  LookForm 'qryOther' ($other + $bound)
+  $r = Write-Dfm @() $ldfm
+  Check 'W12k nor is a dataset bound to a master' ($r.Out -match 'LookupDataSet: qryOther -> TOOLS\n  BLOCKED: the only dataset that reads TOOLS, tblTools, is bound to a master \(MasterSource\)') $r.Out
+  LookForm 'qryOneTool' $oneTool
+  $r = Write-Dfm @() $ldfm
+  Check 'W12l a current target with parameters stays, its wiring is not changed' (($r.Out -notmatch 'LookupDataSet:') -and ($r.Out -match 'qryMainTOOL KeyFields: QTY -> TOOLID\n  BLOCKED: the current lookup dataset qryOneTool has SQL parameters')) $r.Out
+  $noTool = "object frmLook: TfrmLook`n  object qryMain: TFDQuery`n    UpdateOptions.UpdateTableName = 'ORDERS'`n    object qryMainTOOLID: TIntegerField`n      FieldName = 'TOOLID'`n    end`n  end`n"
+  Put $ldfm ($noTool + "$oneTool`nend`n")
+  $r = Write-Dfm @('--dataset', 'qryMain', '--names', 'TOOL') $ldfm
+  Check 'W12m a new lookup into a query with parameters is blocked' ($r.Out -match "insert uLook\.dfm qryMainTOOL: [^\n]*\n  BLOCKED: $param") $r.Out
+  Put $ldfm ($noTool + "$plainTool`nend`n")
+  $r = Write-Dfm @('--dataset', 'qryMain', '--names', 'TOOL') $ldfm
+  Check 'W12n control: a colon in a SQL string or comment is no parameter' ($r.Out -match "insert uLook\.dfm qryMainTOOL: [^\n]*LookupDataSet = qryTools[^\n]*\n(?!  )") $r.Out
+  # a data module named by the unit
+  $lpas = Text (Join-Path $ld 'uLook.pas')
+  Put (Join-Path $ld 'uLook.pas') $lpas.Replace('uses Data.DB;', 'uses Data.DB, uMod;')
+  function ModForm($body) { Put (Join-Path $ld 'uMod.dfm') "object dmMod: TdmMod`n$body`nend`n" }
+  ModForm $oneTool
+  LookForm 'qryOther' $other
+  $r = Write-Dfm @() $ldfm
+  Check 'W12o the same in a data module' ($r.Out -match 'LookupDataSet: qryOther -> TOOLS\n  BLOCKED: the only dataset that reads TOOLS, dmMod\.qryOneTool, has SQL parameters') $r.Out
+  ModForm "  inline Frame1: TFrame1`n    object tblTools: TFDTable`n      TableName = 'TOOLS'`n    end`n  end"
+  $r = Write-Dfm @() $ldfm
+  Check 'W12p a frame of a module' ($r.Out -match 'LookupDataSet: qryOther -> TOOLS\n  BLOCKED: the only dataset that reads TOOLS, dmMod\.Frame1\.tblTools, is inside a frame') $r.Out
+  ModForm $plainTool
+  $r = Write-Dfm @() $ldfm
+  Check 'W12q control: a plain dataset of a module' ($r.Out -match 'LookupDataSet: qryOther -> dmMod\.qryTools\n(?!  )') $r.Out
+  Put (Join-Path $ld 'uLook.pas') $lpas
+  # ---- one wiring, one change ----
+  LookForm 'qryOther' ($other + $plainTool)
+  Put $ldfm ((Text $ldfm).Replace("LookupResultField = 'NAME'", "LookupResultField = 'ID'"))
+  $r = Write-Dfm @() $ldfm
+  $wire = @('KeyFields', 'LookupDataSet', 'LookupResultField' | ForEach-Object { IdOf $r "update uLook\.dfm qryMainTOOL $($_):" })
+  $h = Hash $ldfm
+  $bad = foreach ($i in 0..2) {
+    PutSel $sel $r $wire[$i]
+    $x1 = Write-Dfm @('--select', $sel) $ldfm
+    $miss = @($wire | Where-Object { $_ -ne $wire[$i] }) -join ', '
+    if (($x1.Code -ne 2) -or -not (Has $x1 "change $($wire[$i]) needs changes $miss (select them too)") -or ($h -ne (Hash $ldfm))) { $x1.Out }
+  }
+  Check 'W18a one part alone is refused, the missing ids are named, nothing written' (($wire -notcontains '') -and (-not $bad)) ("$wire" + $bad + $r.Out)
+  $h = Hash $ldfm
+  PutSel $sel $r $wire[0, 1]
+  $x1 = Write-Dfm @('--select', $sel) $ldfm
+  Check 'W18b two of three are refused' (($x1.Code -eq 2) -and (Has $x1 "needs change $($wire[2]) (select it too)") -and ($h -eq (Hash $ldfm))) $x1.Out
+  PutSel $sel $r $wire
+  $x1 = Write-Dfm @('--select', $sel) $ldfm
+  $wired = Text $ldfm
+  Check 'W18c control: all parts together are written' (($x1.Code -eq 0) -and (Has $x1 'applied: 3 changes') -and ($wired -match "LookupDataSet = qryTools\r\n") -and ($wired -match "LookupResultField = 'NAME'") -and ($wired -match " KeyFields = 'TOOLID'")) ($x1.Out + $wired)
+  LookForm 'qryOther' ($other + "  object qryTools: TFDQuery`n    SQL.Strings = (`n      'SELECT ID, NAME FROM TOOLS')`n    object qryToolsID: TIntegerField`n      FieldName = 'ID'`n    end`n  end")
+  Put $ldfm ((Text $ldfm).Replace("LookupResultField = 'NAME'", "LookupResultField = 'ID'"))
+  $r = Write-Dfm @() $ldfm
+  Check 'W18d one blocked part blocks the whole wiring' (($r.Out -match 'LookupResultField: ID -> NAME\n  BLOCKED: qryTools has no field for TOOLS\.NAME') -and ($r.Out -match 'LookupDataSet: qryOther -> qryTools\n  BLOCKED: part of a lookup wiring that is blocked \(change \d+\)') -and ($r.Out -match 'KeyFields: QTY -> TOOLID\n  BLOCKED: part of a lookup wiring that is blocked')) $r.Out
   # ---- M1: by-name bindings ----
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID') (Join-Path $nd 'uAllKinds.dfm')
   Check 'W13a a column of a tree list binds NOTE, a grid QTY; OLDCOL is free' (($r.Out -match "delete uAllKinds\.dfm memOrdersNOTE: [^\n]*\n  BLOCKED: the DFM names 'NOTE': TreeNOTE\.DataBinding\.FieldName") -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersQTY: [^\n]*\n  BLOCKED: the DFM names') -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersOLDCOL: [^\n]*\n  \(unchecked\)')) $r.Out

@@ -45,7 +45,9 @@ conditional) that does not hold the whole published section, and never inside a 
 the class is declared twice, the change is blocked.
 
 **Lookups.** A lookup keeps its dataset while the table of that dataset is not known (a join, an inherited table, a
-data module of another folder): the whole wiring is blocked with the reason. A dataset inside a frame is no new target.
+data module of another folder): the whole wiring is blocked with the reason. A dataset inside a frame, one whose SQL has parameters and one that is bound to a master are no
+targets. `LookupDataSet`, `KeyFields`, `LookupKeyFields` and `LookupResultField` of one field are one wiring: one blocked
+part blocks all, and `--select` refuses a part without the others and names the missing ids.
 
 **What is never written:** calc and event code, graphical columns (they are grid columns), fields that are only
 overridden in an inherited form, datasets whose table the DFM does not state.
