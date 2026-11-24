@@ -2261,10 +2261,10 @@ end;
 
 { SHAPE 2b of used-before-assignment (v154 FPBATCH2 class 4): an ARRAY FILLED IN A LOOP.
 
-  or I := 0 to High(PlanCols) do Fields[I] := .. stores element by element, and
+  for I := 0 to High(PlanCols) do Fields[I] := .. stores element by element, and
   the compiler-style definite assignment cannot know the loop ran, so a later
   Fields[J] read is flagged. Recognised only when ALL of: the read sits AFTER a
-  complete or statement (its end precedes the read), whose bound mentions
+  complete for statement (its end precedes the read), whose bound mentions
   High( or Length(, and whose body holds an assignment whose target is an element
   of AName (AName[..]). A read with no such store anywhere before it, a store
   outside a loop, and a loop whose bound is neither High nor Length all stay
