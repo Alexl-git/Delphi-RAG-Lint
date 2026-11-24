@@ -33,10 +33,10 @@ This is the part that catches people out. The question spans two indexes:
 So pass both:
 
 ```
-drag-lint query unit-usage --in C:\Projects\DataCopy\uGlobals.pas ^
+drag-lint query unit-usage --in C:\Projects\MyTool\uGlobals.pas ^
   --unit System.IniFiles ^
-  --db C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite ^
-  --db C:\Projects\.drag-lint\library-Win64.sqlite
+  --db C:\Projects\MyTool\_D-RAG\MyTool.sqlite ^
+  --db C:\drag-lint-index\library-Win64.sqlite
 ```
 
 Given only the project index, the unit cannot be found, and a unit with no known
@@ -58,7 +58,7 @@ it.
 Every export is listed with its verdict, and the last line is the roll-up.
 
 ```
-file: C:/Projects/DataCopy/CSVRoutines.pas
+file: C:/Projects/MyTool/CSVRoutines.pas
 unit: System.IOUtils
   TSearchOption      System.IOUtils.TSearchOption      UNUSED
   TDirectory         System.IOUtils.TDirectory         UNUSED
@@ -69,7 +69,7 @@ unit: System.IOUtils
 `2 of 11` is a **live** import: one export is enough. Compare a dead one:
 
 ```
-file: C:/Projects/DataCopy/uGlobals.pas
+file: C:/Projects/MyTool/uGlobals.pas
 unit: System.IniFiles
   EIniFileException  System.IniFiles.EIniFileException  UNUSED
   TCustomIniFile     System.IniFiles.TCustomIniFile     UNUSED

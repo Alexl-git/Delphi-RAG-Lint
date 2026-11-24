@@ -836,9 +836,9 @@ guessed project would reorder on an unrelated project's evidence:
 
 | how | example |
 |---|---|
-| `--project <x.dproj>` | `query --name TEdit --project C:\Projects\DataCopy\DataCopy.dproj` |
+| `--project <x.dproj>` | `query --name TEdit --project C:\Projects\MyTool\MyTool.dproj` |
 | `--in <file.pas>` | resolves to the one index containing that file |
-| one non-library `--db` | `query --name TEdit --db library-Win64.sqlite --db C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite` |
+| one non-library `--db` | `query --name TEdit --db library-Win64.sqlite --db C:\Projects\MyTool\_D-RAG\MyTool.sqlite` |
 
 **With no project context the tie is reported exactly as before** -- and it is
 still reported *with* one: this **reorders, never filters**, so both rows come
@@ -1408,17 +1408,17 @@ lines, and is refused when the manifest or an existing index cannot be read):
 
 ```
 rename-owners: 4 of 37 indexes
-rename-project: Micronite2027 index=fresh
-rename-project: DMTEST index=reindexed      (apply; a preview says index=stale (<n> changed file(s)))
+rename-project: MyApp index=fresh
+rename-project: MyAppTests index=reindexed      (apply; a preview says index=stale (<n> changed file(s)))
 rename-project: TEST_X index=unverified (still stale after reindex: <file> -- ... rebuild it: ... --rebuild)
-rename-project: DMTEST index=unverified (index was built from project Micronite2027, not DMTEST.dproj -- rebuild it: ...)
+rename-project: MyAppTests index=unverified (index was built from project MyApp, not MyAppTests.dproj -- rebuild it: ...)
 rename-project: TEST_Y index=stale (1 project member(s) not in the index: <file>)   (preview; the apply reindexes;
                                             a "member" is any .pas of the compile closure, transitively used units
                                             included -- one still missing after the reindex refuses the rename)
 rename-unknown: <db>: <reason>             (a DB that exists but could not be read, or the manifest)
 rename-unindexed: <section> (<db>)         (a configured DB whose file does not exist: not checked)
-rename-target: L48 Lot_Notes -> LotNotes apply Micronite2027=3 DMTEST=1
-rename-target: L52 Other_X -> ? dropped project DMTEST: name OtherX already declared in uFoo
+rename-target: L48 Lot_Notes -> LotNotes apply MyApp=3 MyAppTests=1
+rename-target: L52 Other_X -> ? dropped project MyAppTests: name OtherX already declared in uFoo
 rename-dropped-at-write: Lot_Notes -> LotNotes <file>:<line> (stale)
 autofix: rename refused -- <reason>        (single finding only; always the LAST autofix: line)
 ```
@@ -1649,7 +1649,7 @@ of the answer is anchored `@File.pas:line`. They are answered in-process by the 
 stops it, exit 3, with the reindex command on stderr). A human in RAD Studio asks the same questions
 from drag-lint > Reports (caret -> typeat -> `drag-lint ask`); an agent uses the command line:
 
-    drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1FtrsVNum --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
+    drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1FtrsVNum --project C:\Projects\MyApp\CLIENT\MyApp.dproj
 
 A path or set across units, forms or processes -> the verb first. One member in one file -> `query` /
 `find-callers` or Grep. Question ids, target forms, output and exit codes: `charts\README.md`
@@ -1662,7 +1662,7 @@ live rule, shorten its wording, move the incident stories and measurements here)
 below is the PRE-TRIM wording, copied verbatim; headings are demoted three levels and the
 only edit is non-ASCII punctuation mapped to ASCII (em dash -> `--`, middle dot -> `|`,
 arrow -> `->`; in one placeholder menu path the top level reads `<Top>` instead of the plugin's name, so the docs-sync menu-path check does not read the example as a real caption). The live rules are now in: `~/.claude/CLAUDE.md` (drag-lint index, shell /
-approval), `C:\Projects\CLAUDE.md` (shared Delphi context) and this repo's `CLAUDE.md`.
+approval), the workspace `CLAUDE.md` (shared Delphi context) and this repo's `CLAUDE.md`.
 
 ### 2026-11-14 -- MCP first, post-edit lint, conservative usage numbers (lane CLAUDE-INT)
 
@@ -1687,15 +1687,15 @@ approval), `C:\Projects\CLAUDE.md` (shared Delphi context) and this repo's `CLAU
   for the index is resolved callers and closure completeness, not token count. Policy:
   `docs\INBOX-claude-mcp-integration-152.md` section 2.
 
-### From `C:\Projects\CLAUDE.md` -- drag-lint, gap reporting, shell rule (pre-trim lines 5-80)
+### From the workspace `CLAUDE.md` -- drag-lint, gap reporting, shell rule (pre-trim lines 5-80)
 
 ##### Delphi code search -- drag-lint FIRST, Grep second (GLOBAL RULE -- READ FIRST)
 For ANY Delphi/Pascal symbol lookup ("find X", "where is Y called/used", "what implements Z", "where is this const/type defined"), query the **drag-lint** SQLite index **before** Grep. drag-lint is AST-exact (no string-literal/comment/`-Copy.PAS` noise) and sub-second on 1.5M symbols. Grep is the fallback for text-level matches, non-Delphi files, or when no index covers the code.
 - exe (canonical, **Win64** -- handles large DBs; the old Win32 `dll\drag-lint.exe` OOMs on the ~1.4 GB whole-tree index): `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`
-- **indexes are ONE DB PER PROJECT, and each one lives in its OWN project folder (2026-08-11).** Table-by-table reference of what is inside one (schema 23, columns, codes, fingerprints, WAL notes, example queries): [`docs\wiki\Index-DB-Schema.md`](wiki/Index-DB-Schema.md). A project's DB is `<project folder>\_D-RAG\<project file base name>.sqlite` -- a hidden folder beside its `.dproj`, e.g. `C:\Projects\YADF\_D-RAG\YADF.sqlite`, `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite`. This supersedes the brief 2026-08-09->2026-08-11 layout that put all project DBs under a shared `C:\Projects\.drag-lint\<Repo>-<Project>.sqlite` -- that shared-folder path is GONE too, along with the union DBs it replaced: `C:\Projects\DB\ORM3\drag-lint.sqlite`, `Delphi-RAG-lint.sqlite`, `TableTools.sqlite`, `OCRPDF.sqlite`, `DataCopy.sqlite`, `Delphi-RAG-Lint-Graph.sqlite`, `M2022.sqlite`, `active-projects.sqlite`, `convrules-worktree.sqlite`, `library.sqlite`, `projects.sqlite`, `samples.sqlite` -- all DELETED.
-  - ORM3 is eight project DBs, each in its own project's `_D-RAG` folder: `ORM3-Micronite2027`, `ORM3-MicroniteMW1Service`, `ORM3-Interfaces`, `ORM3-TestMicroniteObjects`, `ORM3-MicroniteTests`, `ORM3-TestCachedUpdates`, `ORM3-PdfOcrImportTests`, `ORM3-TEST_uSetupDefaultsFrm`.
+- **indexes are ONE DB PER PROJECT, and each one lives in its OWN project folder (2026-08-11).** Table-by-table reference of what is inside one (schema 23, columns, codes, fingerprints, WAL notes, example queries): [`docs\wiki\Index-DB-Schema.md`](wiki/Index-DB-Schema.md). A project's DB is `<project folder>\_D-RAG\<project file base name>.sqlite` -- a hidden folder beside its `.dproj`, e.g. `C:\Projects\YADF\_D-RAG\YADF.sqlite`, `C:\Projects\MyApp\CLIENT\_D-RAG\MyApp.sqlite`. This supersedes the brief 2026-08-09->2026-08-11 layout that put all project DBs under a shared `C:\drag-lint-index\<Repo>-<Project>.sqlite` -- that shared-folder path is GONE too, along with the union DBs it replaced -- all DELETED.
+  - A large application with eight projects has eight project DBs, each in its own project's `_D-RAG` folder.
   - This repo's own self-index is `C:\Projects\Delphi-RAG-lint\src\cli\_D-RAG\drag-lint.sqlite` (`DragLint-Cli`; plus `DragLint-Wizard`, `DragLint-Tests`, `DragLint-CorpusScan`, each in their own project's `_D-RAG`).
-  - **Only DBs with no owning project folder still live in the shared location.** `C:\Projects\.drag-lint\library-Win32.sqlite` / `library-Win64.sqlite` (per-platform libraries) and `C:\Projects\DB\SQL\drag-lint-sql.sqlite` (SQL, its own absolute path). Everything else moved.
+  - **Only DBs with no owning project folder still live in the shared location.** `C:\drag-lint-index\library-Win32.sqlite` / `library-Win64.sqlite` (per-platform libraries) and `C:\Projects\MyApp\SQL\drag-lint-sql.sqlite` (SQL, its own absolute path). Everything else moved.
   - **Do not guess a DB path -- ask the tool:** `drag-lint resolve-dbs --platform <p>` lists every configured DB; `... resolve-dbs --project <file.dproj>` or `... resolve-dbs --in <file.pas>` resolves the one that covers a given target; when no index covers the file, `--in` prints no path (`[]` with `--json`, exit 0) and says so in a `NOTE: no index covers <file>` line on stderr. (Unchanged advice -- still the right answer under the new layout.)
   - **AUTHORITATIVE SET = PLATFORM LIBRARY + PROJECT DB, and nothing else (owner ruling 2026-08-13).** A project DB is built ONLY from that project's member units (which may live in several folders); the platform library DB covers RTL/VCL/third-party. Every OTHER database -- another project's DB above all -- is noise and misleading, and is not to be passed. This SUPERSEDES the old "repeat `--db` for cross-project questions" advice: a cross-project caller surfaced through an unverified name match, which is exactly the mechanism that wrote `dxXMLWriter`, `FireDAC.Comp.QBE`, `Spring.Data.ExpressionParser` and `System.JSON` into YADF's shared source on 2026-08-13.
   - **AUTHORITY IS PER-QUESTION, not per-database.** The library DB is the right answer for "which unit declares X" (`find-unit`, type resolution) and the WRONG answer for "who calls X" -- a name match against the RTL is not a caller. Do not read "authoritative" as "may contribute to any fact".
@@ -1766,7 +1766,7 @@ what keeps `.pas` files strict-ASCII + CRLF without a second normalisation pass.
 The dedicated Read / Edit / Write / Grep / Glob tools remain first choice where
 they fit; this rule is about which SHELL runs when a shell is needed.
 
-### From `C:\Projects\CLAUDE.md` -- lint-clean, compilation, CLI tools, Everything (pre-trim lines 114-186)
+### From the workspace `CLAUDE.md` -- lint-clean, compilation, CLI tools, Everything (pre-trim lines 114-186)
 
 ##### Lint-clean by default (GLOBAL RULE - applies to EVERY project here)
 
@@ -1842,10 +1842,10 @@ Use **`WebFetch`** on that URL when the HTTP server is running to resolve file p
 **FastMM4 on this machine:** unit search path includes `C:\Projects\FastMM4` (see `FastMM4.pas` there).
 
 
-### From `C:\Projects\CLAUDE.md` -- Wiki (pre-trim lines 205-end)
+### From the workspace `CLAUDE.md` -- Wiki (pre-trim lines 205-end)
 
 ##### Wiki
-Vault: `C:/Projects/claude-obsidian`
+Vault: `<vault folder>`
 
 **Each REGISTERED project has its OWN hot cache at `claude-obsidian/<Project>/hot.md`.**
 `wiki/hot.md` is NOT it -- that is the shared cache for cwds with no partition, and it
@@ -1857,7 +1857,7 @@ following the old wording here.)
   You normally do not need to open it at all.
 - **Writing (handoff/save) -- RESOLVE the path, never assume it:**
   ```
-  node "C:/Users/alexanderl/.claude/hooks/lib/add-project.js" --check .
+  node "~/.claude/hooks/lib/add-project.js" --check .
   ```
   Prints `REGISTERED as "<Name>"` + the exact `hot cache:` path, or
   `NOT REGISTERED (falls back to the shared cache)`. `--list` shows every project.
@@ -1912,8 +1912,8 @@ This is not style advice. It was written after a session found, in one afternoon
   `lint-all`. 22 of 173 rules are auto-fixable and **a user reading `--help`
   could not discover autofix at all.**
 * **`README.md` and `INSTALL.md` claiming "130+ rules"** against a real 173.
-* **`docs\AI-*.md` pointing at deleted databases** (`.drag-lint\ORM3-*.sqlite`,
-  `DataCopy.sqlite`) months after the `_D-RAG` layout landed.
+* **`docs\AI-*.md` pointing at deleted databases** (`.drag-lint\*.sqlite`,
+  `MyTool.sqlite`) months after the `_D-RAG` layout landed.
 
 The common thread: each was correct when written, and nothing failed when it
 stopped being correct. **Silence is the failure mode**, so the rule is enforced
@@ -1963,7 +1963,7 @@ page: `docs\wiki\Feature-Registry.md`.
 
 A project's index is `<project folder>\_D-RAG\<project file base name>.sqlite` --
 named after the PROJECT FILE, not the folder. Only the per-platform library
-indexes live in `C:\Projects\.drag-lint\`.
+indexes live in `C:\drag-lint-index\`.
 
 Resolve, never guess: `drag-lint resolve-dbs --project <X.dproj>` /
 `--in <X.pas>` / `--platform <p>`.
@@ -2000,7 +2000,7 @@ drag-lint lint --project <App.dproj> --rule unit-not-in-library    (third-party 
 **`--db` is NOT a dry run.** With an explicit `--db`, reconcile-project runs its
 coherence phase: it opens that index read-write, re-scans incoherent members and
 re-runs the resolve pass -- with or without `--apply` (`--help`: "--db heals the
-index"). Measured 2026-10-14: a read-only planner ran it on ORM3 `DMTEST.sqlite`
+index"). Measured 2026-10-14: a read-only planner ran it on one project's index
 believing this line, and the DB was written. For a read-only look, omit `--db`
 or point it at a COPY; pass the real `--db` only when you mean to heal that index.
 

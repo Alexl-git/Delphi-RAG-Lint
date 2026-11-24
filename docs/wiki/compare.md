@@ -50,7 +50,7 @@ The first two lines of a plain answer are:
 
 ```
 Who writes this field (drag-lint report who-writes) for OPERAT.NAME, asked on 2026-10-10 14:32, engine 1.27.0.
-COMMAND who-writes -Target "OPERAT.NAME" -Project "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" -Depth 3
+COMMAND who-writes -Target "OPERAT.NAME" -Project "C:\Projects\MyApp\CLIENT\MyApp.dproj" -Depth 3
 ```
 
 `COMMAND <id> [-Target "v"] [-To "v"] (-Project "v" | -In "v") [-Depth n] [-Cap n] [-SurfaceCap n] [-Control "v"] [-Mode v] [-MaxRows n]` lists only the arguments the

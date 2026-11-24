@@ -28,6 +28,19 @@
   (build\install-vsix-all-profiles.ps1; default ON since 2026-11-11, when a profile
   pointing at a deleted folder silently left the extension unloaded).
 
+  -EngineExe <file> -EngineSha256 <hash> pack THAT Win64 engine (the battery-tested one) instead of
+  src\cli\Win64\Release\drag-lint.exe. The two go together: the hash is checked on the source and
+  again on the packed file, and a mismatch refuses the pack. With -SkipBuild this is a releasable
+  archive as far as the Win64 engine goes.
+
+  -BinRoot <checkout> reads the other build outputs (Win32 engine, ConvRulesEditor, drag-lint-switch,
+  dl-field-repo*) from another checkout of identical sources. Default: this repo.
+  -OutDir <folder> replaces C:\TEMP\rel-<Version>.
+
+  The Microsoft C runtime the parser DLLs import (VCRUNTIME140.dll) is taken from the Visual Studio
+  redist folder at pack time (signature and bitness checked) and packed beside the exe; a machine
+  without that folder cannot pack. -VcRedistX64 / -VcRedistX86 name the folder explicitly.
+
   REQUIRES <repo>\WWW\help\dl\index.json (the IDE help line's offline feature list, shipped
   as help\dl\index.json beside the exe). WWW is NOT in this git repo (owner 2026-11-20: it is
   its own local repo, ignored here), so a fresh clone does not have it: `featuregen build --all`
@@ -37,12 +50,36 @@
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][string]$Version,
       [switch]$SkipBuild,
-      [switch]$NoProfileInstall)
+      [switch]$NoProfileInstall,
+      [string]$EngineExe = "",
+      [string]$EngineSha256 = "",
+      [string]$BinRoot = "",
+      [string]$OutDir = "",
+      [string]$VcRedistX64 = "",
+      [string]$VcRedistX86 = "")
 
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $rs = 'call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"'
 $dproj = Join-Path $repo "src\cli\drag-lint.dproj"
+
+if ($BinRoot -eq "") { $BinRoot = $repo }
+
+function Assert-EngineHash([string]$File) {
+  $h = (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash
+  if ($h -ne $EngineSha256) {
+    Write-Host "PACK REFUSED: $File has SHA256 $h, expected $EngineSha256" -ForegroundColor Red
+    exit 1
+  }
+}
+if (($EngineExe -eq "") -ne ($EngineSha256 -eq "")) {
+  Write-Host "PACK REFUSED: -EngineExe and -EngineSha256 go together" -ForegroundColor Red
+  exit 1
+}
+if ($EngineExe -ne "") {
+  if (-not (Test-Path -LiteralPath $EngineExe -PathType Leaf)) { Write-Host "PACK REFUSED: engine not found: $EngineExe" -ForegroundColor Red; exit 1 }
+  Assert-EngineHash $EngineExe
+}
 
 # WWW is a separate local repo since 2026-11-20 (not tracked here): check its one input first.
 $helpIndex = Join-Path $repo "WWW\help\dl\index.json"
@@ -57,8 +94,15 @@ if (-not (Test-Path -LiteralPath $helpIndex)) {
 & pwsh -NoProfile -File (Join-Path $repo "tools\featuregen-gate.ps1") -Repo $repo
 if ($LASTEXITCODE -ne 0) { Write-Host "PACK REFUSED: generated feature pages are not current (or featuregen is missing) -- run featuregen build --all and commit" -ForegroundColor Red; exit 1 }
 
+# The Microsoft C runtime source, before the builds: a machine without it cannot pack.
+. (Join-Path $PSScriptRoot "VcRuntime.ps1")
+try {
+  Assert-VcRuntimeFile (Join-Path (Resolve-VcRuntimeDir "x64" $VcRedistX64) "vcruntime140.dll") "x64"
+  Assert-VcRuntimeFile (Join-Path (Resolve-VcRuntimeDir "x86" $VcRedistX86) "vcruntime140.dll") "x86"
+} catch { Write-Host "PACK REFUSED: $_" -ForegroundColor Red; exit 1 }
 if ($SkipBuild) {
-  Write-Host "-SkipBuild: staging from the binaries already on disk (NOT a releasable archive)" -ForegroundColor Yellow
+  $skipNote = if ($EngineExe -ne '') { 'Win64 engine pinned by hash' } else { 'NOT a releasable archive' }
+  Write-Host "-SkipBuild: staging from the binaries already on disk ($skipNote)" -ForegroundColor Yellow
 } else {
 
 foreach ($plat in 'Win64','Win32') {
@@ -115,7 +159,7 @@ Write-Host "dl-field-repo + dl-field-repo-std: built Win64"
 
 }  # end -SkipBuild
 
-$rel = "C:\TEMP\rel-$Version"
+$rel = if ($OutDir -ne "") { $OutDir } else { "C:\TEMP\rel-$Version" }
 if (Test-Path $rel) { Remove-Item $rel -Recurse -Force }
 $zips = @()
 foreach ($plat in 'win64','win32') {
@@ -125,13 +169,24 @@ foreach ($plat in 'win64','win32') {
   New-Item -ItemType Directory -Path (Join-Path $stg "rules"), (Join-Path $stg "docs\lint"),
                                      (Join-Path $stg "docs\converter"),
                                      (Join-Path $stg "convrules\vendor") -Force | Out-Null
-  Copy-Item (Join-Path $repo $exe) $stg
+  if (($plat -eq 'win64') -and ($EngineExe -ne "")) {
+    Copy-Item -LiteralPath $EngineExe -Destination (Join-Path $stg "drag-lint.exe")
+    Assert-EngineHash (Join-Path $stg "drag-lint.exe")
+  } else {
+    Copy-Item (Join-Path $BinRoot $exe) $stg
+  }
   foreach ($d in 'tree-sitter-delphi13.dll','tree-sitter-dfm.dll','tree-sitter.dll') { Copy-Item (Join-Path $repo "$dll\$d") $stg }
   # sqlite3.dll: the engine loads it dynamically; without it a clean machine gets FTS5=False
   # and "-314 Cannot load vendor library". Match the zip's bitness (bin64 = x64, bin = x86).
   $sqliteSrc = if ($plat -eq 'win64') { 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin64\sqlite3.dll' } else { 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\sqlite3.dll' }
   if (-not (Test-Path -LiteralPath $sqliteSrc)) { Write-Host "PACK FAILED: $sqliteSrc missing"; exit 1 }
   Copy-Item $sqliteSrc $stg
+  # VCRUNTIME140.dll (+ whatever else of the C runtime the engine and the parser DLLs import).
+  $arch = if ($plat -eq 'win64') { 'x64' } else { 'x86' }
+  $vcRedist = if ($plat -eq 'win64') { $VcRedistX64 } else { $VcRedistX86 }
+  try { $vcAdded = @(Add-VcRuntime -Stage $stg -Arch $arch -RedistDir $vcRedist) }
+  catch { Write-Host "PACK FAILED: $_" -ForegroundColor Red; exit 1 }
+  Write-Host ("  C runtime beside the {0} engine: {1}" -f $plat, ($vcAdded -join ', '))
   Copy-Item (Join-Path $repo "rules\*.scm") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\*.json") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\builtin-symbols.txt") (Join-Path $stg "rules")
@@ -182,10 +237,11 @@ foreach ($plat in 'win64','win32') {
   # real folder on the first "Rescan rules"; an absent index is the correct state.
 
   if ($plat -eq 'win64') {
-    Copy-Item (Join-Path $repo "src\tools\convrules-editor\ConvRulesEditor.exe") $stg
-    Copy-Item (Join-Path $repo "third_party\dll-win64\drag-lint-switch.exe") $stg
-    Copy-Item (Join-Path $repo "src\tools\field-repo\dl-field-repo.exe") $stg
-    Copy-Item (Join-Path $repo "src\tools\field-repo\dl-field-repo-std.exe") $stg
+    Copy-Item (Join-Path $BinRoot "src\tools\convrules-editor\ConvRulesEditor.exe") $stg
+    Copy-Item (Join-Path $BinRoot "third_party\dll-win64\drag-lint-switch.exe") $stg
+    Copy-Item (Join-Path $BinRoot "src\tools\field-repo\dl-field-repo.exe") $stg
+    Copy-Item (Join-Path $BinRoot "src\tools\field-repo\dl-field-repo-std.exe") $stg
+    if (@(Add-VcRuntime -Stage $stg -Arch 'x64' -RedistDir $VcRedistX64).Count -gt 0) { Write-Host "  C runtime: the tools needed more DLLs, added" }
     # The manual documents a GUI, so it ships only where the GUI does -- a manual
     # for an exe that is not in the archive is worse than no manual.
     Copy-Item (Join-Path $repo "docs\converter\convrules-editor-manual.md") (Join-Path $stg "docs\converter")
@@ -205,7 +261,7 @@ foreach ($plat in 'win64','win32') {
     try { $names = @($zf.Entries | ForEach-Object { $_.FullName.Replace('\','/') }) }
     finally { $zf.Dispose() }
     $root = "drag-lint-v$Version-$plat"
-    foreach ($need in 'drag-lint.exe','ConvRulesEditor.exe','drag-lint-switch.exe','sqlite3.dll','dl-field-repo.exe','dl-field-repo-std.exe') {
+    foreach ($need in 'drag-lint.exe','ConvRulesEditor.exe','drag-lint-switch.exe','sqlite3.dll','vcruntime140.dll','dl-field-repo.exe','dl-field-repo-std.exe') {
       if ($names -notcontains "$root/$need") {
         Write-Host "PACK FAILED: $z does not contain $root/$need" -ForegroundColor Red
         exit 1

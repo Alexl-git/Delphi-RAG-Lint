@@ -22,7 +22,7 @@ not yours -- install *Just for me* from your own account instead.
 
 | Component | What you get |
 |---|---|
-| engine, rules and chart scripts | always installed |
+| engine, rules and chart scripts | always installed; with `bin\casts.castlib`, the starter rule books in `bin\convrules` and the IDE help line's `bin\help\dl\index.json` |
 | ConvRulesEditor | the conversion-rules editor |
 | drag-lint-graph | the call-graph tool |
 | Graphviz dot | `dot.exe` and its DLLs -- the charts need it |
@@ -45,7 +45,9 @@ RAD Studio 13 (37.0) only.
 
 ## What it needs
 
-* **Windows x64.**
+* **Windows 10 x64 or later** (the engine uses the Universal CRT, part of Windows since 10).
+* **No VC++ redistributable.** `bin\vcruntime140.dll` (Microsoft signed) is installed beside the
+  engine; the tree-sitter parser DLLs import it.
 * **No PowerShell.** Every chart question is answered by the engine itself; setup
   neither bundles nor looks for PowerShell and installs no `.ps1` file.
 * **RAD Studio must be closed** when installing or uninstalling a plugin -- a
@@ -56,6 +58,7 @@ RAD Studio 13 (37.0) only.
 | Change | Uninstall |
 |---|---|
 | files under the install folder | removed |
+| `bin\casts.castlib`, `bin\convrules\*.rules` | removed; a copy you edited is renamed `<file>.user.bak` and kept |
 | `bin\drag-lint.json` (starter index manifest, no projects) | **kept** -- after the first run it is your file |
 | one `Known Packages` value per plugin, named by its installed path | that value removed; other packages untouched |
 | plugin setting `HKCU\Software\drag-lint\DelphiPlugin\ExePath` | removed only if it still points at this install |
@@ -78,7 +81,8 @@ After the first install, DL builds the platform library index in the background:
 ## Updating
 
 Run the newer setup over the old one; it upgrades in place and keeps your
-settings and `drag-lint.json`. *drag-lint > About > Check for Updates* in the
+settings and `drag-lint.json`. A rule book or `casts.castlib` that differs from the new one is
+replaced and the previous file kept beside it as `<file>.bak`. *drag-lint > About > Check for Updates* in the
 IDE tells you when a newer release exists.
 
 If a release changes the extractor version, every index on the machine is
@@ -94,6 +98,8 @@ pwsh -File installer\Build-Installer.ps1 -DryRun    # checks only
 The version comes from `DRAGLINT_VERSION`; the build stops if the engine being
 shipped reports a different one, or if any source file is missing. Sources
 default to the deployed `third_party\dll-win64` / `dll-win32`, `C:\Projects\YADF`
-(Release builds) and the Graphviz 16.1.0 `bin` folder; each is a parameter.
+(Release builds), the Graphviz 16.1.0 `bin` folder and the newest Visual Studio C++ redist
+folder (for `vcruntime140.dll`: signature and bitness are checked, a missing one stops the
+build); each is a parameter. `-EngineSha256` pins the exact engine.
 Licences shipped: drag-lint (MIT), tree-sitter and both grammars (MIT),
 delphi-tree-sitter (MIT), Graphviz (EPL-2.0), YADF.

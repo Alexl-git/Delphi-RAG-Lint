@@ -20,7 +20,8 @@ Get-ChildItem HKCU:\Software | Select-Object Name
    "RAD Studio 13 not found" / "64-bit IDE not found". Everything else is ticked.
 3. No PowerShell 7 page appears (the installer no longer looks for pwsh).
 4. Finish. Folder `%LOCALAPPDATA%\Programs\drag-lint` holds `bin\`, `bin\rules\`,
-   `bin\graphviz\bin\dot.exe`, `yadf\`, `licenses\` and `report-pairs.example.json`.
+   `bin\graphviz\bin\dot.exe`, `bin\vcruntime140.dll`, `bin\casts.castlib`,
+   `bin\convrules\` (3 rule books + `vendor\README.md`), `bin\help\dl\index.json`, `yadf\`, `licenses\` and `report-pairs.example.json`.
    There is **no** `bin\x64\` and **no** `.bpl` anywhere (no IDE, so no plugin).
 5. Engine runs with nothing from the build machine:
 

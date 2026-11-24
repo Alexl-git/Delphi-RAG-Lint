@@ -424,7 +424,7 @@ managed:
 - **This repo's managed indexes (recommended here).** The `Library` section of
   the named-DB manifest (`third_party/dll-win64/drag-lint.json`) has
   `"source": "registry-libraries"` and rebuilds both platform DBs
-  (`C:\Projects\.drag-lint\library-Win32.sqlite` /
+  (`C:\drag-lint-index\library-Win32.sqlite` /
   `library-Win64.sqlite`) straight from the registry. Rebuild **only** that
   section - no need to touch the project indexes:
 

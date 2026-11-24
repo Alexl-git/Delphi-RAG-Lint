@@ -33,7 +33,7 @@ omitted. An index must still exist.
 Illustrative:
 
 ```
-drag-lint query --kind unit --all --json --db C:\Projects\.drag-lint\library-Win64.sqlite
+drag-lint query --kind unit --all --json --db C:\drag-lint-index\library-Win64.sqlite
 ```
 
 This would print every unit the Win64 platform library index holds.

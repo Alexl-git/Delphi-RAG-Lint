@@ -42,10 +42,10 @@ sees, and since 2026-09-23 each inbound entry (`Called from:`, `Used by:`,
 `Used in units:`) says which projects rendered it:
 
 ```
-/// <para>Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas), [DataCopyTests]Test.X.Bar (Test.X.pas)</para>
+/// <para>Called from: [MyTool,MyToolTests]uX.Foo (uX.pas), [MyToolTests]Test.X.Bar (Test.X.pas)</para>
 ```
 
-* The tag is the `--db` base name (`_D-RAG\DataCopy.sqlite` -> `DataCopy`).
+* The tag is the `--db` base name (`_D-RAG\MyTool.sqlite` -> `MyTool`).
   With more than one `--db` no tag is written or removed.
 * A `document` run adds its own tag to what it renders and removes its own tag
   from what it no longer renders; an entry goes when its set empties. Other

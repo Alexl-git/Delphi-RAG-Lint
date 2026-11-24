@@ -17,7 +17,7 @@ Path resolution, first match wins:
 1. `--repo <file>`.
 2. The `fieldRepository` key of `<project folder>\_D-RAG\drag-lint-project.json`
    (relative to the project folder), when `--project <project file>` is given:
-   `{ "fieldRepository": "..\\SERVER\\_DL-REPO\\Micronite.dlrepo" }`.
+   `{ "fieldRepository": "..\\SERVER\\_DL-REPO\\MyApp.dlrepo" }`.
 3. `"fieldRepository"` on the project's section of the manifest `drag-lint.json` (next to its database path).
 4. The default for `--project`: `<project folder>\_DL-REPO\<project base name>.dlrepo`.
 
@@ -172,7 +172,7 @@ of the repository; the binary `.dlrepo` is not committed.
 ## Connection strings
 
 `--connection` is a FireDAC list separated by `;`, for example
-`"Database=host:D:\data\micronite.fdb;User=SYSDBA;Password=...;DriverID=FB"`. `DriverID=FB` and
+`"Database=host:D:\data\sample.fdb;User=SYSDBA;Password=...;DriverID=FB"`. `DriverID=FB` and
 `CharacterSet=UTF8` are added when missing. The password is never printed or stored; the
 repository keeps only the `Database` value (`source_database`).
 

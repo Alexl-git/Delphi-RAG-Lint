@@ -559,7 +559,7 @@ Same schema and the same code path; the differences are data and policy.
   and `out_of_closure_count` (rows outside the project's compile closure, which only
   `--rebuild` can remove).
 * Scope: a project DB holds only that project's compile closure; the library holds the
-  platform RTL/VCL/third-party units (`C:\Projects\.drag-lint\library-Win32|Win64.sqlite`,
+  platform RTL/VCL/third-party units (`C:\drag-lint-index\library-Win32|Win64.sqlite`,
   millions of symbols, GB-sized). "Which unit declares X" is answered by the library, "who
   calls X" only by the project DB.
 * Cross-DB links are by NAME, never by id: a project call to a library routine has no
