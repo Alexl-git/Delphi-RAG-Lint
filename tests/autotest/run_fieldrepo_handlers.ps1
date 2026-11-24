@@ -14,7 +14,7 @@
         exit 1, the next unit is still written, no temporary file; G15 one form named twice is planned once
   PART 3  gen-maxlen: M1 dry run, M2 apply + compile + run, M3 second run, M4 hand-edited, M5 not ASCII,
           M7 a table named twice = one unit, M8 two tables of one unit = refused
-  PART 4  renumber-regions: N1 dry run, N2 apply (or refused while update-orm cannot read DLFR), N3 not ASCII
+  PART 4  renumber-regions: N1 dry run, N2 apply; update-orm and gen-maxlen read the renamed unit, N3 not ASCII, N5 --in
   A missing toolchain or exe is a FAIL, never a skip.
   Run: pwsh -File tests\autotest\run_fieldrepo_handlers.ps1 [-Exe <drag-lint.exe>] [-SkipUnit]
 #>
@@ -309,20 +309,31 @@ try {
   function Renumber([string[]]$more) { Run (@('repo', 'renumber-regions', '--repo', $x, '--code-dir', $o) + $more) }
   $r = Renumber @()
   Check 'N1 dry run: one region of one unit, nothing written' (($r.Code -eq 0) -and ($r.Out -match 'updated 1 regions') -and ((ReadText $iu) -ceq $iold)) $r.Out
-  $reads = $r.Out -notmatch 'does not read DLFR regions'
   $r = Renumber @('--apply')
-  if ($reads) {
-    $wanted = $iold.Replace("{`$REGION 'DB-RAD 2'}", "{`$REGION 'DLFR 2'}").Replace("{`$ENDREGION 'DB-RAD 2'}", "{`$ENDREGION 'DLFR 2'}")
-    Check 'N2a renamed: exactly the two markers, the comment stays' (($r.Code -eq 0) -and ((ReadText $iu) -ceq $wanted)) $r.Out
-    $h = Hash $iu
-    $r = Renumber @('--apply')
-    Check 'N2b a second run writes nothing' (($r.Code -eq 0) -and ($r.Out -match 'written: 0 units') -and ((Hash $iu) -eq $h)) $r.Out
-    $r = Len @('--apply')
-    $got = ProbeOut $o 'P.dpr' 'dcc64'
-    Check 'N2c gen-maxlen finds the renamed section 2; compiles' ($got -ceq '40 11') "$got $($r.Out)"
-  } else {
-    Check 'N2 update-orm does not read DLFR yet: --apply is refused, nothing written' (($r.Code -eq 1) -and ((ReadText $iu) -ceq $iold)) $r.Out
-  }
+  function Dlfr($t) { $t.Replace("{`$REGION 'DB-RAD 2'}", "{`$REGION 'DLFR 2'}").Replace("{`$ENDREGION 'DB-RAD 2'}", "{`$ENDREGION 'DLFR 2'}") }
+  Check 'N2a renamed: exactly the two markers, the comment stays' (($r.Code -eq 0) -and ((ReadText $iu) -ceq (Dlfr $iold))) $r.Out
+  $h = Hash $iu
+  $r = Renumber @('--apply')
+  Check 'N2b a second run writes nothing' (($r.Code -eq 0) -and ($r.Out -match 'written: 0 units') -and ((Hash $iu) -eq $h)) $r.Out
+  $r = Len @('--apply')
+  $got = ProbeOut $o 'P.dpr' 'dcc64'
+  Check 'N2c gen-maxlen finds the renamed section 2; compiles' ($got -ceq '40 11') "$got $($r.Out)"
+  $m1 = [regex]::Match((ReadText $iu), "(?s)\{\`$REGION 'DLFR 2a hash=.*?ENDREGION 'DLFR 2a'\}").Value
+  function Update { Run @('repo', 'update-orm', '--repo', $x, '--code-dir', $o, '--table', 'ORDERS', '--apply', '--no-backup') }
+  $r = Update
+  $upd = ReadText $iu
+  WriteText $iu $iold
+  $null = Len @('--apply')
+  $r2 = Update
+  Check 'N2d update-orm regenerates DLFR 2 exactly as DB-RAD 2; DLFR 2a stays' (($r.Code -eq 0) -and ($r.Out -match '1 changed') -and ($r2.Out -match '1 changed') -and ($upd -cne (Dlfr $iold)) -and
+    ($upd -ceq (Dlfr (ReadText $iu))) -and ($m1.Length -gt 0) -and $upd.Contains($m1)) "$($r.Out) $($r2.Out)"
+  WriteText $iu $iold.Replace("'DB-RAD 2'", "'DB-RAD 99'")
+  $h = Hash $iu
+  $r = Update
+  Check 'N2e update-orm refuses a unit with an unknown id, unchanged' (($r.Out -match 'skipped .*iORDERS\.PAS: REFUSED.*unknown region id: DB-RAD 99') -and ((Hash $iu) -eq $h)) $r.Out
+  WriteText $iu $iold
+  $r = Run @('repo', 'renumber-regions', '--repo', $x, '--in', "$iu;$($iu.ToUpper())", '--apply')
+  Check 'N5 a unit named twice is renamed and written once' (($r.Code -eq 0) -and ($r.Out -match '(?m)^1 units, 1 to write') -and ($r.Out -match 'written: 1 units') -and ((ReadText $iu) -ceq (Dlfr $iold))) $r.Out
   WriteText $iu ($iold.Replace('Hand-kept', "Hand-k$([char]0xE9)pt"))
   $h = Hash $iu
   $r = Renumber @('--apply')

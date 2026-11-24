@@ -75,4 +75,10 @@ does not parse before or after the edit, a unit that belongs to two tables (`A$B
 
 Only real markers with an ORM id (`1`, `1A`, ..., `CL-KEY`, ...) change, and a unit changes as a whole: an unnamed or
 missing end marker, an end marker of another id or spelling, regions that do not nest, or an id in both spellings leave it as it is. The numbered regions carry no
-hash. `--apply` is refused while `repo update-orm` of the same build cannot read `DLFR` regions.
+hash. `repo update-orm` and `repo upgrade-orm-headers` read `DLFR n` like `DB-RAD n`; they never touch another `DLFR`
+region. A unit whose renamed regions `update-orm` would read differently is refused.
+
+`update-orm` refuses a unit as a whole (`REFUSED` in its `skipped` line, the file unchanged) when a numbered region has no
+end, an unnamed end or the end of another id, when an id is unknown (`DB-RAD notes`), when a marker shares its line with
+code, when a region holds another numbered or `DLFR` region or a part of a conditional, or when a comment or string is left
+open.

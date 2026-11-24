@@ -53,8 +53,7 @@ const
   PAS_MASK = '*.pas';
   PAS_EXT = '.pas';
   DB_RAD = 'DB-RAD';
-  NEW_REGION_LINE = '{$REGION ''DLFR 2''}';
-  NOT_READ_YET = 'repo update-orm of this build does not read DLFR regions: renumbering would make it skip the units. Nothing written';
+  NOT_READ = 'repo update-orm would not read the renamed regions';
   STATE_NAMES: array[TFrhState] of string = ('unchanged', 'inserted', 'updated', 'skipped', 'REFUSED');
   SQL_TABLES = 'SELECT DISTINCT "TABLE_NAME" FROM "DL_FIELDS_INFO" ORDER BY "TABLE_NAME"';
 
@@ -221,6 +220,25 @@ begin
   end;
 end;
 
+{ True when update-orm regenerates the same regions before and after, or refuses the unit already. }
+function ReadsTheSame(const pOld, pNew: string): Boolean;
+var
+  VOld: string;
+begin
+  try
+    VOld := string.Join(',', OrmRegionIds(pOld));
+  except
+    on E: EOrmRegionError do
+      Exit(True);
+  end;
+  try
+    Result := VOld = string.Join(',', OrmRegionIds(pNew));
+  except
+    on E: EOrmRegionError do
+      Result := False;
+  end;
+end;
+
 { The plan of one unit; no items = the unit names no region to rename. }
 function PlanRenumber(const pFile: string): TFrhPlan;
 var
@@ -231,7 +249,9 @@ begin
   Result.FileName := pFile;
   Result.OldText := LoadAsciiUnit(pFile);
   VNew := RenumberRegions(Result.OldText);
-  Result.NewText := VNew.NewText;
+  if (VNew.Refused = '') and not ReadsTheSame(Result.OldText, VNew.NewText) then
+    VNew.Refused := NOT_READ;
+  Result.NewText := if VNew.Refused = '' then VNew.NewText else Result.OldText;
   VItem := Default(TFrhItem);
   VItem.Target := Format('%d regions', [VNew.Count]);
   VItem.Reason := VNew.Refused;
@@ -452,23 +472,13 @@ begin
   end;
 end;
 
-{ True when renumbering would leave units update-orm no longer reads. }
-function WouldStrand(const pSub: string; const pPlans: TPlans): Boolean;
-var
-  VId: string;
-begin
-  Result := SameText(pSub, SUB_RENUMBER) and (ChangedUnits(pPlans) > 0) and not IsOrmRegionStart(NEW_REGION_LINE, VId);
-end;
-
 function RunSub(const pSub, pPath: string; const pOptions: TRunOptions): Integer;
 var
   VPlans: TPlans;
   VOutcomes: TOutcomes;
-  VStrand: Boolean;
 begin
   VPlans := MakePlans(pSub, pPath, pOptions);
-  VStrand := WouldStrand(pSub, VPlans);
-  VOutcomes := RunPlans(VPlans, pOptions.Write and not VStrand);
+  VOutcomes := RunPlans(VPlans, pOptions.Write);
   if pOptions.Json then
     PrintJson(VOutcomes, CountState(VPlans, fhsRefused))
   else
@@ -479,9 +489,7 @@ begin
     else
       Writeln(DRY_RUN_LINE);
   end;
-  if VStrand then
-    Writeln(ErrOutput, 'repo ', pSub, ': ', NOT_READ_YET);
-  Result := if (CountState(VPlans, fhsRefused) + CountFailed(VOutcomes) > 0) or (VStrand and pOptions.Write) then EXIT_FAIL else EXIT_OK;
+  Result := if CountState(VPlans, fhsRefused) + CountFailed(VOutcomes) > 0 then EXIT_FAIL else EXIT_OK;
 end;
 
 function RunRepoHandlersVerb(const pSub, pPath: string; pJson: Boolean): Integer;

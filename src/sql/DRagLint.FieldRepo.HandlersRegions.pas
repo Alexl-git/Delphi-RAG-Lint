@@ -145,7 +145,7 @@ function ReplaceDlfrContent(const pText: string; const pRegion: TDlfrRegion; con
 /// <summary>Reads the id of a numbered ORM region, in the old and the new spelling.</summary>
 /// <param name="pName">Region name: DB-RAD 1A, DB-RADa 2, DLFR 1A, DLFR CL-KEY.</param>
 /// <returns>The upper-case id of the ORM generator; '' for any other name, a hashed DLFR region included.</returns>
-function OrmRegionId(const pName: string): string;  // dl:ok unused-public-symbol@eae1 -- REVIEWED 2026-11-23 TT-HANDLERS: pure part of the generator, asserted directly by tests/fieldrepo/HandlersTests.dpr; outside this project index
+function OrmRegionId(const pName: string): string;
 
 /// <summary>Finds a numbered ORM region of a unit.</summary>
 /// <param name="pText">Unit text.</param>
@@ -153,6 +153,16 @@ function OrmRegionId(const pName: string): string;  // dl:ok unused-public-symbo
 /// <param name="pRegion">Receives the first region of that id.</param>
 /// <returns>False when there is none or the regions of the text cannot be trusted.</returns>
 function FindOrmRegion(const pText, pOrmId: string; out pRegion: TDlfrRegion): Boolean;
+
+/// <summary>Reads the numbered ORM regions of a unit that is to be rewritten.</summary>
+/// <param name="pText">Unit text.</param>
+/// <param name="pKnown">Upper-case ids the caller generates.</param>
+/// <param name="pRegions">Receives the regions in the order of the text, Id = the id; empty when the unit is refused.</param>
+/// <returns>'' or why the unit must not be rewritten: regions that do not nest; a start and an end of different ids; a
+/// region named DB-RAD or DLFR n whose id is not in pKnown; a marker that shares its line with other code; a region that
+/// holds another DB-RAD or DLFR region or a part of a conditional.</returns>
+/// <remarks>DLFR n (a bare ORM id) is the same region as DB-RAD n; every other DLFR region is hand code here.</remarks>
+function ReadOrmRegions(const pText: string; const pKnown: TArray<string>; out pRegions: TArray<TDlfrRegion>): string;
 
 /// <summary>Renames the numbered markers of a whole unit: DB-RAD n becomes DLFR n.</summary>
 /// <param name="pText">Unit text.</param>
@@ -218,10 +228,12 @@ const
   TEMP_EXT = '.dlfr-tmp';
   IF_KEYWORDS: array[0..4] of string = ('IF', 'IFDEF', 'IFNDEF', 'IFOPT', 'IFNOPT');
   END_KEYWORDS: array[0..1] of string = ('ENDIF', 'IFEND');
+  ELSE_KEYWORDS: array[0..1] of string = ('ELSE', 'ELSEIF');
   PAT_DLFR_NAME = '^DLFR\s+(\S+)(?:\s+hash=([0-9a-f]{16}))?\s*$';
   PAT_ANY_DLFR = '^DLFR\s+(\S+)';
   PAT_ORM_NAME = '^(?:DB-RADa?|DLFR)\s+(\d+[A-Z]?|CL-[A-Z]+)$';
   PAT_DBRAD_WORD = 'DB-RADa?';
+  PAT_DBRAD_NAME = '^DB-RADa?\s+\S';
   MAXLEN_ID = '2A'; // the one DLFR id that looks like an ORM id but is a hashed region of its own
 
 type
@@ -652,6 +664,91 @@ begin
         Exit(True);
       end;
   Result := False;
+end;
+
+{ '' or why the pair of one region cannot be trusted; a pair that names no ORM region is never a problem. }
+function OrmPairProblem(const pText: string; const pRegion: TDlfrRegion; const pKnown: TArray<string>): string;
+var
+  VStart, VFinish, VId: string;
+  VFirst: Integer;
+begin
+  VStart := pRegion.Start.RegionName;
+  VFinish := pRegion.Finish.RegionName;
+  VId := OrmRegionId(VStart);
+  VFirst := pRegion.Start.Start;
+  while (VFirst > 1) and (pText[VFirst - 1] <> LF) do
+    Dec(VFirst);
+  if (VId = '') and (OrmRegionId(VFinish) = '') and not Rx(PAT_DBRAD_NAME).IsMatch(VStart) and not Rx(PAT_DBRAD_NAME).IsMatch(VFinish) then
+    Result := ''
+  else if OrmRegionId(VFinish) <> VId then
+    Result := Format('the end marker of "%s" is "%s"', [VStart, VFinish])
+  else if not MatchText(VId, pKnown) then
+    Result := 'unknown region id: ' + VStart
+  else if (pRegion.Body.Last < pRegion.Body.First) or (Trim(Copy(pText, VFirst, pRegion.Start.Start - VFirst)) <> '') then
+    Result := 'a marker is not alone on its line: ' + VStart
+  else
+    Result := '';
+end;
+
+{ True when every conditional that starts in the region ends in it and no other one does. }
+function HoldsWholeConditionals(const pRegion: TDlfrRegion; const pScan: TPasScan): Boolean;
+var
+  VDirective: TPasDirective;
+  VDepth: Integer;
+begin
+  VDepth := 0;
+  Result := True;
+  for VDirective in pScan.Directives do
+    if (VDirective.Start > pRegion.Start.Start) and (VDirective.Start < pRegion.Finish.Start) then
+    begin
+      if MatchStr(VDirective.Keyword, IF_KEYWORDS) then
+        Inc(VDepth)
+      else if MatchStr(VDirective.Keyword, END_KEYWORDS) then
+        Dec(VDepth);
+      Result := Result and (VDepth >= 0) and ((VDepth > 0) or not MatchStr(VDirective.Keyword, ELSE_KEYWORDS));
+    end;
+  Result := Result and (VDepth = 0);
+end;
+
+{ '' or the generated region inside pRegion. }
+function InnerProblem(const pRegion: TDlfrRegion; const pAll: TArray<TDlfrRegion>): string;
+var
+  VInner: TDlfrRegion;
+begin
+  Result := '';
+  for VInner in pAll do
+    if (VInner.Start.Start > pRegion.Start.Start) and (VInner.Start.Start < pRegion.Finish.Start)
+      and ((VInner.Id <> '') or Rx(PAT_DBRAD_NAME).IsMatch(VInner.Start.RegionName)) then
+      Result := Format('the region %s holds the region %s', [pRegion.Start.RegionName, VInner.Start.RegionName]);
+end;
+
+function ReadOrmRegions(const pText: string; const pKnown: TArray<string>; out pRegions: TArray<TDlfrRegion>): string;
+var
+  VAll: TArray<TDlfrRegion>;
+  VRegion: TDlfrRegion;
+  VScan: TPasScan;
+begin
+  pRegions := nil;
+  VScan := ScanPascal(pText);
+  if not ReadRegions(pText, VScan, VAll, Result) then
+    Exit;
+  for VRegion in VAll do
+  begin
+    Result := OrmPairProblem(pText, VRegion, pKnown);
+    if (Result = '') and (OrmRegionId(VRegion.Start.RegionName) <> '') then
+    begin
+      Result := InnerProblem(VRegion, VAll);
+      if (Result = '') and not HoldsWholeConditionals(VRegion, VScan) then
+        Result := 'the region holds a part of a conditional: ' + VRegion.Start.RegionName;
+      pRegions := pRegions + [VRegion];
+      pRegions[High(pRegions)].Id := OrmRegionId(VRegion.Start.RegionName);
+    end;
+    if Result <> '' then
+    begin
+      pRegions := nil;
+      Exit;
+    end;
+  end;
 end;
 
 function IsDbRad(const pName: string): Boolean;
