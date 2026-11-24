@@ -972,30 +972,35 @@ begin
   Result := TRegEx.Replace(pSql, '''[^'']*''|"[^"]*"|/\*.*?\*/|--[^\r\n]*', ' ', [roSingleLine]);
 end;
 
-{ Why the DFM does not show that a dataset holds every row of its table; '' = it does. }
-function TargetDoubt(const pDataset: TDfmrDataset; const pSource: TSource; pDoc: TDfmDocument; pObject: Integer): string;
+{ Why a SELECT of the DFM may not return every row of the dataset's table; '' = it does. }
+function SelectDoubt(const pSql: string; const pSource: TSource): string;
 var
-  VText: string;
   VMatch: TMatch;
 begin
-  Result := '';
-  if pDataset.ObjKind <> OBJECT_KIND then
-    Exit('is inherited: the ancestor may limit its rows');
-  if pDoc.TryProp(pObject, 'Filtered', VText) and SameText(VText, 'True') then
-    Exit('is filtered (Filtered = True)');
-  if pDataset.TableName <> '' then
-    Exit;
-  if not pSource.HasSql then
-    Exit('has no SELECT in the DFM: its rows are set in code');
-  if TRegEx.IsMatch(BareSql(pDataset.Sql), '[&!]\s*[A-Za-z_]') then
+  if TRegEx.IsMatch(BareSql(pSql), '[&!]\s*[A-Za-z_]') then
     Exit('has SQL macros');
   if pSource.Sql.Reason <> '' then
     Exit('has a SELECT that is not understood: ' + pSource.Sql.Reason);
   if (Length(pSource.Sql.Tables) <> 1) or not SameText(pSource.Sql.Tables[0].Name, pSource.TableName) then
     Exit('has a SELECT that does not read ' + pSource.TableName + ' alone');
-  VMatch := TRegEx.Match(BareSql(pDataset.Sql), '\b(WHERE|HAVING|FIRST|SKIP|ROWS|FETCH|OFFSET)\b', [roIgnoreCase]);
-  if VMatch.Success then
-    Result := 'has a SELECT that may not return all rows (' + UpperCase(VMatch.Value) + ')';
+  VMatch := TRegEx.Match(BareSql(pSql), '\b(WHERE|HAVING|FIRST|SKIP|ROWS|FETCH|OFFSET)\b', [roIgnoreCase]);
+  Result := if VMatch.Success then 'has a SELECT that may not return all rows (' + UpperCase(VMatch.Value) + ')' else '';
+end;
+
+{ Why the DFM does not show that a dataset holds every row of its table; '' = it does. }
+function TargetDoubt(const pDataset: TDfmrDataset; const pSource: TSource; pDoc: TDfmDocument; pObject: Integer): string;
+var
+  VText: string;
+begin
+  Result := '';
+  if pDataset.ObjKind <> OBJECT_KIND then
+    Result := 'is inherited: the ancestor may limit its rows'
+  else if pDoc.TryProp(pObject, 'Filtered', VText) and SameText(VText, 'True') then
+    Result := 'is filtered (Filtered = True)'
+  else if pSource.HasSql then
+    Result := SelectDoubt(pDataset.Sql, pSource)
+  else if pDataset.TableName = '' then
+    Result := 'has no SELECT in the DFM: its rows are set in code';
 end;
 
 { Why a dataset is no lookup target at all: it holds the rows of a parameter or of a master record. }
@@ -1201,16 +1206,15 @@ var
   procedure PlanColumnName(const pProp, pCurrent, pColumn: string; const pDataset: TDfmrDataset; const pSource: TSource; pAll: Boolean);
   var
     VName, VBlocked: string;
+    VHere: Boolean;
   begin
-    if pAll and (pColumn = '') then
-    begin
-      SetItem(pField, pProp, pCurrent, '', DfmStringLiteral(''), 'the repository does not hold it');
+    VHere := IsHere(pProp) and (pColumn <> '');
+    if (VHere and SameText(ColumnOf(pDataset, pSource, pCurrent), pColumn)) or not (VHere or pAll) then
       Exit;
-    end;
-    if (pColumn = '') or (IsHere(pProp) and SameText(ColumnOf(pDataset, pSource, pCurrent), pColumn)) or not (pAll or IsHere(pProp)) then
-      Exit;
-    VName := NameOf(pDataset, pSource, pColumn, VBlocked);
-    if pCurrent.Contains(MULTI_FIELD) then
+    VName := if pColumn = '' then '' else NameOf(pDataset, pSource, pColumn, VBlocked);
+    if pColumn = '' then
+      VBlocked := 'the repository does not hold it'
+    else if pCurrent.Contains(MULTI_FIELD) then
       VBlocked := 'multi-field lookup key'
     else if VReason <> '' then
       VBlocked := VReason;

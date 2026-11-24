@@ -602,11 +602,11 @@ begin
       if pBackup = '' then
         System.SysUtils.DeleteFile(pFile)
       else if Result or (pFault = ftAsideOnly) then
-        RenameFile(pFile, pBackup)
+        Win32Check(RenameFile(pFile, pBackup))
       else
         System.SysUtils.DeleteFile(pFile);
       if Result then
-        RenameFile(pNew, pFile)
+        Win32Check(RenameFile(pNew, pFile))
       else if pFault = ftTaken then
         TDirectory.CreateDirectory(pFile);
       SetLastError(LOST_REPLACEMENT);
