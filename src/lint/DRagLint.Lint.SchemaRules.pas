@@ -1045,7 +1045,7 @@ begin
   VQuery := TFDQuery.Create(nil);
   try
     VQuery.Connection := FRepo;
-    VQuery.Open('SELECT "TABLE_NAME" FROM "DL_FIELDS_INFO" WHERE UPPER("FIELD_NAME") = :F ORDER BY 1', [pColumn]);  // dl:ok path-traversal -- REVIEWED 2026-11-24 v154 SCHEMA: SQL text, not a path
+    VQuery.Open('SELECT "TABLE_NAME" FROM "DL_FIELDS_INFO" WHERE UPPER("FIELD_NAME") = :F ORDER BY 1', [pColumn]);
     while not VQuery.Eof do
     begin
       VLength := CharLength(VQuery.Fields[0].AsString, pColumn);

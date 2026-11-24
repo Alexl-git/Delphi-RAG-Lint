@@ -59,6 +59,8 @@ uses
   System.SysUtils
   , System.IOUtils
   , System.StrUtils
+  , System.DateUtils
+  , System.Math
   , System.Classes
   , System.Generics.Collections
   , System.RegularExpressions
@@ -180,7 +182,7 @@ var
 
 function StampOf(const AFile: string): string;
 begin
-  Result:= if TFile.Exists(AFile) then Format('%s|%d', [DateTimeToStr(TFile.GetLastWriteTime(AFile)), TFile.GetSize(AFile)]) else '-';
+  Result:= if TFile.Exists(AFile) then Format('%d|%d', [DateTimeToUnix(TFile.GetLastWriteTimeUtc(AFile)), TFile.GetSize(AFile)]) else '-';
 end;
 
 { Reads the facts of ARepo into the process cache when they are not there yet. Called under GLock. }
@@ -525,7 +527,9 @@ begin
   Result:= nil;
   { FindField answers nil for a field that is not there: the code asks on purpose }
   if (ASite.Site.Member <> MEMBER_FIELD_BY_NAME) or (not IsUnknown(AFacts, ASite.Table, ASite.Column)) or
-     IsListed(ASite.Data.Facts, ASite.Site.Text) or Excepted(AFacts, RULE_UNKNOWN, DatasetKeyOf(ACtx, ASite.Data), ASite.Table, ASite.Column) or
+     IsListed(ASite.Data.Facts, ASite.Site.Text) then
+    Exit;
+  if Excepted(AFacts, RULE_UNKNOWN, DatasetKeyOf(ACtx, ASite.Data), ASite.Table, ASite.Column) or
      IsMadeField(ACtx, ASite.Data, ASite.Site.Text, ASite.Source) or (AScan.OutsideReason(ASite.Data, False) <> '') then
     Exit;
   Result:= [FindingAt(RULE_UNKNOWN, Format('%s reads table %s, which has no column %s (field repository) -- FieldByName raises at run time',
@@ -708,7 +712,7 @@ begin
   Stamp:= TFile.GetLastWriteTime(ADfm);
   TMonitor.Enter(GLock);
   try
-    Known:= GForms.TryGetValue(Key, Entry) and (Entry.Stamp = Stamp);
+    Known:= GForms.TryGetValue(Key, Entry) and SameValue(Entry.Stamp, Stamp);
     if not Known then
     begin
       Entry.Stamp:= Stamp;
@@ -740,24 +744,29 @@ begin
 end;
 
 { True when no code of the index sets the SQL or table of the form's dataset, hands it on or aliases it. }
-function NoCodeChanges(const AQuery: TFDQuery; const APas, ARoot, ADataset: string): Boolean;
+function NoCodeChanges(const AStore: ISymbolStore; const APas, ARoot, ADataset: string): Boolean;
+var
+  Query: TFDQuery;
 begin
-  AQuery.SQL.Text:= 'SELECT s.id, m.name_text, r.id FROM symbols s JOIN files f ON f.id = s.file_id JOIN symbols c ON c.id = s.parent_id ' +
+  Query:= NewQuery(AStore, 'SELECT s.id, m.name_text, r.id FROM symbols s JOIN files f ON f.id = s.file_id JOIN symbols c ON c.id = s.parent_id ' +
     'LEFT JOIN refs r ON r.symbol_id = s.id AND r.kind <> ''write-through'' LEFT JOIN ref_receivers rr ON rr.receiver_ref_id = r.id ' +
     'LEFT JOIN refs m ON m.id = rr.ref_id WHERE s.kind = ''field'' AND s.name = :n COLLATE NOCASE AND c.name = :c COLLATE NOCASE ' +
-    'AND f.path = :p COLLATE NOCASE';
-  AQuery.ParamByName('n').AsString:= ADataset;
-  AQuery.ParamByName('c').AsString:= ARoot;
-  AQuery.ParamByName('p').AsString:= APas;
-  AQuery.Open;
-  Result:= not AQuery.Eof;
-  while Result and (not AQuery.Eof) do
-  begin
-    if not AQuery.Fields[Ord(fxRef)].IsNull then
-      Result:= (AQuery.Fields[Ord(fxMember)].AsString <> '') and (not MatchText(AQuery.Fields[Ord(fxMember)].AsString, CHANGE_MEMBERS));
-    AQuery.Next;
+    'AND f.path = :p COLLATE NOCASE');
+  try
+    Query.ParamByName('n').AsString:= ADataset;
+    Query.ParamByName('c').AsString:= ARoot;
+    Query.ParamByName('p').AsString:= APas;
+    Query.Open;
+    Result:= not Query.Eof;
+    while Result and (not Query.Eof) do
+    begin
+      if not Query.Fields[Ord(fxRef)].IsNull then
+        Result:= (Query.Fields[Ord(fxMember)].AsString <> '') and (not MatchText(Query.Fields[Ord(fxMember)].AsString, CHANGE_MEMBERS));
+      Query.Next;
+    end;
+  finally
+    Query.Free;
   end;
-  AQuery.Close;
 end;
 
 { True when the index shows that only this .dfm decides what the dataset reads. }
@@ -779,10 +788,10 @@ begin
     Query.Open;
     Result:= Query.Fields[0].AsInteger = 0;
     Query.Close;
-    Result:= Result and NoCodeChanges(Query, APas, ARoot, ADataset);
   finally
     Query.Free;
   end;
+  Result:= Result and NoCodeChanges(AStore, APas, ARoot, ADataset);
 end;
 
 function FormKeyOf(const APas, ADataset: string): string;
@@ -810,11 +819,10 @@ begin
      (not IsFixed(ACtx.Store, ACtx.Path, AForm.Root, Data.Name)) then
     Exit;
   if Rule = RULE_TYPE then
-    Result:= [FindingAt(RULE_TYPE, Format('%s is a %s, but %s.%s is %s (field repository) -- the dataset does not open',
-      [AField.Name, AField.ClassName, Table, Column, Fact.TypeText]), ACtx.DfmPath, AField.Line, AField.Col, AField.Col)]
-  else
-    Result:= [FindingAt(RULE_UNKNOWN, Format('%s names column %s, which table %s does not have (field repository) -- the dataset does not open',
-      [AField.Name, Column, Table]), ACtx.DfmPath, AField.NameLine, AField.NameCol, AField.NameCol)];
+    Exit([FindingAt(RULE_TYPE, Format('%s is a %s, but %s.%s is %s (field repository) -- the dataset does not open',
+      [AField.Name, AField.ClassName, Table, Column, Fact.TypeText]), ACtx.DfmPath, AField.Line, AField.Col, AField.Col)]);
+  Result:= [FindingAt(RULE_UNKNOWN, Format('%s names column %s, which table %s does not have (field repository) -- the dataset does not open',
+    [AField.Name, Column, Table]), ACtx.DfmPath, AField.NameLine, AField.NameCol, AField.NameCol)];
 end;
 
 function CheckForm(const ACtx: TV151FileCtx; const AFacts: ISchemaFacts): TArray<TLintFinding>;

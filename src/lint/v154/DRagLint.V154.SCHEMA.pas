@@ -97,12 +97,12 @@ begin
   if Facts <> nil then Result:= CheckForm(ACtx, Facts);
 end;
 
-class function TV154SCHEMARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV154SCHEMARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@5618 -- REVIEWED 2026-11-24 v154 SCHEMA: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV154SCHEMARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV154SCHEMARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@a6c4 -- REVIEWED 2026-11-24 v154 SCHEMA: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;

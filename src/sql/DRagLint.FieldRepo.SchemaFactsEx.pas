@@ -216,6 +216,7 @@ end;
 function FactOf(pQuery: TFDQuery; pGenerators: TDictionary<string, Boolean>): TSchemaColumn;
 var
   VType, VSubType, VScale: Integer;
+  VHasDefault, VGenerated: Boolean;
   VName: string;
 begin
   Result := Default(TSchemaColumn);
@@ -232,9 +233,10 @@ begin
   Result.Calculated := pQuery.Fields[C_CALC].AsBoolean or pQuery.Fields[C_LOOKUP].AsBoolean or
     ((not pQuery.Fields[C_KIND].IsNull) and (pQuery.Fields[C_KIND].AsInteger > FIELD_KIND_COLUMN));
   Result.NotNull := (pQuery.Fields[C_NULL].AsInteger = 1) or (pQuery.Fields[C_DOM_NULL].AsInteger = 1);
-  Result.Filled := (not pQuery.Fields[C_DEFAULT].IsNull) or (Trim(pQuery.Fields[C_DOM_DEFAULT].AsString) <> '') or
-    pQuery.Fields[C_TRIGGERED].AsBoolean or (Trim(pQuery.Fields[C_SEQUENCE].AsString) <> '') or
+  VHasDefault := (not pQuery.Fields[C_DEFAULT].IsNull) or (Trim(pQuery.Fields[C_DOM_DEFAULT].AsString) <> '');
+  VGenerated := pQuery.Fields[C_TRIGGERED].AsBoolean or (Trim(pQuery.Fields[C_SEQUENCE].AsString) <> '') or
     (pQuery.Fields[C_PRIMARY].AsBoolean and (Result.Group = scgNumber));
+  Result.Filled := VHasDefault or VGenerated;
   if not Result.Filled then
     for VName in pGenerators.Keys do
       if VName.Contains(Result.Table) and VName.EndsWith(Result.Column) then
