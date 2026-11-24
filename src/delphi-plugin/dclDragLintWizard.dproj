@@ -186,6 +186,9 @@
         <DCCReference Include="DragLint.Plugin.Cmd.IdxRange.pas"/>
         <DCCReference Include="DragLint.Plugin.Cmd.FixMarker.pas"/>
         <DCCReference Include="DragLint.Plugin.Cmd.FieldRepo.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.Kinds.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadSelection.pas"/>
+        <DCCReference Include="DragLint.Plugin.FieldSelectModel.pas"/>
         <DCCReference Include="DragLint.Plugin.FieldSelectDialog.pas"/>
         <DCCReference Include="DragLint.Plugin.Cmd.ExtractConst.pas"/>
         <DCCReference Include="DragLint.Plugin.Cmd.FindUsagesScope.pas"/>
