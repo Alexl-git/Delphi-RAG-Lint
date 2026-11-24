@@ -67,6 +67,7 @@ type
     FStore       : ISymbolStore;
     FIndexedUnits: TDictionary<string, Int64>;
     FNameCache   : TDictionary<string, TArray<string>>;
+    FCredited    : TDictionary<Int64, TArray<string>>; { bound symbol id -> what UnitsCredited answers; the store reads were per REFERENCE }
     /// <summary><!-- drag-lint:auto sum -->v1511 PROJ R5: the unit stems a reference
     /// credits. A reference the resolver bound to a symbol credits ONLY that symbol's
     /// unit (a local / parameter credits none). An unbound reference falls back to the
@@ -231,6 +232,7 @@ begin
   FStore       := AStore;
   FIndexedUnits:= TDictionary<string, Int64>.Create;
   FNameCache   := TDictionary<string, TArray<string>>.Create;
+  FCredited    := TDictionary<Int64, TArray<string>>.Create;
   for Fid in FStore.GetAllFileIds do
   begin
     U:= StemOf(FStore.GetFilePath(Fid));
@@ -240,6 +242,7 @@ end;
 
 destructor TUsesAuditor.Destroy;
 begin
+  FCredited    .Free;
   FNameCache   .Free;
   FIndexedUnits.Free;
   inherited Destroy;
@@ -259,11 +262,13 @@ var
 begin
   if ARef.SymbolId > 0 then
   begin
+    if FCredited.TryGetValue(ARef.SymbolId, Result) then Exit;
     Sm:= FStore.GetSymbolById(ARef.SymbolId);
     if Sm.Id = ARef.SymbolId then
     begin
       Result:= nil;
       if (Sm.Kind <> skLocalVar) and (Sm.Kind <> skParam) then Result:= TArray<string>.Create(StemOf(FStore.GetFilePath(Sm.FileId)));
+      FCredited.Add(ARef.SymbolId, Result);
       Exit;
     end;
   end;

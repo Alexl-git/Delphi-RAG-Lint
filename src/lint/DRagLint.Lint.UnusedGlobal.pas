@@ -107,6 +107,7 @@ var
   Cands     : TList<TSymbol>;
   CandNames : TDictionary<string, Boolean>;
   KindOf    : TDictionary<Int64, string>;   { candidate id -> kind label }
+  DeclAt    : TDictionary<string, Boolean>; { DeclKey of every candidate's own declaration }
   UsedFiles : TObjectDictionary<string, TDictionary<Int64, Boolean>>; { lower name -> files naming it }
   TextHits  : TObjectDictionary<string, TDictionary<Int64, Integer>>; { suspect lower name -> file id -> whole-word count }
   Findings  : TList<TLintFinding>;
@@ -152,6 +153,11 @@ var
     end;
   end;
 
+  function DeclKey(AFileId: Int64; ALine, ACol: Integer; const ALowerName: string): string;
+  begin
+    Result:= IntToStr(AFileId) + '|' + IntToStr(ALine) + '|' + IntToStr(ACol) + '|' + ALowerName;
+  end;
+
   procedure ScanFile(AFileId: Int64);
   begin
     for var R in AStore.GetReferencesFromFile(AFileId) do
@@ -165,15 +171,7 @@ var
         UsedFiles.Add(Key, Files);
       end;
       { a ref sitting on a candidate's own declaration is not a use }
-      var OnDecl: Boolean:= False;
-      for var C in Cands do
-        if (C.FileId = R.FileId) and (C.StartLine = R.StartLine) and (C.StartCol = R.StartCol) and
-          SameText(C.Name, R.NameText) then
-        begin
-          OnDecl:= True;
-          Break;
-        end;
-      if not OnDecl then Files.AddOrSetValue(AFileId, True);
+      if not DeclAt.ContainsKey(DeclKey(R.FileId, R.StartLine, R.StartCol, Key)) then Files.AddOrSetValue(AFileId, True);
     end;
   end;
 
@@ -249,6 +247,7 @@ begin
   UnitIds  := TDictionary<Int64, Boolean>.Create;
   Cands    := TList<TSymbol>.Create;
   KindOf   := TDictionary<Int64, string>.Create;
+  DeclAt   := TDictionary<string, Boolean>.Create;
   CandNames:= TDictionary<string, Boolean>.Create;
   UsedFiles:= TObjectDictionary<string, TDictionary<Int64, Boolean>>.Create([doOwnsValues]);
   TextHits := TObjectDictionary<string, TDictionary<Int64, Integer>>.Create([doOwnsValues]);
@@ -263,6 +262,7 @@ begin
     for var K in IMPL_KINDS do AddCandidates(K, SECTION_IMPL);
     AddRoutineCandidates;
     if Cands.Count = 0 then Exit;
+    for var C in Cands do DeclAt.AddOrSetValue(DeclKey(C.FileId, C.StartLine, C.StartCol, LowerCase(C.Name)), True);
     for var Fi in AStore.GetAllFileIds do ScanFile(Fi);
 
     var Suspects: TList<TSymbol>:= TList<TSymbol>.Create;
@@ -315,6 +315,7 @@ begin
     TextHits.Free;
     UsedFiles.Free;
     CandNames.Free;
+    DeclAt.Free;
     KindOf.Free;
     Cands.Free;
     UnitIds.Free;

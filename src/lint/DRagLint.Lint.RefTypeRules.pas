@@ -506,6 +506,7 @@ type
       FFileId  : Int64;
       FSrc     : TBytes;
       FSymbols : TDictionary<Int64, TSymbol>;
+      FAliasOf : TDictionary<string, string>; { type name -> what ResolveAlias answers; the lookup was per ARGUMENT }
       { 'operand text|type', lower case: the `x is T` tests of the current file. File-scoped,
         as the lexical check's are: a guard elsewhere silences, which errs towards silence. }
       FGuards  : TDictionary<string, Boolean>;
@@ -698,6 +699,7 @@ begin
   FById    := TDictionary<Int64, TTypeFacts>.Create;
   FLibName := TDictionary<string, TTypeFacts>.Create;
   FSymbols := TDictionary<Int64, TSymbol>.Create;
+  FAliasOf := TDictionary<string, string>.Create;
   FGuards  := TDictionary<string, Boolean>.Create;
   FTouches := TList<TThreadTouch>.Create;
   FRoutineFacts:= TDictionary<Int64, TRoutineThreadFacts>.Create;
@@ -720,6 +722,7 @@ begin
   FReach.Free;
   FRoutineFacts.Free;
   FTouches.Free;
+  FAliasOf.Free;
   FSymbols.Free;
   FGuards.Free;
   FLibName.Free;
@@ -1252,23 +1255,31 @@ begin
 end;
 
 function TRefTypeScan.ResolveAlias(const ATypeName: string): string;
-begin
-  Result:= LeafOf(ATypeName);
-  for var Hop: Integer:= 1 to MAX_ALIAS_HOPS do
+
+  function Resolved: string;
   begin
-    if NumericWidth(Result.ToLower) > 0 then Exit;
-    var Target: string:= '';
-    var Count : Integer:= 0;
-    for var S: TSymbol in FStore.FindSymbolsByExactName(Result) do
-      if S.Kind = skTypeAlias then
-      begin
-        Inc(Count);
-        Target:= S.Signature;
-      end;
-    { A homonym names no one type. }
-    if (Count <> 1) or (Target = '') then Exit;
-    Result:= LeafOf(Target);
+    Result:= LeafOf(ATypeName);
+    for var Hop: Integer:= 1 to MAX_ALIAS_HOPS do
+    begin
+      if NumericWidth(Result.ToLower) > 0 then Exit;
+      var Target: string:= '';
+      var Count : Integer:= 0;
+      for var S: TSymbol in FStore.FindSymbolsByExactName(Result) do
+        if S.Kind = skTypeAlias then
+        begin
+          Inc(Count);
+          Target:= S.Signature;
+        end;
+      { A homonym names no one type. }
+      if (Count <> 1) or (Target = '') then Exit;
+      Result:= LeafOf(Target);
+    end;
   end;
+
+begin
+  if FAliasOf.TryGetValue(ATypeName, Result) then Exit;
+  Result:= Resolved;
+  FAliasOf.Add(ATypeName, Result);
 end;
 
 function TRefTypeScan.NumericName(const ANode: TTSNode; out AFact: TRefFact): Boolean;

@@ -3523,25 +3523,49 @@ begin
   end;
 end;
 
+type
+  { One defProc with its lowercase header name: what FindCalleeDefProc matches on. }
+  TNamedProc = record
+    LowName: string;
+    Proc   : TTSNode;
+  end;
+
+{ Every named defProc under ARoot, in document order. Walks the whole tree: call once per file and keep the answer. }
+function NamedProcsOf(const ARoot: TTSNode; const ASrc: TBytes): TArray<TNamedProc>;
+var
+  Hdr, Nm: TTSNode;
+begin
+  var Procs := CfgFindProcs(ARoot);
+  SetLength(Result, Length(Procs));
+  var N := 0;
+  for var P in Procs do
+  begin
+    Hdr := P.ChildByField('header');
+    if Hdr.IsNull then Continue;
+    Nm := Hdr.ChildByField('name');
+    if Nm.IsNull then Continue;
+    Result[N].LowName := LowerCase(Trim(NodeStr(Nm, ASrc)));
+    Result[N].Proc := P;
+    Inc(N);
+  end;
+  SetLength(Result, N);
+end;
+
 { Find the implementation defProc named AName whose body spans AImplStartLine
   (falls back to the first same-named defProc). }
-function FindCalleeDefProc(const ARoot: TTSNode; const AName: string;
-  AImplStartLine: Integer; const ASrc: TBytes): TTSNode;
-var Procs: TArray<TTSNode>; I, SR, ER: Integer; Hdr, Nm, Fallback: TTSNode;
+function FindCalleeDefProc(const AProcs: TArray<TNamedProc>; const AName: string; AImplStartLine: Integer): TTSNode;
+var SR, ER: Integer; Low: string; Fallback: TTSNode;
 begin
   Result := Default(TTSNode);
   Fallback := Default(TTSNode);
-  Procs := CfgFindProcs(ARoot);
-  for I := 0 to High(Procs) do
+  Low := LowerCase(AName);
+  for var NP in AProcs do
   begin
-    Hdr := Procs[I].ChildByField('header');
-    if Hdr.IsNull then Continue;
-    Nm := Hdr.ChildByField('name');
-    if Nm.IsNull or (LowerCase(Trim(NodeStr(Nm, ASrc))) <> LowerCase(AName)) then Continue;
-    if Fallback.IsNull then Fallback := Procs[I];
-    SR := Integer(Procs[I].StartPoint.Row) + 1;
-    ER := Integer(Procs[I].EndPoint.Row) + 1;
-    if InRange(AImplStartLine, SR, ER) then Exit(Procs[I]);
+    if NP.LowName <> Low then Continue;
+    if Fallback.IsNull then Fallback := NP.Proc;
+    SR := Integer(NP.Proc.StartPoint.Row) + 1;
+    ER := Integer(NP.Proc.EndPoint.Row) + 1;
+    if InRange(AImplStartLine, SR, ER) then Exit(NP.Proc);
   end;
   Result := Fallback;
 end;
@@ -3915,6 +3939,7 @@ var
   StoreModes  : TParamModeLookup;
   UnitSigs    : TDictionary<string, TArray<string>>;
   SameUnitClassKinds: TDictionary<string, Boolean>; { when the store answers tcUnknown }
+  CalleeProcs : TDictionary<string, TArray<TNamedProc>>; { path -> its routines; built by OwnsOracle on first need }
   MethodModes : TMethodArgModes; { built on the first candidate finding of the file }
   SlFacts     : TSlUnitFacts;    { v151 WID-FLOW member facts, built on first need }
   SlKinds     : TDictionary<string, Integer>; { memo for SlMemberKind }
@@ -5103,6 +5128,7 @@ begin
         RSym: TSymbol; I: Integer; FId: Int64; CPF: TParsedFile; DP: TTSNode;  // dl:ok local-field-prefix@04fb -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         T0: Int64; Miss, Cached, Verifying: Boolean;
         Owns: TDictionary<string, Boolean>;
+        NamedProcs: TArray<TNamedProc>;
       begin
         T0 := TStopwatch.GetTimeStamp;
         Miss := False;
@@ -5142,7 +5168,15 @@ begin
         if (CPath = '') or (not TFile.Exists(CPath)) then Exit;
         CPF := TAstParseCache.Get(CPath);
         if CPF.Tree = nil then Exit;
-        DP := FindCalleeDefProc(CPF.Tree.RootNode, ACalleeName, RSym.ImplStartLine, CPF.Src);
+        { v154 LINTPERF: the callee file's routines are collected once per Check, not per callee (22 ms each on a 1.6 MB
+          unit). The nodes live as long as the parse cache's tree; nothing clears that cache inside a Check. }
+        if CalleeProcs = nil then CalleeProcs := TDictionary<string, TArray<TNamedProc>>.Create;
+        if not CalleeProcs.TryGetValue(CPath, NamedProcs) then
+        begin
+          NamedProcs := NamedProcsOf(CPF.Tree.RootNode, CPF.Src);
+          CalleeProcs.Add(CPath, NamedProcs);
+        end;
+        DP := FindCalleeDefProc(NamedProcs, ACalleeName, RSym.ImplStartLine);
         if DP.IsNull then Exit;
         PName := ParamNameAtIndex(DP, AArgIdx, CPF.Src);
         if PName = '' then Exit;
@@ -5514,6 +5548,7 @@ begin
     end;
 
   SameUnitClassKinds := nil; { built on first need, see CheckRoutine }
+  CalleeProcs := nil;
   MethodModes := nil;
   SlFacts := nil;
   SlKinds := nil;
@@ -5539,6 +5574,7 @@ begin
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);
     Result := Findings.ToArray;
   finally
+    CalleeProcs.Free;
     MethodModes.Free;
     SameUnitClassKinds.Free;
     SlFacts.Free;
