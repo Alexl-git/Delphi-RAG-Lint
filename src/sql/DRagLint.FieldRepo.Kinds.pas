@@ -77,7 +77,7 @@ function FrKindName(pKind: TFrFieldKind): string;
 /// <returns>True when the kind carries a body with dependencies.</returns>
 function FrKindHasBody(pKind: TFrFieldKind): Boolean;
 
-/// <summary>Finds every `{{FIELD}}` macro of a calc body (grammar of spec 4.3).</summary>
+/// <summary>Finds every `{{FIELD}}` macro of a calc body (grammar of spec 4.3); one in a string or a comment is text.</summary>
 /// <param name="pBody">The CALC_BODY text; '' or Pascal text without macros gives an empty array.</param>
 /// <returns>The macros in order of appearance.</returns>
 /// <exception cref="EFrKindError">`{{` without a closing `}}` (message names the 1-based offset), an
@@ -101,7 +101,8 @@ implementation
 
 uses
   System.StrUtils,
-  System.Variants;
+  System.Variants,
+  System.RegularExpressions;
 
 const
   CODE_DATA = 1;
@@ -117,6 +118,9 @@ const
   ASSIGN_OP = ':=';
   MEMBER_CLEAR = 'Clear';
   QUOTE = '''';
+  { a string over several lines, a string, a comment, or the two braces that open a macro }
+  PAT_MACRO_TOKEN = '(?s)(''''''(?:'''')*)(?=[ \t]*\r?\n).*?\n[ \t]*\1(?!'')|''(?:''''|[^''\r\n])*''?|//[^\r\n]*' +
+    '|\(\*.*?(?:\*\)|\z)|\{\{|\{.*?(?:\}|\z)';
 
 function IsIdentStart(pC: Char): Boolean;
 begin
@@ -187,11 +191,21 @@ var
   VPos, VClose, VI: Integer;
   VInner: string;
   VMacro: TFrMacro;
+  VToken: TMatch;
 begin
   Result := nil;
-  VPos := Pos(MACRO_OPEN, pBody);
-  while VPos > 0 do
+  VPos := 1;
+  while VPos <= Length(pBody) do
   begin
+    VToken := TRegEx.Match(Copy(pBody, VPos), PAT_MACRO_TOKEN);
+    if not VToken.Success then
+      Break;
+    Inc(VPos, VToken.Index - 1);
+    if VToken.Value <> MACRO_OPEN then
+    begin
+      Inc(VPos, VToken.Length); // a string or a comment
+      Continue;
+    end;
     VClose := Pos(MACRO_CLOSE, pBody, VPos + MACRO_OPEN_LEN);
     if VClose = 0 then
       raise EFrKindError.CreateFmt('unterminated {{ at offset %d', [VPos]);
@@ -209,7 +223,7 @@ begin
     VMacro.Offset := VPos;
     VMacro.Len := VClose + MACRO_CLOSE_LEN - VPos;
     Result := Result + [VMacro];
-    VPos := Pos(MACRO_OPEN, pBody, VClose + MACRO_CLOSE_LEN);
+    VPos := VClose + MACRO_CLOSE_LEN;
   end;
 end;
 
