@@ -99,7 +99,7 @@ function ProbeLibraryReadiness(const ALibDb, APlatform: string; out AWhy, AStamp
 /// <returns>The limb value, or '' when absent.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.ClassifyLibraryStamps (DRagLint.CLI.LibraryReady.pas)</para>
+/// <para>Called from: DRagLint.CLI.KeepStoredBuild (DRagLint.CLI.pas), DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.ClassifyLibraryStamps (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.OneFileRefusal (DRagLint.CLI.pas), DRagLint.CLI.PlanOneFileIndex (DRagLint.CLI.pas)</para>
 /// <para>Calls: Copy</para>
 /// <para>Returns: ''</para>
 /// <!-- drag-lint:auto END -->

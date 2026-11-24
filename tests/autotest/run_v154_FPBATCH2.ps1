@@ -147,6 +147,15 @@ begin
   Mutate(F);
   S:= 'DELETE FROM T WHERE ID=' + F; // TP
 end;
+
+procedure FpUnrelatedCall(Id: Integer; AText: string);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  Mutate(AText);
+  S:= 'DELETE FROM T WHERE ID=' + F;
+end;
 end.
 '@
 Check-Exact 'sql-injection-concat' (Run-Lint $f1 'sql-injection-concat') 'sql-injection-concat' $f1

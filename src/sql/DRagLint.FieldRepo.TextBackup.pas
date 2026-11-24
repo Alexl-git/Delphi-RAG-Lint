@@ -101,10 +101,10 @@ procedure BackupRepositoryToStrings(pConnection: TFDConnection; pLines: TStrings
 /// <exception cref="EOSError">The target cannot be replaced (in use, read-only).</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Repo.RepoBackup (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas)</para>
-/// <para>Calls: Byte, DRagLint.FieldRepo.TextBackup.BackupRepositoryToStrings</para>
-/// <para>Touches: file system</para>
+/// <para>Called from: DRagLint.CLI.Repo.RepoBackup (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.Migrate.MigrateRepository (DRagLint.FieldRepo.Migrate.pas)</para>
+/// <para>Calls: Byte, DRagLint.FieldRepo.TextBackup.BackupRepositoryToStrings, DRagLint.FieldRepo.TextBackup.WriteFileAtomic</para>
 /// <seealso cref="DRagLint.FieldRepo.TextBackup.BackupRepositoryToStrings"/>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.WriteFileAtomic"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure BackupRepository(pConnection: TFDConnection; const pFileName: string);

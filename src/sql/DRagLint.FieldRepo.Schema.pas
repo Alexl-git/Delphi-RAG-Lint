@@ -321,7 +321,7 @@ function RepoRowCount(pConnection: TFDConnection; const pTableName: string): Int
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.SchemaSeed.ApplySchemaChanges (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.FieldRepo.SchemaSeed.PlanSchemaChanges (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.FieldRepo.SchemaSeed.RunSchemaSeed (DRagLint.FieldRepo.SchemaSeed.pas) (+1 more)</para>
-/// <para>Calls: DRagLint.FieldRepo.Schema.RepoRowCount, DRagLint.FieldRepo.Schema.RepoSchemaVersion, DRagLint.FieldRepo.Schema.RepoTablesFor, SameText</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.RepoRowCount, DRagLint.FieldRepo.Schema.RepoSchemaVersion, DRagLint.FieldRepo.Schema.RepoTablesFor, MatchText</para>
 /// <para>Returns: True; False</para>
 /// <seealso cref="DRagLint.FieldRepo.Schema.RepoRowCount"/>
 /// <seealso cref="DRagLint.FieldRepo.Schema.RepoSchemaVersion"/>
