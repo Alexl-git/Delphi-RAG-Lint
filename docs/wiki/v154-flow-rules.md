@@ -12,7 +12,7 @@ drag-lint lint-all --db <project.sqlite> --enable constant-return,redundant-fiel
 | `managed-result-read-first` | warning | ON | no (type names of other units: yes) |
 | `same-variable-two-var-params` | warning | ON | yes |
 | `address-of-nested-routine` | warning | ON | no |
-| `absolute-overlay` | hint | ON | no |
+| `absolute-overlay` | hint | OFF | no |
 | `constant-return` | hint | OFF | yes |
 | `redundant-field-init` | hint | OFF | no |
 | `var-param-never-written` | hint | OFF | yes |
@@ -106,16 +106,16 @@ unmanaged results only; H2077 does not see any of them.
 | corpus | result-first | same-var | nested | overlay | constant | field-init | var-unwritten | value-set |
 |---|---|---|---|---|---|---|---|---|
 | drag-lint (448 files) | 1 | 1 | 0 | 0 | 2 | 12 | 10 | 46 |
-| Micronite2027 (583 units) | 0 | 0 | 0 | 7 | 0 | 43 | 0 | 40 |
+| Micronite2027 (583 units) | 0 | 0 | 0 | 3 | 0 | 43 | 0 | 40 |
 | Loader2025 | 0 | 0 | 0 | 1 | 0 | 2 | 0 | 0 |
 | TableTools370P | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 12 |
 | YADF GuardTest | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 2 |
-| VCL (126 files) | 6 | 0 | 5 | 27 | 0 | 23 | 7 | 420 |
+| VCL (126 files) | 6 | 0 | 0 | 1 | 0 | 23 | 7 | 420 |
 
 * `managed-result-read-first`: 7 of 7 right (read in source; a test program shows the old value for string, array, interface and
   Variant on Win32 and Win64). `same-variable-two-var-params`: 1 of 1 right (the `const` text arrives empty). Both ON.
-* `address-of-nested-routine`: the 5 of the VCL go through an `asm` thunk that pushes the frame; that shape is silent now. ON.
+* `address-of-nested-routine`: the 5 of the VCL go through an `asm` thunk that pushes the frame; that shape is silent now; re-measured with the final engine: VCL 0, Micronite 0, so nothing left to be wrong on those corpora. ON.
 * `absolute-overlay`: the VCL and 4 of 7 Micronite findings were one object reference over another (a cast without a check);
-  that shape is silent now, the rest are right. ON. The last two changes are not re-measured.
+  that shape is silent now. Re-measured with the final engine: VCL 1 (TColor under TRGBTriple), Micronite 3 (a Single bitcast to Cardinal), all deliberate bit casts: a reviewer would dismiss every one, so OFF (owner may switch it on).
 * `constant-return`: 1 of 2 is a command handler with a uniform signature: OFF. `var-param-never-written`: 1 of 17 reads a field the callee
   changes on the way, 2 unsure: OFF. `redundant-field-init`: no false one found, style only: OFF. `value-param-assigned`: OFF, 420 in one corpus.

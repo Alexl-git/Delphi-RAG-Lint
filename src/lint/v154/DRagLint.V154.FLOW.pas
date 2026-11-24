@@ -60,7 +60,7 @@ const
   SEVERITY_WARNING = 'warning';
   SEVERITY_HINT = 'hint';
   { OFF unless the config or --rule asks for them: computed only then }
-  OFF_RULES: array[0..3] of string = (RULE_VAR_UNWRITTEN, RULE_VALUE_SET, RULE_CONST_RETURN, RULE_FIELD_INIT);
+  OFF_RULES: array[0..4] of string = (RULE_VAR_UNWRITTEN, RULE_VALUE_SET, RULE_CONST_RETURN, RULE_FIELD_INIT, RULE_OVERLAY);
 
 { The defaults follow "Measured" in docs\wiki\v154-flow-rules.md. }
 class procedure TV154FLOWRules.Catalog(const ADecls: TList<TV151RuleDecl>);
@@ -72,7 +72,7 @@ begin
   ADecls.Add(V151Rule(RULE_VALUE_SET, CATEGORY_REFACTORING, SEVERITY_HINT, 'By-value parameter used as a local variable', False));
   ADecls.Add(V151Rule(RULE_CONST_RETURN, CATEGORY_FLOW, SEVERITY_HINT, 'Function whose every assignment to Result is the same literal', False));
   ADecls.Add(V151Rule(RULE_FIELD_INIT, CATEGORY_REFACTORING, SEVERITY_HINT, 'Constructor sets a field to the value a new object already has', False));
-  ADecls.Add(V151Rule(RULE_OVERLAY, CATEGORY_BUG, SEVERITY_HINT, 'Variable declared absolute over another variable'));
+  ADecls.Add(V151Rule(RULE_OVERLAY, CATEGORY_BUG, SEVERITY_HINT, 'Variable declared absolute over another variable', False));
 end;
 
 class function TV154FLOWRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;

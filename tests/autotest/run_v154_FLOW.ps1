@@ -50,7 +50,7 @@ function Get-Wanted([string]$Rule) {
 $AllRules = 'managed-result-read-first', 'same-variable-two-var-params', 'address-of-nested-routine', 'var-param-never-written',
   'value-param-assigned', 'constant-return', 'redundant-field-init', 'absolute-overlay'
 $NeedIndex = 'same-variable-two-var-params', 'var-param-never-written', 'constant-return'
-$OffRules  = 'var-param-never-written', 'value-param-assigned', 'constant-return', 'redundant-field-init'
+$OffRules  = 'var-param-never-written', 'value-param-assigned', 'constant-return', 'redundant-field-init', 'absolute-overlay'
 
 Write-Host 'WITH THE INDEX' -ForegroundColor Cyan
 foreach ($rule in $AllRules) {
