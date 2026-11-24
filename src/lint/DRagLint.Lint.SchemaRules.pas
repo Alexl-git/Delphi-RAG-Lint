@@ -23,13 +23,14 @@ unit DRagLint.Lint.SchemaRules;
   Names are never matched bare: the dataset of a FieldByName and a constant used as N are the symbols
   the index BOUND at that site, and a ref whose name is no longer at its stored position (an edited,
   not reindexed file) is skipped. A property counts only when it writes the linked field directly (a
-  setter may shorten the value). A local named t<FIELD> / fld<FIELD> is NOT resolved (owner FR-6: 1.54,
-  opt-in). Only the statement text on the target's own line is read, so a statement that spans lines is
-  silent. Not seen: a TableName / UpdateTableName assigned in code after the .dfm is loaded. }
+  setter may shorten the value). A local named t<FIELD> / fld<FIELD> is resolved by RunLocalNaming only
+  (owner FR-6, 1.54 G-72: config schema_rules.local_naming_match, OFF by default). Only the statement text on
+  the target's own line is read, so a statement that spans lines is silent. Not seen: a TableName / UpdateTableName assigned in code after the .dfm is loaded. }
 
 interface
 
 uses
+  FireDAC.Comp.Client,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces;
 
@@ -67,6 +68,40 @@ type
 function RunSchemaRules(const pStore: ISymbolStore; const pRepoFile: string;
   pOnlyFileId: Int64): TSchemaLintResult;
 
+/// <summary>Finds the field repository of the project this run lints.</summary>
+/// <param name="pStore">The project index; may be nil.</param>
+/// <returns>The repository file (it need not exist); '' = none configured.</returns>
+/// <remarks>For rules that have only the index: the project is --project of a lint / lint-all command line, else the
+/// manifest section that owns the index, else &lt;dir&gt;\&lt;base&gt;.dproj for &lt;dir&gt;\_D-RAG\&lt;base&gt;.sqlite.
+/// Not cached; see DRagLint.V154.SCHEMA.Support.</remarks>
+function SchemaRepositoryOf(const pStore: ISymbolStore): string;
+
+/// <summary>Opens a field repository read-only for lint.</summary>
+/// <param name="pRepoFile">The repository file; '' = none.</param>
+/// <param name="pNote">Receives why there is no connection; '' when there is one.</param>
+/// <returns>The connection, owned by the caller; nil when the file is not configured, missing or unreadable.</returns>
+function OpenSchemaRepository(const pRepoFile: string; out pNote: string): TFDConnection;
+
+/// <summary>The note for a repository that holds no schema facts.</summary>
+/// <param name="pRepoFile">The repository file.</param>
+/// <returns>One line.</returns>
+function NoSchemaFactsNote(const pRepoFile: string): string;
+
+/// <summary>The banner of a run against schema facts.</summary>
+/// <param name="pRepo">An open repository with schema facts.</param>
+/// <param name="pRepoFile">The repository file.</param>
+/// <returns>One line.</returns>
+function SchemaFactsBanner(pRepo: TFDConnection; const pRepoFile: string): string;
+
+/// <summary>Rules 1 and 2 on locals named after a field: tDIMABBR, fldDIMABBR (owner FR-6, G-72).</summary>
+/// <param name="pStore">The project index; a non-SQLite store yields no findings.</param>
+/// <param name="pRepoFile">The field repository file; '' = none.</param>
+/// <param name="pFileId">The unit to check.</param>
+/// <returns>schema-maxlen-drift and schema-length-bound findings.</returns>
+/// <remarks>The caller asks only when the config turns schema_rules.local_naming_match on. A name counts when the part
+/// after the prefix is upper case and every column of that name has one and the same char length.</remarks>
+function RunLocalNaming(const pStore: ISymbolStore; const pRepoFile: string; pFileId: Int64): TArray<TLintFinding>;
+
 /// <summary>Says on stderr what the schema rules did: the banner, or why they stayed silent.</summary>
 /// <param name="pResult">What RunSchemaRules returned.</param>
 /// <param name="pQuiet">True suppresses everything (lint --quiet).</param>
@@ -81,15 +116,17 @@ uses
   System.SysUtils,
   System.IOUtils,
   System.Math,
+  System.StrUtils,
   System.RegularExpressions,
   System.Generics.Collections,
   Data.DB,
-  FireDAC.Comp.Client,
   FireDAC.Stan.Param,
   FireDAC.Stan.Error,
+  DRagLint.Index.Manifest,
   DRagLint.Storage.SQLite,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.SchemaFacts,
+  DRagLint.FieldRepo.Locate,
   DRagLint.FieldRepo.Exceptions;
 
 const
@@ -108,6 +145,11 @@ const
   NOTE_OPEN_FAILED = 'schema rules: field repository %s cannot be opened: %s';
   PROP_SIZE = 'Size';
   PROP_MAXLEN = 'MaxLength';
+  { G-72: the prefixes of a local named after a field, longest first. }
+  LOCAL_PREFIXES: array[0..1] of string = ('fld', 't');
+  DPROJ_EXT = '.dproj';
+  DRAG_DIR = '_D-RAG';
+  PROJECT_SWITCH = '--project';
 
 type
   { What kind of target a symbol is: an ORM field / property takes `X := rhs`, a dataset field
@@ -162,12 +204,15 @@ type
     procedure LoadOrmTargets;
     procedure ScanTargetRefs;
     procedure ScanFieldByName;
+    function NamedLength(const pColumn: string; out pTable: string): Integer;
+    procedure LoadLocalTargets;
     procedure CheckTail(pFileId: Int64; pLine, pCol: Integer; const pText: string; pFrom: Integer;
       const pTarget: TColumnTarget);
   public
     constructor Create(const pStore: ISymbolStore; pRepo: TFDConnection; pOnlyFileId: Int64);
     destructor Destroy; override;
     function Run: TArray<TLintFinding>;
+    function RunLocals: TArray<TLintFinding>;
   end;
 
 { ---- pure text helpers ---- }
@@ -975,8 +1020,80 @@ begin
   Result := FFindings.ToArray;
 end;
 
+{ The column part of a local named after a field: tDIMABBR, fldDIMABBR; '' = not such a name. }
+function LocalColumn(const pName: string): string;
+var
+  VPrefix: string;
+begin
+  for VPrefix in LOCAL_PREFIXES do
+  begin
+    Result := Copy(pName, Length(VPrefix) + 1, MaxInt);
+    if pName.StartsWith(VPrefix) and (Result <> '') and (Result = UpperCase(Result)) and CharInSet(Result[1], ['A'..'Z']) then
+      Exit;
+  end;
+  Result := '';
+end;
+
+{ The one char length every column of that name has; -1 when they differ or there is none. }
+function TSchemaScan.NamedLength(const pColumn: string; out pTable: string): Integer;
+var
+  VQuery: TFDQuery;
+  VLength: Integer;
+begin
+  Result := CHAR_LENGTH_UNKNOWN;
+  pTable := '';
+  VQuery := TFDQuery.Create(nil);
+  try
+    VQuery.Connection := FRepo;
+    VQuery.Open('SELECT "TABLE_NAME" FROM "DL_FIELDS_INFO" WHERE UPPER("FIELD_NAME") = :F ORDER BY 1', [pColumn]);
+    while not VQuery.Eof do
+    begin
+      VLength := CharLength(VQuery.Fields[0].AsString, pColumn);
+      if (VLength < 0) or ((pTable <> '') and (VLength <> Result)) then
+        Exit(CHAR_LENGTH_UNKNOWN);
+      Result := VLength;
+      pTable := if pTable = '' then UpperCase(VQuery.Fields[0].AsString) else '*';
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
+  end;
+end;
+
+procedure TSchemaScan.LoadLocalTargets;
+var
+  VQuery: TFDQuery;
+  VTarget: TColumnTarget;
+begin
+  VQuery := NewQuery('SELECT id, name FROM symbols WHERE file_id = :f AND kind = ''local_var''');
+  try
+    VQuery.ParamByName('f').AsLargeInt := FOnlyFileId;
+    VQuery.Open;
+    while not VQuery.Eof do
+    begin
+      VTarget := Default(TColumnTarget);
+      VTarget.Kind := tkOrm;
+      VTarget.Column := LocalColumn(VQuery.Fields[1].AsString);
+      if VTarget.Column <> '' then
+        VTarget.CharLength := NamedLength(VTarget.Column, VTarget.Table);
+      if VTarget.CharLength > 0 then
+        FTargets.AddOrSetValue(VQuery.Fields[0].AsLargeInt, VTarget);
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
+  end;
+end;
+
+function TSchemaScan.RunLocals: TArray<TLintFinding>;
+begin
+  LoadLocalTargets;
+  ScanTargetRefs;
+  Result := FFindings.ToArray;
+end;
+
 { The repository opened read-only, or nil with pNote saying why the rules stay silent. }
-function OpenRepoForLint(const pRepoFile: string; out pNote: string): TFDConnection;
+function OpenSchemaRepository(const pRepoFile: string; out pNote: string): TFDConnection;
 begin
   Result := nil;
   pNote := '';
@@ -995,17 +1112,109 @@ begin
     end;
 end;
 
+function NoSchemaFactsNote(const pRepoFile: string): string;
+begin
+  Result := Format(NOTE_NO_FACTS, [ExtractFileName(pRepoFile)]);
+end;
+
+function SchemaFactsBanner(pRepo: TFDConnection; const pRepoFile: string): string;
+var
+  VInfo: TSchemaInfo;
+begin
+  VInfo := SchemaInfo(pRepo);
+  Result := Format('schema facts %s (%s) from %s', [VInfo.ReadAtUtc, VInfo.Source, ExtractFileName(pRepoFile)]);
+end;
+
+{ --project of this run's own command line; '' when the run is not lint / lint-all or names none. }
+function ProjectOfCommandLine: string;
+var
+  VIdx: Integer;
+begin
+  Result := '';
+  if not MatchText(ParamStr(1), ['lint', 'lint-all']) then
+    Exit;
+  for VIdx := 2 to ParamCount do
+    if SameText(ParamStr(VIdx), PROJECT_SWITCH) then
+      Exit(ParamStr(VIdx + 1))
+    else if ParamStr(VIdx).StartsWith(PROJECT_SWITCH + '=', True) then
+      Exit(Copy(ParamStr(VIdx), Length(PROJECT_SWITCH) + 2, MaxInt));
+end;
+
+{ The project file whose manifest section owns the index, else the _D-RAG convention; '' when neither applies. }
+function ProjectOfIndex(const pDb: string): string;
+var
+  VManifest: TIndexManifest;
+  VSection: TIndexSection;
+  VDir: string;
+begin
+  Result := '';
+  try
+    VManifest := TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    for VSection in VManifest.Sections do
+      if (SectionProjectFile(VManifest, VSection) <> '') and
+        SameText(ExpandSectionDb(VManifest, VSection), ExpandFileName(pDb)) then
+        Exit(SectionProjectFile(VManifest, VSection));
+  except
+    { No manifest, or an unreadable one, is not a lint failure. }
+    on E: Exception do
+      Result := '';
+  end;
+  VDir := ExtractFileDir(ExpandFileName(pDb));
+  if SameText(ExtractFileName(VDir), DRAG_DIR) then
+    Result := TPath.Combine(ExtractFileDir(VDir), ChangeFileExt(ExtractFileName(pDb), DPROJ_EXT));
+end;
+
+function SchemaRepositoryOf(const pStore: ISymbolStore): string;
+var
+  VProject: string;
+begin
+  Result := '';
+  VProject := ProjectOfCommandLine;
+  if (VProject = '') and (pStore is TSQLiteSymbolStore) then
+    VProject := ProjectOfIndex((pStore as TSQLiteSymbolStore).DbPath);
+  if VProject = '' then
+    Exit;
+  VProject := ExpandFileName(ChangeFileExt(VProject, DPROJ_EXT));
+  if TFile.Exists(VProject) then
+    Result := LocateFieldRepository(VProject, '');
+end;
+
+function RunLocalNaming(const pStore: ISymbolStore; const pRepoFile: string; pFileId: Int64): TArray<TLintFinding>;
+var
+  VRepo: TFDConnection;
+  VScan: TSchemaScan;
+  VNote: string;
+begin
+  Result := nil;
+  if (pStore is not TSQLiteSymbolStore) or (pFileId = 0) then
+    Exit;
+  VRepo := OpenSchemaRepository(pRepoFile, VNote);
+  if VRepo = nil then
+    Exit;
+  try
+    if not HasSchema(VRepo) then
+      Exit;
+    VScan := TSchemaScan.Create(pStore, VRepo, pFileId);
+    try
+      Result := VScan.RunLocals;
+    finally
+      VScan.Free;
+    end;
+  finally
+    VRepo.Free;
+  end;
+end;
+
 function RunSchemaRules(const pStore: ISymbolStore; const pRepoFile: string;
   pOnlyFileId: Int64): TSchemaLintResult;
 var
   VRepo: TFDConnection;
-  VInfo: TSchemaInfo;
   VScan: TSchemaScan;
 begin
   Result := Default(TSchemaLintResult);
   if pStore is not TSQLiteSymbolStore then
     Exit;
-  VRepo := OpenRepoForLint(pRepoFile, Result.Note);
+  VRepo := OpenSchemaRepository(pRepoFile, Result.Note);
   if VRepo = nil then
   begin
     Result.Broken := pRepoFile <> '';
@@ -1014,12 +1223,10 @@ begin
   try
     if not HasSchema(VRepo) then
     begin
-      Result.Note := Format(NOTE_NO_FACTS, [ExtractFileName(pRepoFile)]);
+      Result.Note := NoSchemaFactsNote(pRepoFile);
       Exit;
     end;
-    VInfo := SchemaInfo(VRepo);
-    Result.Banner := Format('schema facts %s (%s) from %s',
-      [VInfo.ReadAtUtc, VInfo.Source, ExtractFileName(pRepoFile)]);
+    Result.Banner := SchemaFactsBanner(VRepo, pRepoFile);
     VScan := TSchemaScan.Create(pStore, VRepo, pOnlyFileId);
     try
       Result.Findings := VScan.Run;

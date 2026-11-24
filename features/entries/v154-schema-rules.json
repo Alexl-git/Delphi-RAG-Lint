@@ -1,0 +1,24 @@
+{
+  "id": "v154-schema-rules",
+  "title": "Lint rules schema-unknown-column, -type-mismatch and -required-not-set",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Warns about fields, SQL columns and accessors that do not fit the tables of the field repository, and (off by default) INSERTs that leave out a required column",
+  "intro": "Read this to see which datasets and SQL texts the rules understand, what counts as a known table, when they stay silent, and the opt-in local naming match (schema_rules.local_naming_match).",
+  "wikiPage": "v154-schema-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    }
+  ],
+  "audience": "both",
+  "related": ["schema-lint", "v154-sql-rules"],
+  "verified": {
+    "date": "2026-11-24",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha"
+  }
+}
