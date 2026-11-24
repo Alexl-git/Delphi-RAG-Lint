@@ -62,7 +62,8 @@ Resolution is conservative; anything it cannot prove is silent:
 A constant counts as N only when the index binds the name on that line to it. A line edited since the
 index was built is skipped. Not seen: a `TableName` / `UpdateTableName` assigned in code.
 
-A local variable named after a field (`tDIMABBR`, `fldNOTE`) is NOT resolved in 1.53. Only the
+A local variable named after a field (`tDIMABBR`, `fldNOTE`) is resolved only with the option
+`schema_rules.local_naming_match` (1.54, OFF by default; see [v154-schema-rules](v154-schema-rules)). Only the
 text of the target's own line is read, so a statement that spans lines is silent.
 
 ## Accepting a finding

@@ -114,10 +114,15 @@ const
   CHANGE_MEMBERS: array[0..16] of string = ('sql', 'commandtext', 'command', 'assign', 'selectsql', 'insertsql', 'updatesql', 'deletesql',
     'refreshsql', 'sqls', 'macros', 'macrobyname', 'loadfromfile', 'clonecursor', 'data', 'tablename', 'commandtype');
 
+  { dataset and command classes that can speak to the Firebird database a repository describes: FireDAC, IBX, IBDAC,
+    FIBPlus, UIB, UniDAC, Zeos, dbExpress. BDE and ADO classes read another database that may reuse the table names. }
+  DATABASE_CLASSES = '^T(FD|IB|pFIB|FIB|UIB|Uni|Z(Read|Update|Query|Table|Connection)|SQL(Query|DataSet|Table|Connection))';
+
 type
   { One SQL dataset or table component of a form. }
   TFormDataset = record
     Name     : string;
+    ClassName: string;
     ObjKind  : string;
     Facts    : TSqlTextFacts;
     TableName: string;
@@ -275,6 +280,11 @@ begin
     (not MatchText(AColumn, NO_COLUMNS));
 end;
 
+function SpeaksDatabase(const AClass: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(AClass, DATABASE_CLASSES, [roIgnoreCase]);
+end;
+
 { ---- kinds ---- }
 
 { Why the accessor does not fit the column; '' = it fits, or nothing certain is known. }
@@ -391,7 +401,7 @@ end;
 function StatedAt(const AData: TSqlDataset; const ASite: TSqlSite): string;
 begin
   Result:= '';
-  if ASite.Kind not in [sskSqlSet, sskSqlAdd] then Exit;
+  if (ASite.Kind not in [sskSqlSet, sskSqlAdd]) or (not SpeaksDatabase(AData.DataClass)) then Exit;
   if AData.Has([sskSqlAdd]) then Result:= if AData.InDfm and (AData.Dfm.Sql <> '') then '' else AData.Facts.Sql
   else if ASite.Known then Result:= ASite.Text;
 end;
@@ -541,7 +551,7 @@ begin
     begin
       Item.Data:= Data;
       Item.Site:= Site;
-      if (Item.Site.Kind <> sskField) or (not Item.Site.Known) or
+      if (Site.Kind <> sskField) or (not Site.Known) or (not SpeaksDatabase(Data.DataClass)) or
          (not AScan.ColumnOf(Item.Data, Item.Site.Text, Item.Table, Item.Column, Reason)) or (not AFacts.KnowsTable(Item.Table)) then
         Continue;
       if AFacts.FindColumn(Item.Table, Item.Column, Fact) then
@@ -611,8 +621,9 @@ end;
 function NewDataset(const AObject: TDfmObjectRow): TFormDataset;
 begin
   Result:= Default(TFormDataset);
-  Result.Name   := AObject.Name;
-  Result.ObjKind:= AObject.ObjKind;
+  Result.Name     := AObject.Name;
+  Result.ClassName:= AObject.ClassName;
+  Result.ObjKind  := AObject.ObjKind;
 end;
 
 function NewField(const AObject: TDfmObjectRow): TFormField;
@@ -719,7 +730,7 @@ begin
   ATable := '';
   AColumn:= '';
   Data:= AForm.Datasets[AField.Dataset];
-  if (not AField.Data) or (not SameText(Data.ObjKind, OBJECT_KIND)) then Exit(False);
+  if (not AField.Data) or (not SameText(Data.ObjKind, OBJECT_KIND)) or (not SpeaksDatabase(Data.ClassName)) then Exit(False);
   if Data.Facts.Sql <> '' then
     Exit((Data.Facts.Verb = svSelect) and (Data.Facts.Source.Reason = '') and
       SqlFieldColumn(Data.Facts.Source, AField.FieldName, AField.Origin, ATable, AColumn, Reason));
@@ -818,7 +829,7 @@ begin
   for Field in Form.Fields do Result:= Result + CheckFormField(ACtx, AFacts, Form, Field);
   for Data in Form.Datasets do
   begin
-    if Data.Facts.Sql = '' then Continue;
+    if (Data.Facts.Sql = '') or (not SpeaksDatabase(Data.ClassName)) then Continue;
     Found.Facts := Data.Facts;
     Found.Path  := ACtx.DfmPath;
     Found.Line  := Data.Line;

@@ -91,6 +91,20 @@ object dmMain: TdmMain
       FieldName = 'ANY'
     end
   end
+  object bdeTable: TTable
+    DatabaseName = 'OLD'
+    TableName = 'ORDERS'
+    object bdeTablePDX: TIntegerField
+      FieldName = 'PDX'
+    end
+    object bdeTableNOTE: TIntegerField
+      FieldName = 'NOTE'
+    end
+  end
+  object bdeQuery: TQuery
+    SQL.Strings = (
+      'SELECT PDX FROM ORDERS')
+  end
   object qryIns: TFDQuery
     SQL.Strings = (
       'INSERT INTO ORDERS (NOTE, CODE)'

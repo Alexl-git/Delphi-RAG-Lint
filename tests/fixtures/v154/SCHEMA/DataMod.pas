@@ -3,7 +3,7 @@ unit DataMod;
 interface
 
 uses
-  System.Classes, Data.DB, FireDAC.Comp.Client, FireDAC.Comp.DataSet;
+  System.Classes, Data.DB, Bde.DBTables, FireDAC.Comp.Client, FireDAC.Comp.DataSet;
 
 type
   TdmMain = class(TDataModule)
@@ -30,6 +30,10 @@ type
     qryOwnLIVEX: TStringField;
     qryOther: TFDQuery;
     qryOtherANY: TStringField;
+    bdeTable: TTable;
+    bdeTablePDX: TIntegerField;
+    bdeTableNOTE: TIntegerField;
+    bdeQuery: TQuery;
     qryIns: TFDQuery;
     qryBad: TFDQuery;
   public
@@ -48,6 +52,8 @@ var
   S: string;
   I: Integer;
 begin
+  S := bdeTable.FieldByName('PDY').AsString;
+  I := bdeTable.FieldByName('NOTE').AsInteger;
   qryOrders.Open;
   S := qryOrders.FieldByName('CALC').AsString;
   S := qryOrders.FieldByName('LOOK').AsString;

@@ -9,11 +9,12 @@ procedure Joins;
 procedure Dynamic(const ATable: string);
 procedure Stated;
 procedure Runtime;
+procedure OtherDatabase;
 
 implementation
 
 uses
-  FireDAC.Comp.Client, Data.DB;
+  FireDAC.Comp.Client, Data.DB, Bde.DBTables, Data.Win.ADODB;
 
 var
   S: string;
@@ -111,6 +112,20 @@ begin
   F.FieldName := 'MADE';
   Q.Open;
   S := Q.FieldByName('MADE').AsString;
+end;
+
+procedure OtherDatabase;
+var
+  Q: TQuery;
+  A: TADOQuery;
+begin
+  Q := TQuery.Create(nil);
+  Q.SQL.Text := 'SELECT * FROM ORDERS';
+  Q.Open;
+  S := Q.FieldByName('PARADOXONLY').AsString;
+  A := TADOQuery.Create(nil);
+  A.SQL.Text := 'INSERT INTO ORDERS (NOTE, ACCESSONLY) VALUES (1, 2)';
+  A.ExecSQL;
 end;
 
 end.
