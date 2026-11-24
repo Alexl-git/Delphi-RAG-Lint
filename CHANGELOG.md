@@ -3,9 +3,11 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.54.0-alpha -- unreleased
+## v1.54.0-alpha -- 2026-11-24
 
-In integration (lane/v154-int). No re-parse: extractor and resolver versions unchanged.
+Released 2026-11-24. Contains 1.53.1, 1.53.0 and 1.52.3 (sections below; they have no tags of their own). No re-parse from 1.53.x: extractor and resolver versions unchanged. From 1.52.2: one re-parse (see 1.53.0).
+
+The setup and the zips carry the Microsoft C runtime (`vcruntime140.dll`) beside the engine, so a clean machine needs no VC++ redistributable; the setup also installs `casts.castlib`, the starter rule books and the IDE help line's feature list.
 
 Merged lanes:
 
@@ -78,7 +80,7 @@ Lane TT-ALTER (lane/v154-tt-alter):
 
 ## v1.53.1-alpha -- 2026-11-24
 
-Tail release of 1.53 (lane/v153-1531). No re-parse: extractor stays 1.43.0-alpha, resolver 1.31.0-alpha. VS Code extension unchanged (1.6.12).
+Included in v1.54.0-alpha. Tail release of 1.53. No re-parse: extractor stays 1.43.0-alpha, resolver 1.31.0-alpha. VS Code extension unchanged (1.6.12).
 
 - AUTODOC: a banner line (`//////`) is no longer taken for documentation, rewritten as a summary or deleted; a slashes-only `<summary>` that 1.53.0 wrote is dropped on the next run; the doc-damage guard sees a deleted banner. A multi-line `///` note keeps its lines when it becomes a `<summary>`. `Registered as` / `Dataset` entries are listed once. A declaration under an attribute (`[Inject]`) is not a tampered file.
 - AUTODOC: a doc verb's rescan or retry re-parses only the files concerned, with the platform, config and defines the index was built with (1.53.0 force-reparsed the whole project per file and could flip the index to Win32). `document --reindex` keeps the build too.
@@ -90,7 +92,7 @@ Tail release of 1.53 (lane/v153-1531). No re-parse: extractor stays 1.43.0-alpha
 
 ## v1.53.0-alpha -- 2026-11-23
 
-In integration (lane/v153-int2). One re-parse for 1.53.0: extractor 1.42.0 -> 1.43.0-alpha (GRAMMAR); resolver stays 1.31.0-alpha. VS Code extension 1.6.12.
+Deployed 2026-11-23; included in v1.54.0-alpha. One re-parse for 1.53.0: extractor 1.42.0 -> 1.43.0-alpha (GRAMMAR); resolver stays 1.31.0-alpha. VS Code extension 1.6.12.
 
 Merged lanes (git log 2323d07a9..HEAD):
 
@@ -108,9 +110,10 @@ Merged lanes (git log 2323d07a9..HEAD):
 - SLZ-IDXFP: index-possibly-out-of-range proves one side of the range at a time (a guard, a write, a caller, a result or an equal-length array each prove a side) instead of asking for both sides at once; precision change only, no new rule and no extractor/resolver change. Measured on the DL src\cli index: 382 -> 182 findings (205 removed, 5 gained -- each the same write now reporting its next unproven access); 21 dl:ok index-possibly-out-of-range markers that suppressed nothing any more are removed.
 - FBFIX: `repo refresh-schema` / `seed-fb --connection` work on Firebird 4 (reserved-word aliases quoted; inline NOT NULL and DEFAULT kept). `--connection` (import-fb, seed-fb, refresh-schema, FB snapshot) refuses OpenMode, CreateDatabase, DropDatabase, ConnectionDef, ConnectionDefName: DropDatabase=Yes used to delete the database. `refresh-schema --json` keeps stdout to one document; a bad `--select` id exits 2.
 - Docs / specs: Field Repository v2 spec and lane plans (owner rulings of 2026-11-22 folded in).
+
 ## v1.52.3-alpha -- 2026-11-22
 
-In integration (lane/v153-int). One re-parse for 1.52.3: resolver 1.30.0 -> 1.31.0-alpha (EXT-RES-TAILS: default indexer on an ancestor). Extractor stays 1.42.0-alpha -- hash-only baseline re-pins, proven by an extraction A/B (symbols / refs / unit_uses / call_edges / files byte-identical on the fixtures and the self project, engines 1096e368f vs the INT build). VS Code extension 1.6.11.
+Deployed 2026-11-22; included in v1.54.0-alpha. One re-parse for 1.52.3: resolver 1.30.0 -> 1.31.0-alpha (EXT-RES-TAILS: default indexer on an ancestor). Extractor stays 1.42.0-alpha -- hash-only baseline re-pins, proven by an extraction A/B (symbols / refs / unit_uses / call_edges / files byte-identical on the fixtures and the self project, engines 1096e368f vs the INT build). VS Code extension 1.6.11.
 
 Merged lanes (git log c53540a95..HEAD):
 
@@ -1920,7 +1923,7 @@ Extractor unchanged (1.21.1): no reindex needed.
   project's DB.** The DB is now the manifest's unique owner of the ACTIVE project
   (`ManifestDbForProject`); no unique owner -> nothing queued, logged. The no-project per-file
   fallback targets the DB covering the saved file, or skips. On 2026-10-16 every save ran
-  `index --project Micronite2027.dproj --db Delphi13MigrationAssistant.sqlite`.
+  `index --project MyApp.dproj --db Delphi13MigrationAssistant.sqlite`.
 - **IDE plugin: project-open auto-index used the folder form** (`index <dir> --db <projectDb>`,
   which widens a project DB); it is now `index --project <the .dproj>`. The "scan libraries"
   setting no longer affects this spawn (a library scan does not belong in a project DB).
@@ -2680,7 +2683,7 @@ No extractor or resolver change on top of 1.26.1: indexes do not re-parse.
   control.
 - **convert-* verbs no longer read a `.drag-lint.json` defaults file.** It is found by
   walking up from the CWD, so a pinned engine copy run from a project folder printed
-  `(loaded defaults from C:\Projects\.drag-lint.json)` on every run, and a `"db"` key
+  `(loaded defaults from C:\MyProjects\.drag-lint.json)` on every run, and a `"db"` key
   there would have become an EXPLICIT `--db` of `convert-apply`. A convert verb now takes
   its databases, rules and units from its command line only; when the file holds a key the
   defaults reader applies (`db`, `project`, `path`, `rule`, `watch`, `docs`), one
@@ -3317,7 +3320,7 @@ manifest-loader changes under `src\index`; each re-pin carries a dated note.)
   the database to the first manifest section whose DB existed, and the write paths honoured that
   default as if it had been typed. Measured in a fixture: indexing an unregistered `Hello2` wrote
   into the sibling `Hello.sqlite` and EVICTED `Hello.dpr` from it; on this machine the same path
-  wrote into `Micronite2027.sqlite`. Affected before 1.20.4, when no `--db` was given:
+  wrote into `MyApp.sqlite`. Affected before 1.20.4, when no `--db` was given:
   - `index --project <X>` -- wrote the project into the first existing section's DB. A REGISTERED
     project indexed for the first time went to `<cwd>\_D-RAG\<cwd name>.sqlite` instead of its
     section's DB.
@@ -6635,15 +6638,15 @@ what moved is where a database lives, not what is inside it.
 
 - **Every project's index moved out of the shared `.drag-lint` folder into a
   hidden `_D-RAG` folder beside its own project file.** Two days after the
-  2026-08-09 move to `C:\Projects\.drag-lint\<Repo>-<Project>.sqlite`, each
+  2026-08-09 move to `C:\drag-lint-index\<Repo>-<Project>.sqlite`, each
   project DB moved again, this time to `<project folder>\_D-RAG\<project file
   base name>.sqlite` (e.g. `C:\Projects\YADF\_D-RAG\YADF.sqlite`,
-  `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite`). All 27 project DBs
+  `C:\Projects\MyApp\CLIENT\_D-RAG\MyApp.sqlite`). All 27 project DBs
   were migrated and verified row-identical at the new path. `_D-RAG` also holds
   that project's `drag-lint-project.json` (ownership roots, next bullet) and
   its ghost-compile recovery journal. Only DBs with **no owning project
-  folder** stay in `C:\Projects\.drag-lint\`: `library-{platform}.sqlite` and
-  the SQL index (`C:\Projects\DB\SQL\drag-lint-sql.sqlite`). Both manifest
+  folder** stay in `C:\drag-lint-index\`: `library-{platform}.sqlite` and
+  the SQL index (`C:\Projects\MyApp\SQL\drag-lint-sql.sqlite`). Both manifest
   copies (`third_party\dll-win32\drag-lint.json` and `dll-win64\
   drag-lint.json`) resolve an omitted section `db` to this path automatically
   (`ExpandSectionDb` in `DRagLint.Index.Manifest.pas`); `resolve-dbs` is still
@@ -6679,18 +6682,13 @@ what moved is where a database lives, not what is inside it.
   **Library/Browsing** path are excluded (they belong to the library index);
   loose unreferenced files in the project folder are excluded.
 - **Per-repo union DBs retired; one DB per project.** DBs now live under
-  `C:\Projects\.drag-lint\` as `<Repo>-<Project>.sqlite`. ORM3's union DB
-  (`C:\Projects\DB\ORM3\drag-lint.sqlite`) is replaced by eight project DBs
-  (`ORM3-Micronite2027`, `ORM3-MicroniteMW1Service`, `ORM3-Interfaces`,
-  `ORM3-TestMicroniteObjects`, `ORM3-MicroniteTests`, `ORM3-TestCachedUpdates`,
-  `ORM3-PdfOcrImportTests`, `ORM3-TEST_uSetupDefaultsFrm`); this repo's own
+  `C:\drag-lint-index\` as `<Repo>-<Project>.sqlite`. ORM3's union DB
+  (`<project root>\drag-lint.sqlite`) is replaced by eight project DBs
+  (one per project); this repo's own
   self-index is now `DragLint-Cli.sqlite` (plus `DragLint-Wizard`,
   `DragLint-Tests`, `DragLint-CorpusScan`).
-- **Deleted DB files** (any doc or script naming them is stale):
-  `Delphi-RAG-lint.sqlite`, `TableTools.sqlite`, `OCRPDF.sqlite`,
-  `DataCopy.sqlite`, `Delphi-RAG-Lint-Graph.sqlite`, `M2022.sqlite`,
-  `active-projects.sqlite`, `convrules-worktree.sqlite`, `library.sqlite`,
-  `projects.sqlite`, `samples.sqlite`, and the ORM3 union DB above.
+- **Deleted DB files:** every per-repo union DB in the shared index folder (any
+  doc or script naming one is stale), and the ORM3 union DB above.
 - **`resolve-dbs` is how you find a DB.** `--platform <p>` lists every
   configured DB; `--project <file.dproj>` and `--in <file.pas>` resolve the one
   covering a given target. **Cross-project questions need several `--db`
@@ -8693,8 +8691,8 @@ each ships with a TDD fixture under `tests/lint/` verified by
   back to `--platform` flag, then manifest `defaultPlatform`.
 - **`index` manifest auto-DB** -- `drag-lint index <path>` without `--db` now
   looks up the manifest section covering `<path>` and uses that section's DB
-  (e.g. `index C:\Projects\DB\ORM3\CLIENT` auto-selects
-  `C:\Projects\DB\ORM3\drag-lint.sqlite` even when run from a different directory).
+  (e.g. `index C:\Projects\MyApp\CLIENT` auto-selects
+  `<project root>\drag-lint.sqlite` even when run from a different directory).
 - **Plugin platform-aware library DB** -- the IDE plugin's `ResolveActiveIndexDbs`
   now reads `indexes.outDir` from the manifest beside the engine exe and calls
   `IOTAProject.CurrentPlatform` to pick `library-Win64.sqlite` for Win64 projects
@@ -9169,7 +9167,7 @@ and DFM:
   `skSqlConstraint`. SQL columns are stored as children of their table
   (same shape as Delphi fields-of-class). Trigger references emit
   `sql_table_ref` rows. Real-world numbers from Micronite
-  `C:\Projects\DB\SQL\` (39 files, 14s):
+  `C:\Projects\MyApp\SQL\` (39 files, 14s):
 
   ```
   489 sql_table   8012 sql_column   619 sql_trigger
@@ -9187,7 +9185,7 @@ and DFM:
   `fb_columns.sql_column_symbol_id` to the Tier 1 DDL symbols by name.
   Each `FIB$*` block is wrapped in try/except, so a permission denial
   or schema mismatch on one optional table doesn't abort the snapshot.
-  Verified against `MICRONITEV6A.FDB`: 134 relations / 2273 columns /
+  Verified against a production Firebird database: 134 relations / 2273 columns /
   2049 field_info / 129 datasets in 0.5s, 99% cross-link rate for
   relations and 93% for columns.
 
