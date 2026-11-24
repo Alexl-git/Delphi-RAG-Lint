@@ -21,8 +21,8 @@ projects.
 third-party). These have no owning project folder, so they live together:
 
 ```
-C:\Projects\.drag-lint\library-Win64.sqlite
-C:\Projects\.drag-lint\library-Win32.sqlite
+C:\drag-lint-index\library-Win64.sqlite
+C:\drag-lint-index\library-Win32.sqlite
 ```
 
 ### Never guess a path -- ask the tool

@@ -19,7 +19,7 @@ repository that is configured but missing or unreadable is named there too; havi
 (`DRAGLINT_DEBUG` shows the reason):
 
 ```
-drag-lint: schema facts 2026-11-22T12:00:00Z (ddl) from Micronite.dlrepo
+drag-lint: schema facts 2026-11-22T12:00:00Z (ddl) from MyApp.dlrepo
 ```
 
 ## Reaching it in the IDE

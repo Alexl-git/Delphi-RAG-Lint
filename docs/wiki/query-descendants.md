@@ -54,7 +54,7 @@ index must exist.
 Illustrative:
 
 ```
-drag-lint query descendants --of TControl --db C:\Projects\.drag-lint\library-Win64.sqlite
+drag-lint query descendants --of TControl --db C:\drag-lint-index\library-Win64.sqlite
 ```
 
 This would list every `TControl` descendant in the Win64 platform library --

@@ -108,11 +108,11 @@ From the repository folder:
 ```
 drag-lint ask round-trip `
     --target frmBlueprint4.dxDBGrid1OperationVName `
-    --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --open
+    --project C:\Projects\MyApp\CLIENT\MyApp.dproj --open
 
 drag-lint ask butterfly `
     --target Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation `
-    --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --open
+    --project C:\Projects\MyApp\CLIENT\MyApp.dproj --open
 ```
 
 * Answers land in `%TEMP%\drag-lint-reports\<question>-<target>\`.

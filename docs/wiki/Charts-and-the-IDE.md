@@ -79,7 +79,7 @@ Run `drag-lint ask` with a question, a target and the project (or index).
 
 ```
 drag-lint ask butterfly --target Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation ^
-    --project CLIENT\Micronite2027.dproj --open
+    --project CLIENT\MyApp.dproj --open
 ```
 
 **`round-trip`** -- one edited grid field, both ways through the pipe. It reads
@@ -87,8 +87,8 @@ three indexes: the client project, the server project and the SQL-script index.
 
 ```
 drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1OperationVName ^
-    --project CLIENT\Micronite2027.dproj ^
-    --server-db SERVER\_D-RAG\MicroniteMW1Service.sqlite ^
+    --project CLIENT\MyApp.dproj ^
+    --server-db SERVER\_D-RAG\MyAppServer.sqlite ^
     --sql-db SQL\_D-RAG\drag-lint-sql.sqlite --open
 ```
 
@@ -109,7 +109,7 @@ answer as text; the engine answers it itself:
 
 ```
 drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1FtrsVNum `
-    --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
+    --project C:\Projects\MyApp\CLIENT\MyApp.dproj
 ```
 
 * It finds the project's index with the engine's `resolve-dbs` (`--project`, or

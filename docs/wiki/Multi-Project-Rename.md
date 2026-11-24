@@ -120,8 +120,8 @@ autofix: <N> fixable finding(s), <K> skipped (stale index) -- reindex: drag-lint
 Single finding (all or nothing), preview then apply:
 
 ```
-drag-lint lint --in C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db>
-drag-lint lint --in C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db> --apply
+drag-lint lint --in C:\Projects\MyApp\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db>
+drag-lint lint --in C:\Projects\MyApp\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db> --apply
 ```
 
 Batch (every fix is on by default since 1.37.0; `--fix-naming` is still accepted

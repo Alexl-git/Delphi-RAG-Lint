@@ -16,7 +16,7 @@ The types that actually mattered -- `Vcl.Skia.TSkSvgBrush`, `FMX.Skia.TSkSvg`,
 at a time, or by grepping the RTL and DevExpress trees.
 
 ```
-drag-lint query --name-like svgbrush --db C:\Projects\.drag-lint\library-Win32.sqlite --limit 5
+drag-lint query --name-like svgbrush --db C:\drag-lint-index\library-Win32.sqlite --limit 5
 ```
 
 ```

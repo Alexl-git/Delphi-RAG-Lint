@@ -79,9 +79,9 @@ the pair in `report-pairs.json`; with neither it draws the one side and says so.
 ## Examples
 
 ```
-drag-lint ask who-writes --target Blueprint4.TfrmBlueprint4.FNoRecursion --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
-drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1FtrsVNum --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --plain
-drag-lint ask deps --target uPipeSessionBuilder --in C:\Projects\DB\ORM3\SERVER\uPipeSessionBuilder.pas --open
+drag-lint ask who-writes --target Blueprint4.TfrmBlueprint4.FNoRecursion --project C:\Projects\MyApp\CLIENT\MyApp.dproj
+drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1FtrsVNum --project C:\Projects\MyApp\CLIENT\MyApp.dproj --plain
+drag-lint ask deps --target uPipeSessionBuilder --in C:\Projects\MyApp\SERVER\uPipeSessionBuilder.pas --open
 ```
 
 ## Related

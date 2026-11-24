@@ -230,7 +230,7 @@ tells you which dozen.
 Examined 2 file(s): 14 of 117 From properties used; 22 unit(s) offered on the Unit Rules tab.
 ```
 
-(the `14 of 117` is real: measured against `C:\Projects\DB\ORM3\CLIENT\SelectData.dfm` for a
+(the `14 of 117` is real: measured against `C:\Projects\MyApp\CLIENT\SelectData.dfm` for a
 `Vcl.StdCtrls.TEdit -> Vcl.StdCtrls.TMemo` rule.)
 
 If the files use names that have no row in this grid, a report window lists them
