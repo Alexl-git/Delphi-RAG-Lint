@@ -183,6 +183,7 @@ uses
   , DRagLint.Project.Members
   , DRagLint.Project.Coherence
   , DRagLint.Project.OwnRoots
+  , DRagLint.Lint.OwnFilter { lint-all's third-party filter (1.54 OWNFILTER) }
   , DRagLint.Project.Facts
   , DRagLint.Project.DefineProfile
   , DRagLint.MCP        .Server
@@ -650,6 +651,8 @@ function UnitNotInLibraryFindings(const AProjectFile: string): TArray<TLintFindi
 { Forward: 1.52.2 Q5 -- the library / third-party roots unit-not-in-dpr leaves out; it sits
   beside UnitNotInLibraryFindings, which judges the same folders. }
 function UnitNotInDprLibraryRoots(const AProjectFile: string): TArray<string>; forward;
+{ Forward: 1.54 OWNFILTER -- those roots split for lint-all's third-party filter. }
+function OwnFilterLibraryScope(const AProjectFile: string): TLibraryScope; forward;
 { Forward: the naming autofix's stale-index hint (FinalizeAndOutput) lives
   beside IfdefProjectFile, far below. }
 function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; forward;
@@ -13084,7 +13087,7 @@ end;
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil;
-  const AUnjudgedRules: TArray<string> = nil; AMarkerUnion: TMarkerUnion = nil): Integer;
+  const AUnjudgedRules: TArray<string> = nil; AMarkerUnion: TMarkerUnion = nil; const AOwnFilter: IOwnFilter = nil): Integer;
 var
   Cfg      : TLintConfig         ;
   Survivors: TArray<TLintFinding>;
@@ -13858,6 +13861,11 @@ begin
         end;
         JArr.AddElement(JObj);
       end;
+      { 1.54 OWNFILTER: a note row, not a finding -- it takes no part in --fail-on, the baseline or the exit code }
+      var SkipRow: TJSONObject:= if AOwnFilter = nil then nil else AOwnFilter.JsonRow;
+      if SkipRow <> nil then JArr.AddElement(SkipRow);
+      var BadRow: TJSONObject:= if AOwnFilter = nil then nil else AOwnFilter.MalformedRow;
+      if BadRow <> nil then JArr.AddElement(BadRow);
       EmitFindingsDoc(AArgs, JArr.Format(2));
     finally
       JArr.Free;
@@ -20000,20 +20008,23 @@ end;
 
   One line when the default cost nothing, the loud form when it skipped files.
   Nothing for a declared set or an unanchored run. }
-function OwnRootsDefaultNote(const AOwn: TOwnRoots; ASkippedCount: Integer): TArray<string>;
+{ 1.54 OWNFILTER: the default no longer hides what lies outside -- an unmarked file there is linted
+  (AKeptOutside), so the loud form says so and how to leave real third-party code out. }
+function OwnRootsDefaultNote(const AOwn: TOwnRoots; AKeptOutside: Integer): TArray<string>;
 begin
   Result:= nil;
   if (not AOwn.Active) or AOwn.Declared then Exit;
   var Cfg: string:= TPath.Combine(TPath.Combine(AOwn.Anchor, DRAG_HOME_DIR), 'drag-lint-project.json');
   var Why: string:= if TFile.Exists(Cfg) then 'could not be read or declares no "ownRoots"'
                     else 'does not exist (it is usually untracked, so a fresh clone or a git worktree lacks it)';
-  if ASkippedCount = 0 then
-    Result:= [Format('lint-all: ownRoots = %s (DEFAULT -- %s %s)', [AOwn.Anchor, Cfg, Why])]
-  else
-    Result:= [Format('lint-all: NOTE: %s %s, so ownRoots DEFAULTED to the project folder %s -- ' +
-      'the %d file(s) outside it were treated as third-party and NOT linted. If they are this project''s ' +
-      'own code, declare "ownRoots" in that file (e.g. ["..\\.."] for a .dproj in a subfolder).',
-      [Cfg, Why, AOwn.Anchor, ASkippedCount])];
+  Result:= [
+    if AKeptOutside = 0 then
+      Format('lint-all: ownRoots = %s (DEFAULT -- %s %s)', [AOwn.Anchor, Cfg, Why])
+    else
+      Format('lint-all: NOTE: %s %s, so ownRoots DEFAULTED to the project folder %s -- ' +
+      'the %d file(s) outside it that nothing marks as third-party ARE linted. To leave third-party ones out, name ' +
+      'their folder in "excludeRoots" of that file, or list the project''s folders in "ownRoots" (e.g. ["..\\.."]).',
+      [Cfg, Why, AOwn.Anchor, AKeptOutside])];
 end;
 
 function BuildSkippedThirdPartyLines(const ASkipped: TArray<string>; const AOwn: TOwnRoots): TArray<string>;
@@ -20968,6 +20979,25 @@ begin
   FilePaths:= nil;
   var ExcludedCount: Integer:= 0;
   var SkippedThird : TArray<string>:= nil;
+  { 1.54 OWNFILTER: ownRoots / excludeRoots first, then the inferred signals; counts what it drops. }
+  var OwnSetup: TOwnFilterSetup:= Default(TOwnFilterSetup);
+  OwnSetup.Own    := Own;
+  OwnSetup.Cfg    := Cfg;
+  OwnSetup.ShowAll:= AArgs.LintThirdParty;
+  OwnSetup.FixRun := AArgs.Fix;
+  var OwnProject: string:= AArgs.ProjectPath;
+  if OwnProject = '' then OwnProject:= ManifestProjectFileForDb(ProjectDb);
+  if OwnProject = '' then
+    for var OwnExt: string in ['.dproj', '.dpr', '.dpk'] do
+    begin
+      OwnProject:= TPath.Combine(Own.Anchor, ChangeFileExt(ExtractFileName(ProjectDb), OwnExt));
+      if TFile.Exists(OwnProject) then Break;
+    end;
+  OwnSetup.Libraries:= function: TLibraryScope begin Result:= OwnFilterLibraryScope(OwnProject); end;
+  var OwnAsked: string:= if AArgs.RuleList <> '' then AArgs.RuleList else AArgs.Rule;
+  var OwnKept : TFunc<string, Boolean>:= RuleKeptByRun(AArgs, Cfg, nil);
+  OwnSetup.Counts:= function(AId: string): Boolean begin Result:= LintRuleWants(OwnAsked, [AId]) and OwnKept(AId); end;
+  var OwnFilter: IOwnFilter:= MakeOwnFilter(OwnSetup);
   for Fid in Store.GetAllFileIds do
   begin
     PasPath:= Store.GetFilePath(Fid);
@@ -20988,8 +21018,16 @@ begin
     if MatchText(ExtractFileExt(PasPath), ['.pas', '.dpr', '.dpk', '.inc'])
        and TFile.Exists(PasPath) then
     begin
-      if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
-      if (not AArgs.LintThirdParty) and (not Own.IsOurs(PasPath)) then
+      if Cfg.IsPathExcluded(PasPath) then
+      begin
+        Inc(ExcludedCount);
+        OwnFilter.NoteFile(PasPath, srExcludePaths);
+        Continue;
+      end;
+      { 1.54 OWNFILTER: a file outside --project's closure is the scope filter's business, not a third-party skip }
+      if (ScopeSet <> nil) and not ScopeSet.ContainsKey(ScopeKey(PasPath)) and (OwnFilter.Judge(PasPath) = srOwn) then Continue;
+      OwnFilter.NoteFile(PasPath, OwnFilter.Judge(PasPath));
+      if OwnFilter.Judge(PasPath) <> srOwn then
         begin
           SkippedThird:= SkippedThird + [PasPath];
           Continue;
@@ -21016,7 +21054,8 @@ begin
     say different things -- see Fix 1, 2026-08-11 review. }
   var SkipLines: TArray<string>:= BuildSkippedThirdPartyLines(SkippedThird, Own);
   for var SkLine: string in SkipLines do EmitNoteLine(AArgs, SkLine);
-  for var OwnLine: string in OwnRootsDefaultNote(Own, Length(SkippedThird)) do EmitNoteLine(AArgs, OwnLine);
+  for var OwnLine: string in OwnRootsDefaultNote(Own, OwnFilter.KeptOutside) do EmitNoteLine(AArgs, OwnLine);
+  if OwnFilter.MalformedNote <> '' then EmitNoteLine(AArgs, OwnFilter.MalformedNote); { 1.54 OWNFILTER: a malformed declaration widened the report }
 
   { Per-file rules: external .scm rules + all built-in AST checks.
 
@@ -21734,7 +21773,12 @@ begin
           Drop:= Cfg.IsPathExcluded(F.FilePath);
           ExclMemo.Add(F.FilePath, Drop);
         end;
-        if not Drop then begin Kept[KeptCount]:= F; Inc(KeptCount); end;
+        if not Drop then
+        begin
+          Kept[KeptCount]:= F;
+          Inc(KeptCount);
+        end
+        else OwnFilter.NoteFinding(F.FilePath, F.RuleId, srExcludePaths);
       end;
       SetLength(Kept, KeptCount);
       Findings:= Kept;
@@ -21746,42 +21790,39 @@ begin
   LintPhase(Format('ownership filter (%d findings)', [Length(Findings)]));
   if (not AArgs.LintThirdParty) and Own.Active then
   begin
-    var OwnMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
-    try
-      var Ours: TArray<TLintFinding>;
-      SetLength(Ours, Length(Findings));
-      var OursCount: Integer:= 0;
-      for F in Findings do
+    var Ours: TArray<TLintFinding>;
+    SetLength(Ours, Length(Findings));
+    var OursCount: Integer:= 0;
+    for F in Findings do
+    begin
+      { 1.54 OWNFILTER: Judge memoizes per file, as the dictionary that stood here did }
+      var Keep: Boolean:= OwnFilter.Judge(F.FilePath) = srOwn;
+      { B19 (1.52 BK-XPROJ): a project-COMPOSITION finding (the project lists, needs or
+        cannot resolve this unit) is about the project, wherever the unit lies: kept when
+        the unit is in this --project's closure, and says so. }
+      if (not Keep) and (ScopeSet <> nil) and IsProjectCompositionRule(F.RuleId)
+         and ScopeSet.ContainsKey(ScopeKey(F.FilePath)) then
       begin
-        var Keep: Boolean;
-        if F.FilePath = '' then Keep:= True
-        else if not OwnMemo.TryGetValue(F.FilePath, Keep) then
-        begin
-          Keep:= Own.IsOurs(F.FilePath);
-          OwnMemo.Add(F.FilePath, Keep);
-        end;
-        { B19 (1.52 BK-XPROJ): a project-COMPOSITION finding (the project lists, needs or
-          cannot resolve this unit) is about the project, wherever the unit lies: kept when
-          the unit is in this --project's closure, and says so. }
-        if (not Keep) and (ScopeSet <> nil) and IsProjectCompositionRule(F.RuleId)
-           and ScopeSet.ContainsKey(ScopeKey(F.FilePath)) then
-        begin
-          Ours[OursCount]:= F;
-          if not ContainsText(F.Message, OUTSIDE_ROOTS_NOTE) then
-            Ours[OursCount].Message:= F.Message + ' (' + OUTSIDE_ROOTS_NOTE + ')';
-          Inc(OursCount);
-        end
-        else if Keep then
-        begin
-          Ours[OursCount]:= F;
-          Inc(OursCount);
-        end;
-      end;
-      SetLength(Ours, OursCount);
-      Findings:= Ours;
-    finally
-      OwnMemo.Free;
+        Ours[OursCount]:= F;
+        if not ContainsText(F.Message, OUTSIDE_ROOTS_NOTE) then
+          Ours[OursCount].Message:= F.Message + ' (' + OUTSIDE_ROOTS_NOTE + ')';
+        Inc(OursCount);
+      end
+      else if Keep then
+      begin
+        Ours[OursCount]:= F;
+        Inc(OursCount);
+      end
+      else OwnFilter.NoteFinding(F.FilePath, F.RuleId, OwnFilter.Judge(F.FilePath));
     end;
+    SetLength(Ours, OursCount);
+    Findings:= Ours;
+  end;
+  { 1.54 OWNFILTER: how many findings, and why -- the same lines on the console and in the report }
+  for var DropLine: string in OwnFilter.SummaryLines do
+  begin
+    EmitNoteLine(AArgs, DropLine);
+    SkipLines:= SkipLines + [DropLine];
   end;
 
   { Scope the PROJECT-WIDE rules too. Filtering FilePaths above only narrowed the
@@ -21859,7 +21900,7 @@ begin
         else if SameText(FF.Severity, 'hint') then Inc(HC)
         else Inc(IC);
       Summary:= Format('lint-all: %d finding(s) -- %d error(s), %d warning(s), %d info, %d hint -- %d file(s) scanned',
-        [Length(ASurv), EC, WC, IC, HC, Length(FilePaths)]);
+        [Length(ASurv), EC, WC, IC, HC, Length(FilePaths)]) + OwnFilter.SummarySuffix;
       OL:= TStringBuilder.Create;
       try
         { CIRCULAR USES SECTION, at the TOP of the report (owner request).
@@ -21967,7 +22008,7 @@ begin
     ProjectDb, { the store actually opened above -- the doc --fix path renders
                  under options defined relative to it, and lint-all's primary is
                  NOT AArgs.DbPath. See OpenExtraStoresExcept. }
-    nil, nil, MarkerUnion
+    nil, nil, MarkerUnion, OwnFilter
   );
   if MarkerUnion <> nil then
     EmitNoteLine(AArgs, Format('lint-all: --shared-db: %d marker(s) judged across %d DB(s), %d left unjudged ' +
@@ -28647,6 +28688,15 @@ begin
     { No library roots resolvable = exclude nothing (the pre-Q5 answer), never a lint failure. }
     on E: Exception do Result:= nil;
   end;
+end;
+/// <summary>1.54 OWNFILTER: the library folders lint-all's third-party filter knows.</summary>
+/// <param name="AProjectFile">The project's .dproj / .dpr / .dpk; a missing one knows no registry roots.</param>
+/// <returns>UnitNotInDprLibraryRoots, split into manifest-declared and registry folders, plus the
+/// units the project file lists.</returns>
+function OwnFilterLibraryScope(const AProjectFile: string): TLibraryScope;
+begin
+  Result:= MakeLibraryScope(UnitNotInDprLibraryRoots(AProjectFile),
+    ManifestLibraryIncludeRoots(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir)), AProjectFile);
 end;
 /// <summary>unit-not-in-library: one finding per third-party unit the project
 /// compiles that is neither a project member nor in the library.</summary>

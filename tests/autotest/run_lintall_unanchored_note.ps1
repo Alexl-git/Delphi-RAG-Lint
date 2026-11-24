@@ -64,6 +64,9 @@ try {
   $a = Invoke-Dl @('lint-all', '--db', "$WorkDir\dbs\p.sqlite")
   Check 'A: unanchored project DB -- NOTE says no ownership scoping' ($a.All -match $notePat) "exit=$($a.Exit)"
   Check 'A: unanchored project DB -- NOTE names the --project remedy' ($a.All -match '(?m)NOTE: .*--project') ''
+  # 1.54 OWNFILTER: an undeclared default skips nothing that is not marked as third-party, so declare the root
+  New-Item -ItemType Directory -Path "$WorkDir\proj\_D-RAG" -Force | Out-Null
+  Write-Ascii "$WorkDir\proj\_D-RAG\drag-lint-project.json" '{ "ownRoots": ["."] }'
   $b = Invoke-Dl @('lint-all', '--db', "$WorkDir\dbs\p.sqlite", '--project', "$WorkDir\proj\App.dpr")
   Check 'B: with --project -- no unscoped NOTE' ($b.All -notmatch $notePat) "exit=$($b.Exit)"
   Check 'B: with --project -- the outside file is skipped (scoping is live)' ($b.All -match 'outside the project''s own roots skipped') ''

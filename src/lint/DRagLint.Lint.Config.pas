@@ -325,6 +325,16 @@ type
     /// replaces the list; the top level appends. Not written by
     /// TLintConfigWriter, which preserves the key verbatim.</remarks>
     PlatformDivergentAllow: TArray<string>;
+    /// <summary>Folder names lint-all treats as vendored code besides the built-in ones, from the
+    /// top-level "vendored_folders" string array; "-name" takes a built-in name out.</summary>
+    /// <remarks>Whole folder names, case-insensitive. A profile that names the key replaces the
+    /// list; the top level appends. Read by DRagLint.Lint.OwnFilter.</remarks>
+    VendoredFolders: TArray<string>;
+    /// <summary>Path globs (as exclude_paths) lint-all always treats as the project's own code, from
+    /// the top-level "own_paths" string array.</summary>
+    /// <remarks>Beats a vendored folder name, a library path and "outside the ownRoots"; loses to
+    /// exclude_paths and excludeRoots. Same profile rule as VendoredFolders.</remarks>
+    OwnPaths: TArray<string>;
     /// <summary>The raw "target_compiler" token (two-way modernize, 1.38): a
     /// product version (13, 12, 10.4, XE7 ...), a CompilerVersion (37, 36 ...)
     /// or "auto". Empty when the key is absent.</summary>
@@ -1144,6 +1154,8 @@ begin
   ApplyList('exclude_paths', FExcludePaths);
   ApplyList('ifdef_allow', IfdefAllow);
   ApplyList('platform_divergent_allow', PlatformDivergentAllow);
+  ApplyList('vendored_folders', VendoredFolders);
+  ApplyList('own_paths', OwnPaths);
   { two-way modernize (1.38): a scalar, so a profile simply overrides it }
   if AObj.GetValue('target_compiler') <> nil then TargetCompiler:= Trim(AObj.GetValue('target_compiler').Value);
   if AObj.GetValue('severity') is TJSONObject then

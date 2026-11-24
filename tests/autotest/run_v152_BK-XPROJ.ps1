@@ -97,6 +97,9 @@ try {
   Check 'U5 _D-RAG WITHOUT groupproj: UsedOnlyByApp2 fires again' ((Hits $ng $UG 'UsedOnlyByApp2') -eq 1) ("hits=$(Hits $ng $UG 'UsedOnlyByApp2')")
   [IO.File]::Move((Join-Path $Work 'Group.groupproj.off'), (Join-Path $Work 'Group.groupproj'))
 
+  # 1.54 OWNFILTER: an undeclared default skips nothing that is not marked as third-party, so App1 declares its root
+  [IO.Directory]::CreateDirectory((Join-Path $Work 'App1\_D-RAG')) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $Work 'App1\_D-RAG\drag-lint-project.json'), '{ "ownRoots": ["."] }', [Text.Encoding]::ASCII)
   $UR = 'used-unit-not-resolvable'
   $onOut = { param($fs) ,@($fs | Where-Object { ('' + $_.file_path) -match 'UOut\.pas$' }) }
   $tp = Lint $Solo @('--lint-third-party')
