@@ -48,7 +48,7 @@ try {
   Check 'M0 the model tests build' (($bl -match 'MODEL_EXITCODE=0') -and ($bl -notmatch 'Error: E\d+')) (($bl -split "`n" | Select-String 'Error' | Select-Object -First 3) -join ' / ')
   $u = @(& { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'FieldSelectTests.exe') 2>&1 | ForEach-Object { "$_" } }); $uc = $LASTEXITCODE
   $u | Where-Object { $_ -cmatch '^(FAIL|EXCEPTION)' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
-  Check "M1 model tests ($($u | Select-Object -Last 1)), none skipped" (($uc -eq 0) -and (($u | Select-Object -Last 1) -eq 'Summary: pass=70 fail=0')) ($u | Select-Object -Last 1)
+  Check "M1 model tests ($($u | Select-Object -Last 1)), none skipped" (($uc -eq 0) -and (($u | Select-Object -Last 1) -eq 'Summary: pass=81 fail=0')) ($u | Select-Object -Last 1)
   if ($SkipForms) { Write-Host 'SKIP F0-F1 (-SkipForms)' }
   else {
     Check 'F0 the forms build without ToolsAPI' ($bl -match 'FORMS_EXITCODE=0') $blog
@@ -118,6 +118,10 @@ try {
   Check 'S2 every dialog call passes the theme' ([regex]::Matches($cmd, '\b(PickDataset|SelectFields|ConfirmChanges)\([^\r\n]*ApplyIdeTheme').Count -eq 3)
   Check 'S3 a form edited after the dry run is not written' ($cmd -match "(?s)if ModuleIsDirty\(OpenModuleOf\(Form\.Dfm\)\) then Form\.Show\([^\r\n]*\r\n\s+else ApplySelection\(Form, SUB_WRITE_DFM")
   Check 'S4 a read is applied only when a second dry run is the same' ($cmd -match "if Newer\.Fingerprint = Plan\.Fingerprint then ApplySelection\(Form, SUB_READ_DFM")
+  Check 'S6 the form is looked at again after the write' ($cmd -match '(?s)System\.SysUtils\.DeleteFile\(SelectFile\);.{0,400}?AfterWrite\(Form, pExitCode, Before\)')
+  Check 'S6b AfterWrite asks for dirty, then reloads or says why not' ($cmd -match '(?s)function AfterWrite\(.*?ReloadStep\(pExitCode, Module <> nil, ModuleIsDirty\(Module\),.*?ApplyNotice\(')
+  Check 'S7 a read looks for unsaved changes before it writes' ($cmd -match '(?s)if ModuleIsDirty\(OpenModuleOf\(Form\.Dfm\)\) then Form\.Show\([^\r\n]*\r\n\s+else if Newer\.Fingerprint = Plan\.Fingerprint then ApplySelection\(Form, SUB_READ_DFM')
+  Check 'S8 an exception of a step is shown, not only logged' (($cmd -match '(?s)procedure TFormContext\.Guarded\(.*?on E: Exception do\s+begin.*?DLT\(.*?Show\(') -and ([regex]::Matches($cmd, '\bForm\.Guarded\(').Count -eq 2))
   Check 'S5 --apply is never used: only --select writes' (([regex]::Matches($cmd.Substring($cmd.IndexOf('1.54 TT-DIALOG: the form')), '--apply').Count -eq 0))
 } finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
 Write-Host "$script:Count checks"

@@ -20,6 +20,7 @@ uses
   , DRagLint.Core.Model
   , DRagLint.V151.Api
   , DRagLint.V154.ParamModes
+  , DRagLint.Analysis.Cfg
   ;
 
 const
@@ -65,6 +66,7 @@ type
     FManaged  : TDictionary<string, Boolean>;
     FEdges    : TDictionary<string, Int64>;
     FParams   : TDictionary<Int64, TV154ParamList>;
+    FNoReturn : TDictionary<string, Boolean>;
     FFindings : TList<TLintFinding>;
     procedure Collect(const ARoot: TTSNode);
     procedure Emit(const ARule, ASeverity, AMessage: string; const ANode: TTSNode);
@@ -78,8 +80,20 @@ type
     procedure AddResultReads(const ANode: TTSNode; AList: TList<TTSNode>);
     function ResultReads(const ANode: TTSNode): TArray<TTSNode>;
     function SetAtOnce(const ABody: TTSNode): Boolean;
-    function GuardsOf(const ARoutine, ANode: TTSNode): TArray<string>;
-    function SameGuard(const ARoutine, ARead: TTSNode): Boolean;
+    function IsFreshSet(const ANode: TTSNode): Boolean;
+    function FreshSets(const ARoutine, ARead: TTSNode): TArray<TTSNode>;
+    function IsConditional(const ARoutine, ANode: TTSNode): Boolean;
+    function HasEnumLabels(const ACase: TTSNode): Boolean;
+    function IsBlind(const ANode: TTSNode): Boolean;
+    function BranchOf(const ARoutine, ASet: TTSNode; out ABranch: TTSNode): Boolean;
+    function OneBranch(const ARoutine, ARead: TTSNode; const ASets: TArray<TTSNode>): Boolean;
+    function LeavesBefore(const ANode: TTSNode; AByte: UInt32): Boolean;
+    function ReachedUnset(const ARoutine, ARead: TTSNode): Boolean;
+    function BodyNeverReturns(const ARoutine: TTSNode): Boolean;
+    function IndexedNeverReturns(const AName: string): Boolean;
+    function NeverReturns(const AName: string): Boolean;
+    function CalledName(const AStatement: TTSNode): string;
+    procedure CutRaising(ACfg: TCfg);
     function FilledEarlier(const AItem, ARead: TTSNode): Boolean;
     procedure CheckResult(const ARoutine: TTSNode);
     procedure LoadEdges;
@@ -148,7 +162,6 @@ uses
   , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Storage.SQLite
-  , DRagLint.Analysis.Cfg
   , DRagLint.Analysis.DataFlow
   , DRagLint.Analysis.Flow.Lattices
   ;
@@ -161,7 +174,17 @@ const
   SELF_PREFIX = SELF_NAME + '.';
   SYSTEM_PREFIX = 'system.';
   ROUTINE_NODES: array[0..1] of string = ('defProc', 'lambda');
-  IF_NODES: array[0..1] of string = ('if', 'ifElse');
+  IF_NODES: array[0..2] of string = ('if', 'ifElse', 'exprIf');
+  COUNTED_LOOPS: array[0..1] of string = ('for', 'foreach');
+  LOOP_NODES: array[0..3] of string = ('while', 'for', 'foreach', 'repeat');
+  SHORT_CIRCUITS: array[0..1] of string = ('kAnd', 'kOr');
+  { words that leave a routine }
+  LEAVE_NAMES: array[0..3] of string = ('exit', 'halt', 'abort', 'runerror');
+  { RTL routines that always raise }
+  RAISE_CALLS: array[0..1] of string = ('raiselastoserror', 'raiselastwin32error');
+  CALL_STATEMENTS: array[0..3] of string = ('statement', 'exprCall', 'exprDot', 'identifier');
+  OWN_PREFIXES: array[0..2] of string = ('self', 'sysutils', 'system.sysutils');
+  NO_RETURN_DIRECTIVE = 'noreturn';
   MANAGED_TYPES: array[0..10] of string = ('string', 'unicodestring', 'ansistring', 'widestring', 'rawbytestring', 'utf8string', 'variant',
     'olevariant', 'iinterface', 'iunknown', 'tbytes');
   PLAIN_TYPES: array[0..26] of string = ('integer', 'cardinal', 'byte', 'word', 'smallint', 'shortint', 'int64', 'uint64', 'longint', 'longword', 'nativeint',
@@ -416,6 +439,7 @@ begin
   FTypes    := TDictionary<string, TTSNode>.Create;
   FManaged  := TDictionary<string, Boolean>.Create;
   FParams   := TDictionary<Int64, TV154ParamList>.Create;
+  FNoReturn := TDictionary<string, Boolean>.Create;
   FFindings := TList<TLintFinding>.Create;
   Parsed    := TAstParseCache.Get(ACtx.Path);
   if Parsed.Tree = nil then Exit;
@@ -426,6 +450,7 @@ end;
 destructor TFlowRun.Destroy;
 begin
   FFindings.Free;
+  FNoReturn.Free;
   FParams.Free;
   FEdges.Free;
   FManaged.Free;
@@ -629,54 +654,299 @@ begin
   end;
 end;
 
-{ The conditions ANode stands under, an else marked. }
-function TFlowRun.GuardsOf(const ARoutine, ANode: TTSNode): TArray<string>;
+{ ANode sets the whole Result to something that does not come from Result itself, or hands it to a routine that can. }
+function TFlowRun.IsFreshSet(const ANode: TTSNode): Boolean;
 var
-  Up  : TTSNode;
-  I   : Integer;
-  Part: string;
+  Path, Call: TTSNode;
 begin
-  Result:= nil;
-  Up    := ANode.Parent;
-  while not (Up.IsNull or (Up = ARoutine)) do
-  begin
-    if MatchStr(Up.NodeType, IF_NODES) and (Up.NamedChild(1).EndByte <= ANode.StartByte) then
-    begin
-      Part:= Flat(Up.NamedChild(1));
-      for I:= 0 to Up.NamedChildCount - 1 do
-        if (Up.NamedChild(I).NodeType = 'kElse') and (Up.NamedChild(I).EndByte <= ANode.StartByte) then Part:= 'else ' + Part;
-      Result:= Result + [Part];
-    end;
-    Up:= Up.Parent;
-  end;
+  Path:= PathOf(ANode);
+  if IsAssignTarget(Path) then Exit((Path = ANode) and (Length(ResultReads(Path.Parent)) = 0));
+  if (Lower(ANode) <> RESULT_NAME) or IsResultRead(ANode) then Exit(False);
+  Call  := CallOfArgument(Path);
+  Result:= Call.IsNull or (Length(ResultReads(Call)) = 0);   // SetLength(Result, Length(Result) + 1) keeps what is there
 end;
 
-{ An earlier assignment that sets Result from scratch stands under the same condition as the read. }
-function TFlowRun.SameGuard(const ARoutine, ARead: TTSNode): Boolean;
+{ The fresh sets that can come before ARead: earlier in the text, or in a loop around both. }
+function TFlowRun.FreshSets(const ARoutine, ARead: TTSNode): TArray<TTSNode>;
 var
   List: TList<TTSNode>;
-  Node: TTSNode;
-  Mine: TArray<string>;
-  Part: string;
+  Node, Up: TTSNode;
+  Loop: Cardinal;   // end of the outermost loop around ARead; 0 = none
 begin
-  Result:= False;
-  Mine  := GuardsOf(ARoutine, ARead);
-  if Mine = nil then Exit;
+  Result:= nil;
+  Loop  := 0;
+  Up    := ARead.Parent;
+  while not (Up.IsNull or (Up = ARoutine)) do
+  begin
+    if MatchStr(Up.NodeType, LOOP_NODES) then Loop:= Up.EndByte;
+    Up:= Up.Parent;
+  end;
   List:= TList<TTSNode>.Create;
   try
     AddUses(ARoutine.ChildByField('body'), RESULT_NAME, FSrc, List);
+    AddUses(ARoutine.ChildByField('body'), LastName(Lower(Header(ARoutine).ChildByField('name'))), FSrc, List);
     for Node in List do
-    begin
-      if (Node.StartByte >= ARead.StartByte) or (not IsAssignTarget(Node)) then Continue;
-      if Length(ResultReads(Node.Parent)) > 0 then Continue;
-      for Part in GuardsOf(ARoutine, Node) do
-        if MatchStr(Part, Mine) then Exit(True);
-    end;
+      if ((Node.StartByte < ARead.StartByte) or (Node.StartByte < Loop)) and IsFreshSet(Node) then Result:= Result + [Node];
   finally
     List.Free;
   end;
 end;
 
+{ AChild of AParent stands behind a child of the kind AKind. }
+function IsBehind(const AParent, AChild: TTSNode; const AKind: string): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  for I:= 0 to AParent.NamedChildCount - 1 do
+    if (AParent.NamedChild(I).NodeType = AKind) and (AParent.NamedChild(I).EndByte <= AChild.StartByte) then Exit(True);
+end;
+
+{ Some entries of the routine pass ANode by: it is not evaluated whenever control comes to its outermost statement. }
+function TFlowRun.IsConditional(const ARoutine, ANode: TTSNode): Boolean;
+var
+  Child, Up: TTSNode;
+begin
+  Result:= False;
+  Child := ANode;
+  Up    := Child.Parent;
+  while not (Result or Up.IsNull or (Up = ARoutine)) do
+  begin
+    if MatchStr(Up.NodeType, IF_NODES) then Result:= IsBehind(Up, Child, 'kThen')
+    else if Up.NodeType = 'while' then Result:= Up.ChildByField('condition').StartByte <> Child.StartByte
+    else if MatchStr(Up.NodeType, COUNTED_LOOPS) or MatchStr(Up.NodeType, ROUTINE_NODES) then Result:= True
+    else if Up.NodeType = 'case' then Result:= IsBehind(Up, Child, 'kOf')
+    else if Up.NodeType = 'try' then Result:= IsBehind(Up, Child, 'kExcept')
+    else if (Up.NodeType = 'exprBinary') and HasChild(Up, SHORT_CIRCUITS) then Result:= Up.ChildByField('rhs') = Child;
+    Child:= Up;
+    Up   := Child.Parent;
+  end;
+end;
+
+{ A label of ACase names a value of an enumeration, or True / False: the branches can be all the values there are. }
+function TFlowRun.HasEnumLabels(const ACase: TTSNode): Boolean;
+
+  function IsEnumValue(const AName: string): Boolean;
+  var
+    Decl  : TTSNode;
+    Store : ISymbolStore;
+    Symbol: TSymbol;
+  begin
+    Result:= False;
+    for Decl in FTypes.Values do
+      if HasNode(Decl, ['declEnum']) and TRegEx.IsMatch(Text(Decl), '\b' + TRegEx.Escape(AName) + '\b', [roIgnoreCase]) then Exit(True);
+    for Store in [FCtx.Store, FCtx.LibStore] do
+      if Store <> nil then
+        for Symbol in Store.FindSymbolsByExactName(AName) do
+          if Symbol.Kind = skEnumValue then Exit(True);
+  end;
+
+  function NamesValue(const ANode: TTSNode): Boolean;
+  var
+    I: Integer;
+  begin
+    Result:= MatchStr(Lower(ANode), ['true', 'false']) or ((ANode.NodeType = 'identifier') and IsEnumValue(Text(ANode)));
+    I     := 0;
+    while (not Result) and (I < ANode.NamedChildCount) do
+    begin
+      Result:= NamesValue(ANode.NamedChild(I));
+      Inc(I);
+    end;
+  end;
+
+var
+  I, J: Integer;
+  Arm, Body: TTSNode;
+begin
+  Result:= False;
+  for I:= 0 to ACase.NamedChildCount - 1 do
+  begin
+    Arm:= ACase.NamedChild(I);
+    if Arm.NodeType <> 'caseCase' then Continue;
+    Body:= Arm.ChildByField('body');
+    for J:= 0 to Arm.NamedChildCount - 1 do
+      if (Body.IsNull or (Arm.NamedChild(J).EndByte <= Body.StartByte)) and NamesValue(Arm.NamedChild(J)) then Exit(True);
+  end;
+end;
+
+{ Nothing says that a path passes a set inside ANode by: a loop, a try with a handler, a case over an enumeration. }
+function TFlowRun.IsBlind(const ANode: TTSNode): Boolean;
+begin
+  if ANode.NodeType = 'try' then Exit(HasChild(ANode, ['kExcept']));
+  if ANode.NodeType = 'case' then Exit(HasEnumLabels(ANode));
+  Result:= MatchStr(ANode.NodeType, LOOP_NODES) or MatchStr(ANode.NodeType, ROUTINE_NODES);
+end;
+
+{ The outermost if or case ASet stands in. False when there is none, or a node that is blind. }
+function TFlowRun.BranchOf(const ARoutine, ASet: TTSNode; out ABranch: TTSNode): Boolean;
+var
+  Up: TTSNode;
+begin
+  ABranch:= Default(TTSNode);
+  Up     := ASet.Parent;
+  while not (Up.IsNull or (Up = ARoutine)) do
+  begin
+    if IsBlind(Up) then Exit(False);
+    if MatchStr(Up.NodeType, IF_NODES) or (Up.NodeType = 'case') then ABranch:= Up;
+    Up:= Up.Parent;
+  end;
+  Result:= not ABranch.IsNull;
+end;
+
+{ All of ASets stand in one if (on one side of its else) or one case before ARead. }
+function TFlowRun.OneBranch(const ARoutine, ARead: TTSNode; const ASets: TArray<TTSNode>): Boolean;
+var
+  Node, Branch, First: TTSNode;
+  InElse: Boolean;
+begin
+  First := Default(TTSNode);
+  InElse:= False;
+  for Node in ASets do
+  begin
+    if not BranchOf(ARoutine, Node, Branch) then Exit(False);
+    if First.IsNull then
+    begin
+      First := Branch;
+      InElse:= IsBehind(First, Node, 'kElse');
+    end;
+    if (Branch.StartByte <> First.StartByte) or ((First.NodeType <> 'case') and (IsBehind(First, Node, 'kElse') <> InElse)) then Exit(False);
+  end;
+  Result:= First.IsNull or (First.EndByte <= ARead.StartByte);
+end;
+
+{ Something before AByte can leave the routine. }
+function TFlowRun.LeavesBefore(const ANode: TTSNode; AByte: UInt32): Boolean;
+var
+  I: Integer;
+begin
+  if (ANode.StartByte >= AByte) or MatchStr(ANode.NodeType, ROUTINE_NODES) then Exit(False);
+  Result:= (ANode.NodeType = 'raise') or ((ANode.NamedChildCount = 0) and MatchStr(Lower(ANode), LEAVE_NAMES));
+  I     := 0;
+  while (not Result) and (I < ANode.NamedChildCount) do
+  begin
+    Result:= LeavesBefore(ANode.NamedChild(I), AByte);
+    Inc(I);
+  end;
+end;
+
+{ ARead, which a set can precede, is certainly reached without one: no fresh set can come before it at all, or ARead is
+  evaluated on every run and one if or case before it holds all of them. A read under a condition of its own can go with the set. }
+function TFlowRun.ReachedUnset(const ARoutine, ARead: TTSNode): Boolean;
+var
+  Sets, Before: TArray<TTSNode>;
+  Node: TTSNode;
+begin
+  Sets:= FreshSets(ARoutine, ARead);
+  if Length(Sets) = 0 then Exit(True);
+  if IsConditional(ARoutine, ARead) then Exit(False);
+  Before:= nil;
+  for Node in Sets do
+    if Node.StartByte < ARead.StartByte then Before:= Before + [Node];
+  Result:= (Length(Before) = 0) or
+    (OneBranch(ARoutine, ARead, Before) and (not LeavesBefore(ARoutine.ChildByField('body'), ARead.StartByte)));
+end;
+
+{ ---- routines that never return ---- }
+
+{ The routine a call statement names, lower case; '' for a call through an object or a unit that is not the RTL's. }
+function TFlowRun.CalledName(const AStatement: TTSNode): string;
+var
+  Node: TTSNode;
+begin
+  Node:= AStatement;
+  if (Node.NodeType = 'statement') and (Node.NamedChildCount > 0) then Node:= Node.NamedChild(0);
+  if Node.NodeType = 'exprCall' then Node:= Node.ChildByField('entity');
+  Result:= '';
+  if Node.IsNull then Exit;
+  if Node.NodeType = 'identifier' then Result:= Lower(Node)
+  else if (Node.NodeType = 'exprDot') and MatchStr(Flat(Node.ChildByField('lhs')), OWN_PREFIXES) then Result:= Lower(Node.ChildByField('rhs'));
+end;
+
+{ Every routine row of the index with the name carries the noreturn directive. }
+function TFlowRun.IndexedNeverReturns(const AName: string): Boolean;
+var
+  Symbol: TSymbol;
+begin
+  Result:= False;
+  if FCtx.Store = nil then Exit;
+  for Symbol in FCtx.Store.FindSymbolsByExactName(AName) do
+  begin
+    if Symbol.Kind not in [skProcedure, skFunction, skMethod] then Continue;
+    Result:= MatchText(NO_RETURN_DIRECTIVE, SplitString(Symbol.Directives, ' '));
+    if not Result then Exit;
+  end;
+end;
+
+{ Every way through the body ends in a raise, Halt, Abort or a routine that never returns. }
+function TFlowRun.BodyNeverReturns(const ARoutine: TTSNode): Boolean;
+var
+  Cfg : TCfg;
+  Seen: TList<Integer>;
+  I, Next: Integer;
+begin
+  Cfg := TCfgBuilder.Build(ARoutine, FSrc, True);
+  Seen:= TList<Integer>.Create;
+  try
+    if Cfg.Skipped or (Cfg.Blocks.Count = 0) then Exit(False);
+    CutRaising(Cfg);
+    Seen.Add(Cfg.EntryIdx);
+    I:= 0;
+    while I < Seen.Count do
+    begin
+      for Next in Cfg.Blocks[Seen[I]].Succ do
+        if Next = Cfg.ExitIdx then
+        begin
+          if not Cfg.Blocks[Seen[I]].NoReturn then Exit(False);
+        end
+        else if not Seen.Contains(Next) then Seen.Add(Next);
+      Inc(I);
+    end;
+    Result:= True;
+  finally
+    Seen.Free;
+    Cfg.Free;
+  end;
+end;
+
+{ A call of AName never comes back: the routines of that name in this unit, else the RTL's, else the index's. }
+function TFlowRun.NeverReturns(const AName: string): Boolean;
+var
+  Routine: TTSNode;
+  Found  : Boolean;
+begin
+  if AName = '' then Exit(False);
+  if FNoReturn.TryGetValue(AName, Result) then Exit;
+  FNoReturn.Add(AName, False);   // a routine that calls itself
+  Found := False;
+  Result:= True;
+  for Routine in FRoutines do
+    if Result and (LastName(Lower(Header(Routine).ChildByField('name'))) = AName) then
+    begin
+      Found := True;
+      Result:= BodyNeverReturns(Routine);
+    end;
+  if not Found then Result:= MatchStr(AName, RAISE_CALLS) or IndexedNeverReturns(AName);
+  FNoReturn[AName]:= Result;
+end;
+
+{ Nothing follows a call that never comes back. }
+procedure TFlowRun.CutRaising(ACfg: TCfg);
+var
+  Block: TCfgBlock;
+  I    : Integer;
+begin
+  for Block in ACfg.Blocks do
+    for I:= 0 to Block.Items.Count - 1 do
+      if MatchStr(Block.Items[I].Node.NodeType, CALL_STATEMENTS) and NeverReturns(CalledName(Block.Items[I].Node)) then
+      begin
+        Block.Succ.Clear;
+        Block.Items.Count:= I + 1;
+        Break;
+      end;
+  ACfg.ComputePreds;
+end;
+
+{ ---- managed-result-read-first: the routine ---- }
 { The same item fills Result before it reads it: Fill(Result) and (Result <> ''). }
 function TFlowRun.FilledEarlier(const AItem, ARead: TTSNode): Boolean;
 var
@@ -700,7 +970,6 @@ var
   Cfg  : TCfg;
   Vars : TRoutineVarTable;
   StateIn, StateOut: TArray<TDefAsgnVal>;
-  Block: TCfgBlock;
   Item : TCfgItem;
   State: TDefAsgnVal;
   First: TTSNode;
@@ -730,9 +999,30 @@ var
     for Node in ResultReads(Item.Node) do
     begin
       if (not First.IsNull) and (First.StartByte <= Node.StartByte) then Continue;
-      if FilledEarlier(Item.Node, Node) or (State.May[Slot] and SameGuard(ARoutine, Node)) then Continue;
+      if FilledEarlier(Item.Node, Node) or (State.May[Slot] and (not ReachedUnset(ARoutine, Node))) then Continue;
       First:= Node;
       May  := State.May[Slot];
+    end;
+  end;
+
+  procedure JudgeAll;
+  var
+    Block: TCfgBlock;
+    I    : Integer;
+  begin
+    First:= Default(TTSNode);
+    May  := False;
+    if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, TDefiniteAssignment.Create(Vars, FSrc), StateIn, StateOut) then Exit;
+    for Block in Cfg.Blocks do
+    begin
+      State:= StateIn[Block.Index];
+      for I:= 0 to Block.Items.Count - 1 do
+      begin
+        if State.Must[Slot] then Break;
+        Item:= Block.Items[I];
+        if not Item.Opaque then Judge;
+        Step;
+      end;
     end;
   end;
 
@@ -742,19 +1032,11 @@ begin
   try
     Slot:= Vars.IndexOf(RESULT_NAME);
     if Cfg.Skipped or (Slot < 0) or Vars.Get(Slot).Captured or (Vars.Get(Slot).Kind <> vkResult) then Exit;
-    if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, TDefiniteAssignment.Create(Vars, FSrc), StateIn, StateOut) then Exit;
-    First:= Default(TTSNode);
-    May  := False;
-    for Block in Cfg.Blocks do
-    begin
-      State:= StateIn[Block.Index];
-      for Item in Block.Items do
-      begin
-        if State.Must[Slot] then Break;
-        if not Item.Opaque then Judge;
-        Step;
-      end;
-    end;
+    JudgeAll;
+    if First.IsNull then Exit;
+    { only a candidate pays for the question which calls never come back }
+    CutRaising(Cfg);
+    JudgeAll;
     if First.IsNull then Exit;
     Emit(RULE_RESULT_FIRST, SEVERITY_WARNING, Format('Result (%s) is read before it is set%s: it is the caller''s variable and can hold an old value',
       [Text(Header(ARoutine).ChildByField('type')), if May then ' on every path' else '']), First);
@@ -921,6 +1203,7 @@ procedure TFlowRun.CheckNestedAddresses;
 var
   Node, Name, Owner: TTSNode;
   Sites: TList<TTSNode>;   // the address expressions: @X, Addr(X)
+  OwnerName: string;
 begin
   Sites:= TList<TTSNode>.Create;
   try
@@ -934,8 +1217,9 @@ begin
       if (Name.NodeType <> 'identifier') or ThroughAsm(Node) then Continue;
       Owner:= NestedOwner(Name, Lower(Name));
       if Owner.IsNull then Continue;
+      OwnerName:= if Header(Owner).IsNull then 'the anonymous method' else Text(Header(Owner).ChildByField('name'));
       Emit(RULE_NESTED_ADDR, SEVERITY_WARNING, Format('Address of the nested routine %s: a call through the pointer lacks the hidden frame of %s ' +
-        '(Win64 shifts the arguments; reading an outer local fails)', [Text(Name), Text(Header(Owner).ChildByField('name'))]), Name);
+        '(Win64 shifts the arguments; reading an outer local fails)', [Text(Name), OwnerName]), Name);
     end;
   finally
     Sites.Free;

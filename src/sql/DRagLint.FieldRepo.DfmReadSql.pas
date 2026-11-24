@@ -42,7 +42,8 @@ type
 
 /// <summary>Reads the FROM clause and the select list of a SELECT.</summary>
 /// <param name="pSql">SQL text.</param>
-/// <returns>The source; Reason is set for an empty text, a non-SELECT, UNION, WITH, a derived table, a macro.</returns>
+/// <returns>The source; Reason is set for an empty text, a non-SELECT, UNION, WITH, a derived table, a macro in front of
+/// the WHERE clause.</returns>
 function ReadSelectSource(const pSql: string): TDfmrSqlSource;
 
 /// <summary>Finds the table column a dataset field comes from.</summary>
@@ -88,8 +89,8 @@ const
   TABLE_EXTENSIONS: array[0..1] of string = ('DB', 'DBF');
   FROM_END_WORDS: array[0..9] of string = ('WHERE', 'GROUP', 'ORDER', 'HAVING', 'PLAN', 'FETCH', 'ROWS', 'OFFSET', 'FOR',
     'WINDOW');
-  { Words that are values where a column may stand. }
-  VALUE_WORDS: array[0..10] of string = ('NULL', 'TRUE', 'FALSE', 'USER', 'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP',
+  { Words that are values, or start an expression, where a column may stand. }
+  VALUE_WORDS: array[0..11] of string = ('NULL', 'NOT', 'TRUE', 'FALSE', 'USER', 'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP',
     'CURRENT_USER', 'CURRENT_ROLE', 'LOCALTIME', 'LOCALTIMESTAMP');
   JOIN_WORDS: array[0..7] of string = ('JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER', 'CROSS', 'NATURAL');
 
@@ -389,6 +390,17 @@ begin
       Break;
 end;
 
+{ A macro (&NAME, !NAME) among the first pCount tokens: the list or the tables are not all in the text. }
+function HasMacro(const pTokens: TSqlTokens; pCount: Integer): Boolean;
+var
+  VI: Integer;
+begin
+  Result := False;
+  for VI := 0 to pCount - 2 do
+    if (IsSymbol(pTokens[VI], '&') or IsSymbol(pTokens[VI], '!')) and IsName(pTokens[VI + 1]) then
+      Exit(True);
+end;
+
 function ReadSelectSource(const pSql: string): TDfmrSqlSource;
 var
   VTokens, VItem: TSqlTokens;
@@ -417,7 +429,9 @@ begin
     SetLength(VTokens, Length(VTokens) - 1);
     Dec(VEnd);
   end;
-  if not ReadFrom(Copy(VTokens, VFrom + 1, VEnd - VFrom - 1), Result) then
+  if ReadFrom(Copy(VTokens, VFrom + 1, VEnd - VFrom - 1), Result) and HasMacro(VTokens, VEnd) then
+    Result.Reason := 'the SQL has a macro';
+  if Result.Reason <> '' then
   begin
     Result.Tables := nil;
     Exit;

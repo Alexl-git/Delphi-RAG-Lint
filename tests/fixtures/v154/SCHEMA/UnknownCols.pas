@@ -9,6 +9,7 @@ procedure Joins;
 procedure Dynamic(const ATable: string);
 procedure Stated;
 procedure Runtime;
+procedure Macros;
 procedure OtherDatabase;
 
 implementation
@@ -112,6 +113,31 @@ begin
   F.FieldName := 'MADE';
   Q.Open;
   S := Q.FieldByName('MADE').AsString;
+end;
+
+procedure Macros;
+var
+  Q, M, B: TFDQuery;
+begin
+  Q := TFDQuery.Create(nil);
+  Q.SQL.Text := 'SELECT CUSTNAME FROM ORDERS &JOINS';
+  Q.SQL.Text := 'SELECT CUSTNAME FROM ORDERS !JOINS';
+  Q.SQL.Text := 'SELECT CUSTNAME FROM ORDERS O &JOINS WHERE O.ID = 1';
+  Q.SQL.Text := 'SELECT FIRST &N NAME FROM ORDERS';
+  Q.SQL.Text := 'SELECT FIRST !N NAME FROM ORDERS';
+  Q.SQL.Text := 'SELECT NOT ACTIVE FROM ORDERS';
+  Q.SQL.Text := 'SELECT BADM FROM ORDERS WHERE &COND'; // FIRE schema-unknown-column
+  Q.SQL.Text := 'SELECT BADM FROM ORDERS WHERE QTY != 1'; // FIRE schema-unknown-column
+  Q.SQL.Text := 'SELECT NOTE, BADM FROM ORDERS ORDER BY !ORD'; // FIRE schema-unknown-column
+  Q.Open;
+  M := TFDQuery.Create(nil);
+  M.SQL.Text := 'SELECT * FROM ORDERS &JOINS';
+  M.Open;
+  S := M.FieldByName('CUSTNAME').AsString;
+  B := TFDQuery.Create(nil);
+  B.SQL.Text := 'SELECT FIRST &N * FROM ORDERS';
+  B.Open;
+  S := B.FieldByName('CUSTNAME').AsString;
 end;
 
 procedure OtherDatabase;

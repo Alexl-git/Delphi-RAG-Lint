@@ -27,8 +27,10 @@ field, a hidden field and contradicting values are unchecked. A blocked change s
 Warnings are below the list. Enter does not write; Apply does.
 
 **Between preview and write.** `write-dfm` takes the plan id of the preview: when the form, its unit or the repository
-changed, nothing is written. For a read the dry run is repeated and compared. A form edited after the preview is not
-written. After a write the form is reloaded; the old files are beside it (`*.before-write-dfm-*`).
+changed, nothing is written. For a read the dry run is repeated and compared. A form edited after the preview is neither
+written nor read. After a write the form is reloaded; the old files are beside it (`*.before-write-dfm-*`). A form that was
+edited while the write ran is not reloaded: the message says `written to disk, NOT reloaded: your editor buffer is older`.
+After a failed run that changed a file you are asked whether to reload.
 
 The calculation code of an added field is not written into the unit: see
 [generated handlers](field-repository-handlers).

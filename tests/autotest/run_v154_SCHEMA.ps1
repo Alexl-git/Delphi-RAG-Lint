@@ -152,6 +152,29 @@ Check 'lint <file> reports the unit and its form' (($w.Count -gt 3) -and ($f.Cou
 $u = Get-Found @('lint', (Join-Path $base.Dir 'UnknownCols.pas'), '--db', $base.Db, '--config', $OffCfg)
 Check 'lint <file> without --rule reports it too' (@($u | Where-Object { $_ -like '* schema-unknown-column' }).Count -eq @($a | Where-Object { $_ -like 'UnknownCols*' }).Count)
 
+Write-Host 'A REPOSITORY THAT CANNOT BE READ ONCE' -ForegroundColor Cyan
+# positive-control: the test exe is built from the same sources; a build or start failure is a FAIL, never a skip
+$rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
+$tests = (Resolve-Path "$PSScriptRoot\..").Path
+$dcu = Join-Path $WorkDir 'dcu'
+New-Item -ItemType Directory $dcu | Out-Null
+# mirrors the CLI .dproj's DCC_UnitSearchPath (same list as run_v154_SQLTEXT.ps1)
+$units = (@('preprocess','core','context','diagnostics','doc','forms','index','lint','lsp','mcp','output','parser','project','query','refactor',
+  'report','resolver','sql','storage','workspace','analysis','cli','lint\v151','lint\v152','lint\v153','lint\v154') | ForEach-Object { "..\src\$_" }) -join ';'
+$bat = Join-Path $WorkDir 'build.bat'
+$lines = @('@echo off', ('call "{0}"' -f $rs), ('cd /d "{0}"' -f $tests),
+  ('dcc64 -B "-NSSystem;System.Win;Winapi;Data;FireDAC" -U"{0};..\third_party\delphi-tree-sitter" -E"{1}" -N0"{2}" V154SchemaFactsRetryTests.dpr' -f $units, $WorkDir, $dcu),
+  'echo BUILD_EXITCODE=%ERRORLEVEL%')
+[IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+$log = Join-Path $WorkDir 'build.log'
+Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait | Out-Null
+$built = [IO.File]::ReadAllText($log) -match 'BUILD_EXITCODE=0'
+Check 'the retry test builds' $built ((Get-Content $log | Select-String 'Error|Fatal' | Select-Object -First 3) -join ' / ')
+if ($built) {
+  Copy-Item "$tests\..\third_party\dll-win64\*.dll" $WorkDir
+  $o = @(& { $ErrorActionPreference = 'Continue'; & (Join-Path $WorkDir 'V154SchemaFactsRetryTests.exe') lint --project $base.Proj --repo (Join-Path $base.Dir 'schema.dlrepo') 2>&1 | ForEach-Object { "$_" } })
+  Check 'a repository locked once is read when the lock is gone' (($LASTEXITCODE -eq 0) -and (@($o | Where-Object { $_ -like '`[PASS`]*' }).Count -eq 3)) ($o -join ' | ')
+}
 Write-Host ("run_v154_SCHEMA: {0} passed, {1} failed" -f $script:Passed, $script:Failed)
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green

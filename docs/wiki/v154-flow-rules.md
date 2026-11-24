@@ -37,9 +37,16 @@ end;
 
 Also `SetLength(Result, Length(Result) + 1)`, `if Result = nil` and `while Length(Result) < N`. One finding per function.
 
+When an assignment can come before the read, the rule reports it only if a path without one is certain: the read runs on every
+call, nothing before it leaves the function, and one `if` or `case` holds all the assignments before it. A read under a
+condition, in a counted loop or behind `and` / `or` may go together with the assignment (`if I = 0 then Result := S[I] else
+Result := Result + ',' + S[I]`, a `Found` flag) and is silent; so are assignments in a loop, in a `try` with `except`
+or in a `case` over an enumeration. `Result := Result + X` is no assignment in this sense.
+
 Silent when every path sets `Result` first (assignment, own name, `Exit(value)`, an element or a field of it); `Result` is
 passed to a routine that can fill it (`SetLength(Result, N)`, `Fill(Result)`, `@Result`); a nested routine or an anonymous
-method uses it; the read stands under the same condition as an assignment before it; the result is a record, a short string
+method uses it; the other branch ends in a routine that always raises (of the unit, `RaiseLastOSError`, or `noreturn` in the
+index); the result is a record, a short string
 or an unmanaged type; the routine holds `asm`.
 
 ## same-variable-two-var-params

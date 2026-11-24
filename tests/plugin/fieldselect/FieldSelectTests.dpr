@@ -280,6 +280,25 @@ begin
   CheckText('A7 nothing known: the text itself', ApplyLog('Access violation'#10, MAX_LOG), 'Access violation');
 end;
 
+{ What happens to the open form after a write run. }
+procedure TestAfterWrite;
+begin
+  Check('R1 nothing changed on disk', ReloadStep(0, True, False, False) = frNone);
+  Check('R2 not open', ReloadStep(0, False, False, True) = frNone);
+  Check('R3 written, clean: reload', ReloadStep(0, True, False, True) = frReload);
+  Check('R4 written, edited meanwhile: not reloaded', ReloadStep(0, True, True, True) = frDirty);
+  Check('R5 a failed run that changed a file: ask', ReloadStep(1, True, False, True) = frAsk);
+  Check('R6 a failed run, edited meanwhile: not reloaded', ReloadStep(1, True, True, True) = frDirty);
+  Check('R7 a failed run that changed nothing', ReloadStep(1, True, True, False) = frNone);
+  CheckText('N1 reloaded: nothing to say', ApplyNotice(frReload, 'u.dfm', ''), '');
+  CheckText('N2 edited meanwhile', ApplyNotice(frDirty, 'u.dfm', ''), 'u.dfm was written to disk, NOT reloaded: your editor buffer is older. ' +
+    'Saving it overwrites what was written; close the form without saving to get the written one.');
+  CheckText('N3 the reload failed', ApplyNotice(frFailed, 'u.dfm', 'EX: no'),
+    'u.dfm was written to disk, NOT reloaded (EX: no): your editor buffer is older.');
+  CheckText('N4 the user kept the buffer', ApplyNotice(frAsk, 'u.dfm', ''),
+    'u.dfm was changed on disk by a run that failed, NOT reloaded: your editor buffer is older.');
+end;
+
 { ---- with the output of a real engine ---- }
 
 procedure Clicks(pSel: TFieldSelection; pFrom: Integer);
@@ -352,6 +371,7 @@ begin
       TestDatasetToUse;
       TestPlan;
       TestText;
+  TestAfterWrite;
       Writeln(Format('Summary: pass=%d fail=%d', [GPass, GFail]));
       if GFail > 0 then
         ExitCode := 1;

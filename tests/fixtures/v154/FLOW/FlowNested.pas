@@ -78,6 +78,25 @@ begin
   Other(1);
 end;
 
+procedure InLambda;
+type
+  TRun = reference to procedure;
+var
+  R: TRun;
+begin
+  R :=
+    procedure
+
+      procedure Deeper;
+      begin
+      end;
+
+    begin
+      Take(@Deeper); // FIRE address-of-nested-routine
+    end;
+  R();
+end;
+
 procedure Sibling;
 begin
   Take(@UnitProc);

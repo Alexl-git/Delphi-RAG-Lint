@@ -25,8 +25,21 @@ begin
     Q.SQL.Text := 'SELECT * FROM ORDERS';
     Q.Open;
     I := Q.FieldByName('NOTE').AsInteger; // FIRE schema-type-mismatch
-    Q.FieldByName('CODE').AsFloat := 1; // FIRE schema-type-mismatch
-    Q.FieldByName('NOTE').AsDateTime := 0; // FIRE schema-type-mismatch
+    if Q.FieldByName('CODE').AsFloat > 1 then Exit; // FIRE schema-type-mismatch
+    if Q.FieldByName('NOTE').AsDateTime > 0 then Exit; // FIRE schema-type-mismatch
+    { TStringField.SetAsXxx calls SetAsString: legal }
+    Q.FieldByName('CODE').AsFloat := 1;
+    Q.FieldByName('NOTE').AsDateTime := 0;
+    Q.FieldByName('CODE').AsInteger := 5;
+    Q.FieldByName('CODE')
+      .AsInteger := 6;
+    if Q.FieldByName('BODY').AsInteger > 1 then Exit; // FIRE schema-type-mismatch
+    { TWideMemoField.SetAsInteger calls SetAsString, the other setters of a memo raise }
+    Q.FieldByName('BODY').AsInteger := 1;
+    Q.FieldByName('BODY').AsFloat := 1; // FIRE schema-type-mismatch
+    Q.FieldByName('CREATED').AsInteger := 1; // FIRE schema-type-mismatch
+    Q.FieldByName('FLAG').AsInteger := 1; // FIRE schema-type-mismatch
+    Q.FieldByName('PICTURE').AsBoolean := True; // FIRE schema-type-mismatch
     I := Q.FieldByName('CREATED').AsInteger; // FIRE schema-type-mismatch
     Q.FieldByName('QTY').AsDateTime := 0; // FIRE schema-type-mismatch
     I := Q.FieldByName('PICTURE').AsInteger; // FIRE schema-type-mismatch
@@ -74,6 +87,13 @@ begin
   I := dmMain.tblOrdersNOTE.AsInteger; // FIRE schema-type-mismatch
   I := dmMain.tblOrdersQTY.AsInteger;
   I := dmMain.qryLiveNOTE.AsInteger;
+  { a write: legal for a string field, not for a number }
+  dmMain.tblOrdersNOTE.AsInteger := 5;
+  dmMain.tblOrdersNOTE
+    .AsInteger := 6;
+  dmMain.qryOrdersID.AsDateTime := 0; // FIRE schema-type-mismatch
+  { the class decides what an accessor does, the .dfm finding says it does not fit the column }
+  I := dmMain.qryOrdersCREATED.AsInteger;
   tblOrdersNOTE := nil;
   I := tblOrdersNOTE.AsInteger + I;
 end;

@@ -110,6 +110,15 @@ object dmMain: TdmMain
       'INSERT INTO ORDERS (NOTE, CODE)'
       'VALUES (:NOTE, :CODE)')
   end
+  object qryMacro: TFDQuery
+    SQL.Strings = (
+      'SELECT CUSTNAME'
+      'FROM ORDERS &JOINS')
+    object qryMacroCUSTNAME: TStringField
+      FieldName = 'CUSTNAME'
+      Size = 20
+    end
+  end
   object qryBad: TFDQuery
     SQL.Strings = (
       'SELECT ID,'

@@ -100,6 +100,7 @@ uses
   DragLint.Plugin.ExeResolver,
   System.UITypes,
   System.IOUtils,
+  System.DateUtils,
   Vcl.FileCtrl,
   ToolsAPI,
   DragLint.Plugin.Telemetry,
@@ -121,6 +122,7 @@ const
   SUB_READ_DFM = 'read-dfm';
   SUB_WRITE_DFM = 'write-dfm';
   JSON_FLAG = '--json';
+  NOT_WRITTEN_DIRTY = 'the form has unsaved changes now: nothing written';
   NO_PROJECT_MSG = 'drag-lint: open a project first; the field repository belongs to the active project.';
 
 function MaskedPrompt(const pText: string): string;
@@ -430,6 +432,7 @@ type
     Dfm: string;
     Selected: TArray<string>; // components selected in the designer
     procedure Show(const pText: string);
+    procedure Guarded(const pStep: TProc);
   end;
 
   TFormStep = reference to procedure(const pOutput: string);
@@ -438,6 +441,21 @@ type
 procedure TFormContext.Show(const pText: string);
 begin
   ShowMessage(Title + sLineBreak + sLineBreak + pText);
+end;
+
+{ Runs the answer to an engine run: the async runner would only log what it raises. }
+procedure TFormContext.Guarded(const pStep: TProc);
+begin
+  try
+    pStep();
+  except
+    on E: EAbort do DLT('field-repository', Title + ': ' + E.Message);
+    on E: Exception do
+    begin
+      DLT('field-repository', Title + ': ' + E.ClassName + ': ' + E.Message);
+      Show('this step failed: ' + E.ClassName + ': ' + E.Message);
+    end;
+  end;
 end;
 
 { The open module of a form's unit, or nil. }
@@ -512,47 +530,90 @@ end;
 { One `repo` run off the main thread; pNext gets the output of a run that succeeded. }
 procedure RunFormStep(const pForm: TFormContext; const pSub, pArgs: string; const pNext: TFormStep);
 var
-  Title: string;
+  Form: TFormContext;
   Next: TFormStep;
 begin
-  Title:= pForm.Title;
+  Form:= pForm;
   Next:= pNext;
   RunCliAsync(FieldRepoCommandLine(pForm.Exe, pSub, pForm.Project, pArgs),
     procedure(pExitCode: Integer; const pOutput: string)
     begin
-      if pExitCode = 0 then Next(pOutput) else ShowRunResult(Title, pExitCode, ApplyLog(pOutput, SUMMARY_LINES));
+      Form.Guarded(
+        procedure
+        begin
+          if pExitCode = 0 then Next(pOutput) else ShowRunResult(Form.Title, pExitCode, ApplyLog(pOutput, SUMMARY_LINES));
+        end);
     end, REPO_STALL_MS);
 end;
 
-{ Reloads the form after its files were written; a form edited meanwhile is left alone. }
-procedure ReloadForm(const pDfm: string);
+{ Size and time of the form's two files on disk. }
+function DiskStamp(const pDfm: string): string;
+
+  function One(const pFile: string): string;
+  begin
+    Result:= if FileExists(pFile) then DateToISO8601(TFile.GetLastWriteTimeUtc(pFile)) + ' ' + IntToStr(TFile.GetSize(pFile)) else '-';
+  end;
+
+begin
+  Result:= One(pDfm) + ' ' + One(ChangeFileExt(pDfm, '.pas'));
+end;
+
+{ Reloads the form; '' or why it failed. }
+function ReloadModule(const pModule: IOTAModule): string;
+begin
+  Result:= '';
+  try
+    pModule.Refresh(True);
+  except
+    on E: Exception do
+    begin
+      Result:= E.ClassName + ': ' + E.Message;
+      DLT('field-repository', 'reload ' + pModule.FileName + ': ' + Result);
+    end;
+  end;
+end;
+
+{ The form in the editor after a write run; pBefore = DiskStamp before it. Its edits since then are looked for now: the run
+  was not on the main thread. Returns what the user must know, '' = the editor holds what is on disk. }
+function AfterWrite(const pForm: TFormContext; pExitCode: Integer; const pBefore: string): string;
 var
   Module: IOTAModule;
+  Step: TFsReload;
+  Error: string;
 begin
-  try
-    Module:= OpenModuleOf(pDfm);
-    if (Module <> nil) and not ModuleIsDirty(Module) then Module.Refresh(True);
-  except
-    on E: Exception do DLT('field-repository', 'reload ' + pDfm + ': ' + E.ClassName + ': ' + E.Message);
-  end;
+  Module:= OpenModuleOf(pForm.Dfm);
+  Step:= ReloadStep(pExitCode, Module <> nil, ModuleIsDirty(Module), DiskStamp(pForm.Dfm) <> pBefore);
+  if (Step = frAsk) and (MessageDlg(ExtractFileName(pForm.Dfm) + ': the run failed, but files on disk were changed. Reload the form from disk?',
+    mtConfirmation, [mbYes, mbNo], 0) = mrYes) then Step:= frReload;
+  Error:= if Step = frReload then ReloadModule(Module) else '';
+  if Error <> '' then Step:= frFailed;
+  Result:= ApplyNotice(Step, ExtractFileName(pForm.Dfm), Error);
 end;
 
 { The run that writes exactly the checked changes. }
 procedure ApplySelection(const pForm: TFormContext; const pSub, pArgs: string; const pPlan: TFsPlan);
 var
-  SelectFile, SubVerb: string;
+  SelectFile, SubVerb, Before: string;
   Form: TFormContext;
 begin
   Form:= pForm;
   SubVerb:= pSub;
+  Before:= DiskStamp(Form.Dfm);
   SelectFile:= TPath.Combine(TPath.GetTempPath, 'drag-lint-select-' + TGUID.NewGuid.ToString + '.txt');
   TFile.WriteAllText(SelectFile, pPlan.SelectFileText);
   RunCliAsync(FieldRepoCommandLine(Form.Exe, SubVerb, Form.Project, pArgs + SelectArg(SelectFile)),
     procedure(pExitCode: Integer; const pOutput: string)
     begin
       System.SysUtils.DeleteFile(SelectFile);
-      if (pExitCode = 0) and (SubVerb = SUB_WRITE_DFM) then ReloadForm(Form.Dfm);
-      ShowRunResult(Form.Title, pExitCode, ApplyLog(pOutput, SUMMARY_LINES));
+      Form.Guarded(
+        procedure
+        var
+          Notice: string;
+        begin
+          Notice:= if SubVerb = SUB_WRITE_DFM then AfterWrite(Form, pExitCode, Before) else '';
+          if Notice = '' then ShowRunResult(Form.Title, pExitCode, ApplyLog(pOutput, SUMMARY_LINES))
+          else ShowMessage(Form.Title + (if pExitCode = 0 then '' else ' -- exit ' + IntToStr(pExitCode)) + sLineBreak + sLineBreak + Notice + sLineBreak + sLineBreak + ApplyLog(pOutput, SUMMARY_LINES));
+        end);
     end, REPO_STALL_MS);
 end;
 
@@ -593,7 +654,8 @@ begin
           Newer: TFsPlan;
         begin
           if not PlanOf(Form, pAgain, Newer) then Exit;
-          if Newer.Fingerprint = Plan.Fingerprint then ApplySelection(Form, SUB_READ_DFM, Args, Plan)
+          if ModuleIsDirty(OpenModuleOf(Form.Dfm)) then Form.Show(NOT_WRITTEN_DIRTY)
+          else if Newer.Fingerprint = Plan.Fingerprint then ApplySelection(Form, SUB_READ_DFM, Args, Plan)
           else Form.Show('the form or the repository changed meanwhile: nothing written');
         end);
     end);
@@ -617,7 +679,7 @@ begin
       if not PlanOf(Form, pOutput, Plan) then Exit;
       Plan.KeepAllBut(Removed);
       if not Confirmed(Form, Plan) then Exit;
-      if ModuleIsDirty(OpenModuleOf(Form.Dfm)) then Form.Show('the form has unsaved changes now: nothing written')
+      if ModuleIsDirty(OpenModuleOf(Form.Dfm)) then Form.Show(NOT_WRITTEN_DIRTY)
       else ApplySelection(Form, SUB_WRITE_DFM, Args, Plan);
     end);
 end;

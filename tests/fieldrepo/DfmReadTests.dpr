@@ -120,6 +120,14 @@ begin
   CheckText('union', Col('SELECT A FROM T UNION SELECT A FROM U', 'A'), '!the SQL is a UNION');
   CheckText('derived table', Col('SELECT A FROM (SELECT A FROM U) V', 'A'), '!the SQL reads a derived table');
   CheckText('macro table', Col('SELECT A FROM &TBL', 'A'), '!the SQL names its table by a macro or an expression');
+  CheckText('macro after the table', Col('SELECT A FROM T &JOINS', 'A'), '!the SQL has a macro');
+  CheckText('macro with an exclamation mark', Col('SELECT A FROM T !JOINS WHERE B = 1', 'A'), '!the SQL has a macro');
+  CheckText('macro row count', Col('SELECT FIRST &N NAME FROM T', 'NAME'), '!the SQL has a macro');
+  CheckText('macro item', Col('SELECT A, &MORE FROM T', 'A'), '!the SQL has a macro');
+  CheckText('a macro of the WHERE clause says nothing about a column', Col('SELECT A FROM T WHERE &COND', 'A'), 'T.A');
+  CheckText('!= is an operator', Col('SELECT A, B != C AS X FROM T', 'A'), 'T.A');
+  CheckText('a macro in a text or a comment', Col('SELECT A, ''&X'' AS S /* &Y */ FROM T', 'A'), 'T.A');
+  CheckText('NOT is an operator', Col('SELECT NOT ACTIVE FROM T', 'ACTIVE'), '?computed by the SQL');
   CheckText('stored procedure', Col('SELECT A FROM P(1)', 'A'), '!the SQL selects from a stored procedure');
   CheckText('update', Col('UPDATE T SET A = 1', 'A'), '!the SQL is not a plain SELECT');
   CheckText('empty', Col('', 'A'), '!the SQL is empty in the DFM');

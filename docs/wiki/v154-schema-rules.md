@@ -34,13 +34,14 @@ a table or column with a `DL_EXCEPTIONS` row of the repository (rule id or `*`, 
 
 ## schema-type-mismatch (warning, project-wide)
 
-* An accessor whose kind clashes with the column: `AsInteger`, `AsFloat`, `AsDateTime` and their kin on CHAR / VARCHAR
+* An accessor whose kind clashes with the column: reading `AsInteger`, `AsFloat`, `AsDateTime` and their kin of CHAR / VARCHAR
   (converts the text, EConvertError for anything else); `AsInteger` / `AsBoolean` on DATE, TIME, TIMESTAMP; `AsDateTime` on a
-  number; `AsInteger`, `AsFloat`, `AsDateTime` on BOOLEAN; any of them on a BLOB (all raise at run time). On
+  number; `AsInteger`, `AsFloat`, `AsDateTime` on BOOLEAN; any of them on a BLOB (these raise, read or written). On
   `FieldByName('X')`, and on a persistent field, also of another unit's data module (`dmMain.qryX.AsInteger`).
 * A persistent field class of another kind than its column (`TIntegerField` on a VARCHAR) -- the dataset does not open.
 
-Allowed: `AsString`, `AsVariant`, `Value`, `AsBoolean` on text and numbers (flag columns), `AsInteger` on NUMERIC, `AsFloat`
+Allowed: writing text with any accessor (`FieldByName('CODE').AsInteger := 5`: a string field calls `SetAsString`), writing
+`AsInteger` of a memo; `AsString`, `AsVariant`, `Value`, `AsBoolean` on text and numbers (flag columns), `AsInteger` on NUMERIC, `AsFloat`
 on a date, memo fields on text.
 
 ## schema-required-not-set (warning, project-wide, OFF by default)
@@ -52,7 +53,8 @@ trigger fills, apart from keys. `Append` / `Post` on a dataset is not followed.
 
 ## Silent when
 
-* the SQL is built by an expression, has a macro, is set in several places, or the dataset is a parameter, passed on or
+* the SQL is built by an expression, has a macro (`&NAME`, `!NAME`) in the select list, the row count or the FROM clause, is
+  set in several places, or the dataset is a parameter, passed on or
   aliased (see [v154-sql-rules](v154-sql-rules): the same reader);
 * UNION, CTE, derived table; a computed item; an unqualified column of a join; `*` over several tables;
 * the field is calculated, lookup, internal or aggregate, or the unit's code sets `FieldName := 'X'`; `FindField` (it answers

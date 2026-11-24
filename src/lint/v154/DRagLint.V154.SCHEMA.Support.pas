@@ -66,6 +66,7 @@ uses
   , System.RegularExpressions
   , Winapi.Windows
   , FireDAC.Comp.Client
+  , FireDAC.Stan.Error
   , FireDAC.Stan.Param
   , TreeSitter
   , DRagLint.Core.Interfaces
@@ -101,6 +102,8 @@ const
   ACCESSOR_LIST = '''asinteger'', ''aslargeint'', ''aslongword'', ''asfloat'', ''assingle'', ''asextended'', ''ascurrency'', ' +
     '''asbcd'', ''asdatetime'', ''assqltimestamp'', ''asboolean''';
   BOOL_ACCESSOR = 'asboolean';
+  INTEGER_ACCESSOR = 'asinteger';
+  BCD_ACCESSOR = 'asbcd';
   { persistent field classes by the kind of column they can open }
   TEXT_FIELDS: array[0..1] of string = ('TStringField', 'TWideStringField');
   MEMO_FIELDS: array[0..1] of string = ('TMemoField', 'TWideMemoField');
@@ -108,6 +111,8 @@ const
     'TShortintField', 'TByteField', 'TAutoIncField', 'TCurrencyField', 'TFloatField', 'TSingleField', 'TExtendedField',
     'TBCDField', 'TFMTBCDField', 'TLargeUIntField');
   DATE_FIELDS: array[0..4] of string = ('TDateField', 'TTimeField', 'TDateTimeField', 'TSQLTimeStampField', 'TSQLTimeStampOffsetField');
+  BLOB_FIELDS: array[0..1] of string = ('TBlobField', 'TGraphicField');
+  BOOLEAN_FIELD = 'TBooleanField';
   { words and pseudo columns that stand where a column may }
   NO_COLUMNS: array[0..13] of string = ('ROW_COUNT', 'GDSCODE', 'SQLCODE', 'SQLSTATE', 'INSERTING', 'UPDATING', 'DELETING',
     'CURRENT_CONNECTION', 'CURRENT_TRANSACTION', 'ROWID', 'OID', 'ROWNUM', 'SYSDATE', 'RESETTING');
@@ -185,7 +190,8 @@ begin
   Result:= if TFile.Exists(AFile) then Format('%d|%d', [DateTimeToUnix(TFile.GetLastWriteTimeUtc(AFile)), TFile.GetSize(AFile)]) else '-';
 end;
 
-{ Reads the facts of ARepo into the process cache when they are not there yet. Called under GLock. }
+{ Reads the facts of ARepo into the process cache when they are not there yet. Called under GLock. A read that failed leaves
+  no key: the next call tries again although the file is the same (a lock, a file being replaced). }
 procedure Refresh(const ARepo: string);
 var
   Key : string;
@@ -195,14 +201,24 @@ begin
   if Key = GFactsKey then Exit;
   GFacts    := nil;
   GFactsNote:= Default(TSchemaLintResult);
-  GFactsKey := Key;
+  GFactsKey := '';
   Repo:= OpenSchemaRepository(ARepo, GFactsNote.Note);
   GFactsNote.Broken:= (Repo = nil) and (ARepo <> '');
   if Repo = nil then Exit;
   try
-    GFacts:= LoadSchemaFacts(Repo);
-    if GFacts = nil then GFactsNote.Note:= NoSchemaFactsNote(ARepo)
-    else GFactsNote.Banner:= SchemaFactsBanner(Repo, ARepo);
+    try
+      GFacts:= LoadSchemaFacts(Repo);
+      if GFacts = nil then GFactsNote.Note:= NoSchemaFactsNote(ARepo)
+      else GFactsNote.Banner:= SchemaFactsBanner(Repo, ARepo);
+      GFactsKey:= Key;
+    except
+      on E: EFDException do
+      begin
+        GFacts:= nil;
+        GFactsNote.Broken:= True;
+        GFactsNote.Note  := Format('schema rules: field repository %s cannot be read: %s', [ARepo, E.Message]);
+      end;
+    end;
   finally
     Repo.Free;
   end;
@@ -289,8 +305,16 @@ end;
 
 { ---- kinds ---- }
 
-{ Why the accessor does not fit the column; '' = it fits, or nothing certain is known. }
-function AccessorClash(const AFact: TSchemaColumn; const AAccessor: string): string;
+{ What an accessor of a memo field does (Data.DB): AsInteger converts the text both ways, AsBCD reads the text; the rest raises. }
+function MemoClash(const AName: string; AWrite: Boolean): string;
+begin
+  Result:= if (AName = INTEGER_ACCESSOR) and AWrite then '' else if MatchStr(AName, [INTEGER_ACCESSOR, BCD_ACCESSOR]) and (not AWrite) then CLASH_CONVERTS
+    else CLASH_RAISES;
+end;
+
+{ Why the accessor does not fit a field of the kind; '' = it fits, or nothing certain is known. Reading a string field
+  converts its text; writing one (SetAsInteger and the rest) calls SetAsString and is legal. }
+function AccessorClash(AGroup: TSchemaGroup; const AAccessor: string; AWrite: Boolean): string;
 var
   Name  : string;
   Number: Boolean;
@@ -300,10 +324,12 @@ begin
   Number:= MatchStr(Name, NUMBER_ACCESSORS);
   Date  := MatchStr(Name, DATE_ACCESSORS);
   Result:= '';
-  case AFact.Group of
+  case AGroup of
     scgText:
-      if Number or Date then Result:= CLASH_CONVERTS;
-    scgMemo, scgBinary:
+      if (Number or Date) and (not AWrite) then Result:= CLASH_CONVERTS;
+    scgMemo:
+      if Number or Date or (Name = BOOL_ACCESSOR) then Result:= MemoClash(Name, AWrite);
+    scgBinary:
       if Number or Date or (Name = BOOL_ACCESSOR) then Result:= CLASH_RAISES;
     scgDateTime:
       if MatchStr(Name, ORDINAL_ACCESSORS) or (Name = BOOL_ACCESSOR) then Result:= CLASH_RAISES;
@@ -321,6 +347,8 @@ begin
   else if MatchText(AClass, MEMO_FIELDS) then Result:= scgMemo
   else if MatchText(AClass, NUMBER_FIELDS) then Result:= scgNumber
   else if MatchText(AClass, DATE_FIELDS) then Result:= scgDateTime
+  else if MatchText(AClass, BLOB_FIELDS) then Result:= scgBinary
+  else if SameText(AClass, BOOLEAN_FIELD) then Result:= scgBoolean
   else Result:= scgUnknown;
 end;
 
@@ -334,6 +362,18 @@ begin
   if Own = scgMemo then Own:= scgText;
   if Col = scgMemo then Col:= scgText;
   Result:= (Own in [scgText, scgNumber, scgDateTime]) and (Col in [scgText, scgNumber, scgDateTime]) and (Own <> Col);
+end;
+
+{ What a persistent field of AClass does with the accessor; '' = fits, or the class is not the column's kind (its own
+  finding) or not known well enough to judge a write. }
+function FieldClash(const AFact: TSchemaColumn; const AClass, AAccessor: string; AWrite: Boolean): string;
+var
+  Own: TSchemaGroup;
+begin
+  Own:= ClassGroup(AClass);
+  if Own = scgUnknown then Exit(if AWrite then '' else AccessorClash(AFact.Group, AAccessor, False));
+  if (Own <> AFact.Group) and (not ((Own in [scgText, scgMemo]) and (AFact.Group in [scgText, scgMemo]))) then Exit('');
+  Result:= AccessorClash(Own, AAccessor, AWrite);
 end;
 
 { ---- SQL texts ---- }
@@ -445,6 +485,16 @@ begin
   Result:= Call.Parent.ChildByField('rhs');
 end;
 
+{ The accessor is assigned to: FieldByName('X').AsInteger := 5. }
+function IsWritten(const AAccessor: TTSNode): Boolean;
+var
+  Path: TTSNode;
+begin
+  if AAccessor.IsNull then Exit(False);
+  Path  := AAccessor.Parent;
+  Result:= (Path.Parent.NodeType = 'assignment') and (Path.Parent.ChildByField('lhs') = Path);
+end;
+
 function SourceText(const ANode: TTSNode; const ASrc: TBytes): string;
 begin
   Result:= '';
@@ -511,10 +561,12 @@ function CheckSiteType(const ACtx: TV151FileCtx; const AScan: TSqlTextScan; cons
   const AFact: TSchemaColumn): TArray<TLintFinding>;
 var
   Access, Clash: string;
+  Node: TTSNode;
 begin
   Result:= nil;
-  Access:= SourceText(AccessorOf(ASite.Site.Node), ASite.Source);
-  Clash := if AFact.Calculated then '' else AccessorClash(AFact, Access);
+  Node  := AccessorOf(ASite.Site.Node);
+  Access:= SourceText(Node, ASite.Source);
+  Clash := if AFact.Calculated then '' else AccessorClash(AFact.Group, Access, IsWritten(Node));
   if (Clash = '') or Excepted(AFacts, RULE_TYPE, DatasetKeyOf(ACtx, ASite.Data), ASite.Table, ASite.Column) or
      (AScan.OutsideReason(ASite.Data, False) <> '') then
     Exit;
@@ -851,7 +903,7 @@ end;
 
 type
   { The columns of the query of UsesOf. }
-  TUseColumn = (ucLine, ucCol, ucEndCol, ucName, ucPas, ucRoot, ucAccessor);  // dl:ok enum-ordinal-persisted@f797 -- REVIEWED 2026-11-24 v154 SCHEMA: Ord() only indexes Query.Fields[] of a read; nothing is persisted
+  TUseColumn = (ucLine, ucCol, ucEndCol, ucName, ucPas, ucRoot, ucAccessor, ucAccessorLine, ucAccessorCol);  // dl:ok enum-ordinal-persisted@1b37 -- REVIEWED 2026-11-24 v154 SCHEMA: Ord() only indexes Query.Fields[] of a read; nothing is persisted
 
   { A use of a persistent field: dmMain.tblOrdersNOTE.AsInteger. }
   TFieldUse = record
@@ -860,6 +912,7 @@ type
     Pas     : string;     // unit that declares it
     Root    : string;     // its class
     Accessor: string;
+    AccessorLine, AccessorCol: Integer;
   end;
 
 function UsesOf(const ACtx: TV151FileCtx): TArray<TFieldUse>;
@@ -868,7 +921,7 @@ var
   Item : TFieldUse;
 begin
   Result:= nil;
-  Query:= NewQuery(ACtx.Store, 'SELECT DISTINCT r.start_line, r.start_col, r.end_col, s.name, f.path, c.name, m.name_text FROM refs r ' +
+  Query:= NewQuery(ACtx.Store, 'SELECT DISTINCT r.start_line, r.start_col, r.end_col, s.name, f.path, c.name, m.name_text, m.start_line, m.start_col FROM refs r ' +
     'JOIN symbols s ON s.id = r.symbol_id AND s.kind = ''field'' JOIN files f ON f.id = s.file_id JOIN symbols c ON c.id = s.parent_id ' +
     'JOIN ref_receivers rr ON rr.receiver_ref_id = r.id JOIN refs m ON m.id = rr.ref_id ' +
     'WHERE r.file_id = :f AND m.name_text COLLATE NOCASE IN (' + ACCESSOR_LIST + ') ORDER BY 1, 2');
@@ -884,6 +937,8 @@ begin
       Item.Pas     := Query.Fields[Ord(ucPas)].AsString;
       Item.Root    := Query.Fields[Ord(ucRoot)].AsString;
       Item.Accessor:= Query.Fields[Ord(ucAccessor)].AsString;
+      Item.AccessorLine:= Query.Fields[Ord(ucAccessorLine)].AsInteger;
+      Item.AccessorCol := Query.Fields[Ord(ucAccessorCol)].AsInteger;
       Result:= Result + [Item];
       Query.Next;
     end;
@@ -892,7 +947,19 @@ begin
   end;
 end;
 
-function CheckUse(const ACtx: TV151FileCtx; const AFacts: ISchemaFacts; const AUse: TFieldUse): TArray<TLintFinding>;
+{ The accessor of the use is assigned to; ALines is the source. }
+function IsWrittenUse(const AUse: TFieldUse; const ALines: TArray<string>): Boolean;
+var
+  Rest: string;
+begin
+  Result:= False;
+  if (AUse.AccessorLine < 1) or (AUse.AccessorLine > Length(ALines)) then Exit;
+  Rest:= Copy(ALines[AUse.AccessorLine - 1], AUse.AccessorCol + Length(AUse.Accessor), MaxInt);
+  if (Trim(Rest) = '') and (AUse.AccessorLine < Length(ALines)) then Rest:= ALines[AUse.AccessorLine];
+  Result:= TRegEx.IsMatch(Rest, '^(\s|\{[^}]*\})*:=');
+end;
+
+function CheckUse(const ACtx: TV151FileCtx; const AFacts: ISchemaFacts; const AUse: TFieldUse; AWrite: Boolean): TArray<TLintFinding>;
 var
   Form : TSchemaForm;
   Field: TFormField;
@@ -906,7 +973,7 @@ begin
     if SameText(Field.Name, AUse.Name) and ColumnOfField(Form, Field, Table, Column) and AFacts.KnowsTable(Table) and
        AFacts.FindColumn(Table, Column, Fact) and (not Fact.Calculated) then
     begin
-      Clash:= AccessorClash(Fact, AUse.Accessor);
+      Clash:= FieldClash(Fact, Field.ClassName, AUse.Accessor, AWrite);
       if (Clash = '') or Excepted(AFacts, RULE_TYPE, FormKeyOf(AUse.Pas, Form.Datasets[Field.Dataset].Name), Table, Column) or
          (not IsFixed(ACtx.Store, AUse.Pas, Form.Root, Form.Datasets[Field.Dataset].Name)) then
         Continue;
@@ -934,7 +1001,7 @@ begin
   for Item in UsesOf(ACtx) do
     { an edited, not reindexed file is not judged by its old positions }
     if (Item.Line <= Length(Lines)) and SameText(Copy(Lines[Item.Line - 1], Item.Col, Item.EndCol - Item.Col), Item.Name) then
-      Result:= Result + CheckUse(ACtx, AFacts, Item);
+      Result:= Result + CheckUse(ACtx, AFacts, Item, IsWrittenUse(Item, Lines));
 end;
 
 initialization

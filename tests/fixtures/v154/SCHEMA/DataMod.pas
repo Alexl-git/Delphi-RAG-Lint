@@ -35,6 +35,8 @@ type
     bdeTableNOTE: TIntegerField;
     bdeQuery: TQuery;
     qryIns: TFDQuery;
+    qryMacro: TFDQuery;
+    qryMacroCUSTNAME: TStringField;
     qryBad: TFDQuery;
   public
     procedure Work;

@@ -205,6 +205,27 @@ function SelectArg(const pFile: string): string;
 /// <returns>The kept lines joined with line breaks; the whole output when it has no such line.</returns>
 function ApplyLog(const pOutput: string; pMaxLines: Integer): string;
 
+type
+  /// <summary>What becomes of the form in the editor after a run that writes it: nothing to do, reload it, ask first (the run
+  /// failed), leave it because it has unsaved changes, the reload raised.</summary>
+  TFsReload = (frNone, frReload, frAsk, frDirty, frFailed);
+
+/// <summary>What to do with the open form after a write run.</summary>
+/// <param name="pExitCode">Exit code of the run.</param>
+/// <param name="pOpen">The form is open in the IDE.</param>
+/// <param name="pDirty">It has unsaved changes now.</param>
+/// <param name="pChanged">Its files on disk are not those from before the run.</param>
+/// <returns>frNone, frReload, frAsk or frDirty.</returns>
+/// <remarks>A failed run can have changed a file: write-dfm says so when it could not restore one.</remarks>
+function ReloadStep(pExitCode: Integer; pOpen, pDirty, pChanged: Boolean): TFsReload;
+
+/// <summary>What the user must know about the form in the editor after a write run.</summary>
+/// <param name="pReload">What happened; frAsk = the user did not want the reload.</param>
+/// <param name="pFile">Name of the form file.</param>
+/// <param name="pError">Why the reload failed; used for frFailed only.</param>
+/// <returns>One line; '' when the editor holds what is on disk.</returns>
+function ApplyNotice(pReload: TFsReload; const pFile, pError: string): string;
+
 implementation
 
 uses
@@ -740,6 +761,35 @@ begin
     VShown := VShown + [VKept[VI]];
   VShown := VShown + [Format('... %d more lines', [Length(VKept) - pMaxLines]), VKept[High(VKept)]];
   Result := string.Join(sLineBreak, VShown);
+end;
+
+{ ---- after a write ---- }
+
+function ReloadStep(pExitCode: Integer; pOpen, pDirty, pChanged: Boolean): TFsReload;
+begin
+  if not (pOpen and pChanged) then
+    Result := frNone
+  else if pDirty then
+    Result := frDirty
+  else
+    Result := if pExitCode = 0 then frReload else frAsk;
+end;
+
+function ApplyNotice(pReload: TFsReload; const pFile, pError: string): string;
+const
+  WRITTEN = ' was written to disk, NOT reloaded';
+  OLDER = ': your editor buffer is older.';
+begin
+  case pReload of
+    frDirty:
+      Result := pFile + WRITTEN + OLDER + ' Saving it overwrites what was written; close the form without saving to get the written one.';
+    frFailed:
+      Result := pFile + WRITTEN + ' (' + pError + ')' + OLDER;
+    frAsk:
+      Result := pFile + ' was changed on disk by a run that failed, NOT reloaded' + OLDER;
+  else
+    Result := '';
+  end;
 end;
 
 end.
