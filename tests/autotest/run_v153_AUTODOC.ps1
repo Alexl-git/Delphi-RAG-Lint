@@ -210,7 +210,7 @@ var
   U: string;
 begin
   A[0]:= 1;
-  U:= '{ http://CInString'; U:= U + 'it''s'; if Length(U) = CAfterUrl then Writeln(U, A[0]);
+  U:= '{ http://CInString'; U:= U + 'it''s'; Writeln(U, A[0]); {$IF CAfterUrl > 1} {$IFEND}
 end;
 
 end.

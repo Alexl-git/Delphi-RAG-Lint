@@ -1137,7 +1137,7 @@ warning and hint counts of both builds, every error line, and the warnings / hin
 |---|---|---|
 | `document --qname <q>` | Generate/repair a managed DocInsight comment for one symbol (every overload of the name) | `--apply`, `--json` |
 | `document --unit <f.pas>` | Document every public decl in a unit (facts-only by default; trivial accessors skipped) | `--apply`, `--stubs`, `--include-accessors` |
-| `document --project <p>` | Document every public decl the project owns (vendored roots skipped unless told otherwise) | `--stubs`, `--apply`, `--reindex`, `--document-third-party` |
+| `document --project <p>` | Document every public decl the project owns (vendored roots skipped unless told otherwise); `--apply` refuses (exit 1) an unfinished index and a file whose rescan failed | `--stubs`, `--apply`, `--reindex`, `--document-third-party` |
 | [`document-all`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/document-all) | Document every public decl in every indexed unit (no project scope) | `--stubs`, `--apply` |
 | `document ... --strip` | Remove drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched) | works on `--qname` / `--unit` / `--project` / `document-all` |
 | `document ... --no-seealso` / `--since` | `<seealso cref>` links to related symbols (callees + siblings) are emitted **by default** in every document mode; `--no-seealso` turns them off (`--seealso` is still accepted and does nothing -- it was the opt-in before it became the default). `--since [--base-dir <repoRoot>]` adds a git-derived `<since>` date and degrades silently when git is absent | works on `--qname` / `--unit` / `--project` / `document-all` |
@@ -1347,7 +1347,7 @@ CLI-only verbs).
 ### Lint rule pack (437 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.53.0-alpha: **437 rules across 18 categories -- 324
+external `.scm`). As of v1.53.1-alpha: **437 rules across 18 categories -- 324
 built-in and 113 external `.scm`, 358 enabled by default, and 131 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 

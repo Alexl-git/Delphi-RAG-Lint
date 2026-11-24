@@ -52,12 +52,16 @@
     {
       "ask": "document --project warns or refuses because files it reads facts from changed since indexing -- what now?",
       "command": "drag-lint document --project <p.dproj> --apply --reindex"
+    },
+    {
+      "ask": "document --apply refuses because the index run did not finish or the rescan of a file FAILED -- what now?",
+      "command": "drag-lint index --project <p.dproj> --db <file.sqlite>"
     }
   ],
   "verified": {
-    "date": "2026-11-18",
+    "date": "2026-11-24",
     "by": "ENGINE",
-    "build": "1.51.1-alpha",
-    "surfaceHash": "732a633c865239c7c3f7fcf11b5b05e3844bead505ae17120dad6e4ea47ad8bd"
+    "build": "1.53.1-alpha",
+    "surfaceHash": "194349a98a708afd486927fd1995d8889257870c451b04bbabe4900dd5f074cd"
   }
 }

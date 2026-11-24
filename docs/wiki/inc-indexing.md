@@ -33,8 +33,11 @@ An incremental `index` skips a unit whose bytes are unchanged unless something i
 
 The result equals a full index of the same tree (`index_db_diff`, 0 differing rows). Guards: `tests\autotest\run_v1522_INCRPP_incremental.ps1`, `tests\autotest\run_v1523_INCR_incremental.ps1`. A database written by an older engine records these inputs as each unit is next re-parsed; `index --rebuild` records them all at once.
 
-## Reaching it in the IDE
-No IDE surface; the IDE plugin uses the same index.
+### One file into an existing index (1.53.1)
+
+`drag-lint index <file.pas> --db <file.sqlite>` parses the file with the build the index records -- platform, config, defines, preprocess mode, the project's include path and used-unit constants -- and leaves the index-wide stamp as it was, so the next `index --project` still re-parses every other stale file. When that build cannot be reproduced (no run ever completed the index, its project file is not on disk, the defines changed since, or `--platform` names another build) a project index refuses the file: exit 2, nothing parsed, the message names `index --project`. The project file is looked for beside the program file the index holds, then in the folders of the indexed files, then at the index's own place. A folder or ad-hoc index always takes the file.
+
+## Reaching it in the IDENo IDE surface; the IDE plugin uses the same index.
 
 ## What it needs
 A project index built with the 1.37.0 extractor; older DBs re-parse on the next index run.

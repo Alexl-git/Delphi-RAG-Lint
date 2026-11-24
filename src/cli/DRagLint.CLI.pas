@@ -5922,7 +5922,7 @@ begin
   if AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) <> '' then
     Writeln(AWhat, ': an interrupted --rebuild is still open; the next plain index finishes its walk.')
   else if Prev = '' then
-    Writeln(AWhat, ': this DB records no indexer fingerprint yet; the next plain index records it.')
+    Writeln(AWhat, ': this DB records no indexer fingerprint yet; the next project or folder index, or one with --rebuild, records it.')
   else
     Writeln(Format('%s: %d file(s) not at the current indexer fingerprint; the next plain index re-parses them (resuming, good parses kept).', [AWhat, NotCurrent]));
 end;
@@ -5960,7 +5960,8 @@ end;
 
 { The project files a project index may have been built from, the likeliest first: for the .dpr / .dpk it
   holds (the one its project_tag names; the .dproj itself is not a row) the .dproj beside it, then the
-  file itself; else the .dproj at the database's proper place. Empty = none is on disk. }
+  file itself; else a .dproj of that name in the folder of an indexed file (a MainSource not named like
+  its .dproj is no row either); else the .dproj at the database's proper place. Empty = none is on disk. }
 function ProjectFilesOfStore(const AStore: ISymbolStore; const ADbPath: string): TArray<string>;
 begin
   Result:= nil;
@@ -5970,6 +5971,16 @@ begin
        ((Tag = '') or SameText(Tag, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(FS.Path)))) then
       for var Candidate: string in [ChangeFileExt(FS.Path, '.dproj'), FS.Path] do
         if TFile.Exists(Candidate) and not MatchText(Candidate, Result) then Result:= Result + [Candidate];
+  if (Length(Result) = 0) and (Tag <> '') then
+  begin
+    var Folders: TArray<string>:= nil;
+    for var FS: TFileStamp in AStore.GetAllFileStamps do
+      if not MatchText(ExtractFileDir(FS.Path), Folders) then Folders:= Folders + [ExtractFileDir(FS.Path)];
+    for var Folder: string in Folders do
+      if TDirectory.Exists(Folder) then
+        for var Candidate: string in TDirectory.GetFiles(Folder, '*.dproj') do
+          if SameText(Tag, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(Candidate))) then Result:= Result + [Candidate];
+  end;
   if (Length(Result) = 0) and (ProjectOfDb(ADbPath) <> '') then Result:= [ProjectOfDb(ADbPath)];
 end;
 
@@ -17905,16 +17916,22 @@ begin
   end; // try
 end; // function
 
-{ The platform ADbPath's index was built for, '' when it records none or cannot be opened. }
-function StoredPlatformOfDb(const ADbPath: string): string;
+{ A doc verb's project reindex keeps the platform and the build config the database was built with (the
+  IDE passes --platform, a user --build-config; the .dproj marker may name others). What the command line
+  names itself wins; a database that records none, or cannot be opened, changes nothing. }
+procedure KeepStoredBuild(var AIndexArgs: TArgs; const ADbPath: string);
 begin
   var Ok: Boolean;
   var Store: ISymbolStore:= OpenReadOnlyStore(ADbPath, Ok, True);
-  Result:= if Ok then FingerprintLimbValue(Store.GetMetaValue(INDEXER_FP_KEY), FP_LIMB_PLATFORM) else '';
+  if not Ok then Exit;
+  var Stored: string:= Store.GetMetaValue(INDEXER_FP_KEY);
+  var Cfg: string:= FingerprintLimbValue(Stored, FP_LIMB_CONFIG);
+  if AIndexArgs.CheckPlatform = '' then AIndexArgs.CheckPlatform:= FingerprintLimbValue(Stored, FP_LIMB_PLATFORM);
+  if (AIndexArgs.BuildConfig = '') and (Cfg <> FP_CONFIG_JSON) then AIndexArgs.BuildConfig:= Cfg;
 end;
 
-{ 1.53.1: `document` on an index no run finished (killed before or during its resolve, or a --rebuild
-  left open) renders facts from missing edges: callers, reads and exceptions read as "none". --apply is
+{ 1.53.1: `document` on an index no run finished (killed before or during its resolve, a --rebuild left
+  open, or a run still at work) renders facts from missing edges: callers, reads and exceptions read as "none". --apply is
   REFUSED (True; the verb exits 1, nothing written); a dry run WARNs on stderr and goes on. --strip reads
   no facts and is never asked. }
 function DocIndexUnfinished(const AArgs: TArgs; const AStore: ISymbolStore): Boolean;
@@ -17927,8 +17944,9 @@ begin
     else '';
   Result:= (Why <> '') and AArgs.Apply;
   if Why <> '' then
-    Writeln(ErrOutput, Format('doc: %s -- %s did not finish, so callers, reads and exceptions may be missing from the facts.%s ' +
-      'Finish it: drag-lint index --project <file.dproj> --db "%s"',
+    Writeln(ErrOutput, Format('doc: %s -- %s is running or did not finish, so callers, reads and exceptions may be missing from the facts.%s ' +
+      'If no index run is at work on it, finish it: drag-lint index --project <file.dproj> --db "%s" ' +
+      '(a project index), drag-lint index <folder> (a folder index), or drag-lint index <file> --rebuild (a one-file index).',
       [(if Result then 'REFUSED' else 'WARN'), Why, (if Result then ' NOTHING was written.' else ''), AArgs.DbPath]));
 end;
 
@@ -17963,9 +17981,7 @@ begin
   if AArgs.ProjectPath <> '' then
   begin
     IndexArgs.Path:= '';    // ProjectPath drives the closure
-    { 1.53.1: the platform the DB was indexed for (the IDE passes --platform, the .dproj marker may name
-      another), so a doc verb's reindex never flips it. }
-    if IndexArgs.CheckPlatform = '' then IndexArgs.CheckPlatform:= StoredPlatformOfDb(AArgs.DbPath);
+    KeepStoredBuild(IndexArgs, AArgs.DbPath); { 1.53.1: a doc verb's reindex never flips the DB's build }
   end
   // 152b DOCU2: the ONE stale file, never its folder. `index <dir> --db
   // <projectDb>` is the widening the index verb refuses (exit 2), so the folder
@@ -18044,10 +18060,14 @@ end;
   Rescan BOTH sides -- the documented file and every file its facts were read from -- with
   --force-reparse (the stamp fast path would skip them), say so on stderr as a WARN, and
   re-open AStore so the caller runs on the fresh rows. Returns True when it rescanned;
-  False (nothing touched) when every stamp-clean file agrees with its source. }
-function RescanTamperedFacts(const AArgs: TArgs; var AStore: ISymbolStore; const AOwnFile: string): Boolean;
+  False (nothing touched) when every stamp-clean file agrees with its source.
+  1.53.1: a rescan that FAILED (the one-file index refused: a define changed since the project was
+  indexed) leaves rows known to be wrong, so ARefused comes back True under --apply and the caller exits
+  1 with nothing written; a dry run only WARNs. --strip reads no facts and is never refused. }
+function RescanTamperedFacts(const AArgs: TArgs; var AStore: ISymbolStore; const AOwnFile: string; out ARefused: Boolean): Boolean;
 begin
   Result:= False;
+  ARefused:= False;
   var Files: TArray<string>:= nil;
   if AOwnFile <> '' then Files:= [AOwnFile];
   for var R: string in SourceFilesRead do
@@ -18076,8 +18096,11 @@ begin
     IndexArgs.ProjectPath  := '';
     IndexArgs.CheckPlatform:= ''; { the DB's stored build decides (TOneFilePlan) }
     IndexArgs.BuildConfig  := '';
-    if DoIndexForDoc(AArgs, IndexArgs) <> 0 then
-      Writeln(ErrOutput, 'doc: WARN -- the rescan of ' + F + ' FAILED; the facts for it may still be stale.');
+    if DoIndexForDoc(AArgs, IndexArgs) = 0 then Continue;
+    ARefused:= AArgs.Apply and not AArgs.DocStrip;
+    Writeln(ErrOutput, Format('doc: %s -- the rescan of %s FAILED; the facts stored for it do not match the source.%s',
+      [(if ARefused then 'REFUSED' else 'WARN'), F, (if ARefused then ' NOTHING was written. Reindex first: drag-lint index --project ' +
+       '<file.dproj> --db "' + AArgs.DbPath + '"' else '')]));
   end;
   var Ok: Boolean;
   var Fresh: ISymbolStore:= OpenReadOnlyStore(AArgs.DbPath, Ok);
@@ -18217,8 +18240,10 @@ begin
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   ResetSourceFilesRead; // 152b DOCU: record what the facts read, then refuse on stale text
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
-  if RescanTamperedFacts(AArgs, Store, AArgs.DocUnit) then // v151 DOCU5 (OQ5)
+  var Refused: Boolean;
+  if RescanTamperedFacts(AArgs, Store, AArgs.DocUnit, Refused) then // v151 DOCU5 (OQ5)
   begin
+    if Refused then Exit(1);
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
   end;
@@ -18429,6 +18454,7 @@ begin
     var IndexArgs: TArgs := AArgs;
     IndexArgs.IndexAll := False;  // incremental (default)
     IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
+    KeepStoredBuild(IndexArgs, AArgs.DbPath);
     var IndexResult := DoIndexForDoc(AArgs, IndexArgs);
     if IndexResult <> 0 then
     begin
@@ -18464,8 +18490,10 @@ begin
   // Step 2: document --apply (shifts lines, which makes index stale)
   ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
-  if RescanTamperedFacts(AArgs, Store, '') then
+  var Refused: Boolean;
+  if RescanTamperedFacts(AArgs, Store, '', Refused) then
   begin
+    if Refused then Exit(1);
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   end;
@@ -18482,6 +18510,7 @@ begin
     var IndexArgs: TArgs := AArgs;
     IndexArgs.IndexAll := False;  // incremental
     IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
+    KeepStoredBuild(IndexArgs, AArgs.DbPath);
     var IndexResult := DoIndexForDoc(AArgs, IndexArgs);
     if IndexResult <> 0 then
     begin
@@ -18533,8 +18562,10 @@ begin
   TSharedFacts.MigrateLegacyPure:= AArgs.DocMigratePure; // 2026-09-23: --migrate-pure regenerates a stored legacy `Pure` line.
   ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentAll(Store, Opts);
-  if RescanTamperedFacts(AArgs, Store, '') then
+  var Refused: Boolean;
+  if RescanTamperedFacts(AArgs, Store, '', Refused) then
   begin
+    if Refused then Exit(1);
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentAll(Store, Opts);
   end;
@@ -19018,8 +19049,10 @@ begin
     AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,
     LoadDocComplexityMin); // gap 3: manifest docs.dialog_routines / max_handles for 'Catches:'. ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap; ADP2 T3: manifest docs.complexity_min threshold.
 
-  if (Res.Action <> DRagLint.Doc.Document.daNotFound) and RescanTamperedFacts(AArgs, Store, Res.FilePath) then // v151 DOCU5 (OQ5)
+  var Refused: Boolean;
+  if (Res.Action <> DRagLint.Doc.Document.daNotFound) and RescanTamperedFacts(AArgs, Store, Res.FilePath, Refused) then // v151 DOCU5 (OQ5)
   begin
+    if Refused then Exit(1);
     ResetSourceFilesRead;
     Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, LoadDocHandlesOptions, AArgs.DocSeeAlso,
       AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,

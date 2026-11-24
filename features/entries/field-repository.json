@@ -264,6 +264,10 @@
       "command": "drag-lint repo seed-fb --connection \"Database=host:db;User=..;Password=..\" --repo <file>"
     },
     {
+      "ask": "repo update-orm says REFUSED for a unit -- what is wrong with it?",
+      "command": "drag-lint repo update-orm --repo <file> --code-dir <dir> --table <T>"
+    },
+    {
       "ask": "How do I keep it in version control?",
       "command": "drag-lint repo backup --repo <file> --output <file.txt>"
     },
@@ -297,9 +301,9 @@
     }
   ],
   "verified": {
-    "date": "2026-11-23",
+    "date": "2026-11-24",
     "by": "ENGINE",
-    "build": "1.53.0-alpha",
+    "build": "1.53.1-alpha",
     "surfaceHash": "c1bf3a004cc975812c13b5a5ba839c8fa3b7cf9b0fd766c5e342c03ee3a260c6"
   }
 }

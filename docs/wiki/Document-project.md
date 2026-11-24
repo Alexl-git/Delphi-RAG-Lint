@@ -37,6 +37,24 @@ use `--apply --reindex`, which reindexes before it documents.
 document even when the run reindexes in-process (`--reindex`, the
 stale-anchor retry, the tamper rescan).
 
+### When --apply refuses the whole run (1.53.1)
+
+Every document form (`--qname`, `--unit`, `--project`, `document-all`) exits 1
+and writes nothing when the facts would be wrong:
+
+* the index run, its resolve or a `--rebuild` is still running or did not
+  finish. Finish it with `index --project <file.dproj>` (a project index),
+  `index <folder>` (a folder index) or `index <file> --rebuild` (a one-file
+  index);
+* the facts stored for a file disagree with its source although its timestamp
+  and size did not change, and the rescan of that file failed -- for example
+  a define changed since the project was indexed. Run `index --project`.
+
+A dry run prints the same line as a WARN and goes on. `--strip` reads no facts
+and is never refused. A reindex the verb runs itself (`--reindex`, the
+stale-anchor retry) keeps the platform and the build config the index was
+built with.
+
 ## What it needs
 
 Optional, per the feature map's Index column.

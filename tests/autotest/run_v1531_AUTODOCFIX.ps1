@@ -17,6 +17,10 @@
     GAP     doc + banner + blank + declaration is one doc block, rewritten in place.
     TAMPER  comments between an attribute and its heading are neither the heading nor tampering.
     STRIP   --strip --qname takes only the declaration's own block, never one above a banner.
+    RESCAN  (review 2) the rescan of a file whose facts are known wrong failed: --apply is refused in every
+            document form; a dry run WARNs. Control: after index --project the same --apply writes.
+    KEEP    (review 2) document --project --reindex keeps the platform and the build config the DB was built with.
+    MAIN    (review 2) a project whose MainSource is not named like its .dproj, DB outside _D-RAG: one file is taken.
   Needs python (sqlite3) for the stamp edits. Run from any CWD, pwsh 7.
 #>
 [CmdletBinding()]
@@ -214,6 +218,46 @@ Set-Meta $db 'rebuild_in_progress' '1'
 Touch "$r\app\uA.pas"; [void](Run @('index', "$r\app\uA.pas", '--db', $db))
 Check 'STAMP one file does not close an interrupted --rebuild' ((Meta $db 'rebuild_in_progress') -eq '1') (Meta $db 'rebuild_in_progress')
 
+# ---------------------------------------------------------------- RESCAN (review 2, item 1)
+$r = "$WorkDir\rescan"; New-Project $r; $db = "$r\app\_D-RAG\P.sqlite"; $dproj = "$r\app\P.dproj"
+[void](Run @('index', '--project', $dproj, '--db', $db))
+[IO.File]::WriteAllText($dproj, [IO.File]::ReadAllText($dproj).Replace('MYDEBUG;', 'MYDEBUG;MYOTHER;'), [Text.Encoding]::ASCII)
+Tamper "$r\app\uA.pas" 'EOne' 'ETwo'
+function Units([string]$Root) { (Get-ChildItem "$Root\app\*.pas" | Sort-Object Name | ForEach-Object { $_.Name; Text $_.FullName }) -join "`n" }
+$before = Units $r
+$forms = [ordered]@{ '--unit' = @('document', '--unit', "$r\app\uA.pas"); '--qname' = @('document', '--qname', 'uA.Always'); '--project' = @('document', '--project', $dproj); 'document-all' = @('document-all') }
+foreach ($f in $forms.Keys) {
+  $d = Run ($forms[$f] + @('--apply', '--no-backup', '--db', $db))
+  Check "RESCAN control $f : the tamper is seen and its rescan fails" (($d -match 'look unchanged by timestamp') -and ($d -match 'refusing to index one file')) $d
+  Check "RESCAN $f --apply is refused, nothing written" (($script:Code -eq 1) -and ($d -match 'doc: REFUSED -- the rescan of') -and ((Units $r) -ceq $before)) "exit=$($script:Code) $d"
+}
+$d = Run @('document', '--unit', "$r\app\uA.pas", '--db', $db)
+Check 'RESCAN a dry run WARNs and goes on' (($script:Code -eq 0) -and ($d -match 'doc: WARN -- the rescan of')) "exit=$($script:Code) $d"
+[void](Run @('index', '--project', $dproj, '--db', $db, '--force-reparse'))
+$d = Run @('document', '--unit', "$r\app\uA.pas", '--apply', '--no-backup', '--db', $db)
+Check 'RESCAN control: after index --project the same --apply writes' (($script:Code -eq 0) -and ((Units $r) -cne $before)) "exit=$($script:Code) $d"
+
+# ---------------------------------------------------------------- KEEP (review 2, item 2)
+$r = "$WorkDir\keep"; New-Project $r; $db = "$r\app\_D-RAG\P.sqlite"; $dproj = "$r\app\P.dproj"
+[void](Run @('index', '--project', $dproj, '--db', $db, '--platform', 'Win32', '--build-config', 'Release')); $fp0 = Fp $db
+Check 'KEEP control: the DB is Win32 Release' ($fp0 -match 'plat=win32;cfg=release;') $fp0
+$d = Run @('document', '--project', $dproj, '--apply', '--no-backup', '--reindex', '--db', $db)
+Check 'KEEP document --project --reindex keeps platform and config' (($script:Code -eq 0) -and ((Fp $db) -eq $fp0)) "exit=$($script:Code) $(Fp $db) $d"
+Check 'KEEP and parses as Win32 Release' ((Names $db) -notmatch '\bOnly(Win64|Debug)\b') (Names $db)
+
+# ---------------------------------------------------------------- MAIN (review 2, item 5)
+$r = "$WorkDir\mainsrc"; New-Project $r; $dproj = "$r\app\Other.dproj"
+[IO.File]::Move("$r\app\P.dproj", $dproj)
+$db = "$WorkDir\main.sqlite"
+[void](Run @('index', '--project', $dproj, '--db', $db)); $fp0 = Fp $db
+Check 'MAIN control: indexed as Win64 Debug' ($fp0 -match 'plat=win64;cfg=debug;') $fp0
+Touch "$r\app\uA.pas"
+$o = Run @('index', "$r\app\uA.pas", '--db', $db)
+Check 'MAIN one file is taken with the project build' (($script:Code -eq 0) -and ($o -match 'uA\.pas -> \d+ symbols') -and ((Fp $db) -eq $fp0) -and ((Names $db) -match '\bOnlyDebug\b')) "exit=$($script:Code) $o"
+[IO.File]::Move($dproj, "$dproj.away"); Touch "$r\app\uA.pas"
+$o = Run @('index', "$r\app\uA.pas", '--db', $db)
+Check 'MAIN control: no .dproj on disk is still refused' (($script:Code -eq 2) -and ($o -match 'not on disk')) "exit=$($script:Code) $o"
+
 # ---------------------------------------------------------------- BUILD (M1) / CTX (M2)
 $r = "$WorkDir\build"; New-Project $r; $db = "$r\app\_D-RAG\P.sqlite"; $dproj = "$r\app\P.dproj"
 [void](Run @('index', '--project', $dproj, '--db', $db))
@@ -281,6 +325,17 @@ foreach ($key in 'resolver_fingerprint', 'indexer_fingerprint') {
   [IO.File]::WriteAllText("$oDir\uO.pas", $before.Replace("`n", "`r`n"), [Text.Encoding]::ASCII)
   Set-Meta $oDb $key $keep
 }
+# review 2, items 3 / 4: every command that can finish the run is named; a run in progress is not called dead
+$kDb = "$WorkDir\killed.sqlite"
+[void](Run @('index', "$oDir\uO.pas", '--db', $kDb)); Set-Meta $kDb 'indexer_fingerprint' '-'
+$d = Run @('document', '--unit', "$oDir\uO.pas", '--apply', '--no-backup', '--db', $kDb)
+Check 'OPEN a killed ad-hoc first run: the refusal names --project, a folder and --rebuild' (($script:Code -eq 1) -and ($d -match 'index --project') -and ($d -match 'index <folder>') -and ($d -match '--rebuild')) $d
+Check 'OPEN it says is running or did not finish' ($d -match 'is running or did not finish') $d
+$o = Run @('index', "$oDir\uO.pas", '--db', $kDb)
+Check 'OPEN one file does not promise that a plain index records the build' ($o -notmatch 'the next plain index records it') $o
+[void](Run @('index', "$oDir\uO.pas", '--rebuild', '--db', $kDb))
+$d = Run @('document', '--unit', "$oDir\uO.pas", '--db', $kDb)
+Check 'OPEN control: index <file> --rebuild finishes it' (($script:Code -eq 0) -and ($d -notmatch 'did not finish')) $d
 [void](Run @('index', $oDir, '--db', $oDb))
 $d = Run @('document', '--unit', "$oDir\uO.pas", '--apply', '--no-backup', '--db', $oDb)
 Check 'OPEN control: a finished index is documented, no WARN' (($script:Code -eq 0) -and ($d -notmatch 'did not finish') -and ((Text "$oDir\uO.pas") -cne $before)) $d

@@ -1,5 +1,5 @@
 {
-  "product": "1.53.0-alpha",
+  "product": "1.53.1-alpha",
   "extractor": "1.43.0-alpha",
   "resolver": "1.31.0-alpha",
   "schema": 27,
@@ -279,9 +279,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-20",
+        "date": "2026-11-24",
         "by": "ENGINE",
-        "build": "1.52.2-alpha",
+        "build": "1.53.1-alpha",
         "surfaceHash": "ef7035a4a4af9b1f2e8b73f5c2b7d6fd883fabb9660dd0fdf8621cf18cfd0b2e"
       }
     },
@@ -7281,13 +7281,17 @@
         {
           "ask": "document --project warns or refuses because files it reads facts from changed since indexing -- what now?",
           "command": "drag-lint document --project <p.dproj> --apply --reindex"
+        },
+        {
+          "ask": "document --apply refuses because the index run did not finish or the rescan of a file FAILED -- what now?",
+          "command": "drag-lint index --project <p.dproj> --db <file.sqlite>"
         }
       ],
       "verified": {
-        "date": "2026-11-18",
+        "date": "2026-11-24",
         "by": "ENGINE",
-        "build": "1.51.1-alpha",
-        "surfaceHash": "732a633c865239c7c3f7fcf11b5b05e3844bead505ae17120dad6e4ea47ad8bd"
+        "build": "1.53.1-alpha",
+        "surfaceHash": "194349a98a708afd486927fd1995d8889257870c451b04bbabe4900dd5f074cd"
       }
     },
     {
@@ -7343,10 +7347,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-24",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
-        "surfaceHash": "7928ec8d0e418cc306a99a68c1485faa645515d255dd6be6ac4c21c491c1db6c"
+        "build": "1.53.1-alpha",
+        "surfaceHash": "7760aebffd2d39fb87d125ee57dfe725ccb9b0a8d9566274f0c0c0ed08c15c28"
       }
     },
     {
@@ -15849,6 +15853,10 @@
           "command": "drag-lint repo seed-fb --connection \"Database=host:db;User=..;Password=..\" --repo <file>"
         },
         {
+          "ask": "repo update-orm says REFUSED for a unit -- what is wrong with it?",
+          "command": "drag-lint repo update-orm --repo <file> --code-dir <dir> --table <T>"
+        },
+        {
           "ask": "How do I keep it in version control?",
           "command": "drag-lint repo backup --repo <file> --output <file.txt>"
         },
@@ -15882,9 +15890,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-23",
+        "date": "2026-11-24",
         "by": "ENGINE",
-        "build": "1.53.0-alpha",
+        "build": "1.53.1-alpha",
         "surfaceHash": "c1bf3a004cc975812c13b5a5ba839c8fa3b7cf9b0fd766c5e342c03ee3a260c6"
       }
     },
