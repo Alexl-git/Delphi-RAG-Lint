@@ -508,11 +508,14 @@ end;
 
 class function TSharedUnit.AddProject(const AUnitPath, AProject: string;
   out ANewText: string): Boolean;
+var
+  OldText: string;
 begin
-  ANewText:= ReadUnitText(AUnitPath);
+  OldText:= ReadUnitText(AUnitPath);
+  ANewText:= OldText;
   Result  := False;
-  if ANewText = '' then Exit;
-  Result:= AddProjectToText(ANewText, AProject, ANewText);
+  if OldText = '' then Exit;
+  Result:= AddProjectToText(OldText, AProject, ANewText);
 end;
 
 end.
