@@ -471,7 +471,7 @@ begin
     Callee:= SqlNodeText(Ent, ASrc);
     if not SqlCalleeOnlyReads(Callee) then
       for I:= 0 to N.ChildCount - 1 do
-        if (not (N.Child(I) = Ent)) and SqlMentions(N.Child(I), AName, ASrc) then
+        if (not (N.Child(I) = Ent)) and SqlMentions(N.Child(I), AName, ASrc) then  // dl:ok nonminimal-bool@28d2 -- REVIEWED 2026-11-24 INT-W2: TTSNode has no <> operator (E2015)
         begin
           Inc(AUnsafe);
           Break;
