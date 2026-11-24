@@ -28,11 +28,13 @@ unit DRagLint.Lint.UnusedGlobal;
 
   TEXT FALLBACK (measured on src\cli: 5 of the first 14 findings were false):
   the index records no ref for a name used only as an array bound
-  (`array[0..CONST - 1]`), behind a pointer type (`^TFoo`) or in a doc comment
-  (`<see cref>`). A candidate with no ref therefore gets one whole-word text
-  count over its scope (the declaring file; every indexed file for an interface
-  symbol); a second occurrence anywhere -- code, comment or string -- keeps it
-  silent. Only ref-less suspects are tokenised, so the cost is one pass over the
+  (`array[0..CONST - 1]`) or behind a pointer type (`^TFoo`). A candidate with no
+  ref therefore gets one whole-word text count over its scope (the declaring file;
+  every indexed file for an interface symbol); a second occurrence in code, a
+  compiler directive or a string keeps it silent. COMMENTS DO NOT COUNT
+  (INBOX-orm3-server-153 item 2): `document --apply` writes symbol names into /// blocks
+  (seealso cref, managed facts), and a name only a comment holds is not a use.
+  Only ref-less suspects are tokenised, so the cost is one pass over the
   sources, paid only when a suspect exists. }
 
 interface
@@ -61,8 +63,8 @@ const
 /// unless another project that lists the unit names them (see AShared). Anchored at the declaration.</returns>
 /// <remarks>
 /// Name-keyed and conservative: a homonym used anywhere in scope keeps
-/// a symbol silent, and so does a mention in a comment or string (text
-/// fallback). Not thread-safe. A symbol used only inside an inactive {$IFDEF}
+/// a symbol silent, and so does a mention in a string or a compiler directive
+/// (text fallback); a mention in a comment does not. Not thread-safe. A symbol used only inside an inactive {$IFDEF}
 /// branch is invisible to the refs but visible to the text fallback.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
@@ -184,7 +186,42 @@ var
     Result:= if SameText(ASym.Section, SECTION_IMPL) then Files.ContainsKey(ASym.FileId) else Files.Count > 0;
   end;
 
-  { Counts whole-word occurrences of every suspect name in one file. }
+  { AFrom sits on a comment opener (`//`, `{`, `(*`, never a directive's `$` form): the index of
+    the comment's last character, else 0. }
+  function CommentEnd(const AText: string; AFrom: Integer): Integer;
+  begin
+    Result:= 0;
+    var Head: string:= Copy(AText, AFrom, Length('(*$'));
+    if Head.StartsWith('//') then
+    begin
+      Result:= AFrom;
+      while (Result < Length(AText)) and not CharInSet(AText[Result + 1], [#13, #10]) do Inc(Result);
+      Exit;
+    end;
+    if Head.StartsWith('{$') or Head.StartsWith('(*$') then Exit;
+    if Head.StartsWith('{') then Result:= Pos('}', AText, AFrom)
+    else if Head.StartsWith('(*') then
+    begin
+      Result:= Pos('*)', AText, AFrom + Length('(*'));
+      if Result > 0 then Inc(Result);
+    end
+    else Exit;
+    if Result = 0 then Result:= Length(AText); { unterminated: the rest of the file is comment }
+  end;
+
+  { AFrom sits on a quote: the index of the closing quote, else AFrom (no quote left on the line). }
+  function StringEnd(const AText: string; AFrom: Integer): Integer;
+  begin
+    Result:= AFrom;
+    var K: Integer:= AFrom + 1;
+    while (K <= Length(AText)) and not CharInSet(AText[K], [#13, #10]) do
+    begin
+      if AText[K] = '''' then Exit(K);
+      Inc(K);
+    end;
+  end;
+
+  { Counts whole-word occurrences of every suspect name in one file, comments excluded. }
   procedure CountSuspects(AFileId: Int64);
   var
     Text: string;
@@ -199,9 +236,13 @@ var
       end;
     end;
     var I: Integer:= 1;
+    var InString: Integer:= 0; { last index of the string literal I is in }
     while I <= Length(Text) do
     begin
-      if CharInSet(Text[I], ['A'..'Z', 'a'..'z', '_']) then
+      if (I > InString) and (Text[I] = '''') then InString:= StringEnd(Text, I);
+      var Skip: Integer:= if I > InString then CommentEnd(Text, I) else 0;
+      if Skip > 0 then I:= Skip + 1
+      else if CharInSet(Text[I], ['A'..'Z', 'a'..'z', '_']) then
       begin
         var J: Integer:= I;
         while (J <= Length(Text)) and CharInSet(Text[J], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(J);
