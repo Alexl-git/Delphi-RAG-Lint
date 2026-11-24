@@ -1,11 +1,1752 @@
 unit DRagLint.FieldRepo.DfmWritePlan;
 
-{ drag-lint 1.54 -- lane TT-DFMWRITE: the repo -> DFM change set of one form
-  (design 2026-11-22-field-repository-v2-design.md section 9).
-  Scaffold created EMPTY by lane FRAME. }
+{ drag-lint 1.54 -- lane TT-DFMWRITE: the repository -> DFM change set of a form and its applier (design
+  2026-11-22-field-repository-v2-design.md sections 3, 4.4 and 9).
+
+  The datasets and persistent fields come from the read side (DfmRead); a field's table column is found by the same
+  rules as DfmReadPlan (UpdateTableName, TableName, the SELECT). Property changes: the repository wins; a value the
+  repository does not hold changes nothing. Fields are added and removed only for an explicit selection of one
+  dataset, and then in the unit too (the published field is what lets Delphi find the class when the form loads).
+  Calc and event code is never written here. }
 
 interface
 
+uses
+  System.SysUtils,
+  FireDAC.Comp.Client,
+  DRagLint.FieldRepo.Kinds,
+  DRagLint.FieldRepo.ChangeSet,
+  DRagLint.FieldRepo.DfmReadPlan,
+  DRagLint.FieldRepo.DfmWrite;
+
+type
+  /// <summary>Raised for a selection that cannot be planned: no dataset, an unresolved one, an unknown field.</summary>
+  EDfmWriteSelection = class(EDfmWriteError);
+
+  /// <summary>What a change does to the DFM text.</summary>
+  TDfmwAction = (dwaSet, dwaRemove, dwaKind, dwaInsert, dwaDelete);
+
+  /// <summary>One change; parallel to the change set.</summary>
+  TDfmwItem = record
+    /// <summary>Index in Files.</summary>
+    FileIndex: Integer;
+    /// <summary>What to do.</summary>
+    Action: TDfmwAction;
+    /// <summary>Dataset and field component names.</summary>
+    Dataset: string;
+    Component: string;
+    /// <summary>Class of the field (its declaration in the unit, the order of its properties).</summary>
+    FieldClass: string;
+    /// <summary>dwaSet, dwaRemove: the property; dwaSet: its DFM literal.</summary>
+    PropName: string;
+    Literal: string;
+    /// <summary>dwaKind: the new kind.</summary>
+    Kind: TFrFieldKind;
+    /// <summary>dwaInsert: the block's lines.</summary>
+    Block: TArray<string>;
+    /// <summary>Component names of the dataset's fields (where a new one goes).</summary>
+    Siblings: TArray<string>;
+    /// <summary>Ids of changes that must be applied with this one.</summary>
+    Requires: TArray<Integer>;
+  end;
+
+  /// <summary>A form to write: the bytes the plan was made from.</summary>
+  TDfmwFile = record
+    /// <summary>Path of the DFM and its bytes.</summary>
+    DfmName: string;
+    DfmBytes: TBytes;
+    /// <summary>Path of the unit beside it ('' = none) and its bytes.</summary>
+    PasName: string;
+    PasBytes: TBytes;
+    /// <summary>Class of the root object.</summary>
+    FormClass: string;
+  end;
+
+  /// <summary>A planned write.</summary>
+  TDfmwPlan = record
+    /// <summary>Direction repo-to-dfm.</summary>
+    ChangeSet: TFrChangeSet;
+    /// <summary>Items[i] belongs to ChangeSet.Changes[i].</summary>
+    Items: TArray<TDfmwItem>;
+    /// <summary>The forms.</summary>
+    Files: TArray<TDfmwFile>;
+    /// <summary>One report per dataset, in DFM order.</summary>
+    Datasets: TArray<TDfmrDatasetReport>;
+    /// <summary>Everything the repository holds that is not written, and every fact to look at.</summary>
+    Warnings: TArray<string>;
+  end;
+
+  /// <summary>The new content of one file.</summary>
+  TDfmwOutput = record
+    /// <summary>Path.</summary>
+    FileName: string;
+    /// <summary>The bytes the plan was made from.</summary>
+    OldBytes: TBytes;
+    /// <summary>The bytes to write.</summary>
+    NewBytes: TBytes;
+  end;
+
+/// <summary>Plans the changes that bring DFMs in line with the repository.</summary>
+/// <param name="pRepo">Open repository connection, schema 2; only SELECTs run.</param>
+/// <param name="pFiles">Text DFM files.</param>
+/// <param name="pDataset">Dataset component name (case-insensitive); '' = every dataset of every file.</param>
+/// <param name="pFields">Field selection of the one dataset: FIELD_NAMEs or `all`; nil = no field is added or
+/// removed. ExpandSelection adds what the selected fields depend on.</param>
+/// <returns>The plan. Checked: property changes and added fields. Unchecked: removed fields, hidden fields and changed kinds.
+/// Blocked: everything that cannot be written so that the form still loads.</returns>
+/// <exception cref="EDfmWriteError">A binary DFM, or one that Delphi or the readers do not understand.</exception>
+/// <exception cref="EDfmWriteSelection">pFields without exactly one dataset with a table.</exception>
+/// <exception cref="EDfmReadError">A file or the dataset does not exist.</exception>
+/// <exception cref="EFrSelectionError">An unknown field in pFields.</exception>
+/// <exception cref="ERepoError">The repository is schema 1 (run repo migrate first).</exception>
+/// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids.</remarks>
+function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
+  const pFields: TArray<string>): TDfmwPlan;
+
+/// <summary>Applies chosen changes to the plan's bytes in memory.</summary>
+/// <param name="pPlan">The plan.</param>
+/// <param name="pChosen">Changes to apply.</param>
+/// <returns>Only the files whose bytes change. Every new DFM was converted to binary by the RTL and read again.</returns>
+/// <exception cref="EDfmWriteError">A chosen change is blocked, needs a change that was not chosen, or the result does
+/// not read back as planned.</exception>
+/// <remarks>No file is read or written: the applier for an open designer uses this too.</remarks>
+function RenderDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>): TArray<TDfmwOutput>;
+
+/// <summary>Writes chosen changes, with a backup of every changed file beside it.</summary>
+/// <param name="pPlan">The plan.</param>
+/// <param name="pChosen">Changes to apply.</param>
+/// <returns>One `replacing OLD with NEW` line per change, then one `backup FILE` line per changed file.</returns>
+/// <exception cref="EDfmWriteError">As RenderDfmWrite; a file changed since the plan; a file cannot be written (the
+/// files written before it are restored).</exception>
+/// <remarks>Everything is computed and checked before the first byte is written. Backup name:
+/// `FILE.before-write-dfm-yyyymmdd-hhnnss`, never an existing file.</remarks>
+function ApplyDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>): TArray<string>;
+
+/// <summary>The TField class a repository field gets in a new persistent field.</summary>
+/// <param name="pFieldType">FIELD_TYPE (RDB$FIELD_TYPE), 0 = not a column.</param>
+/// <param name="pSubType">FIELD_SUBTYPE.</param>
+/// <param name="pScale">FIELD_SCALE (zero or negative).</param>
+/// <param name="pAsType">FIELD_AS_TYPE, used when there is no FIELD_TYPE.</param>
+/// <param name="pVarType">VAR_TYPE, tells a memo from a string.</param>
+/// <returns>A class name, '' = unknown.</returns>
+/// <remarks>String classes are the narrow ones; the planner widens them to match the dataset.</remarks>
+function FieldClassForRow(pFieldType, pSubType, pScale: Integer; const pAsType, pVarType: string): string;
+
 implementation
+
+uses
+  System.Classes,
+  System.IOUtils,
+  System.Math,
+  System.StrUtils,
+  System.TypInfo,
+  System.RegularExpressions,
+  System.Generics.Collections,
+  Data.DB,
+  FireDAC.Stan.Param,
+  FireDAC.DApt,
+  FireDAC.Comp.DataSet,
+  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.SchemaFacts,
+  DRagLint.FieldRepo.DfmRead,
+  DRagLint.FieldRepo.DfmReadSql,
+  DRagLint.FieldRepo.DfmReadSelection;
+
+const
+  SCHEMA_WITH_BODIES = 2;
+  ALL_FIELDS = 'all';
+  MULTI_FIELD = ';';
+  DFM_EXT = '.dfm';
+  PAS_EXT = '.pas';
+  OBJECT_KIND = 'object';
+  UNIT_DB = 'Data.DB';
+  UNIT_OLD_DB = 'DB';
+  BACKUP_STAMP = '.before-write-dfm-';
+  PROP_LABEL = 'DisplayLabel';
+  PROP_FORMAT = 'DisplayFormat';
+  PROP_EDIT_FORMAT = 'EditFormat';
+  PROP_WIDTH = 'DisplayWidth';
+  PROP_VISIBLE = 'Visible';
+  PROP_ALIGNMENT = 'Alignment';
+  PROP_SIZE = 'Size';
+  PROP_KIND = 'FieldKind';
+  PROP_CALCULATED = 'Calculated'; // streamed by TField.DefineProperties for fkCalculated
+  PROP_LOOKUP_DATASET = 'LookupDataSet';
+  CLASS_STRING = 'TStringField';
+  CLASS_WIDE_STRING = 'TWideStringField';
+  CLASS_MEMO = 'TMemoField';
+  CLASS_WIDE_MEMO = 'TWideMemoField';
+  CLASS_AGGREGATE = 'TAggregateField';
+  CLASS_BCD = 'TBCDField';
+  CLASS_FMTBCD = 'TFMTBCDField';
+  DEFAULT_STRING_SIZE = 20; // TStringField.Size
+  MAX_BCD_SCALE = 4; // FireDAC maps more decimals to TFMTBCDField
+  UNICODE_CHARSETS: array[0..1] of string = ('UTF8', 'UNICODE_FSS');
+  BDE_CLASSES: array[0..2] of string = ('TTable', 'TQuery', 'TStoredProc');
+  MAX_ALIGNMENT = Ord(High(TAlignment));
+  KIND_NAMES: array[TFrFieldKind] of string = ('fkData', 'fkCalculated', 'fkLookup', 'fkInternalCalc', 'fkAggregate', '');
+  SQL_ROWS = 'SELECT F.*, D."CHARSET" AS "DOMAIN_CHARSET" FROM "DL_FIELDS_INFO" F LEFT JOIN "DL_DOMAINS" D ' +
+    'ON D."DOMAIN_NAME" = F."DOMAIN_NAME" ORDER BY F."TABLE_NAME", F."FIELD_NAME"';
+
+  FB_SHORT = 7;
+  FB_LONG = 8;
+  FB_FLOAT = 10;
+  FB_DATE = 12;
+  FB_TIME = 13;
+  FB_CHAR = 14;
+  FB_INT64 = 16;
+  FB_BOOLEAN = 23;
+  FB_DEC16 = 24;
+  FB_DEC34 = 25;
+  FB_INT128 = 26;
+  FB_DOUBLE = 27;
+  FB_TIME_TZ = 28;
+  FB_TIMESTAMP_TZ = 29;
+  FB_TIMESTAMP = 35;
+  FB_VARCHAR = 37;
+  FB_BLOB = 261;
+  SUBTYPE_TEXT_BLOB = 1;
+  SUBTYPE_OCTETS = 1;
+
+  { Every class a new field can get, and every class whose properties and defaults are known from the class itself. }
+  KNOWN_CLASSES: array[0..32] of TFieldClass = (TIntegerField, TSmallintField, TShortintField, TByteField, TWordField,
+    TAutoIncField, TLongWordField, TLargeintField, TFloatField, TCurrencyField, TSingleField, TExtendedField, TBCDField,
+    TFMTBCDField, TStringField, TWideStringField, TGuidField, TMemoField, TWideMemoField, TBooleanField, TDateField,
+    TTimeField, TDateTimeField, TSQLTimeStampField, TSQLTimeStampOffsetField, TBlobField, TGraphicField, TBinaryField,
+    TBytesField, TVarBytesField, TVariantField, TAggregateField, TFDAutoIncField);
+
+  { FIELD_AS_TYPE -> class, for a field that is not a column. }
+  ACCESSOR_CLASSES: array[0..11] of array[0..1] of string = (('AsInteger', 'TIntegerField'), ('AsLongWord', 'TLongWordField'),
+    ('AsLargeInt', 'TLargeintField'), ('AsFloat', 'TFloatField'), ('AsSingle', 'TSingleField'),
+    ('AsExtended', 'TExtendedField'), ('AsCurrency', CLASS_BCD), ('AsBCD', CLASS_FMTBCD), ('AsBoolean', 'TBooleanField'),
+    ('AsDateTime', 'TDateTimeField'), ('AsSQLTimeStamp', 'TSQLTimeStampField'),
+    ('AsSQLTimeStampOffset', 'TSQLTimeStampOffsetField'));
+
+type
+  TRepoField = record
+    TableName: string;
+    FieldName: string;
+    Kind: TFrFieldKind;
+    KindKnown: Boolean;
+    FieldType: Integer;
+    SubType: Integer;
+    Scale: Integer;
+    Charset: string;
+    AsType: string;
+    VarType: string;
+    StringSize: Integer;
+    DisplayLabel: string;
+    DisplayFormat: string;
+    EditFormat: string;
+    DisplayWidth: Integer;
+    HasVisible: Boolean;
+    Visible: Boolean;
+    Alignment: Integer; // -1 = none
+    SourceKey: string;
+    DestTable: string;
+    DestKey: string;
+    DestValue: string;
+    Body: string;
+  end;
+
+  { Where a dataset's fields come from (the rules of DfmReadPlan). }
+  TSource = record
+    TableName: string;
+    Sql: TDfmrSqlSource;
+    HasSql: Boolean;
+    Reason: string;
+  end;
+
+  { A field that is or will be in the dataset. }
+  TPlannedField = record
+    Column: string;
+    Name: string;
+    ChangeId: Integer; // 0 = already there
+  end;
+
+  { A lookup's dataset. }
+  TLookupTarget = record
+    RefName: string; // as the DFM names it: `tblTools`, `dmMain.tblTools`
+    Dataset: TDfmrDataset;
+    Source: TSource;
+  end;
+
+  TDfmWritePlanner = class
+  strict private
+    FRepo: TFDConnection;
+    FPlan: TDfmwPlan;
+    FRows: TDictionary<string, TRepoField>;
+    FOrder: TList<TRepoField>;
+    FSamples: TObjectDictionary<string, TField>;
+    FWarnings: TStringList;
+    FChanges: TList<TFrChange>;
+    FItems: TList<TDfmwItem>;
+    { the form being planned }
+    FFileIndex: Integer;
+    FForm: TDfmrForm;
+    FDoc: TDfmDocument;
+    FUnit: TDfmUnitDocument;
+    { the dataset being planned }
+    FDataset: TDfmrDataset;
+    FSource: TSource;
+    FPlanned: TList<TPlannedField>;
+    FNewNames: TStringList;
+    procedure LoadRows;
+    procedure OpenForm(const pFile: string);
+    procedure CloseForm;
+    procedure CheckReaders;
+    function Sample(const pClass: string): TField;
+    function Where(const pField: TDfmrField): string;
+    procedure PlanDataset(const pFields: TArray<string>);
+    procedure Report;
+    procedure TryPlanField(const pField: TDfmrField; const pRow: TRepoField);
+    procedure PlanField(const pField: TDfmrField; const pRow: TRepoField);
+    procedure PlanText(const pField: TDfmrField; const pProp, pDefault, pWant: string);
+    procedure PlanValue(const pField: TDfmrField; const pProp, pDefault, pWant: string; pRemovable: Boolean);
+    procedure PlanWidthAndSize(const pField: TDfmrField; const pRow: TRepoField);
+    procedure PlanVisible(const pField: TDfmrField; const pRow: TRepoField);
+    procedure PlanKind(const pField: TDfmrField; const pRow: TRepoField);
+    procedure PlanLookup(const pField: TDfmrField; const pRow: TRepoField);
+    procedure PlanSelection(const pFields: TArray<string>);
+    procedure PlanInsert(const pRow: TRepoField);
+    procedure PlanDelete(const pField: TDfmrField);
+    function Stated(const pField: TDfmrField; const pProp: string; out pText: string): Boolean;
+    function IsOwn(const pField: TDfmrField): Boolean;
+    function AddItem(const pItem: TDfmwItem; pOp: TFrChangeOp; const pOld, pNew: string): Integer;
+    procedure Block(pIndex: Integer; const pReason: string);
+    function NewItem(pAction: TDfmwAction; const pComponent, pClass: string): TDfmwItem;
+    procedure SetItem(const pField: TDfmrField; const pProp, pOld, pNew, pLiteral, pBlocked: string);
+    function ColumnOf(const pDataset: TDfmrDataset; const pSource: TSource; const pName: string): string;
+    function NameOf(const pDataset: TDfmrDataset; const pSource: TSource; const pColumn: string; out pBlocked: string): string;
+    function PlannedName(const pColumn: string; out pId: Integer): string;
+    function TryCurrentTarget(const pName: string; out pTarget: TLookupTarget): Boolean;
+    function TargetsOf(const pTable: string): TArray<TLookupTarget>;
+    function ModuleForms: TArray<TDfmrForm>;
+    function LookupNamesReason(const pRow: TRepoField; const pTarget: TLookupTarget; pField: TField): string;
+    function LookupBlock(const pRow: TRepoField; pField: TField; out pRequires: TArray<Integer>): string;
+    function InsertBlockReason(const pRow: TRepoField; const pClass: string): string;
+    function ClassOfRow(const pRow: TRepoField): string;
+    function SizeOfRow(const pRow: TRepoField): Integer;
+    function NewComponentName(const pField: string): string;
+    function DeleteBlockReason(const pField: TDfmrField): string;
+  public
+    constructor Create(pRepo: TFDConnection);
+    destructor Destroy; override;
+    function Execute(const pFiles: TArray<string>; const pDataset: string; const pFields: TArray<string>): TDfmwPlan;
+  end;
+
+function KeyOf(const pTable, pField: string): string;
+begin
+  Result := UpperCase(pTable) + '|' + UpperCase(pField);
+end;
+
+{ ---- field classes ---- }
+
+function FindClassByName(const pName: string): TFieldClass;
+var
+  VClass: TFieldClass;
+begin
+  Result := nil;
+  for VClass in KNOWN_CLASSES do
+    if SameText(VClass.ClassName, pName) then
+      Exit(VClass);
+end;
+
+function ExactNumericClass(const pPlain: string; pScale: Integer): string;
+begin
+  Result := if pScale = 0 then pPlain else if -pScale > MAX_BCD_SCALE then CLASS_FMTBCD else CLASS_BCD;
+end;
+
+{ The class of a column; '' = unknown type code. }
+function ClassOfColumn(pFieldType, pSubType, pScale: Integer): string;
+begin
+  case pFieldType of
+    FB_SHORT: Result := ExactNumericClass('TSmallintField', pScale);
+    FB_LONG: Result := ExactNumericClass('TIntegerField', pScale);
+    FB_INT64: Result := ExactNumericClass('TLargeintField', pScale);
+    FB_FLOAT: Result := 'TSingleField';
+    FB_DOUBLE: Result := 'TFloatField';
+    FB_DATE: Result := 'TDateField';
+    FB_TIME: Result := 'TTimeField';
+    FB_TIMESTAMP: Result := 'TSQLTimeStampField';
+    FB_TIME_TZ, FB_TIMESTAMP_TZ: Result := 'TSQLTimeStampOffsetField';
+    FB_BOOLEAN: Result := 'TBooleanField';
+    FB_DEC16, FB_DEC34, FB_INT128: Result := CLASS_FMTBCD;
+    FB_CHAR: Result := if pSubType = SUBTYPE_OCTETS then 'TBytesField' else CLASS_STRING;
+    FB_VARCHAR: Result := if pSubType = SUBTYPE_OCTETS then 'TVarBytesField' else CLASS_STRING;
+    FB_BLOB: Result := if pSubType = SUBTYPE_TEXT_BLOB then CLASS_MEMO else 'TBlobField';
+  else
+    Result := '';
+  end;
+end;
+
+function FieldClassForRow(pFieldType, pSubType, pScale: Integer; const pAsType, pVarType: string): string;
+var
+  VI: Integer;
+begin
+  if pFieldType <> 0 then
+    Exit(ClassOfColumn(pFieldType, pSubType, pScale));
+  if SameText(pAsType, 'AsString') then
+    Exit(if SameText(pVarType, 'TStringList') then CLASS_MEMO else CLASS_STRING);
+  Result := '';
+  for VI := 0 to High(ACCESSOR_CLASSES) do
+    if SameText(ACCESSOR_CLASSES[VI][0], pAsType) then
+      Result := ACCESSOR_CLASSES[VI][1];
+end;
+{ True when the class is known and publishes the property. }
+function HasProp(const pClass, pProp: string): Boolean;
+var
+  VClass: TFieldClass;
+begin
+  VClass := FindClassByName(pClass);
+  Result := (VClass <> nil) and IsPublishedProp(VClass, pProp);
+end;
+
+{ Published properties of a TField class in streaming order. }
+function StreamOrder(const pClass: string): TArray<string>;
+var
+  VClass: TFieldClass;
+  VList: PPropList;
+  VCount, VI: Integer;
+begin
+  Result := nil;
+  VClass := FindClassByName(pClass);
+  if VClass = nil then
+    VClass := TField;
+  VCount := GetPropList(PTypeInfo(VClass.ClassInfo), VList);
+  if VCount > 0 then
+    try
+      for VI := 0 to VCount - 1 do
+        Result := Result + [GetPropName(VList^[VI])];
+    finally
+      FreeMem(VList);
+    end;
+end;
+
+{ ---- sources (the rules of DfmReadPlan.SourceOf / FieldSource) ---- }
+
+function SourceOf(const pDataset: TDfmrDataset): TSource;
+begin
+  Result := Default(TSource);
+  Result.HasSql := (pDataset.TableName = '') and (pDataset.Sql <> '');
+  if Result.HasSql then
+    Result.Sql := ReadSelectSource(pDataset.Sql);
+  if pDataset.UpdateTableName <> '' then
+    Result.TableName := CleanTableName(pDataset.UpdateTableName)
+  else if pDataset.TableName <> '' then
+    Result.TableName := CleanTableName(pDataset.TableName)
+  else if not Result.HasSql then
+    Result.Reason := 'no TableName and no SQL in the DFM'
+  else if Result.Sql.Reason <> '' then
+    Result.Reason := Result.Sql.Reason
+  else if Length(Result.Sql.Tables) = 1 then
+    Result.TableName := Result.Sql.Tables[0].Name
+  else
+    Result.Reason := Format('the SQL reads %d tables', [Length(Result.Sql.Tables)]);
+end;
+
+{ The table and column of a persistent field; False = the DFM does not state it. }
+function FieldSource(const pSource: TSource; const pField: TDfmrField; out pTable, pColumn: string): Boolean;
+var
+  VReason: string;
+begin
+  pTable := pSource.TableName;
+  pColumn := UpperCase(Trim(pField.FieldName));
+  if (pField.Kind = frkData) and pSource.HasSql and (pSource.Sql.Reason = '') then
+    Exit(SqlFieldColumn(pSource.Sql, pField.FieldName, pField.Origin, pTable, pColumn, VReason));
+  Result := pTable <> '';
+end;
+
+{ The name a column has in the dataset; '' = the SELECT does not return it. }
+function ResultName(const pSource: TSource; const pColumn: string): string;
+var
+  VItem: TDfmrSqlItem;
+  VTable, VColumn, VReason: string;
+begin
+  if not pSource.HasSql then
+    Exit(pColumn);
+  Result := '';
+  if pSource.Sql.Reason <> '' then
+    Exit;
+  for VItem in pSource.Sql.Items do
+    if VItem.Plain and (VItem.OutName <> '') and SqlFieldColumn(pSource.Sql, VItem.OutName, '', VTable, VColumn, VReason)
+      and SameText(VTable, pSource.TableName) and SameText(VColumn, pColumn) then
+      Exit(VItem.OutName);
+  if SqlFieldColumn(pSource.Sql, pColumn, '', VTable, VColumn, VReason) and SameText(VTable, pSource.TableName)
+    and SameText(VColumn, pColumn) then
+    Result := pColumn;
+end;
+
+{ ---- items ---- }
+
+procedure ApplyKind(pDoc: TDfmDocument; pObject: Integer; const pItem: TDfmwItem);
+var
+  VOrder: TArray<string>;
+begin
+  VOrder := StreamOrder(pItem.FieldClass);
+  if pItem.Kind = frkData then
+    pDoc.RemoveProp(pObject, PROP_KIND)
+  else
+    pDoc.SetProp(pObject, PROP_KIND, KIND_NAMES[pItem.Kind], VOrder);
+  if pItem.Kind = frkCalc then
+    pDoc.SetProp(pObject, PROP_CALCULATED, 'True', VOrder)
+  else
+    pDoc.RemoveProp(pObject, PROP_CALCULATED);
+end;
+
+{ Records one change; pUnit may be nil when no field is added or removed. }
+procedure ApplyItem(pDoc: TDfmDocument; pUnit: TDfmUnitDocument; const pFormClass: string; const pItem: TDfmwItem);
+var
+  VObject: Integer;
+begin
+  VObject := if pItem.Action = dwaInsert then pDoc.FindObject(pItem.Dataset, '') else pDoc.FindObject(pItem.Component, pItem.Dataset);
+  if VObject < 0 then
+    raise EDfmWriteError.CreateFmt('%s.%s is not in the DFM', [pItem.Dataset, pItem.Component]);
+  if pItem.Action = dwaInsert then
+  begin
+    pDoc.InsertChild(VObject, pItem.Block, pItem.Siblings);
+    pUnit.AddField(pFormClass, pItem.Component, pItem.FieldClass, pItem.Siblings + [pItem.Dataset]);
+    Exit;
+  end;
+  case pItem.Action of
+    dwaSet: pDoc.SetProp(VObject, pItem.PropName, pItem.Literal, StreamOrder(pItem.FieldClass));
+    dwaRemove: pDoc.RemoveProp(VObject, pItem.PropName);
+    dwaKind: ApplyKind(pDoc, VObject, pItem);
+  else
+    pDoc.RemoveObject(VObject);
+    pUnit.RemoveField(pFormClass, pItem.Component);
+  end;
+end;
+
+{ TDfmWritePlanner }
+
+constructor TDfmWritePlanner.Create(pRepo: TFDConnection);
+begin
+  inherited Create;
+  FRepo := pRepo;
+  FRows := TDictionary<string, TRepoField>.Create;
+  FOrder := TList<TRepoField>.Create;
+  FSamples := TObjectDictionary<string, TField>.Create([doOwnsValues]);
+  FWarnings := TStringList.Create(dupIgnore, False, False);
+  FChanges := TList<TFrChange>.Create;
+  FItems := TList<TDfmwItem>.Create;
+  FPlanned := TList<TPlannedField>.Create;
+  FNewNames := TStringList.Create;
+end;
+
+destructor TDfmWritePlanner.Destroy;
+begin
+  CloseForm;
+  FNewNames.Free;
+  FPlanned.Free;
+  FItems.Free;
+  FChanges.Free;
+  FWarnings.Free;
+  FSamples.Free;
+  FOrder.Free;
+  FRows.Free;
+  inherited;
+end;
+
+{ A column row nobody edited: the DB -> repository read writes VISIBLE False into every new row, which says nothing. }
+function IsNewRow(const pRow: TRepoField): Boolean;
+begin
+  Result := (pRow.Kind = frkData) and (pRow.DisplayLabel + pRow.DisplayFormat + pRow.EditFormat = '')
+    and (pRow.DisplayWidth = 0) and (pRow.Alignment < 0);
+end;
+
+function ReadRow(pQuery: TFDQuery): TRepoField;
+begin
+  Result := Default(TRepoField);
+  Result.TableName := pQuery.FieldByName('TABLE_NAME').AsString;
+  Result.FieldName := pQuery.FieldByName('FIELD_NAME').AsString;
+  Result.KindKnown := FrKindCodeKnown(pQuery.FieldByName('FIELD_KIND').Value);
+  if Result.KindKnown then
+    Result.Kind := FrKindFromCode(pQuery.FieldByName('FIELD_KIND').Value);
+  Result.FieldType := pQuery.FieldByName('FIELD_TYPE').AsInteger;
+  Result.SubType := pQuery.FieldByName('FIELD_SUBTYPE').AsInteger;
+  Result.Scale := pQuery.FieldByName('FIELD_SCALE').AsInteger;
+  Result.Charset := Trim(pQuery.FieldByName('DOMAIN_CHARSET').AsString);
+  Result.AsType := pQuery.FieldByName('FIELD_AS_TYPE').AsString;
+  Result.VarType := pQuery.FieldByName('VAR_TYPE').AsString;
+  Result.StringSize := pQuery.FieldByName('STRING_SIZE').AsInteger;
+  Result.DisplayLabel := pQuery.FieldByName('DISPLAY_LABEL').AsString;
+  Result.DisplayFormat := pQuery.FieldByName('DISPLAY_FORMAT').AsString;
+  Result.EditFormat := pQuery.FieldByName('EDIT_FORMAT').AsString;
+  Result.DisplayWidth := pQuery.FieldByName('DISPLAY_WIDTH').AsInteger;
+  Result.Visible := pQuery.FieldByName('VISIBLE').AsBoolean;
+  Result.Alignment := if pQuery.FieldByName('ALIGNMENT').IsNull then -1 else pQuery.FieldByName('ALIGNMENT').AsInteger;
+  Result.HasVisible := (not pQuery.FieldByName('VISIBLE').IsNull) and (Result.Visible or not IsNewRow(Result));
+  Result.SourceKey := pQuery.FieldByName('SOURCEKEY').AsString;
+  Result.DestTable := pQuery.FieldByName('DESTTABLE').AsString;
+  Result.DestKey := pQuery.FieldByName('DESTKEY').AsString;
+  Result.DestValue := pQuery.FieldByName('DESTVALUE').AsString;
+  Result.Body := pQuery.FieldByName('CALC_BODY').AsString;
+end;
+
+procedure TDfmWritePlanner.LoadRows;
+var
+  VQuery: TFDQuery;
+  VRow: TRepoField;
+begin
+  VQuery := TFDQuery.Create(nil);
+  try
+    VQuery.Connection := FRepo;
+    VQuery.Open(SQL_ROWS);
+    while not VQuery.Eof do
+    begin
+      VRow := ReadRow(VQuery);
+      FRows.AddOrSetValue(KeyOf(VRow.TableName, VRow.FieldName), VRow);
+      FOrder.Add(VRow);
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
+  end;
+end;
+
+{ An instance of the class: its defaults and its published properties; nil = class not linked. }
+function TDfmWritePlanner.Sample(const pClass: string): TField;
+var
+  VClass: TFieldClass;
+begin
+  if FSamples.TryGetValue(LowerCase(pClass), Result) then
+    Exit;
+  VClass := FindClassByName(pClass);
+  Result := nil;
+  if VClass <> nil then
+    Result := VClass.Create(nil);
+  FSamples.Add(LowerCase(pClass), Result);
+end;
+
+procedure TDfmWritePlanner.CloseForm;
+begin
+  FreeAndNil(FUnit);
+  FreeAndNil(FDoc);
+end;
+
+{ The byte-level reader and the reader of the index must see the same components. }
+procedure TDfmWritePlanner.CheckReaders;
+var
+  VI: Integer;
+  VName: string;
+begin
+  if Length(FForm.Diagnostics) > 0 then
+    raise EDfmWriteError.Create(ExtractFileName(FForm.FileName) + ': ' + FForm.Diagnostics[0]);
+  if Length(FDoc.Objects) <> Length(FForm.Components) + 1 then
+    raise EDfmWriteError.CreateFmt('%s: the two DFM readers disagree (%d and %d components)',
+      [ExtractFileName(FForm.FileName), Length(FDoc.Objects) - 1, Length(FForm.Components)]);
+  for VI := 0 to High(FForm.Components) do
+  begin
+    VName := FDoc.Objects[VI + 1].Name;
+    if VName = '' then
+      VName := FDoc.Objects[VI + 1].ObjClass; // `object TOvcTabPage`: the index names it by its class
+    if not SameText(FForm.Components[VI], VName) then
+      raise EDfmWriteError.CreateFmt('%s: the two DFM readers disagree (%s and %s)', [ExtractFileName(FForm.FileName), VName,
+        FForm.Components[VI]]);
+  end;
+end;
+
+procedure TDfmWritePlanner.OpenForm(const pFile: string);
+var
+  VFile: TDfmwFile;
+  VPas: string;
+begin
+  CloseForm;
+  VFile := Default(TDfmwFile);
+  VFile.DfmName := TPath.GetFullPath(pFile);
+  if not TFile.Exists(VFile.DfmName) then
+    raise EDfmReadError.CreateFmt('the DFM does not exist: %s', [pFile]);
+  VFile.DfmBytes := TFile.ReadAllBytes(VFile.DfmName);
+  FDoc := TDfmDocument.Create(VFile.DfmBytes, ExtractFileName(VFile.DfmName));
+  FForm := LoadDfmForm(VFile.DfmName);
+  CheckReaders;
+  VFile.FormClass := FForm.FormClass;
+  VPas := ChangeFileExt(VFile.DfmName, PAS_EXT);
+  if TFile.Exists(VPas) then
+  begin
+    VFile.PasName := VPas;
+    VFile.PasBytes := TFile.ReadAllBytes(VPas);
+    FUnit := TDfmUnitDocument.Create(VFile.PasBytes, ExtractFileName(VPas));
+  end;
+  FFileIndex := Length(FPlan.Files);
+  FPlan.Files := FPlan.Files + [VFile];
+  FNewNames.Clear;
+end;
+
+function TDfmWritePlanner.Where(const pField: TDfmrField): string;
+begin
+  Result := ExtractFileName(FForm.FileName) + ' ' + pField.CompName;
+end;
+
+function TDfmWritePlanner.Stated(const pField: TDfmrField; const pProp: string; out pText: string): Boolean;
+begin
+  Result := FDoc.TryProp(FDoc.FindObject(pField.CompName, FDataset.Name), pProp, pText);
+end;
+
+{ True for a field this DFM declares; an inherited one states only what it overrides. }
+function TDfmWritePlanner.IsOwn(const pField: TDfmrField): Boolean;
+begin
+  Result := FDoc.Objects[FDoc.FindObject(pField.CompName, FDataset.Name)].Kind = OBJECT_KIND;
+end;
+
+{ ---- changes ---- }
+
+function TDfmWritePlanner.NewItem(pAction: TDfmwAction; const pComponent, pClass: string): TDfmwItem;
+var
+  VField: TDfmrField;
+begin
+  Result := Default(TDfmwItem);
+  Result.FileIndex := FFileIndex;
+  Result.Action := pAction;
+  Result.Dataset := FDataset.Name;
+  Result.Component := pComponent;
+  Result.FieldClass := pClass;
+  for VField in FDataset.Fields do
+    Result.Siblings := Result.Siblings + [VField.CompName];
+end;
+
+procedure TDfmWritePlanner.Block(pIndex: Integer; const pReason: string);
+begin
+  if pReason = '' then
+    Exit;
+  FChanges.List[pIndex].Blocked := pReason;
+  FChanges.List[pIndex].Checked := False;
+end;
+
+{ Adds a change and tries it alone: one that cannot be written is blocked with the reason. }
+function TDfmWritePlanner.AddItem(const pItem: TDfmwItem; pOp: TFrChangeOp; const pOld, pNew: string): Integer;
+var
+  VChange: TFrChange;
+begin
+  Result := FChanges.Count;
+  VChange := Default(TFrChange);
+  VChange.Id := Result + 1;
+  VChange.Op := pOp;
+  VChange.Target := ExtractFileName(FForm.FileName) + ' ' + pItem.Component;
+  VChange.Prop := pItem.PropName;
+  VChange.OldValue := pOld;
+  VChange.NewValue := pNew;
+  VChange.Checked := True;
+  FChanges.Add(VChange);
+  FItems.Add(pItem);
+  if (FUnit = nil) and (pItem.Action in [dwaInsert, dwaDelete]) then
+  begin
+    Block(Result, 'no unit beside the DFM to declare the field in');
+    Exit;
+  end;
+  FDoc.ClearEdits;
+  if FUnit <> nil then
+    FUnit.ClearEdits;
+  try
+    ApplyItem(FDoc, FUnit, FForm.FormClass, pItem);
+    FDoc.Output;
+  except
+    on E: EDfmWriteError do
+      Block(Result, E.Message);
+  end;
+end;
+
+procedure TDfmWritePlanner.SetItem(const pField: TDfmrField; const pProp, pOld, pNew, pLiteral, pBlocked: string);
+var
+  VItem: TDfmwItem;
+begin
+  VItem := NewItem(if pLiteral = '' then dwaRemove else dwaSet, pField.CompName, pField.FieldClass);
+  VItem.PropName := pProp;
+  VItem.Literal := pLiteral;
+  Block(AddItem(VItem, fcoUpdate, pOld, pNew), pBlocked);
+end;
+
+{ A property that is not a string. pDefault = its value when the DFM does not state it. }
+procedure TDfmWritePlanner.PlanValue(const pField: TDfmrField; const pProp, pDefault, pWant: string; pRemovable: Boolean);
+var
+  VOld: string;
+  VStated, VOwn: Boolean;
+begin
+  VStated := Stated(pField, pProp, VOld);
+  VOwn := IsOwn(pField);
+  if not VStated then
+    VOld := pDefault;
+  if SameText(VOld, pWant) or not (VStated or VOwn) then
+    Exit;
+  SetItem(pField, pProp, VOld, pWant, if pRemovable and VStated and VOwn and SameText(pWant, pDefault) then '' else pWant, '');
+end;
+
+{ A string property; '' in the repository states nothing. }
+procedure TDfmWritePlanner.PlanText(const pField: TDfmrField; const pProp, pDefault, pWant: string);
+var
+  VOld, VBlocked: string;
+  VStated, VOwn: Boolean;
+begin
+  VStated := Stated(pField, pProp, VOld);
+  VOwn := IsOwn(pField);
+  if not VStated then
+    VOld := pDefault;
+  if (pWant = '') or (VOld = pWant) or not (VStated or VOwn) then
+    Exit;
+  VBlocked := '';
+  if not (VStated or HasProp(pField.FieldClass, pProp)) then
+    VBlocked := pField.FieldClass + ' has no property ' + pProp + ' that drag-lint knows of';
+  SetItem(pField, pProp, VOld, pWant, if VStated and VOwn and (pWant = pDefault) then '' else DfmStringLiteral(pWant), VBlocked);
+end;
+
+procedure TDfmWritePlanner.PlanWidthAndSize(const pField: TDfmrField; const pRow: TRepoField);
+var
+  VSample: TField;
+  VText: string;
+  VSize, VLength: Integer;
+begin
+  VSample := Sample(pField.FieldClass);
+  VSize := 0;
+  if MatchText(pField.FieldClass, [CLASS_STRING, CLASS_WIDE_STRING]) then
+  begin
+    VSize := if Stated(pField, PROP_SIZE, VText) then StrToIntDef(VText, 0) else DEFAULT_STRING_SIZE;
+    VSample.Size := VSize;
+  end;
+  if pRow.DisplayWidth > 0 then
+    PlanValue(pField, PROP_WIDTH, if VSample = nil then '' else IntToStr(VSample.DisplayWidth), IntToStr(pRow.DisplayWidth), False);
+  if (VSize = 0) or (pField.Kind <> frkData) or (pRow.Kind <> frkData) or MatchText(FDataset.DatasetClass, BDE_CLASSES) then
+    Exit;
+  VLength := ColumnCharLength(FRepo, pRow.TableName, pRow.FieldName);
+  if VLength > 0 then
+    PlanValue(pField, PROP_SIZE, IntToStr(VSize), IntToStr(VLength), False);
+end;
+
+{ Hiding a field is never checked: False is also the repository's new-row value. }
+procedure TDfmWritePlanner.PlanVisible(const pField: TDfmrField; const pRow: TRepoField);
+var
+  VFirst, VI: Integer;
+begin
+  { TAggregateField.Visible defaults to False; a stored True may be the default of a new repository row }
+  if (not pRow.HasVisible) or ((pField.Kind = frkAggregate) and pRow.Visible) then
+    Exit;
+  VFirst := FChanges.Count;
+  PlanValue(pField, PROP_VISIBLE, if pField.Kind = frkAggregate then 'False' else 'True', BoolToStr(pRow.Visible, True), True);
+  for VI := VFirst to FChanges.Count - 1 do
+    FChanges.List[VI].Checked := FChanges.List[VI].Checked and pRow.Visible;
+end;
+
+{ A changed kind is never checked: the form's code may assign the field. }
+procedure TDfmWritePlanner.PlanKind(const pField: TDfmrField; const pRow: TRepoField);
+var
+  VItem: TDfmwItem;
+  VIndex: Integer;
+begin
+  VItem := NewItem(dwaKind, pField.CompName, pField.FieldClass);
+  VItem.PropName := PROP_KIND;
+  VItem.Kind := pRow.Kind;
+  VIndex := AddItem(VItem, fcoUpdate, KIND_NAMES[pField.Kind], KIND_NAMES[pRow.Kind]);
+  FChanges.List[VIndex].Checked := False;
+  if ([pField.Kind, pRow.Kind] * [frkLookup, frkAggregate]) <> [] then
+    Block(VIndex, 'a lookup or aggregate field is another component: remove the field and add it again')
+  else if not IsOwn(pField) then
+    Block(VIndex, 'the field is declared in the ancestor''s DFM');
+end;
+
+{ The column behind a dataset field; '' = the dataset does not state it. }
+function TDfmWritePlanner.ColumnOf(const pDataset: TDfmrDataset; const pSource: TSource; const pName: string): string;
+var
+  VField, VNamed: TDfmrField;
+  VTable: string;
+begin
+  VNamed := Default(TDfmrField);
+  VNamed.FieldName := Trim(pName);
+  for VField in pDataset.Fields do
+    if SameText(VField.FieldName, Trim(pName)) then
+      VNamed := VField;
+  if not (FieldSource(pSource, VNamed, VTable, Result) and SameText(VTable, pSource.TableName)) then
+    Result := '';
+end;
+
+function TDfmWritePlanner.PlannedName(const pColumn: string; out pId: Integer): string;
+var
+  VField: TPlannedField;
+begin
+  Result := '';
+  pId := 0;
+  for VField in FPlanned do
+    if SameText(VField.Column, pColumn) then
+    begin
+      pId := VField.ChangeId;
+      Exit(VField.Name);
+    end;
+end;
+
+{ The name of a column in a dataset as it is at run time: with persistent fields only those exist. }
+function TDfmWritePlanner.NameOf(const pDataset: TDfmrDataset; const pSource: TSource; const pColumn: string;
+  out pBlocked: string): string;
+var
+  VField: TDfmrField;
+  VTable, VColumn: string;
+begin
+  pBlocked := '';
+  for VField in pDataset.Fields do
+    if FieldSource(pSource, VField, VTable, VColumn) and SameText(VTable, pSource.TableName) and SameText(VColumn, pColumn) then
+      Exit(VField.FieldName);
+  Result := '';
+  if (Length(pDataset.Fields) = 0) and (Length(pDataset.InheritedFields) = 0) then
+    Result := ResultName(pSource, pColumn);
+  if Result = '' then
+    pBlocked := Format('%s has no field for %s.%s', [pDataset.Name, pSource.TableName, pColumn]);
+end;
+
+{ ---- lookups ---- }
+
+{ The other forms / data modules of the folder that the form's unit names. }
+function TDfmWritePlanner.ModuleForms: TArray<TDfmrForm>;
+var
+  VFile, VUnit: string;
+begin
+  Result := nil;
+  if FUnit = nil then
+    Exit;
+  for VFile in TDirectory.GetFiles(ExtractFilePath(FForm.FileName), '*' + DFM_EXT) do
+  begin
+    VUnit := TPath.GetFileNameWithoutExtension(VFile);
+    if SameText(VFile, FForm.FileName) or (FUnit.Mentions(VUnit.Substring(VUnit.LastIndexOf('.') + 1)) = 0) then
+      Continue;
+    try
+      Result := Result + [LoadDfmForm(VFile)];
+    except
+      on E: EDfmReadError do
+        FWarnings.Add('lookup datasets: ' + E.Message);
+    end;
+  end;
+end;
+
+procedure AddTarget(var pTargets: TArray<TLookupTarget>; const pRefName: string; const pDataset: TDfmrDataset);
+var
+  VTarget: TLookupTarget;
+begin
+  VTarget.RefName := pRefName;
+  VTarget.Dataset := pDataset;
+  VTarget.Source := SourceOf(pDataset);
+  pTargets := pTargets + [VTarget];
+end;
+
+{ The datasets a lookup into pTable can use: this form's, or else those of the modules its unit names. }
+function TDfmWritePlanner.TargetsOf(const pTable: string): TArray<TLookupTarget>;
+var
+  VDataset: TDfmrDataset;
+  VForm: TDfmrForm;
+begin
+  Result := nil;
+  for VDataset in FForm.Datasets do
+    if SameText(SourceOf(VDataset).TableName, pTable) and (not SameText(VDataset.Name, FDataset.Name)) then
+      AddTarget(Result, VDataset.Name, VDataset);
+  if Length(Result) > 0 then
+    Exit;
+  for VForm in ModuleForms do
+    for VDataset in VForm.Datasets do
+      if SameText(SourceOf(VDataset).TableName, pTable) then
+        AddTarget(Result, VForm.FormName + '.' + VDataset.Name, VDataset);
+end;
+
+function TDfmWritePlanner.TryCurrentTarget(const pName: string; out pTarget: TLookupTarget): Boolean;
+var
+  VForm: TDfmrForm;
+  VDataset: TDfmrDataset;
+  VForms: TArray<TDfmrForm>;
+  VTargets: TArray<TLookupTarget>;
+  VTarget: TLookupTarget;
+begin
+  VTargets := nil;
+  for VDataset in FForm.Datasets do
+    AddTarget(VTargets, VDataset.Name, VDataset);
+  VForms := if pName.Contains('.') then ModuleForms else nil;
+  for VForm in VForms do
+    for VDataset in VForm.Datasets do
+      AddTarget(VTargets, VForm.FormName + '.' + VDataset.Name, VDataset);
+  pTarget := Default(TLookupTarget);
+  Result := False;
+  for VTarget in VTargets do
+    if SameText(VTarget.RefName, pName) then
+    begin
+      pTarget := VTarget;
+      Exit(True);
+    end;
+end;
+
+function TargetNames(const pTargets: TArray<TLookupTarget>): string;
+var
+  VTarget: TLookupTarget;
+  VNames: TArray<string>;
+begin
+  VNames := nil;
+  for VTarget in pTargets do
+    VNames := VNames + [VTarget.RefName];
+  Result := string.Join(' ', VNames);
+end;
+{ '' when the table has exactly one dataset to look up in. }
+function TargetReason(const pTargets: TArray<TLookupTarget>; const pTable: string): string;
+begin
+  Result := '';
+  if Length(pTargets) = 0 then
+    Result := 'no dataset of the form (or of a module its unit names) reads ' + pTable
+  else if Length(pTargets) > 1 then
+    Result := Format('%d datasets read %s: %s', [Length(pTargets), pTable, TargetNames(pTargets)]);
+end;
+
+{ The key column of the lookup table: DESTKEY, or its one-column primary key. }
+function LookupKeyColumn(pRepo: TFDConnection; const pRow: TRepoField): string;
+var
+  VPk: TArray<string>;
+begin
+  Result := pRow.DestKey;
+  if Result <> '' then
+    Exit;
+  VPk := PrimaryKey(pRepo, pRow.DestTable);
+  if Length(VPk) = 1 then
+    Result := VPk[0];
+end;
+
+procedure TDfmWritePlanner.PlanLookup(const pField: TDfmrField; const pRow: TRepoField);
+var
+  VTarget: TLookupTarget;
+  VTargets: TArray<TLookupTarget>;
+
+  { Compares in column space: the DFM names dataset fields, the repository columns. }
+  procedure PlanColumnName(const pProp, pCurrent, pColumn: string; const pDataset: TDfmrDataset; const pSource: TSource);
+  var
+    VName, VBlocked: string;
+  begin
+    if (pColumn = '') or SameText(ColumnOf(pDataset, pSource, pCurrent), pColumn) then
+      Exit;
+    VName := NameOf(pDataset, pSource, pColumn, VBlocked);
+    if pCurrent.Contains(MULTI_FIELD) then
+      VBlocked := 'multi-field lookup key';
+    SetItem(pField, pProp, pCurrent, if VName = '' then pColumn else VName, DfmStringLiteral(VName), VBlocked);
+  end;
+
+begin
+  PlanColumnName('KeyFields', pField.KeyFields, pRow.SourceKey, FDataset, FSource);
+  if pRow.DestTable = '' then
+    Exit;
+  if not (TryCurrentTarget(pField.LookupDataSet, VTarget) and SameText(VTarget.Source.TableName, pRow.DestTable)) then
+  begin
+    VTargets := TargetsOf(pRow.DestTable);
+    if Length(VTargets) <> 1 then
+    begin
+      SetItem(pField, PROP_LOOKUP_DATASET, pField.LookupDataSet, pRow.DestTable, pRow.DestTable, TargetReason(VTargets, pRow.DestTable));
+      Exit;
+    end;
+    VTarget := VTargets[0];
+    SetItem(pField, PROP_LOOKUP_DATASET, pField.LookupDataSet, VTarget.RefName, VTarget.RefName, '');
+  end;
+  PlanColumnName('LookupKeyFields', pField.LookupKeyFields, LookupKeyColumn(FRepo, pRow), VTarget.Dataset, VTarget.Source);
+  PlanColumnName('LookupResultField', pField.LookupResult, pRow.DestValue, VTarget.Dataset, VTarget.Source);
+end;
+
+{ ---- existing fields ---- }
+
+procedure TDfmWritePlanner.PlanField(const pField: TDfmrField; const pRow: TRepoField);
+var
+  VSample: TField;
+begin
+  if not pRow.KindKnown then
+    Exit;
+  if pRow.Kind <> pField.Kind then
+  begin
+    if pRow.Kind = frkGraphical then
+      FWarnings.Add(Where(pField) + ': the repository has a graphical column, the DFM a persistent field')
+    else
+      PlanKind(pField, pRow);
+    Exit;
+  end;
+  VSample := Sample(pField.FieldClass);
+  if InRange(pRow.Alignment, 0, MAX_ALIGNMENT) and (VSample <> nil) then
+    PlanValue(pField, PROP_ALIGNMENT, GetEnumName(TypeInfo(TAlignment), Ord(VSample.Alignment)),
+      GetEnumName(TypeInfo(TAlignment), pRow.Alignment), True);
+  PlanText(pField, PROP_LABEL, pField.FieldName, pRow.DisplayLabel);
+  PlanWidthAndSize(pField, pRow);
+  PlanVisible(pField, pRow);
+  PlanText(pField, PROP_FORMAT, '', pRow.DisplayFormat);
+  PlanText(pField, PROP_EDIT_FORMAT, '', pRow.EditFormat);
+  if pRow.Kind = frkLookup then
+    PlanLookup(pField, pRow);
+  if (pRow.Kind = frkAggregate) and SameText(pField.FieldClass, CLASS_AGGREGATE) then
+    PlanText(pField, 'Expression', '', pRow.Body);
+end;
+
+{ A field the byte-level reader cannot tell from another one (two frames with one dataset) is reported. }
+procedure TDfmWritePlanner.TryPlanField(const pField: TDfmrField; const pRow: TRepoField);
+begin
+  try
+    PlanField(pField, pRow);
+  except
+    on E: EDfmWriteError do
+      FWarnings.Add(Where(pField) + ': not written: ' + E.Message);
+  end;
+end;
+
+{ ---- new fields ---- }
+
+{ Wide or narrow strings: as the dataset's first string column, else as the column's character set. }
+function IsWideDataset(const pDataset: TDfmrDataset; const pCharset: string): Boolean;
+var
+  VField: TDfmrField;
+begin
+  Result := MatchText(pCharset, UNICODE_CHARSETS);
+  for VField in pDataset.Fields do
+    if (VField.Kind = frkData) and MatchText(VField.FieldClass, [CLASS_STRING, CLASS_WIDE_STRING]) then
+      Exit(SameText(VField.FieldClass, CLASS_WIDE_STRING));
+end;
+
+function TDfmWritePlanner.ClassOfRow(const pRow: TRepoField): string;
+var
+  VDest: TRepoField;
+begin
+  if pRow.Kind = frkAggregate then
+    Exit(CLASS_AGGREGATE);
+  Result := FieldClassForRow(pRow.FieldType, pRow.SubType, pRow.Scale, pRow.AsType, pRow.VarType);
+  if (pRow.Kind = frkLookup) and FRows.TryGetValue(KeyOf(pRow.DestTable, pRow.DestValue), VDest) and (VDest.FieldType <> 0) then
+    Result := FieldClassForRow(VDest.FieldType, VDest.SubType, VDest.Scale, '', '');
+  if MatchText(Result, [CLASS_STRING, CLASS_MEMO]) and IsWideDataset(FDataset, pRow.Charset) then
+    Result := if Result = CLASS_STRING then CLASS_WIDE_STRING else CLASS_WIDE_MEMO;
+end;
+
+{ Length of a string field, 0 = the repository does not know it. }
+function TDfmWritePlanner.SizeOfRow(const pRow: TRepoField): Integer;
+begin
+  Result := if pRow.Kind = frkLookup then ColumnCharLength(FRepo, pRow.DestTable, pRow.DestValue)
+    else ColumnCharLength(FRepo, pRow.TableName, pRow.FieldName);
+  if Result <= 0 then
+    Result := pRow.StringSize;
+end;
+
+{ Dataset name + field name, as the IDE does; a name the form or its unit uses gets a number. }
+function TDfmWritePlanner.NewComponentName(const pField: string): string;
+var
+  VBase: string;
+  VNumber: Integer;
+begin
+  VBase := FDataset.Name + TRegEx.Replace(pField, '[^A-Za-z0-9_]', '');
+  Result := VBase;
+  VNumber := 0;
+  while (FDoc.FindObject(Result, '') >= 0) or (FNewNames.IndexOf(Result) >= 0)
+    or ((FUnit <> nil) and (FUnit.Mentions(Result) > 0)) do
+  begin
+    Inc(VNumber);
+    Result := VBase + IntToStr(VNumber);
+  end;
+  FNewNames.Add(Result);
+end;
+
+{ Gives a field a lookup dataset that streams as pRefName: a stand-in the field owns. }
+procedure SetLookupStandIn(pField: TField; const pRefName: string);
+var
+  VOwner: TComponent;
+  VDataset: TDataSet;
+  VDot: Integer;
+begin
+  VOwner := pField;
+  VDot := pRefName.IndexOf('.');
+  if VDot > 0 then
+  begin
+    VOwner := TComponent.Create(pField);
+    VOwner.Name := pRefName.Substring(0, VDot);
+  end;
+  VDataset := TFDMemTable.Create(VOwner);
+  VDataset.Name := pRefName.Substring(VDot + 1);
+  pField.LookupDataSet := VDataset;
+end;
+
+{ Sets the key and result field of a new lookup; returns why the target dataset has none. }
+function TDfmWritePlanner.LookupNamesReason(const pRow: TRepoField; const pTarget: TLookupTarget; pField: TField): string;
+var
+  VKey: string;
+begin
+  VKey := LookupKeyColumn(FRepo, pRow);
+  if VKey = '' then
+    Exit('no lookup key: DESTKEY is empty and ' + pRow.DestTable + ' has no one-column primary key');
+  pField.LookupKeyFields := NameOf(pTarget.Dataset, pTarget.Source, VKey, Result);
+  if Result = '' then
+    pField.LookupResultField := NameOf(pTarget.Dataset, pTarget.Source, pRow.DestValue, Result);
+end;
+
+{ Sets the wiring of a new lookup field; returns why it cannot be wired. }
+function TDfmWritePlanner.LookupBlock(const pRow: TRepoField; pField: TField; out pRequires: TArray<Integer>): string;
+var
+  VTargets: TArray<TLookupTarget>;
+  VKey: string;
+  VId: Integer;
+begin
+  pRequires := nil;
+  if (pRow.SourceKey = '') or (pRow.DestTable = '') or (pRow.DestValue = '') then
+    Exit('the lookup wiring in the repository is incomplete');
+  VKey := PlannedName(pRow.SourceKey, VId);
+  if VKey = '' then
+    Exit(Format('%s has no field for %s', [FDataset.Name, pRow.SourceKey]));
+  if VId > 0 then
+    pRequires := [VId];
+  pField.KeyFields := VKey;
+  VTargets := TargetsOf(pRow.DestTable);
+  Result := TargetReason(VTargets, pRow.DestTable);
+  if Result = '' then
+    Result := LookupNamesReason(pRow, VTargets[0], pField);
+  if Result = '' then
+    SetLookupStandIn(pField, VTargets[0].RefName);
+end;
+function TDfmWritePlanner.InsertBlockReason(const pRow: TRepoField; const pClass: string): string;
+begin
+  Result := '';
+  if not pRow.KindKnown then
+    Result := 'unknown FIELD_KIND'
+  else if FDataset.ObjKind <> OBJECT_KIND then
+    Result := 'the dataset is inherited: its fields are in the ancestor''s DFM'
+  else if FindClassByName(pClass) = nil then
+    Result := 'the repository does not say which TField class it is (FIELD_TYPE / FIELD_AS_TYPE)'
+  else if (pRow.Kind = frkData) and MatchText(FDataset.DatasetClass, BDE_CLASSES) then
+    Result := 'the repository holds the Firebird type, ' + FDataset.DatasetClass + ' reads another database'
+  else if (pRow.Kind = frkData) and MatchText(pClass, [CLASS_STRING, CLASS_WIDE_STRING]) and (SizeOfRow(pRow) <= 0) then
+    Result := 'the repository does not know its length'
+  else if (pRow.Kind = frkAggregate) and not (FDataset.DatasetClass.StartsWith('TFD') or SameText(FDataset.DatasetClass, 'TClientDataSet')) then
+    Result := FDataset.DatasetClass + ' has no aggregate fields'
+  else if (pRow.Kind = frkAggregate) and (pRow.Body = '') then
+    Result := 'the repository has no aggregate expression (CALC_BODY)'
+  else if (pRow.Kind = frkData) and (ResultName(FSource, pRow.FieldName) = '') then
+    Result := 'the SQL does not return it'
+  else if (FUnit <> nil) and not FUnit.UsesAny([UNIT_DB, UNIT_OLD_DB]) then
+    Result := 'the interface section of the unit does not use Data.DB';
+end;
+
+procedure SetTextProp(pField: TField; const pName, pValue: string);
+begin
+  if (pValue <> '') and IsPublishedProp(pField, pName) then
+    SetStrProp(pField, pName, pValue);
+end;
+
+{ Everything but the lookup wiring. }
+procedure FillField(pField: TField; const pRow: TRepoField; pSize: Integer);
+begin
+  if pRow.Kind = frkAggregate then
+    SetTextProp(pField, 'Expression', pRow.Body)
+  else
+    pField.FieldKind := TFieldKind(GetEnumValue(TypeInfo(TFieldKind), KIND_NAMES[pRow.Kind]));
+  if pField is TStringField then
+    pField.Size := if pSize > 0 then pSize else pField.Size
+  else if ((pField is TBCDField) or (pField is TFMTBCDField)) and (pRow.Scale < 0) then
+    pField.Size := -pRow.Scale;
+  if not SameStr(pRow.DisplayLabel, pField.FieldName) then
+    SetTextProp(pField, PROP_LABEL, pRow.DisplayLabel);
+  SetTextProp(pField, PROP_FORMAT, pRow.DisplayFormat);
+  SetTextProp(pField, PROP_EDIT_FORMAT, pRow.EditFormat);
+  if pRow.DisplayWidth > 0 then
+    pField.DisplayWidth := pRow.DisplayWidth;
+  { a column's False may be the new-row value: it stays a change of its own, unchecked }
+  if pRow.HasVisible and (pRow.Visible or (pRow.Kind <> frkData)) then
+    pField.Visible := pRow.Visible;
+  if InRange(pRow.Alignment, 0, MAX_ALIGNMENT) then
+    pField.Alignment := TAlignment(pRow.Alignment);
+end;
+
+function StreamBlock(pField: TField): TArray<string>;
+var
+  VStream: TBytesStream;
+begin
+  VStream := TBytesStream.Create;
+  try
+    VStream.WriteComponent(pField);
+    Result := DfmBlockOfStream(Copy(VStream.Bytes, 0, VStream.Size));
+  finally
+    VStream.Free;
+  end;
+end;
+
+{ `TIntegerField; FieldName = 'QTY'`: the block without its frame. }
+function BlockSummary(const pClass: string; const pBlock: TArray<string>): string;
+var
+  VI: Integer;
+begin
+  Result := pClass;
+  for VI := 1 to High(pBlock) - 1 do
+    Result := Result + '; ' + Trim(pBlock[VI]);
+end;
+
+procedure TDfmWritePlanner.PlanInsert(const pRow: TRepoField);
+var
+  VItem: TDfmwItem;
+  VField: TField;
+  VReason, VClass: string;
+  VPlanned: TPlannedField;
+  VIndex: Integer;
+begin
+  VClass := ClassOfRow(pRow);
+  VReason := InsertBlockReason(pRow, VClass);
+  VItem := NewItem(dwaInsert, NewComponentName(pRow.FieldName), VClass);
+  if FindClassByName(VClass) <> nil then
+  begin
+    VField := FindClassByName(VClass).Create(nil);
+    try
+      VField.Name := VItem.Component;
+      VField.FieldName := if (pRow.Kind = frkData) and (VReason = '') then ResultName(FSource, pRow.FieldName) else pRow.FieldName;
+      FillField(VField, pRow, SizeOfRow(pRow));
+      if (pRow.Kind = frkLookup) and (VReason = '') then
+        VReason := LookupBlock(pRow, VField, VItem.Requires);
+      VItem.Block := StreamBlock(VField);
+      VPlanned.Name := VField.FieldName;
+    finally
+      VField.Free;
+    end;
+  end;
+  VIndex := AddItem(VItem, fcoInsert, '', BlockSummary(VClass, VItem.Block));
+  Block(VIndex, VReason);
+  if FChanges[VIndex].Blocked <> '' then
+    Exit;
+  VPlanned.Column := pRow.FieldName;
+  VPlanned.ChangeId := VIndex + 1;
+  FPlanned.Add(VPlanned);
+  if (pRow.Kind in [frkCalc, frkInternalCalc]) and (pRow.Body <> '') then
+    FWarnings.Add(FChanges[VIndex].Target + ': its calc code is not written (handler code is generated separately)');
+end;
+
+{ ---- removed fields ---- }
+
+{ Why the form or its unit still needs the component. }
+function TDfmWritePlanner.DeleteBlockReason(const pField: TDfmrField): string;
+var
+  VRefs: TArray<string>;
+  VDeclared: Integer;
+begin
+  Result := '';
+  if not IsOwn(pField) then
+    Exit('the field is declared in the ancestor''s DFM');
+  VRefs := FDoc.ReferencesTo(pField.CompName);
+  if Length(VRefs) > 0 then
+    Exit('used in the DFM: ' + string.Join(', ', VRefs));
+  if FUnit = nil then
+    Exit;
+  VDeclared := if IndexOfDecl(FUnit.Declarations(FForm.FormClass), pField.CompName) >= 0 then 1 else 0;
+  if FUnit.Mentions(pField.CompName) > VDeclared then
+    Result := 'used in the code of the unit'
+  else if FUnit.Mentions(QuotedStr(pField.FieldName)) > 0 then
+    Result := 'the unit names ' + QuotedStr(pField.FieldName);
+end;
+
+procedure TDfmWritePlanner.PlanDelete(const pField: TDfmrField);
+var
+  VItem: TDfmwItem;
+  VIndex: Integer;
+  VOther: TDfmrField;
+  VReason: string;
+begin
+  VItem := NewItem(dwaDelete, pField.CompName, pField.FieldClass);
+  try
+    VReason := DeleteBlockReason(pField);
+  except
+    on E: EDfmWriteError do
+      VReason := E.Message;
+  end;
+  VIndex := AddItem(VItem, fcoDelete, pField.FieldClass + '; FieldName = ' + QuotedStr(pField.FieldName), '');
+  FChanges.List[VIndex].Checked := False;
+  for VOther in FDataset.Fields do
+    if (VOther.Kind = frkLookup) and (not SameText(VOther.CompName, pField.CompName))
+      and MatchText(pField.FieldName, VOther.KeyFields.Split([MULTI_FIELD])) then
+      VReason := 'KeyFields of ' + VOther.CompName + ' names it';
+  Block(VIndex, VReason);
+end;
+
+procedure TDfmWritePlanner.PlanSelection(const pFields: TArray<string>);
+var
+  VAll: TArray<TFrSelectionField>;
+  VItem: TFrSelectionField;
+  VRow: TRepoField;
+  VWanted: TArray<string>;
+  VField: TDfmrField;
+  VTable, VColumn: string;
+  VId: Integer;
+  VPass: Boolean;
+begin
+  VAll := nil;
+  for VRow in FOrder do
+    if SameText(VRow.TableName, FSource.TableName) and (VRow.Kind <> frkGraphical) then
+    begin
+      VItem.Name := VRow.FieldName;
+      VItem.Kind := VRow.Kind;
+      VItem.SourceKey := VRow.SourceKey;
+      VItem.Body := VRow.Body;
+      VAll := VAll + [VItem];
+    end;
+  VWanted := nil;
+  if (Length(pFields) = 1) and SameText(pFields[0], ALL_FIELDS) then
+    for VItem in VAll do
+      VWanted := VWanted + [VItem.Name]
+  else
+    VWanted := ExpandSelection(pFields, VAll);
+  { lookups last: they need the field names of their keys }
+  for VPass := False to True do
+    for VRow in FOrder do
+      if SameText(VRow.TableName, FSource.TableName) and MatchText(VRow.FieldName, VWanted)
+        and ((VRow.Kind = frkLookup) = VPass) and (PlannedName(VRow.FieldName, VId) = '') then
+        PlanInsert(VRow);
+  for VField in FDataset.Fields do
+    if FieldSource(FSource, VField, VTable, VColumn) and SameText(VTable, FSource.TableName) and (not MatchText(VColumn, VWanted)) then
+      PlanDelete(VField);
+end;
+
+{ ---- datasets ---- }
+
+procedure TDfmWritePlanner.Report;
+var
+  VReport: TDfmrDatasetReport;
+  VField: TDfmrField;
+  VTable, VColumn: string;
+  VRow: TRepoField;
+  VGraphical: string;
+begin
+  VReport := Default(TDfmrDatasetReport);
+  VReport.DfmName := ExtractFileName(FForm.FileName);
+  VReport.Dataset := FDataset.Name;
+  VReport.DatasetClass := FDataset.DatasetClass;
+  VReport.TableName := FSource.TableName;
+  if FSource.TableName = '' then
+    VReport.Unresolved := FSource.Reason;
+  for VField in FDataset.Fields do
+  begin
+    Inc(VReport.Counts[VField.Kind]);
+    if not FieldSource(FSource, VField, VTable, VColumn) then
+      VReport.Unattributed := VReport.Unattributed + [VField.FieldName]
+    else if not FRows.ContainsKey(KeyOf(VTable, VColumn)) then
+      FWarnings.Add(Where(VField) + ': ' + VTable + '.' + VColumn + ' is not in the repository');
+  end;
+  if Length(FDataset.InheritedFields) > 0 then
+    FWarnings.Add(Format('%s %s: %d inherited fields not written (FieldName is in the ancestor''s DFM): %s',
+      [VReport.DfmName, FDataset.Name, Length(FDataset.InheritedFields), string.Join(', ', FDataset.InheritedFields)]));
+  VGraphical := '';
+  for VRow in FOrder do
+    if (VRow.Kind = frkGraphical) and SameText(VRow.TableName, FSource.TableName) then
+      VGraphical := VGraphical + ' ' + VRow.FieldName;
+  if VGraphical <> '' then
+    FWarnings.Add(Format('%s %s: graphical columns are grid columns, not written:%s', [VReport.DfmName, FDataset.Name, VGraphical]));
+  FPlan.Datasets := FPlan.Datasets + [VReport];
+end;
+
+procedure TDfmWritePlanner.PlanDataset(const pFields: TArray<string>);
+var
+  VField: TDfmrField;
+  VRow: TRepoField;
+  VPlanned: TPlannedField;
+  VTable, VColumn: string;
+  VFirst, VI: Integer;
+begin
+  FSource := SourceOf(FDataset);
+  FPlanned.Clear;
+  Report;
+  VPlanned.ChangeId := 0;
+  for VField in FDataset.Fields do
+    if FieldSource(FSource, VField, VTable, VColumn) then
+    begin
+      if SameText(VTable, FSource.TableName) then
+      begin
+        VPlanned.Column := VColumn;
+        VPlanned.Name := VField.FieldName;
+        FPlanned.Add(VPlanned);
+      end;
+      if FRows.TryGetValue(KeyOf(VTable, VColumn), VRow) then
+        TryPlanField(VField, VRow);
+    end;
+  if Length(pFields) = 0 then
+    Exit;
+  if FSource.TableName = '' then
+    raise EDfmWriteSelection.CreateFmt('%s has no table: %s', [FDataset.Name, FSource.Reason]);
+  VFirst := FChanges.Count;
+  PlanSelection(pFields);
+  { a field that would be removed gets no property changes }
+  for VI := VFirst to FChanges.Count - 1 do
+    if FItems[VI].Action = dwaDelete then
+      for var VJ := 0 to VFirst - 1 do
+        if SameText(FItems[VJ].Component, FItems[VI].Component) and (FItems[VJ].FileIndex = FFileIndex)
+          and SameText(FItems[VJ].Dataset, FDataset.Name) then
+          Block(VJ, 'the field is not in the selection');
+end;
+
+function TDfmWritePlanner.Execute(const pFiles: TArray<string>; const pDataset: string; const pFields: TArray<string>): TDfmwPlan;
+var
+  VFile: string;
+  VDataset: TDfmrDataset;
+begin
+  FPlan := Default(TDfmwPlan);
+  FPlan.ChangeSet.Direction := fdRepoToDfm;
+  if (Length(pFields) > 0) and ((pDataset = '') or (Length(pFiles) <> 1)) then
+    raise EDfmWriteSelection.Create('a field selection needs one form and one dataset');
+  LoadRows;
+  for VFile in pFiles do
+  begin
+    OpenForm(VFile);
+    for VDataset in FForm.Datasets do
+      if (pDataset = '') or SameText(pDataset, VDataset.Name) then
+      begin
+        FDataset := VDataset;
+        PlanDataset(pFields);
+      end;
+  end;
+  if (pDataset <> '') and (Length(FPlan.Datasets) = 0) then
+    raise EDfmReadError.CreateFmt('no dataset %s in the DFM', [pDataset]);
+  FPlan.ChangeSet.Changes := FChanges.ToArray;
+  FPlan.Items := FItems.ToArray;
+  FPlan.Warnings := FWarnings.ToStringArray;
+  Result := FPlan;
+end;
+
+function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
+  const pFields: TArray<string>): TDfmwPlan;
+var
+  VPlanner: TDfmWritePlanner;
+begin
+  if RepoSchemaVersion(pRepo) < SCHEMA_WITH_BODIES then
+    raise ERepoError.Create('the repository is schema 1: run repo migrate first');
+  VPlanner := TDfmWritePlanner.Create(pRepo);
+  try
+    Result := VPlanner.Execute(pFiles, pDataset, pFields);
+  finally
+    VPlanner.Free;
+  end;
+end;
+
+{ ---- render ---- }
+
+function IdChosen(const pChosen: TArray<TFrChange>; pId: Integer): Boolean;
+var
+  VChange: TFrChange;
+begin
+  Result := False;
+  for VChange in pChosen do
+    if VChange.Id = pId then
+      Exit(True);
+end;
+
+{ Refuses a blocked change, one chosen twice, and one whose needed change is not chosen. }
+procedure CheckChosen(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>);
+var
+  VChange: TFrChange;
+  VNeeded: Integer;
+  VSeen: TDictionary<Integer, Boolean>;
+begin
+  VSeen := TDictionary<Integer, Boolean>.Create;
+  try
+    for VChange in pChosen do
+    begin
+      if pPlan.ChangeSet.Changes[VChange.Id - 1].Blocked <> '' then
+        raise EDfmWriteError.CreateFmt('change %d is blocked: %s', [VChange.Id, pPlan.ChangeSet.Changes[VChange.Id - 1].Blocked]);
+      if not VSeen.TryAdd(VChange.Id, True) then
+        raise EDfmWriteError.CreateFmt('change %d is chosen twice', [VChange.Id]);
+      for VNeeded in pPlan.Items[VChange.Id - 1].Requires do
+        if not IdChosen(pChosen, VNeeded) then
+          raise EDfmWriteError.CreateFmt('change %d needs change %d (select it too)', [VChange.Id, VNeeded]);
+    end;
+  finally
+    VSeen.Free;
+  end;
+end;
+
+{ Reads the new DFM back: the RTL converts it and every planned change is there. }
+procedure CheckDfm(const pBytes: TBytes; const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>);
+var
+  VDoc: TDfmDocument;
+  VItem: TDfmwItem;
+  VObject: Integer;
+  VText, VLiteral: string;
+  VOk: Boolean;
+begin
+  VDoc := TDfmDocument.Create(pBytes, ExtractFileName(pFile.DfmName) + ' (as it would be written)');
+  try
+    for VItem in pItems do
+    begin
+      VObject := VDoc.FindObject(VItem.Component, VItem.Dataset);
+      VOk := (VObject >= 0) <> (VItem.Action = dwaDelete);
+      if VOk and (VItem.Action = dwaSet) then
+      begin
+        VLiteral := Trim(VItem.Literal);
+        VOk := VDoc.TryProp(VObject, VItem.PropName, VText) and (VLiteral.StartsWith('''') or VLiteral.StartsWith('#') or (VText = VLiteral));
+      end
+      else if VOk and (VItem.Action = dwaRemove) then
+        VOk := not VDoc.TryProp(VObject, VItem.PropName, VText);
+      if not VOk then
+        raise EDfmWriteError.CreateFmt('%s: the change of %s does not read back', [ExtractFileName(pFile.DfmName), VItem.Component]);
+    end;
+  finally
+    VDoc.Free;
+  end;
+end;
+
+{ Reads the new unit back: every added field is declared, every removed one is not. }
+procedure CheckUnit(const pBytes: TBytes; const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>);
+var
+  VUnit: TDfmUnitDocument;
+  VItem: TDfmwItem;
+  VDecls: TArray<TDfmwDecl>;
+begin
+  VUnit := TDfmUnitDocument.Create(pBytes, ExtractFileName(pFile.PasName) + ' (as it would be written)');
+  try
+    VDecls := VUnit.Declarations(pFile.FormClass);
+    for VItem in pItems do
+      if (VItem.Action in [dwaInsert, dwaDelete]) and ((IndexOfDecl(VDecls, VItem.Component) >= 0) <> (VItem.Action = dwaInsert)) then
+        raise EDfmWriteError.CreateFmt('%s: the declaration of %s does not read back', [ExtractFileName(pFile.PasName), VItem.Component]);
+  finally
+    VUnit.Free;
+  end;
+end;
+
+procedure AddOutput(var pOutputs: TArray<TDfmwOutput>; const pFileName: string; const pOld, pNew: TBytes);
+var
+  VOutput: TDfmwOutput;
+begin
+  VOutput.FileName := pFileName;
+  VOutput.OldBytes := pOld;
+  VOutput.NewBytes := pNew;
+  pOutputs := pOutputs + [VOutput];
+end;
+
+procedure RenderFile(const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>; var pOutputs: TArray<TDfmwOutput>);
+var
+  VDoc: TDfmDocument;
+  VUnit: TDfmUnitDocument;
+  VItem: TDfmwItem;
+  VUnitChanges: Boolean;
+  VBytes: TBytes;
+begin
+  VUnitChanges := False;
+  VUnit := nil;
+  VDoc := TDfmDocument.Create(pFile.DfmBytes, ExtractFileName(pFile.DfmName));
+  try
+    if pFile.PasName <> '' then
+      VUnit := TDfmUnitDocument.Create(pFile.PasBytes, ExtractFileName(pFile.PasName));
+    for VItem in pItems do
+    begin
+      ApplyItem(VDoc, VUnit, pFile.FormClass, VItem);
+      VUnitChanges := VUnitChanges or (VItem.Action in [dwaInsert, dwaDelete]);
+    end;
+    VBytes := VDoc.Output;
+    CheckDfm(VBytes, pFile, pItems);
+    AddOutput(pOutputs, pFile.DfmName, pFile.DfmBytes, VBytes);
+    if not VUnitChanges then
+      Exit;
+    VBytes := VUnit.Output;
+    CheckUnit(VBytes, pFile, pItems);
+    AddOutput(pOutputs, pFile.PasName, pFile.PasBytes, VBytes);
+  finally
+    VUnit.Free;
+    VDoc.Free;
+  end;
+end;
+
+function RenderDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>): TArray<TDfmwOutput>;
+var
+  VI: Integer;
+  VChange: TFrChange;
+  VItems: TArray<TDfmwItem>;
+begin
+  Result := nil;
+  CheckChosen(pPlan, pChosen);
+  for VI := 0 to High(pPlan.Files) do
+  begin
+    VItems := nil;
+    for VChange in pChosen do
+      if pPlan.Items[VChange.Id - 1].FileIndex = VI then
+        VItems := VItems + [pPlan.Items[VChange.Id - 1]];
+    if Length(VItems) > 0 then
+      RenderFile(pPlan.Files[VI], VItems, Result);
+  end;
+end;
+
+{ ---- write ---- }
+
+function SameBytes(const pA, pB: TBytes): Boolean;
+begin
+  Result := (Length(pA) = Length(pB)) and ((Length(pA) = 0) or CompareMem(@pA[0], @pB[0], Length(pA)));
+end;
+
+function BackupName(const pFile: string): string;
+var
+  VBase: string;
+  VNumber: Integer;
+begin
+  VBase := pFile + BACKUP_STAMP + FormatDateTime('yyyymmdd-hhnnss', Now);
+  Result := VBase;
+  VNumber := 0;
+  while TFile.Exists(Result) do
+  begin
+    Inc(VNumber);
+    Result := VBase + '-' + IntToStr(VNumber);
+  end;
+end;
+
+{ Raises when a file cannot be opened for writing, before anything is written. }
+procedure CheckWritable(const pOutput: TDfmwOutput);
+var
+  VFile: TFileStream;
+begin
+  if not SameBytes(TFile.ReadAllBytes(pOutput.FileName), pOutput.OldBytes) then
+    raise EDfmWriteError.Create('the file changed since it was read: ' + pOutput.FileName);
+  try
+    VFile := TFileStream.Create(pOutput.FileName, fmOpenReadWrite or fmShareDenyWrite);
+    VFile.Free;
+  except
+    on E: EStreamError do
+      raise EDfmWriteError.Create('the file cannot be written: ' + pOutput.FileName + ' (' + E.Message + ')');
+  end;
+end;
+
+{ Puts the old bytes back; '' or what went wrong. }
+function Restore(const pOutput: TDfmwOutput): string;
+begin
+  Result := '';
+  try
+    if not SameBytes(TFile.ReadAllBytes(pOutput.FileName), pOutput.OldBytes) then
+      TFile.WriteAllBytes(pOutput.FileName, pOutput.OldBytes);
+  except
+    on E: Exception do
+      Result := '; NOT restored (use its backup): ' + pOutput.FileName;
+  end;
+end;
+
+{ Restores pOutputs[0..pLast]. }
+function RestoreAll(const pOutputs: TArray<TDfmwOutput>; pLast: Integer): string;
+var
+  VI: Integer;
+  VStates: TArray<string>;
+begin
+  VStates := nil;
+  for VI := 0 to pLast do
+    VStates := VStates + [Restore(pOutputs[VI])];
+  Result := string.Join('', VStates);
+end;
+
+{ Writes all files or none: a failure restores those already written. }
+procedure WriteAll(const pOutputs: TArray<TDfmwOutput>);
+var
+  VI: Integer;
+begin
+  for VI := 0 to High(pOutputs) do
+    try
+      TFile.WriteAllBytes(pOutputs[VI].FileName, pOutputs[VI].NewBytes);
+    except
+      on E: Exception do
+        raise EDfmWriteError.Create('the write failed and was undone: ' + E.Message + RestoreAll(pOutputs, VI));
+    end;
+end;
+function ApplyDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>): TArray<string>;
+var
+  VOutputs: TArray<TDfmwOutput>;
+  VOutput: TDfmwOutput;
+  VChange: TFrChange;
+  VBackup: string;
+  VBackups: TArray<string>;
+begin
+  Result := nil;
+  VOutputs := RenderDfmWrite(pPlan, pChosen);
+  for VOutput in VOutputs do
+    CheckWritable(VOutput);
+  for VOutput in VOutputs do
+  begin
+    VBackup := BackupName(VOutput.FileName);
+    TFile.WriteAllBytes(VBackup, VOutput.OldBytes);
+    VBackups := VBackups + ['backup ' + VBackup];
+  end;
+  WriteAll(VOutputs);
+  for VChange in pChosen do
+    Result := Result + [ApplyLogLine(VChange)];
+  Result := Result + VBackups;
+end;
 
 end.

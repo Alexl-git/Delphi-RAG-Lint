@@ -1,0 +1,29 @@
+{
+  "id": "repo-write-dfm",
+  "title": "Write the field repository into a form",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Brings the persistent fields of a text DFM, and their declarations in its unit, in line with the field repository as a change set, dry run by default",
+  "intro": "Read this when a form should follow the field repository. drag-lint repo write-dfm prints the property changes of existing persistent fields and, for a field selection, the fields to add or remove; --apply or --select writes them with a backup. Every byte outside a planned change stays the same, the new text is checked by Delphi's own reader before it is written, and a binary DFM is refused.",
+  "wikiPage": "repo-write-dfm",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "write-dfm"
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I bring the fields of a form in line with the repository?",
+      "command": "drag-lint repo write-dfm --dfm <form.dfm> --direction repo-to-dfm --repo <file>"
+    },
+    {
+      "ask": "How do I add every repository field of a table to a dataset as persistent fields?",
+      "command": "drag-lint repo write-dfm --dfm <form.dfm> --dataset <name> --names all --direction repo-to-dfm --repo <file>"
+    }
+  ]
+}
