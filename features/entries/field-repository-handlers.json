@@ -1,0 +1,35 @@
+{
+  "id": "field-repository-handlers",
+  "title": "Field repository: generated handlers",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Writes the field repository's event code and MAXLEN constants into hash-checked DLFR regions of existing units",
+  "intro": "Read this when calculated-field and field-event code, or MAXLEN constants, should come from the field repository. A region edited by hand is reported and never overwritten; everything outside the regions is kept byte for byte.",
+  "wikiPage": "field-repository-handlers",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "gen-handlers"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "gen-maxlen"
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "renumber-regions"
+    }
+  ],
+  "audience": "both",
+  "related": ["field-repository"],
+  "verified": {
+    "date": "2026-11-23",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha"
+  }
+}
