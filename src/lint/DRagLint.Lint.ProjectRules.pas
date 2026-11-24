@@ -4404,6 +4404,7 @@ var
     Stem  : string                      ;
   begin
     if StemsOfName.TryGetValue(AName, Cached) then Exit(Cached);
+    Result:= nil;
     Seen:= TDictionary<string, Boolean>.Create;
     try
       for S in AStore.FindSymbolsByExactName(AName) do
