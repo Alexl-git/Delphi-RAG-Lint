@@ -79,7 +79,7 @@ that name has one and the same char length; the table is shown as `*` when there
 
 ## What the rules add over the compiler
 
-dcc64 37.0 with all warnings and hints compiles every positive case without a message about the field, the SQL or the type;
+dcc32 37.0 (the BDE needs Win32) with all warnings and hints compiles every positive case without a message about the field, the SQL or the type;
 the compiler sees strings. The errors appear when the line runs or the dataset opens.
 
 ## Measured
@@ -92,6 +92,7 @@ Read-only copies of five project indexes, 2026-11-24, against one repository see
 | Loader2025 (Paradox to Firebird) | 2, both right (`GONOFF.OFF` became `OOFF`) | 19, all right (TIME columns that became DOUBLE PRECISION) | 0 |
 | Micronite2027 client, MicroniteMW1Service server (ORM3) | 0 | 0 | 0 |
 | TableTools370P | 0 | 0 | 0 |
+| M2022 | 0 | 0 | 0 |
 
 Before BDE and ADO datasets were excluded the Loader had about 70 wrong findings, all on Paradox tables (now a negative
 fixture). The same copies against a script of 2025-02 reported every column added since then: keep the repository current.

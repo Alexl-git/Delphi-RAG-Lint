@@ -167,7 +167,7 @@ type
   end;
 
   { The columns of a set of rows IsFixed reads. }
-  TFixedColumn = (fxSymbol, fxMember, fxRef);
+  TFixedColumn = (fxSymbol, fxMember, fxRef);  // dl:ok enum-ordinal-persisted@4ce1 -- REVIEWED 2026-11-24 v154 SCHEMA: Ord() only indexes Query.Fields[] of a read; nothing is persisted
 
 var
   GLock     : TObject;
@@ -852,7 +852,7 @@ end;
 
 type
   { The columns of the query of UsesOf. }
-  TUseColumn = (ucLine, ucCol, ucEndCol, ucName, ucPas, ucRoot, ucAccessor);
+  TUseColumn = (ucLine, ucCol, ucEndCol, ucName, ucPas, ucRoot, ucAccessor);  // dl:ok enum-ordinal-persisted@f797 -- REVIEWED 2026-11-24 v154 SCHEMA: Ord() only indexes Query.Fields[] of a read; nothing is persisted
 
   { A use of a persistent field: dmMain.tblOrdersNOTE.AsInteger. }
   TFieldUse = record

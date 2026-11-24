@@ -16,7 +16,7 @@ const
 
 procedure Inserts(const AColumns: string);
 var
-  Q, C, D, E, F, G, H: TFDQuery;
+  Q, C, D, E, F, G, H, J: TFDQuery;
 begin
   Q := TFDQuery.Create(nil);
   Q.SQL.Text := 'INSERT INTO ORDERS (NOTE) VALUES (:NOTE)'; // FIRE schema-required-not-set
@@ -40,6 +40,9 @@ begin
   H.SQL.Text := 'UPDATE ORDERS SET NOTE = 1';
   H.ExecSQL;
   H.ExecSQL('INSERT INTO UNREAD (A) VALUES (1)');
+  J := TFDQuery.Create(nil);
+  J.SQL.Text := 'UPDATE OR INSERT INTO ORDERS (NOTE) VALUES (:NOTE) MATCHING (NOTE)'; // FIRE schema-required-not-set
+  J.ExecSQL;
 end;
 
 end.
