@@ -56,6 +56,10 @@ the full number. The same lines stand in the report file.
 `files_skipped`, `findings_dropped`, `reasons` (`reason`, `where`, `files`, `findings`), `rules` (rule id to
 count), `show_with`. It is not a finding: it has no part in the exit code, `--fail-on` or a baseline. SARIF has no such row.
 
+A `drag-lint-project.json` that exists but is not a JSON object (truncated, a stray comma, a list) used to default
+to the project folder in silence, which widens the report. It now says so: a `lint-all: NOTE: ... is malformed` line (and in the
+report file), and in `--json` a second note row, rule `own-roots-malformed`, severity `info`, `file_path` = the file.
+
 ## Limits
 
 * A file you name (`lint <file>`, the editor, the LSP, VS Code) is always reported, third-party or not.

@@ -25,6 +25,9 @@ const
   /// <summary>Rule id of the note row a --json report ends with when something was skipped.</summary>
   THIRD_PARTY_SKIPPED_ROW = 'third-party-skipped';
 
+  /// <summary>Rule id of the note row a --json report carries when the project's declaration is malformed.</summary>
+  OWN_ROOTS_MALFORMED_ROW = 'own-roots-malformed';
+
 type
   /// <summary>Why a file is left out of a project lint run.</summary>
   /// <remarks>srOwn = it is not left out. srExcludePaths is decided by the caller
@@ -70,6 +73,12 @@ type
     /// <summary>Files outside the project folder that were admitted because nothing marks them third-party.</summary>
     /// <returns>0 when the own roots are declared.</returns>
     function KeptOutside: Integer;
+    /// <summary>The sentence for a drag-lint-project.json that exists but does not parse as a JSON object.</summary>
+    /// <returns>'' when the file is absent, readable, or the roots are declared: a malformed file silently defaults to the project folder, which widens the report.</returns>
+    function MalformedNote: string;
+    /// <summary>The note row for a --json report saying the declaration was malformed.</summary>
+    /// <returns>A new object the caller owns, or nil when MalformedNote is ''.</returns>
+    function MalformedRow: TJSONObject;
   end;
 
   /// <summary>What a lint run hands to the filter.</summary>
@@ -116,7 +125,8 @@ uses
   System.IOUtils,
   System.RegularExpressions,
   System.StrUtils,
-  Winapi.Windows;
+  Winapi.Windows,
+  DRagLint.Core.Model;
 
 const
   VENDORED_DEFAULTS: array [0..6] of string =
@@ -145,6 +155,10 @@ type
     FKeptOutside: Integer;
     FLib        : TLibraryScope;
     FLibLoaded  : Boolean;
+    FFault      : string;
+    FFaultDone  : Boolean;
+    function Fault: string;
+    function ConfigFile: string;
     function Classify(const APath: string; out AWhere: string): TSkipReason;
     function VendoredName(const APath: string): string;
     function LibraryRoot(const APath: string): string;
@@ -162,6 +176,8 @@ type
     function SummarySuffix: string;
     function JsonRow: TJSONObject;
     function KeptOutside: Integer;
+    function MalformedNote: string;
+    function MalformedRow: TJSONObject;
   end;
 
 function FullPath(const APath: string): string;
@@ -204,7 +220,8 @@ begin
   try
     SetLength(Bytes, FileSeek(Handle, 0, Ord(soEnd)));
     FileSeek(Handle, 0, Ord(soBeginning));
-    FileRead(Handle, Bytes, Length(Bytes));
+    { Bytes[0], never Bytes: the untyped buffer parameter takes the VARIABLE, so the file text would overwrite the array pointer }
+    if Length(Bytes) > 0 then FileRead(Handle, Bytes[0], Length(Bytes));
     AText:= TEncoding.ANSI.GetString(Bytes);
   finally
     FileClose(Handle);
@@ -378,6 +395,53 @@ begin
   if AReason = srExcludePaths then Exit;
   if not FRules.TryGetValue(ARuleId, N) then N:= 0;
   FRules.AddOrSetValue(ARuleId, N + 1);
+end;
+
+function TOwnFilter.ConfigFile: string;
+begin
+  Result:= TPath.Combine(TPath.Combine(FSetup.Own.Anchor, DRAG_HOME_DIR), 'drag-lint-project.json');
+end;
+
+function TOwnFilter.Fault: string;
+var
+  Cfg : string;
+  Text: string;
+  JVal: TJSONValue;
+begin
+  if FFaultDone then Exit(FFault);
+  FFaultDone:= True;
+  FFault    := '';
+  if (not FSetup.Own.Active) or FSetup.Own.Declared or (FSetup.Own.Error <> '') then Exit(FFault);
+  Cfg:= ConfigFile;
+  if not (TFile.Exists(Cfg) and TryReadText(Cfg, Text)) then Exit(FFault);
+  JVal:= TJSONObject.ParseJSONValue(Text);
+  try
+    if JVal = nil then FFault:= 'is not valid JSON'
+    else if not (JVal is TJSONObject) then FFault:= 'has a root that is not a JSON object';
+  finally
+    JVal.Free;
+  end;
+  Result:= FFault;
+end;
+
+function TOwnFilter.MalformedNote: string;
+begin
+  Result:= Fault;
+  if Result <> '' then
+    Result:= Format('lint-all: NOTE: %s is malformed (%s), so ownRoots defaulted to the project folder %s -- ' +
+      'the report may be wider than the declaration you meant', [ConfigFile, Result, FSetup.Own.Anchor]);
+end;
+
+function TOwnFilter.MalformedRow: TJSONObject;
+begin
+  Result:= nil;
+  if Fault = '' then Exit;
+  Result:= TJSONObject.Create;
+  Result.AddPair('rule', OWN_ROOTS_MALFORMED_ROW);
+  Result.AddPair('severity', 'info');
+  Result.AddPair('file_path', ConfigFile);
+  for var Pos: string in ['start_line', 'start_col', 'end_line', 'end_col'] do Result.AddPair(Pos, TJSONNumber.Create(0));
+  Result.AddPair('message', 'drag-lint-project.json is malformed (' + Fault + '); ownRoots defaulted to the project folder');
 end;
 
 function TOwnFilter.KeptOutside: Integer;

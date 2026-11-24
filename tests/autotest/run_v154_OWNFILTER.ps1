@@ -202,6 +202,23 @@ W $regFix (@{ '37.0' = @{ RootDir = 'C:\NoStudio'; Library = @{ Win32 = $wide; W
 $env:DRAGLINT_TEST_BDS_REGISTRY = $regFix
 try { $h2 = LintAll } finally { $env:DRAGLINT_TEST_BDS_REGISTRY = '' }
 Check 'H4 a library path that holds the project itself is no signal' ((Hits $h2 'UReg') -eq 2)
+Write-Host 'I. a malformed declaration says so' -ForegroundColor Cyan
+$db = Join-Path $app '_D-RAG\App.sqlite'   # H left $db on app2; $decl belongs to app
+W $decl '{ "ownRoots": [ ".." '
+$i1 = LintAll
+Check 'I1 text warns about the malformed file' ($i1 -match 'drag-lint-project\.json .*malformed|malformed .*drag-lint-project\.json') $i1
+Check 'I2 and says it defaulted to the project folder' ($i1 -match 'defaulted to the project folder')
+$ij = Json
+$irow = @($ij | Where-Object { $_.rule -eq 'own-roots-malformed' })
+Check 'I3 one own-roots-malformed JSON row' ($irow.Count -eq 1) "n=$($irow.Count)"
+Check 'I4 it is a note, with the file and a reason' (($irow.Count -eq 1) -and ($irow[0].severity -eq 'info') -and ($irow[0].file_path -like '*drag-lint-project.json') -and ($irow[0].message)) ($irow | ConvertTo-Json -Compress)
+W $decl '["a"]'
+Check 'I5 a non-object root warns too' ((LintAll) -match 'defaulted to the project folder')
+W $decl '{ "ownRoots": [".."] }'
+$ic = LintAll
+Check 'I6 CONTROL a valid declaration: no warning' (($ic -notmatch 'malformed') -and (@((Json) | Where-Object { $_.rule -eq 'own-roots-malformed' }).Count -eq 0))
+NoDecl
+Check 'I7 CONTROL no declaration: no warning' ((LintAll) -notmatch 'malformed')
 Write-Host ''
 Write-Host ("{0} check(s)" -f $script:N)
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0 }

@@ -13709,6 +13709,8 @@ begin
       { 1.54 OWNFILTER: a note row, not a finding -- it takes no part in --fail-on, the baseline or the exit code }
       var SkipRow: TJSONObject:= if AOwnFilter = nil then nil else AOwnFilter.JsonRow;
       if SkipRow <> nil then JArr.AddElement(SkipRow);
+      var BadRow: TJSONObject:= if AOwnFilter = nil then nil else AOwnFilter.MalformedRow;
+      if BadRow <> nil then JArr.AddElement(BadRow);
       EmitFindingsDoc(AArgs, JArr.Format(2));
     finally
       JArr.Free;
@@ -20829,6 +20831,7 @@ begin
   var SkipLines: TArray<string>:= BuildSkippedThirdPartyLines(SkippedThird, Own);
   for var SkLine: string in SkipLines do EmitNoteLine(AArgs, SkLine);
   for var OwnLine: string in OwnRootsDefaultNote(Own, OwnFilter.KeptOutside) do EmitNoteLine(AArgs, OwnLine);
+  if OwnFilter.MalformedNote <> '' then EmitNoteLine(AArgs, OwnFilter.MalformedNote); { 1.54 OWNFILTER: a malformed declaration widened the report }
 
   { Per-file rules: external .scm rules + all built-in AST checks.
 
