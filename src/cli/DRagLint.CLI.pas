@@ -5932,7 +5932,7 @@ type
     holds an index parses its file. The stored fingerprint names the build every other file was parsed
     with, so that build is taken from it; the DB-level stamp stays what it was (FinishOneFileRun). }
   TOneFilePlan = record
-    Active      : Boolean; { one file, into a database already indexed (or left open by a killed run) }
+    Applies     : Boolean; { one file, into a database already indexed (or left open by a killed run) }
     IsProject   : Boolean; { the database is a project's index }
     Stored      : string ; { its indexer_fingerprint, '' = no run ever completed it }
     Platform    : string ; { stored platform, '' = none }
@@ -5981,7 +5981,7 @@ begin
   if (AArgs.ProjectPath <> '') or AArgs.ScanLibraries or AArgs.Rebuild or not TFile.Exists(AArgs.Path) then Exit;
   Result.Stored:= AStore.GetMetaValue(INDEXER_FP_KEY);
   if ADbWasEmpty and (Result.Stored = '') and (AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) = '') then Exit;
-  Result.Active   := True;
+  Result.Applies  := True;
   var Cfg: string := FingerprintLimbValue(Result.Stored, FP_LIMB_CONFIG);
   Result.IsProject:= (Cfg <> '') or SameText(AStore.GetMetaValue(SCAN_TYPE_KEY), SCAN_TYPE_PROJECT) or
     (Trim(AStore.GetMetaValue(PROJECT_TAG_KEY)) <> '') or ((Result.Stored = '') and (ProjectOfDb(ADbPath) <> ''));
@@ -6014,7 +6014,7 @@ end;
 function OneFileRefusal(const APlan: TOneFilePlan; const ACur: string): string;
 begin
   Result:= '';
-  if not (APlan.Active and APlan.IsProject) then Exit;
+  if not (APlan.Applies and APlan.IsProject) then Exit;
   if APlan.Stored = '' then Exit('no index run ever completed it, so the build its files are parsed with is unknown');
   if (FingerprintLimbValue(APlan.Stored, FP_LIMB_CONFIG) <> '') and (APlan.BuildDproj = '') then
     Exit('its project file is not on disk, so the defines it was built with cannot be read');
@@ -6429,9 +6429,9 @@ begin
   // names (INBOX-orm3-server-153 item 3, AUTODOC review HIGH-1 / M1 / M2) -- see TOneFilePlan.
   var OneFile: TOneFilePlan:= PlanOneFileIndex(Store, ResolvedDb, AArgs, DbWasEmpty);
   var NoPp: Boolean:= AArgs.NoPreprocess or OneFile.NoPreprocess;
-  if OneFile.Active and (OneFile.Stored <> '') and (Trim(AArgs.TargetCompiler) = '') then
+  if OneFile.Applies and (OneFile.Stored <> '') and (Trim(AArgs.TargetCompiler) = '') then
     SetTargetCompilerVersion(OneFile.CompilerVer);
-  var IdxBuild: TActiveBuild:= ResolveIndexBuild((if OneFile.Active then OneFile.BuildDproj else AArgs.ProjectPath),
+  var IdxBuild: TActiveBuild:= ResolveIndexBuild((if OneFile.Applies then OneFile.BuildDproj else AArgs.ProjectPath),
     (if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else OneFile.Platform),
     (if AArgs.BuildConfig <> '' then AArgs.BuildConfig else OneFile.Config));
   var PpPlatform: string:= IdxBuild.Platform;
@@ -6467,7 +6467,7 @@ begin
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
   { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
     even when every byte on disk is identical. }
-  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not NoPp, PpPlatform, IdxCfgLimb, AArgs.ResolveOnly);  // dl:ok duplicate-code@ee09 -- REVIEWED 2026-11-05 (extract-136 review; AResolveOnly added to both): DoIndex (single root) and BuildPlanItem (index --all manifest path) run the SAME fingerprint + resolver-staleness gate on purpose (INBOX 2.3); the duplicated block is that gate's call sequence with each path's own args
+  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not NoPp, PpPlatform, IdxCfgLimb, AArgs.ResolveOnly);  // dl:ok duplicate-code@fbcc -- REVIEWED 2026-11-05 (extract-136 review; AResolveOnly added to both): DoIndex (single root) and BuildPlanItem (index --all manifest path) run the SAME fingerprint + resolver-staleness gate on purpose (INBOX 2.3); the duplicated block is that gate's call sequence with each path's own args
 
   { RESOLVER STALENESS -- the sibling question, asked separately because its
     remedy is minutes rather than the ~5 hours a reparse costs.
@@ -6591,7 +6591,7 @@ begin
         if not NoPp then
         begin
           var LibArgs: TArgs:= AArgs;
-          if OneFile.Active then LibArgs.CheckPlatform:= IdxBuild.Platform; { the library the project run reads }
+          if OneFile.Applies then LibArgs.CheckPlatform:= IdxBuild.Platform; { the library the project run reads }
           PPSrc:= InstallPPUnitSource(IdxBuild.Profile, nil, [LintLibraryDb(LibArgs)]);
         end;
         { INCR18 CLOSURE CACHE: what the last walk read out of each unit, reused
@@ -6648,7 +6648,7 @@ begin
         Indexer.SetIncludeContext(not NoPp, CR.SearchPaths);
         for var W: string in CR.Warnings do Writeln('  ', W);
 
-        if OneFile.Active then Folders:= [AArgs.Path]
+        if OneFile.Applies then Folders:= [AArgs.Path]
         else
         begin
           { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
@@ -7193,7 +7193,7 @@ begin
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
     if AArgs.ResolveOnly then CommitAfterResolveOnly(Store, not NoPp, PpPlatform, IdxCfgLimb)
-    else if OneFile.Active then FinishOneFileRun(Store, not NoPp, PpPlatform, IdxCfgLimb)
+    else if OneFile.Applies then FinishOneFileRun(Store, not NoPp, PpPlatform, IdxCfgLimb)
     else CommitIndexerFingerprint(Store, not NoPp, PpPlatform, IdxCfgLimb);
     { --watch: ResolverStale was read ONCE, before the loop. This tick derived
       the edges with the current resolver and stamped it, so a later tick must
