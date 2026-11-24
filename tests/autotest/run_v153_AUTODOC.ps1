@@ -303,7 +303,7 @@ end;
 
 end.
 '@
-function Fp { (& $Exe sql --db $pdb --query "select value from schema_meta where key='indexer_fingerprint'" 2>$null | Where-Object { $_ -match '^v=' }) -join '' }
+function Fp { (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $pdb --query "select value from schema_meta where key='indexer_fingerprint'" 2>$null } | Where-Object { $_ -match '^v=' }) -join '' }
 $ix = Run @('index', '--project', "$prj\P.dproj", '--db', $pdb)
 $fp0 = Fp
 Check 'RESCAN control: the project index carries its own build (win64, cfg)' ($fp0 -match 'plat=win64;cfg=debug;defs=') "$fp0 || $ix"
