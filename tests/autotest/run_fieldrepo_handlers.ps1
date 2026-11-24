@@ -10,7 +10,10 @@
     G7  a hand-edited region is refused (exit 1) and stays byte for byte, the other regions are still written
     G8  a region whose end marker is commented out: refused; G9 a unit that is not ASCII: refused, unchanged
     G10 no handler assigned = skipped, a shared handler = refused; G11 --json; G12 usage and missing files
-  PART 3  gen-maxlen: M1 dry run, M2 apply + compile + run, M3 second run, M4 hand-edited, M5 not ASCII
+    G13 a handler another event of the form names too: refused; G14 a unit that cannot be written: reported (text, json),
+        exit 1, the next unit is still written, no temporary file; G15 one form named twice is planned once
+  PART 3  gen-maxlen: M1 dry run, M2 apply + compile + run, M3 second run, M4 hand-edited, M5 not ASCII,
+          M7 a table named twice = one unit, M8 two tables of one unit = refused
   PART 4  renumber-regions: N1 dry run, N2 apply (or refused while update-orm cannot read DLFR), N3 not ASCII
   A missing toolchain or exe is a FAIL, never a skip.
   Run: pwsh -File tests\autotest\run_fieldrepo_handlers.ps1 [-Exe <drag-lint.exe>] [-SkipUnit]
@@ -56,7 +59,7 @@ function FieldRow($name, $kind = '', $body = @(), $len = '') {
 }
 function EventRow($name, $event, $body) { @("[DL_LAYOUT_EVENTS ORDERS|$name|Field|$event]", 'EVENT_CODE:') + @($body | ForEach-Object { " |$_" }) + '' }
 # a repository made through the product's own text format
-function NewRepo($name, $vat = '0.2', $noteLen = '40') {
+function NewRepo($name, $vat = '0.2', $noteLen = '40', $more = @()) {
   $empty = Join-Path $work "$name.empty.dlrepo"
   $bk = Join-Path $work "$name.txt"
   $null = Run @('repo', 'init', '--repo', $empty)
@@ -65,6 +68,7 @@ function NewRepo($name, $vat = '0.2', $noteLen = '40') {
     (FieldRow 'REFNO' '' @() '12'),
     (FieldRow 'TOTAL' '2' @('if {{QTY}}.IsNull or {{PRICE}}.IsNull then', '  {{TOTAL}}.Clear', 'else', '  {{TOTAL}}.AsFloat := {{QTY}}.AsInteger * {{PRICE}}.AsFloat;')),
     (FieldRow 'VAT' '2' @("{{VAT}}.AsFloat := {{TOTAL}}.AsFloat * $vat;")))
+  $fields = @($more | ForEach-Object { , $_ }) + $fields
   $events = @((EventRow 'ID' 'OnGetText' @('Text := {{ID}}.AsString;')), (EventRow 'NOTE' 'OnGetText' @('var VOpen := ''<'';', 'Text := VOpen + {{NOTE}}.AsString + ''>'';')),
     (EventRow 'NOTE' 'OnSetText' @('{{NOTE}}.AsString := UpperCase(Text);')), (EventRow 'QTY' 'OnChange' @('{{NOTE}}.AsString := ''q'' + {{QTY}}.AsString;')),
     (EventRow 'QTY' 'OnValidate' @('if {{QTY}}.AsInteger < 0 then', '  raise Exception.Create(''negative'');')), (EventRow 'VAT' 'OnGetText' @('Text := {{VAT}}.AsString;')))
@@ -210,7 +214,7 @@ try {
   $r = Gen (NewForm 'json') $x @('--json')
   $j = $null
   try { $j = $r.Out | ConvertFrom-Json } catch { }
-  Check 'G11 --json is one object with the same facts' (($null -ne $j) -and ($j.refused -eq 2 -or $j.refused -eq 1) -and ($j.written -eq 0) -and (@($j.units[0].regions | Where-Object state -eq 'inserted').Count -eq 5)) $r.Out
+  Check 'G11 --json is one object with the same facts' (($null -ne $j) -and ($j.refused -eq 1) -and ($j.not_written -eq 0) -and ($j.units[0].written -eq $false) -and ($j.written -eq 0) -and (@($j.units[0].regions | Where-Object state -eq 'inserted').Count -eq 5)) $r.Out
   Check 'G12a no --dfm = 2' ((Run @('repo', 'gen-handlers', '--repo', $x)).Code -eq 2)
   Check 'G12b a missing repository = 1' ((Gen $d (Join-Path $work 'nope.dlrepo') @()).Code -eq 1)
   Check 'G12c an unknown dataset = 1' ((Gen $d $x @('--dataset', 'nope')).Code -eq 1)
@@ -221,7 +225,38 @@ try {
   $h = Hash (Join-Path $n 'uGen.pas')
   $r = Gen $n $x @('--apply', '--dry-run')
   Check 'G12e --dry-run wins over --apply' (((Hash (Join-Path $n 'uGen.pas')) -eq $h) -and ($r.Out -match 'dry run')) $r.Out
-  Check 'G12f no temporary file is left' (@(Get-ChildItem $work -Recurse -Filter '*.dlfr-tmp').Count -eq 0)
+  # G13
+  $n = NewForm 'multi'
+  Edit (Join-Path $n 'uGen.dfm') '    OnCalcFields = memOrdersCalcFields' "    AfterScroll = memOrdersCalcFields`r`n    OnCalcFields = memOrdersCalcFields"
+  $r = Gen $n $x @('--apply')
+  Check 'G13 a handler that AfterScroll names too: refused, not filled' (($r.Code -eq 1) -and ($r.Out -match 'REFUSED memOrders\.OnCalcFields \(memOrdersCalcFields\): .*more than one event') -and
+    ((ReadText (Join-Path $n 'uGen.pas')) -notmatch 'DLFR memOrders\.OnCalcFields hash=(?!0123)')) $r.Out
+  # G14
+  function Two($a, $b, [string[]]$more) { Run (@('repo', 'gen-handlers', '--repo', $x, '--dfm', ((Join-Path $a 'uGen.dfm') + ';' + (Join-Path $b 'uGen.dfm'))) + $more) }
+  foreach ($how in 'locked', 'readonly') {
+    $a = NewForm "${how}A"
+    $b = NewForm "${how}B"
+    $apas = Join-Path $a 'uGen.pas'
+    $h = Hash $apas
+    $lock = $null
+    if ($how -eq 'locked') { $lock = [IO.File]::Open($apas, 'Open', 'Read', 'Read') } else { [IO.File]::SetAttributes($apas, 'ReadOnly') }
+    try {
+      $r = Two $a $b @('--apply')
+      Check "G14a ${how}: named as not written, the other one as written, exit 1" (($r.Code -eq 1) -and ($r.Out -match ('NOT WRITTEN ' + [regex]::Escape($apas) + ': ')) -and
+        ($r.Out -match ('(?m)^  written ' + [regex]::Escape((Join-Path $b 'uGen.pas')))) -and ($r.Out -match 'written: 1 units, NOT WRITTEN: 1 units') -and ($r.Out -match '10 inserted')) $r.Out
+      Check "G14b ${how}: it is as it was, the other one is done" (((Hash $apas) -eq $h) -and ((ReadText (Join-Path $b 'uGen.pas')) -ceq $new))
+      Check "G14c ${how}: no temporary file is left" ((@(Get-ChildItem $a).Count -eq 3) -and (@(Get-ChildItem $b).Count -eq 3))
+      $r = Two $a $b @('--apply', '--json')
+      $j = $null
+      try { $j = $r.Out | ConvertFrom-Json } catch { }
+      Check "G14d ${how}: --json says the same" (($r.Code -eq 1) -and ($null -ne $j) -and ($j.not_written -eq 1) -and ($j.written -eq 0) -and ($j.units[0].error -ne '') -and ($j.units[1].error -eq '')) $r.Out
+    }
+    finally { if ($lock) { $lock.Dispose() } else { [IO.File]::SetAttributes($apas, 'Normal') } }
+  }
+  # G15
+  $a = NewForm 'twice'
+  $r = Two $a $a.ToUpper() @('--apply')
+  Check 'G15 a form named twice is planned and written once' (($r.Out -match '(?m)^1 units, 1 to write, 0 unchanged, 5 inserted') -and ($r.Out -match 'written: 1 units') -and ((ReadText (Join-Path $a 'uGen.pas')) -ceq $new)) $r.Out
 
   # ---- part 3 ----
   $o = Join-Path $work 'orm'
@@ -254,6 +289,20 @@ try {
   Check 'M5 not ASCII: refused, unchanged' (($r.Code -eq 1) -and ($r.Out -match 'not 7-bit ASCII') -and ((Hash $iu) -eq $h)) $r.Out
   Check 'M6 no --code-dir = 2; a folder that is missing = 2; a named table without unit = 1' (((Run @('repo', 'gen-maxlen', '--repo', $x)).Code -eq 2) -and
     ((Run @('repo', 'gen-maxlen', '--repo', $x, '--code-dir', (Join-Path $work 'nope'))).Code -eq 2) -and ((Len @('--table', 'NOPE')).Code -eq 1))
+
+  WriteText $iu $iold
+  $r = Len @('--table', 'ORDERS,orders', '--apply')
+  Check 'M7 a table named twice: one unit, written' (($r.Code -eq 0) -and ($r.Out -match '(?m)^1 units, 1 to write') -and ($r.Out -match 'written: 1 units') -and ((ReadText $iu) -ceq $inew)) $r.Out
+  $ab = Join-Path $o 'iA_B.pas'
+  WriteText $ab ($iold.Replace('iORDERS', 'iA_B'))
+  $h = Hash $ab
+  $two = NewRepo 'two' '0.2' '40' @((FieldRow 'F' '' @() '5').Replace('ORDERS', 'A$B'), (FieldRow 'F' '' @() '6').Replace('ORDERS', 'A_B'))
+  foreach ($t in 'A$B,A_B', 'A_B') {
+    $r = Len @('--table', $t, '--apply') $two
+    Check "M8 ${t}: the unit of two tables is refused once, both are named, unchanged" (($r.Code -eq 1) -and ($r.Out -match 'REFUSED iA_B.pas: the unit belongs to more than one table: A\$B, A_B') -and
+      ($r.Out -match '(?m)^1 units, 0 to write') -and ((Hash $ab) -eq $h)) $r.Out
+  }
+  [IO.File]::Delete($ab)
 
   # ---- part 4 ----
   WriteText $iu $iold

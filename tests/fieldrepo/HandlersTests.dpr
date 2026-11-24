@@ -10,6 +10,8 @@ program HandlersTests;
 uses
   System.SysUtils,
   System.StrUtils,
+  System.IOUtils,
+  DRagLint.FieldRepo.Kinds in '..\..\src\sql\DRagLint.FieldRepo.Kinds.pas',
   DRagLint.FieldRepo.HandlersRegions in '..\..\src\sql\DRagLint.FieldRepo.HandlersRegions.pas',
   DRagLint.FieldRepo.Handlers in '..\..\src\sql\DRagLint.FieldRepo.Handlers.pas';
 
@@ -195,6 +197,8 @@ begin
   CheckText('N19 ... and neither a handler nor the MAXLEN region nor a text',
     OrmRegionId('DLFR tblA.OnCalcFields hash=0123456789abcdef') + OrmRegionId('DLFR 2a hash=0123456789abcdef') + OrmRegionId('DLFR 2a') +
     OrmRegionId('DB-RAD notes') + OrmRegionId('not DB-RAD 1') + OrmRegionId('DB-RAD'), '');
+  Refused('N21 the end marker of a hand region names an id: the unit stays', '{$REGION ''notes''}|x|{$ENDREGION ''DB-RAD 2''}|' + MARKED);
+  Refused('N22 a half-renamed region: the unit stays', '{$REGION ''DLFR 2''}|x|{$ENDREGION ''DB-RAD 2''}|' + MARKED);
   Refused('N20 a string left open could hide a marker: the unit stays', 'x := ''a|' + MARKED);
 end;
 
@@ -221,6 +225,16 @@ end;
 procedure Refuses(const pName: string; const pFields: TArray<TFrhField>; const pReason: string);
 begin
   Check(pName, CalcText(pFields).StartsWith('!') and ((pReason = '') or ContainsText(CalcText(pFields), pReason)), CalcText(pFields));
+end;
+
+function Deps(const pBody, pSelf: string): string;
+begin
+  try
+    Result := string.Join(',', CalcDependencies(pBody, pSelf));
+  except
+    on E: EFrKindError do
+      Result := E.Message;
+  end;
 end;
 
 procedure TestCalc;
@@ -255,6 +269,19 @@ begin
   Check('C17 event code with an unknown field is refused', not EventRegionContent([Fld('Q', 'tQ')], 'Text := {{Z}}.AsString;', VContent, VReason) and (VReason <> ''));
   Check('C18 OnGetText parameters', FieldEventParams('OnGetText') = 'Sender,Text,DisplayText');
   Check('C19 the other events', (FieldEventParams('OnSetText') = 'Sender,Text') and (FieldEventParams('OnValidate') = 'Sender') and (FieldEventParams('OnChange') = 'Sender') and (FieldEventParams('OnClick') = ''));
+  CheckText('C20 a macro in a string is text', CalcText([Fld('QTY', 'tQ'), Fld('A', 'tA', '{{A}}.AsString := ''it''''s {{QTY}}'' + {{QTY}}.AsString;')]),
+    'begin // A|  tA.AsString := ''it''''s {{QTY}}'' + tQ.AsString;|end;|');
+  CheckText('C21 a macro in a comment is text', CalcText([Fld('A', 'tA', '(* {{NOPE}} *) {{A}}.AsInteger := 1; // {{NOPE}}')]),
+    'begin // A|  (* {{NOPE}} *) tA.AsInteger := 1; // {{NOPE}}|end;|');
+  CheckText('C22 a macro in a multi-line string is text', CalcText([Fld('A', 'tA', '{{A}}.AsString := ''''''' + NL + '  {{NOPE}}' + NL + '  '''''' + {{A}}.AsString;')]),
+    'begin // A|  tA.AsString := ''''''|    {{NOPE}}|    '''''' + tA.AsString;|end;|');
+  CheckText('C23 no dependency in a string or comment', Deps('{{A}} := ''{{B}}''; { {{C} // {{D', 'A'), '');
+  CheckText('C23b ... a real one behind them is', Deps('{{A}} := ''{{B}}'' { x } + {{C}};', 'A'), 'C');
+  Refuses('C24 Exit in a body with bodies behind it', [Fld('A', 'tA', 'if {{A}}.IsNull then Exit;'), Fld('B', 'tB', '{{B}}.AsInteger := 1;')], 'Exit');
+  CheckText('C25 Exit in the last body', CalcText([Fld('A', 'tA', '{{A}}.AsInteger := 1;'), Fld('B', 'tB', 'exit;')]), 'begin // A|  tA.AsInteger := 1;|end;|begin // B|  exit;|end;|');
+  CheckText('C26 a member named Exit, and the word in a string', CalcText([Fld('A', 'tA', '{{A}}.AsInteger := x.Exit; s := ''Exit'';'), Fld('B', 'tB', 'b;')]),
+    'begin // A|  tA.AsInteger := x.Exit; s := ''Exit'';|end;|begin // B|  b;|end;|');
+  CheckText('C27 a lone CR ends a line', CalcText([Fld('A', 'tA', '// one' + #13 + '{{A}}.AsInteger := 1;')]), 'begin // A|  // one|  tA.AsInteger := 1;|end;|');
 end;
 { ---- handlers ---- }
 
@@ -280,11 +307,15 @@ begin
   Result := '  ' + pContent.TrimRight.Replace(NL, NL + '  ') + NL;
 end;
 
+var
+  GNotes: string; // of the last Apply
+
 function Apply(const pText: string; const pJob: TFrhJob; out pState: TFrhState; out pReason: string): string;
 var
   VItem: TFrhItem;
 begin
   Result := ApplyHandlerJob(pText, 'u1.pas', pJob, VItem);
+  GNotes := string.Join('|', VItem.Notes);
   pState := VItem.State;
   pReason := VItem.Reason;
 end;
@@ -293,6 +324,7 @@ procedure TestHandlers;
 var
   VState: TFrhState;
   VReason, VOut, VIn, VRegion, VEdited: string;
+  VJob: TFrhJob;
 
   procedure Inserted(const pName, pText, pWant: string);
   begin
@@ -353,18 +385,18 @@ begin
   Refused('H17 no such handler', FormUnit(L(['begin', 'end;'])).Replace('procedure TfrmA.tblACalcFields', 'procedure TfrmA.Else1'), Job, 'is not in the unit');
   Refused('H18 the handler twice', FormUnit(L(['begin', 'end;']), L(['procedure TfrmA.tblACalcFields(DataSet: TDataSet);', 'begin', 'end;'])), Job, 'more than once');
   Refused('H19 the handler inside {$IFDEF}', FormUnit(L(['begin', 'end;'])).Replace('procedure TfrmA', '{$IFDEF X}' + NL + 'procedure TfrmA').Replace(NL + 'end.', NL + '{$ENDIF}' + NL + 'end.'), Job, 'conditional');
-  Refused('H20 an asm body', FormUnit(L(['asm', '  nop', 'end;'])), Job, '');
-  Refused('H21 content that leaves the handler', FormUnit(L(['begin', 'end;'])), Job(L(['end;', 'procedure P;', 'begin'])), '');
-  Refused('H22 content that does not parse', FormUnit(L(['begin', 'end;'])), Job(L(['x := := 1;'])), '');
+  Refused('H20 an asm body', FormUnit(L(['asm', '  nop', 'end;'])), Job, 'has no begin');
+  Refused('H21 content that leaves the handler', FormUnit(L(['begin', 'end;'])), Job(L(['end;', 'procedure P;', 'begin'])), 'does not stay inside');
+  Refused('H22 content that does not parse', FormUnit(L(['begin', 'end;'])), Job(L(['x := := 1;'])), 'does not parse');
   Refused('H23 another parameter name than the content uses', FormUnit(L(['begin', 'end;'])).Replace('(DataSet:', '(ADs:'), Job(L(['DataSet.Tag := 1;'])), 'DataSet');
   VOut := Apply(FormUnit(L(['begin', 'end;'])).Replace('(DataSet:', '(ADs:'), Job, VState, VReason);
   Check('H24 another parameter name the content does not use', VState = fhsInserted, VReason);
   Refused('H25 nothing to generate, a region is there: reported, left', VIn, Job(''), 'nothing');
   VOut := Apply(FormUnit(L(['begin', 'end;'])), Job(''), VState, VReason);
   Check('H26 nothing to generate, no region', (VState = fhsUnchanged) and (VOut = FormUnit(L(['begin', 'end;']))), VReason);
-  Refused('H27 the insertion point is conditional', FormUnit(L(['begin', '{$IFDEF X}', '  a;', 'end;', '{$ELSE}', 'end;', '{$ENDIF}'])), Job, '');
+  Refused('H27 the insertion point is conditional', FormUnit(L(['begin', '{$IFDEF X}', '  a;', 'end;', '{$ELSE}', 'end;', '{$ENDIF}'])), Job, 'inside a conditional');
   Refused('H28 non-ASCII unit text', FormUnit(L(['begin', '  s := ''' + Char($E9) + ''';', 'end;'])), Job, 'ASCII');
-  Refused('H29 the end marker is commented out', VIn.Replace('  {$ENDREGION ''DLFR tblA.OnCalcFields''}', '  // {$ENDREGION ''DLFR tblA.OnCalcFields''}'), Job, '');
+  Refused('H29 the end marker is commented out', VIn.Replace('  {$ENDREGION ''DLFR tblA.OnCalcFields''}', '  // {$ENDREGION ''DLFR tblA.OnCalcFields''}'), Job, 'region without an end marker');
   VIn := FormUnit(L(['begin', '  a;', '  tA.AsFloat := 1; // one', '  if b then', '    tB.AsFloat := 2;', '  {$IFDEF X}', '  tC.AsFloat := 3;', '  {$ENDIF}', '  // tD.AsFloat := 4;', 'end;']));
   Check('H31 the handler holds the code by hand', HandlerHoldsCode(VIn, 'u1.pas', Job, 'tA.AsFloat  := 1;'));
   Check('H32 ... over several statements', HandlerHoldsCode(VIn, 'u1.pas', Job, 'a;' + NL + 'tA.AsFloat := 1'));
@@ -375,7 +407,34 @@ begin
   Check('H37 ... another string', not HandlerHoldsCode(FormUnit(L(['begin', '  s := ''a'';', 'end;'])), 'u1.pas', Job, 's := ''b'';'));
   Check('H38 ... the same string', HandlerHoldsCode(FormUnit(L(['begin', '  s := ''a'';', 'end;'])), 'u1.pas', Job, 's := ''a'';'));
   Check('H39 ... not a string that differs in blanks only', not HandlerHoldsCode(FormUnit(L(['begin', '  s := ''a  b'';', 'end;'])), 'u1.pas', Job, 's := ''a b'';'));
-  Refused('H30 the region only in a comment, its end marker real', FormUnit(L(['begin']) + '//' + VRegion + L(['end;'])), Job, '');
+  VIn := FormUnit(L(['begin', '  a;']) + Indented(CALC_A) + L(['end;']));
+  Check('H40 the region without its markers is the same code by hand', HandlerHoldsCode(VIn, 'u1.pas', Job, 'tA.AsFloat := 1;'));
+  Check('H40b ... not when it was edited', not HandlerHoldsCode(VIn.Replace(':= 1', ':= 5'), 'u1.pas', Job, 'tA.AsFloat := 1;'));
+  VJob := Job;
+  VJob.Assigns := ['tA'];
+  Refused('H41 an edited block without its markers, calc', VIn.Replace(':= 1', ':= 5'), VJob, 'markers');
+  Refused('H41b ... event', VIn.Replace(':= 1', ':= 5'), Job, 'markers');
+  VOut := Apply(VIn.Replace('tA', 'tZ').Replace('// A', '// Z'), VJob, VState, VReason);
+  Check('H41c a block of another field is hand code', VState = fhsInserted, VReason);
+  VOut := Apply(FormUnit(L(['begin', '  if b then', '  begin', '    tA.AsFloat := 5;', '  end;', 'end;'])), VJob, VState, VReason);
+  Check('H41d a block of a statement is hand code, noted', (VState = fhsInserted) and ContainsText(GNotes, 'assigns tA'), VReason + GNotes);
+  VJob := Job('begin' + NL + '  if b then Exit;' + NL + 'end;' + NL);
+  VOut := Apply(FormUnit(L(['begin', 'end;'])), VJob, VState, VReason);
+  Check('H42 Exit in the region, nothing behind it: no note', (VState = fhsInserted) and (GNotes = ''), GNotes);
+  VOut := Apply(VOut.Replace('OnCalcFields''}' + NL + 'end;', 'OnCalcFields''}' + NL + '  ; c;' + NL + 'end;'), VJob, VState, VReason);
+  Check('H42b ... hand code behind it: noted', (VState = fhsUnchanged) and ContainsText(GNotes, 'behind'), VReason + GNotes);
+  VOut := Apply(FormUnit(L(['begin', '{$IFDEF X}', '  a', '{$ELSE}', '  b;', '{$ENDIF}', 'end;'])), Job, VState, VReason);
+  Check('H43 the last statement is conditional: a semicolon comes first', (VState = fhsInserted) and VOut.Contains('''}' + NL + '  ;' + NL + '  begin // A'), VReason);
+  VJob := Job;
+  VJob.Components := ['tA'];
+  Refused('H44 a local variable hides the component', FormUnit(L(['var', '  n, tA, k: Integer;', 'begin', 'end;'])), VJob, 'local name');
+  Refused('H45 ... a parameter', FormUnit(L(['begin', 'end;'])).Replace('(DataSet: TDataSet)', '(DataSet: TDataSet; tA: Integer)'), VJob, 'local name');
+  Refused('H46 ... an inline variable', FormUnit(L(['begin', '  var k, tA: Integer;', 'end;'])), VJob, 'local name');
+  VOut := Apply(FormUnit(L(['var', '  tAB: Integer;', '  procedure N;', '  begin', '    tA.Tag := 1;', '    if x then tA := nil;', '  end;', 'begin', 'end;'])), VJob, VState, VReason);
+  Check('H47 ... not a use of it', VState = fhsInserted, VReason);
+  VJob.Content := 'begin' + NL + '  var tA := 1;' + NL + 'end;' + NL;
+  Refused('H48 ... a name of the content itself', FormUnit(L(['begin', 'end;'])), VJob, 'local name');
+  Refused('H30 the region only in a comment, its end marker real', FormUnit(L(['begin']) + '//' + VRegion + L(['end;'])), Job, 'end marker without a region');
 end;
 
 { ---- MAXLEN ---- }
@@ -433,11 +492,63 @@ begin
   Check('M13 a name with $', Put(IUnit(L(['', 'implementation', 'end.'])), [Len('F$X', 10)]).Contains('ORD_F_X_MAXLEN = 10;'));
   VIn := IUnit(L(['', 'implementation', 'end.'])).Replace('type' + NL, '{$IFDEF X}' + NL + 'type' + NL).Replace('  end;' + NL, '  end;' + NL + '{$ENDIF}' + NL);
   Check('M14 section 2 inside {$IFDEF}: refused', (Put(VIn, [Len('A', 10)]) = VIn) and (VItem.State = fhsRefused), VItem.Reason);
+  VIn := IUnit(L(['', 'implementation', 'function B(N: Integer): Boolean;', 'begin', '  Result := ORD_A_MAXLEN = 9;', 'end;', 'end.']));
+  Check('M16 a comparison is no constant', Put(VIn, [Len('A', 10)]).Contains('ORD_A_MAXLEN = 10;') and (Length(VItem.Notes) = 0), VItem.Reason);
+  VIn := L(['unit iORD;', 'interface', 'type', '  TX = class', '  const', '    ORD_A_MAXLEN = 9;', '  end;', '  ImcORD = interface', '{$REGION ''DB-RAD 2''}', '{$ENDREGION ''DB-RAD 2''}', '  end;', 'implementation', 'end.']);
+  Check('M17 a class constant is another name', Put(VIn, [Len('A', 10)]).Contains(NL + '  ORD_A_MAXLEN = 10;') and (Length(VItem.Notes) = 0), VItem.Reason);
+  VIn := IUnit(L(['', 'implementation', '{$IFDEF X}', 'const', '  ORD_A_MAXLEN = 10;', '{$ENDIF}', 'end.']));
+  Check('M18 a constant inside a conditional: left out and noted', (Put(VIn, [Len('A', 10)]) = VIn) and (Length(VItem.Notes) = 1) and ContainsText(VItem.Notes[0], 'conditional'), VItem.Reason);
+  VIn := L(['unit iORD;', 'interface', 'type', '  TORD = class', '  type', '    TR = record', '{$REGION ''DB-RAD 2''}', '    A: Integer;', '{$ENDREGION ''DB-RAD 2''}', '    end;', '    procedure P;', '  end;', 'implementation', 'end.']);
+  Check('M19 the constants would go into a class: refused', (Put(VIn, [Len('A', 10)]) = VIn) and (VItem.State = fhsRefused) and (VItem.Reason <> ''), VItem.Reason);
+  VIn := IUnit(L(['', 'implementation', 'procedure X; begin := end;', 'end.']));
+  Check('M20 a unit that does not parse: refused', (Put(VIn, [Len('A', 10)]) = VIn) and (VItem.State = fhsRefused) and ContainsText(VItem.Reason, 'parse'), VItem.Reason);
   VIn := IUnit(L(['', 'implementation', 'end.'])).Replace('{$REGION', '{$IFDEF X}' + NL + '{$REGION').Replace('  end;' + NL, '{$ENDIF}' + NL + '  end;' + NL);
   Check('M15 only section 2 inside {$IFDEF}: refused', (Put(VIn, [Len('A', 10)]) = VIn) and (VItem.State = fhsRefused), VItem.Reason);
 end;
 
 { ---- ASCII ---- }
+
+function SaveError(const pFile, pOld, pNew: string): string;
+begin
+  Result := '';
+  try
+    if not SaveAsciiUnit(pFile, pOld, pNew) then
+      Result := 'not written';
+  except
+    on E: EDlfrError do
+      Result := 'EDlfrError ' + E.Message;
+    on E: Exception do
+      Result := E.ClassName + ' ' + E.Message;
+  end;
+end;
+
+procedure TestSave;
+var
+  VDir, VFile: string;
+begin
+  VDir := TPath.Combine(TPath.GetTempPath, 'dl-handlers-' + TPath.GetRandomFileName);
+  TDirectory.CreateDirectory(VDir);
+  try
+    VFile := TPath.Combine(VDir, 'u1.pas');
+    TFile.WriteAllText(VFile, 'old', TEncoding.ASCII);
+    CheckText('W1 the same text is not written', SaveError(VFile, 'old', 'old'), 'not written');
+    CheckText('W2 written', SaveError(VFile, 'old', 'new') + TFile.ReadAllText(VFile), 'new');
+    Check('W3 the file changed meanwhile: EDlfrError, kept', SaveError(VFile, 'old', 'x').StartsWith('EDlfrError the file changed') and (TFile.ReadAllText(VFile) = 'new'));
+    Check('W4 new text that is not ASCII: EDlfrError, kept', SaveError(VFile, 'new', Char($E9)).StartsWith('EDlfrError the new text') and (TFile.ReadAllText(VFile) = 'new'));
+    CheckText('W2b the name on disk keeps its letter case', SaveError(VFile.ToUpper, 'new', 'new2') + SaveError(VFile, 'new2', 'new') + ExtractFileName(TDirectory.GetFiles(VDir)[0]), 'u1.pas');
+    SaveError(VFile.ToUpper, 'new', 'new2');
+    CheckText('W2c', ExtractFileName(TDirectory.GetFiles(VDir)[0]), 'u1.pas');
+    SaveError(VFile.ToUpper, 'new2', 'new');
+    TFile.SetAttributes(VFile, [TFileAttribute.faReadOnly]);
+    Check('W5 a read-only unit: EDlfrError, kept', SaveError(VFile, 'new', 'x').StartsWith('EDlfrError cannot replace') and (TFile.ReadAllText(VFile) = 'new'));
+    TFile.SetAttributes(VFile, [TFileAttribute.faNormal]);
+    Check('W6 no temporary file is left', Length(TDirectory.GetFiles(VDir)) = 1);
+    TDirectory.CreateDirectory(VFile + '.dlfr-tmp');
+    Check('W7 the temporary file cannot be written: EDlfrError, kept', SaveError(VFile, 'new', 'x').StartsWith('EDlfrError cannot write') and (TFile.ReadAllText(VFile) = 'new'), SaveError(VFile, 'new', 'x'));
+  finally
+    TDirectory.Delete(VDir, True);
+  end;
+end;
 
 procedure TestAscii;
 begin
@@ -446,19 +557,21 @@ begin
   Check('A3 a BOM is not ASCII', FirstNonAscii([$EF, $BB, $BF, 65]) = 0);
 end;
 
+procedure Run(const pTests: array of TProc);
+var
+  VTest: TProc;
 begin
-  try
-    TestScan;
-    TestRegions;
-    TestRenumber;
-    TestCalc;
-    TestHandlers;
-    TestMaxLen;
-    TestAscii;
-  except
-    on E: Exception do
-      Check('no exception', False, E.ClassName + ': ' + E.Message);
-  end;
+  for VTest in pTests do
+    try
+      VTest();
+    except
+      on E: Exception do
+        Check('no exception', False, E.ClassName + ': ' + E.Message);
+    end;
+end;
+
+begin
+  Run([TestScan, TestRegions, TestRenumber, TestCalc, TestHandlers, TestMaxLen, TestAscii, TestSave]);
   Writeln(Format('Summary: pass=%d fail=%d', [GPass, GFail]));
   if GFail > 0 then
     Halt(1);

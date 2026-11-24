@@ -56,6 +56,8 @@ type
     Content: string;
     /// <summary>Components the content assigns: hand code that assigns one too is noted.</summary>
     Assigns: TArray<string>;
+    /// <summary>Field components of the dataset: a local name of the handler must not hide one the content uses.</summary>
+    Components: TArray<string>;
   end;
 
   /// <summary>What happens to one region.</summary>
@@ -105,8 +107,8 @@ const
 /// <param name="pContent">Receives the lines (CRLF); '' when no field has a body.</param>
 /// <param name="pReason">Receives why nothing can be generated.</param>
 /// <returns>False for a dependency cycle, a field the dataset does not have or has twice, a body that is not ASCII,
-/// holds a directive, or leaves a comment or string open.</returns>
-/// <remarks>A field that reads itself is no cycle.</remarks>
+/// holds a directive, leaves a comment or string open, or calls Exit while the block of another field follows.</returns>
+/// <remarks>A field that reads itself is no cycle. A macro in a string or a comment is text.</remarks>
 function CalcRegionContent(const pFields: TArray<TFrhField>; out pContent, pReason: string): Boolean;  // dl:ok unused-public-symbol@2b43 -- REVIEWED 2026-11-23 TT-HANDLERS: pure part of the generator, asserted directly by tests/fieldrepo/HandlersTests.dpr; outside this project index
 
 /// <summary>Text of a field-event region.</summary>
@@ -127,8 +129,8 @@ function FieldEventParams(const pEvent: string): string;  // dl:ok unused-public
 /// <param name="pFile">Unit path.</param>
 /// <param name="pJob">Names the handler and the region (the region itself is not hand code).</param>
 /// <param name="pCode">Statements without macros.</param>
-/// <returns>True when consecutive top-level statements of the handler are that code, blanks between words and comments
-/// aside.</returns>
+/// <returns>True when consecutive top-level statements of the handler are that code, in a block of its own or not, blanks
+/// between words and comments aside.</returns>
 function HandlerHoldsCode(const pText, pFile: string; const pJob: TFrhJob; const pCode: string): Boolean;  // dl:ok unused-public-symbol@e9d0 -- REVIEWED 2026-11-23 TT-HANDLERS: pure part of the generator, asserted directly by tests/fieldrepo/HandlersTests.dpr; outside this project index
 
 /// <summary>Brings one region of one handler up to date.</summary>
@@ -138,15 +140,18 @@ function HandlerHoldsCode(const pText, pFile: string; const pJob: TFrhJob; const
 /// <param name="pItem">Receives the outcome.</param>
 /// <returns>The new text; pText itself unless the state is fhsInserted or fhsUpdated.</returns>
 /// <remarks>Refused: a hand-edited region, a region outside its handler, a missing or repeated or conditional handler,
-/// content that does not parse inside it, a unit that is not ASCII.</remarks>
+/// content that does not parse inside it, a component hidden by a local name, a unit that is not ASCII. A new region is
+/// also refused beside a top-level block that looks like one without its markers.</remarks>
 function ApplyHandlerJob(const pText, pFile: string; const pJob: TFrhJob; out pItem: TFrhItem): string;  // dl:ok unused-public-symbol@bbd5 -- REVIEWED 2026-11-23 TT-HANDLERS: pure part of the generator, asserted directly by tests/fieldrepo/HandlersTests.dpr; outside this project index
 
 /// <summary>Brings the MAXLEN region of an interface unit up to date.</summary>
 /// <param name="pText">Unit text.</param>
 /// <param name="pTable">Table name.</param>
 /// <param name="pColumns">Its string columns, in the order to write.</param>
-/// <param name="pItem">Receives the outcome; a constant the unit declares by hand is left out and noted when it differs.</param>
+/// <param name="pItem">Receives the outcome; a constant the unit declares by hand is left out and noted when it differs or
+/// stands inside a conditional.</param>
 /// <returns>The new text; pText itself unless the state is fhsInserted or fhsUpdated.</returns>
+/// <remarks>Refused: a unit that does not parse before or after the edit, a place inside another declaration.</remarks>
 function ApplyMaxLen(const pText, pTable: string; const pColumns: TArray<TFrhLength>; out pItem: TFrhItem): string;  // dl:ok unused-public-symbol@58b1 -- REVIEWED 2026-11-23 TT-HANDLERS: pure part of the generator, asserted directly by tests/fieldrepo/HandlersTests.dpr; outside this project index
 
 /// <summary>Plans the handler regions of a form unit.</summary>
@@ -171,10 +176,18 @@ implementation
 
 uses
   System.StrUtils,
+  System.Math,
   Data.DB,
   System.Generics.Collections,
+  System.Classes,
+  System.IOUtils,
   System.RegularExpressions,
   TreeSitter,
+  DRagLint.Core.Model,
+  DRagLint.Core.Interfaces,
+  DRagLint.Core.Encoding,
+  DRagLint.Parser.DFM,
+  DRagLint.Parser.DFMProps,
   DRagLint.LSP.SyntaxTree,
   DRagLint.FieldRepo.Kinds,
   DRagLint.FieldRepo.SchemaFacts,
@@ -192,6 +205,12 @@ const
   N_HEAD = 'declProc';
   N_NAME = 'genericDot';
   N_BLOCK = 'block';
+  N_TYPE = 'declType';
+  N_CONST = 'declConst';
+  FIELD_OF_NAME = 'name';
+  DFM_IDENT = 'ident';
+  DFM_SIGNATURE = 'TPF0';
+  CONDITIONALS: array[0..7] of string = ('IF', 'IFDEF', 'IFNDEF', 'IFOPT', 'ELSE', 'ELSEIF', 'ENDIF', 'IFEND');
   KW_BEGIN = 'begin';
   KW_END = 'end';
   EVENT_CALC = 'OnCalcFields';
@@ -213,6 +232,13 @@ const
   SQL_FIELDS = 'SELECT "FIELD_NAME" FROM "DL_FIELDS_INFO" WHERE UPPER("TABLE_NAME") = UPPER(:T) ORDER BY "FIELD_NAME"';
   PAT_NO_SEMICOLON_AFTER = '(?:;|\bbegin)$';
   PAT_EMPTY_FIRST_LINE = '^\s*;\s*\n';
+  PAT_EXIT = '(?<![.&\w])Exit\b';
+  { the rest of these patterns follows a word }
+  PAT_ASSIGNED = '\s*\.\s*(?:\w+\s*:=|Clear\b)';
+  PAT_DECLARED = '\s*(?:,\s*\w+\s*)*(?::(?!=)|=)';
+  PAT_INLINE_FRONT = '\b(?:var|const)\s+(?:\w+\s*,\s*)*';
+  PAT_CONST_VALUE = '=\s*([^;]*)';
+  PAT_MAXLEN_NAME = '^\s*(\w+_MAXLEN) = ';
   PAT_PARAM_MODE = '^\s*(?:const|var|out)\s+';
   PAT_AFTER_SECTION = '\G\s*end\s*;';
   PAT_NEXT_SECTION = '\G\s*(?:implementation|const|resourcestring|type|var|threadvar|procedure|function|exports)\b';
@@ -225,6 +251,13 @@ type
     EndPos: Integer;    // the 'end' of the body
     MethodCount: Integer; // implementations in the whole unit
     Params: TArray<string>;
+  end;
+
+  { A constant declared at unit level. }
+  TUnitConst = record
+    Name: string;
+    Value: string;
+    InConditional: Boolean;
   end;
 
   { The dependency order of the calculated fields. }
@@ -273,7 +306,7 @@ end;
 
 function LinesOf(const pText: string): TArray<string>;
 begin
-  Result := pText.Replace(CR, '').TrimRight([LF]).Split([LF]);
+  Result := pText.Replace(DLFR_CRLF, LF).Replace(CR, LF).TrimRight([LF]).Split([LF]);
 end;
 
 { pText with every non-empty line indented. }
@@ -444,7 +477,14 @@ begin
   VBlocks := nil;
   for VField in VOrdered do
     if ExpandBody(pFields, VField.Body, VCode, pReason) then
+    begin
       VBlocks := VBlocks + [BlockText(VCode, VField.Column)];
+      if (Length(VBlocks) < Length(VOrdered)) and Rx(PAT_EXIT).IsMatch(ScanPascal(VCode).Code) then
+      begin
+        pReason := VField.Column + ': the body calls Exit, which would skip the fields calculated after it';
+        Exit(False);
+      end;
+    end;
   pContent := string.Join('', VBlocks);
   Result := True;
 end;
@@ -688,6 +728,31 @@ begin
       Exit(Format('the code uses the parameter %s, which %s does not have under that name', [pJob.StdParams[VI], pJob.Method]));
 end;
 
+{ '' or the component of the dataset that a name of the handler or of the content hides from the content. }
+function HiddenProblem(const pJob: TFrhJob; const pScan: TPasScan; const pSpot: TMethodSpot): string;
+var
+  VName, VCode, VDecl, VAll: string;
+begin
+  Result := '';
+  VCode := ScanPascal(pJob.Content).Code;
+  VDecl := Copy(pScan.Code, pSpot.First, pSpot.BeginPos - pSpot.First);
+  VAll := Copy(pScan.Code, pSpot.First, pSpot.EndPos - pSpot.First) + VCode;
+  for VName in pJob.Components do
+    if Rx('(?<![.&\w])' + VName + '\b').IsMatch(VCode)
+      and (Rx('(?<![.&\w])' + VName + PAT_DECLARED).IsMatch(VDecl) or Rx(PAT_INLINE_FRONT + VName + '\b').IsMatch(VAll)) then
+      Exit(Format('%s is also a local name of %s: the code would not reach the component', [VName, pJob.Method]));
+end;
+
+function HasConditional(const pScan: TPasScan; pFirst, pLast: Integer): Boolean;
+var
+  VDirective: TPasDirective;
+begin
+  Result := False;
+  for VDirective in pScan.Directives do
+    if (VDirective.Start >= pFirst) and (VDirective.Start < pLast) and MatchStr(VDirective.Keyword, CONDITIONALS) then
+      Exit(True);
+end;
+
 function InsertRegion(const pText: string; const pJob: TFrhJob; const pScan: TPasScan; const pSpot: TMethodSpot): string;
 var
   VEol, VIndent, VContent: string;
@@ -697,7 +762,7 @@ begin
   VPos := pSpot.EndPos;
   VIndent := LineIndent(pText, VPos);
   VContent := IndentLines(pJob.Content, VIndent + INDENT, VEol);
-  if not Rx(PAT_NO_SEMICOLON_AFTER).IsMatch(Copy(pScan.Code, pSpot.BeginPos, VPos - pSpot.BeginPos).TrimRight) then
+  if HasConditional(pScan, pSpot.BeginPos, VPos) or not Rx(PAT_NO_SEMICOLON_AFTER).IsMatch(Copy(pScan.Code, pSpot.BeginPos, VPos - pSpot.BeginPos).TrimRight) then
     VContent := VIndent + INDENT + EMPTY_STATEMENT + VEol + VContent;
   VContent := RenderDlfrRegion(pJob.RegionId, VContent, VIndent + INDENT, VEol);
   if (VPos - Length(VIndent) > 1) and (pText[VPos - Length(VIndent) - 1] = LF) then
@@ -744,15 +809,18 @@ end;
 { Hand code around the region that a reader should know of. }
 function HandNotes(const pText: string; const pJob: TFrhJob; const pSpot: TMethodSpot; const pRegion: TDlfrRegion): TArray<string>;
 var
-  VCode, VName: string;
+  VAll, VCode, VName: string;
 begin
   Result := nil;
-  VCode := ScanPascal(pText).Code;
-  VCode := Copy(VCode, pSpot.BeginPos, pRegion.Start.Start - pSpot.BeginPos);
-  if Rx('\bExit\b').IsMatch(VCode) then
+  VAll := ScanPascal(pText).Code;
+  VCode := Copy(VAll, pSpot.BeginPos, pRegion.Start.Start - pSpot.BeginPos);
+  if Rx(PAT_EXIT).IsMatch(VCode) then
     Result := ['hand code can Exit before the region'];
+  if Rx(PAT_EXIT).IsMatch(Copy(VAll, pRegion.Body.First, pRegion.Body.Last - pRegion.Body.First))
+    and (Copy(VAll, pRegion.Finish.Finish, pSpot.EndPos - pRegion.Finish.Finish).Trim([' ', EMPTY_STATEMENT, CR, LF]) <> '') then
+    Result := Result + ['the region can Exit before the hand code behind it'];
   for VName in pJob.Assigns do
-    if Rx('\b' + VName + '\s*\.\s*\w+\s*:=').IsMatch(VCode) then
+    if Rx('\b' + VName + PAT_ASSIGNED).IsMatch(VCode) then
       Result := Result + ['hand code before the region assigns ' + VName + ' too; the region runs after it'];
 end;
 
@@ -762,21 +830,27 @@ var
   VScan: TPasScan;
   VSpan: TPasSpan;
   VOpen: string;
-  VOut: TArray<string>;
+  VOut, VGap: TArray<string>; // VGap = code and blanks for comments since the last string
   VPos: Integer;
 begin
   VScan := ScanPascal(pCode);
   VOut := nil;
+  VGap := nil;
   VPos := 1;
   for VSpan in VScan.Spans do
   begin
-    VOut := VOut + [Rx('\s+').Replace(Copy(pCode, VPos, VSpan.First - VPos), ' ')];
+    VGap := VGap + [Copy(pCode, VPos, VSpan.First - VPos)];
     VOpen := Copy(pCode, VSpan.First, Length(OPEN_PAREN_DIRECTIVE));
-    VOut := VOut + [if VOpen.StartsWith('''') or VOpen.StartsWith(OPEN_DIRECTIVE) or (VOpen = OPEN_PAREN_DIRECTIVE) then
-      Copy(pCode, VSpan.First, VSpan.Last - VSpan.First) else ' '];
+    if VOpen.StartsWith('''') or VOpen.StartsWith(OPEN_DIRECTIVE) or (VOpen = OPEN_PAREN_DIRECTIVE) then
+    begin
+      VOut := VOut + [Rx('\s+').Replace(string.Join('', VGap), ' '), Copy(pCode, VSpan.First, VSpan.Last - VSpan.First)];
+      VGap := nil;
+    end
+    else
+      VGap := VGap + [' '];
     VPos := VSpan.Last;
   end;
-  Result := (string.Join('', VOut) + Rx('\s+').Replace(Copy(pCode, VPos), ' ')).Trim([' ', EMPTY_STATEMENT]);
+  Result := (string.Join('', VOut) + Rx('\s+').Replace(string.Join('', VGap) + Copy(pCode, VPos), ' ')).Trim([' ', EMPTY_STATEMENT]);
 end;
 
 { True when statements of the block that follow one another are pWanted. }
@@ -801,35 +875,77 @@ begin
   end;
 end;
 
-function HandlerHoldsCode(const pText, pFile: string; const pJob: TFrhJob; const pCode: string): Boolean;
+{ Calls pVisit with the body of the method; not at all when there is no such method. }
+procedure WithMethodBlock(const pText, pFile, pMethod: string; const pVisit: TProc<TTSNode>);
 var
-  VRegion: TDlfrRegion;
-  VText, VReason: string;
   VTree: TTSTree;
   VMethods: TList<TTSNode>;
   VNode, VBlock: TTSNode;
 begin
-  Result := False;
-  if Trim(pCode) = '' then
-    Exit;
-  VText := pText;
-  if FindDlfrRegion(VText, pJob.RegionId, VRegion, VReason) = drsIntact then
-    VText := Copy(VText, 1, VRegion.Start.Start - 1) + Copy(VText, VRegion.Finish.Finish);
-  VTree := ParseDelphiUtf8(TEncoding.ASCII.GetBytes(VText), pFile);
+  VTree := ParseDelphiUtf8(TEncoding.ASCII.GetBytes(pText), pFile);
   if VTree = nil then
     Exit;
   VMethods := TList<TTSNode>.Create;
   try
     CollectMethods(VTree.RootNode, VMethods);
-    if (OneMethod(VText, VMethods, pJob.Method, VNode) = '') and ChildOfType(VNode, N_BLOCK, VBlock) then
-      Result := BlockHolds(VText, ScanPascal(VText), VBlock, CanonicalCode(pCode));
+    if (OneMethod(pText, VMethods, pMethod, VNode) = '') and ChildOfType(VNode, N_BLOCK, VBlock) then
+      pVisit(VBlock);
   finally
     VMethods.Free;
     VTree.Free;
   end;
 end;
 
-{ The edited text, or '' with the reason. }function EditHandler(const pText, pFile: string; const pJob: TFrhJob; pState: TDlfrRegionState; const pRegion: TDlfrRegion;
+function HandlerHoldsCode(const pText, pFile: string; const pJob: TFrhJob; const pCode: string): Boolean;
+var
+  VRegion: TDlfrRegion;
+  VText, VReason: string;
+  VHolds: Boolean;
+begin
+  if Trim(pCode) = '' then
+    Exit(False);
+  VText := pText;
+  if FindDlfrRegion(VText, pJob.RegionId, VRegion, VReason) = drsIntact then
+    VText := Copy(VText, 1, VRegion.Start.Start - 1) + Copy(VText, VRegion.Finish.Finish);
+  VHolds := False;
+  WithMethodBlock(VText, pFile, pJob.Method,
+    procedure(pBlock: TTSNode)
+    begin
+      VHolds := BlockHolds(VText, ScanPascal(VText), pBlock, CanonicalCode(pCode))
+        or BlockHolds(VText, ScanPascal(VText), pBlock, CanonicalCode(BlockText(pCode, '')));
+    end);
+  Result := VHolds;
+end;
+
+{ '' or why a new region may double code: a top-level block that can be a region whose markers were deleted. Only the
+  blocks that assign one of the fields count in a handler of a whole dataset. }
+function UnmarkedProblem(const pText, pFile: string; const pJob: TFrhJob): string;
+var
+  VFound: Boolean;
+begin
+  VFound := False;
+  WithMethodBlock(pText, pFile, pJob.Method,
+    procedure(pBlock: TTSNode)
+    var
+      VI: Integer;
+      VCode, VName: string;
+    begin
+      for VI := 0 to Integer(pBlock.NamedChildCount) - 1 do
+        if pBlock.NamedChild(VI).NodeType = N_BLOCK then
+        begin
+          VCode := ScanPascal(NodeText(pText, pBlock.NamedChild(VI))).Code;
+          VFound := VFound or (pJob.Assigns = nil);
+          for VName in pJob.Assigns do
+            VFound := VFound or Rx('\b' + VName + PAT_ASSIGNED).IsMatch(VCode);
+        end;
+    end);
+  Result := if VFound then
+    'the handler holds a begin .. end block that may be this region without its markers: delete the block or put the markers back'
+    else '';
+end;
+
+{ The edited text, or '' with the reason. }
+function EditHandler(const pText, pFile: string; const pJob: TFrhJob; pState: TDlfrRegionState; const pRegion: TDlfrRegion;
   out pReason: string): string;
 var
   VScan: TPasScan;
@@ -840,6 +956,10 @@ begin
   pReason := FindMethodSpot(pText, pFile, pJob.Method, VScan, VSpot);
   if pReason = '' then
     pReason := ParamProblem(pJob, VSpot);
+  if pReason = '' then
+    pReason := HiddenProblem(pJob, VScan, VSpot);
+  if (pReason = '') and (pState = drsAbsent) then
+    pReason := UnmarkedProblem(pText, pFile, pJob);
   if (pReason = '') and (pState = drsIntact) and not IsInMethod(pRegion, VSpot) then
     pReason := 'the region is not inside ' + pJob.Method;
   if pReason <> '' then
@@ -901,42 +1021,117 @@ begin
   Result := (pTable + '_' + pColumn + '_MAXLEN').ToUpper.Replace('$', '_');
 end;
 
-{ The value of a constant declared by hand; False = not declared. }
-function HandConstant(const pCode, pName: string; out pValue: string): Boolean;
+{ Constants of the unit itself; those of methods and types are other names. }
+procedure CollectConsts(const pText: string; const pNode: TTSNode; const pScan: TPasScan; var pConsts: TArray<TUnitConst>);
+var
+  VI: Integer;
+  VConst: TUnitConst;
+  VMatch: TMatch;
+begin
+  if pNode.NodeType = N_CONST then
+  begin
+    VConst.Name := NodeText(pText, pNode.ChildByField(FIELD_OF_NAME));
+    VMatch := Rx(PAT_CONST_VALUE).Match(ScanPascal(NodeText(pText, pNode)).Code);
+    VConst.Value := if VMatch.Success then Trim(VMatch.Groups[1].Value) else '';
+    VConst.InConditional := pScan.IfDepthAt(Integer(pNode.StartByte) + 1) > 0;
+    pConsts := pConsts + [VConst];
+  end
+  else if not MatchStr(pNode.NodeType, [N_PROC, N_TYPE]) then
+    for VI := 0 to Integer(pNode.NamedChildCount) - 1 do
+      CollectConsts(pText, pNode.NamedChild(VI), pScan, pConsts);
+end;
+
+{ False = the unit does not parse. }
+function UnitConsts(const pText: string; out pConsts: TArray<TUnitConst>): Boolean;
+var
+  VTree: TTSTree;
+begin
+  pConsts := nil;
+  VTree := ParseDelphiUtf8(TEncoding.ASCII.GetBytes(pText));
+  if VTree = nil then
+    Exit(False);
+  try
+    Result := not VTree.RootNode.HasError;
+    if Result then
+      CollectConsts(pText, VTree.RootNode, ScanPascal(pText), pConsts);
+  finally
+    VTree.Free;
+  end;
+end;
+
+{ The constant of a name; False = none. }
+function FindConst(const pConsts: TArray<TUnitConst>; const pName: string; out pConst: TUnitConst): Boolean;
+var
+  VConst: TUnitConst;
+begin
+  Result := False;
+  pConst := Default(TUnitConst);
+  for VConst in pConsts do
+    if SameText(VConst.Name, pName) then
+    begin
+      pConst := VConst;
+      Exit(True);
+    end;
+end;
+
+{ True when something inside a conditional looks like a declaration of the constant: a build may have it or not. }
+function InConditional(const pScan: TPasScan; const pName: string): Boolean;
 var
   VMatch: TMatch;
 begin
-  VMatch := Rx('\b' + pName + '\b\s*(?::\s*\w+\s*)?=\s*([^;]*);').Match(pCode);
-  Result := VMatch.Success;
-  pValue := if Result then Trim(VMatch.Groups[1].Value) else '';
+  Result := False;
+  for VMatch in Rx('\b' + pName + '\b\s*(?::\s*\w+\s*)?=').Matches(pScan.Code) do
+    Result := Result or (pScan.IfDepthAt(VMatch.Index) > 0);
 end;
 
-{ pCode with the region blanked. }
-function WithoutRegion(const pCode: string; const pRegion: TDlfrRegion): string;
-begin
-  Result := Copy(pCode, 1, pRegion.Start.Start - 1) + StringOfChar(' ', pRegion.Finish.Finish - pRegion.Start.Start) +
-    Copy(pCode, pRegion.Finish.Finish);
-end;
-
-function MaxLenContent(const pCode, pTable, pEol: string; const pColumns: TArray<TFrhLength>; var pItem: TFrhItem): string;
+{ '' or why the new text must not be kept: it parses and every generated constant is one of the unit. }
+function MaxLenProblem(const pNew, pContent: string): string;
 var
+  VConsts: TArray<TUnitConst>;
+  VFound: TUnitConst;
+  VMatch: TMatch;
+begin
+  if not UnitConsts(pNew, VConsts) then
+    Exit('the unit would not parse');
+  Result := '';
+  for VMatch in TRegEx.Create(PAT_MAXLEN_NAME, [roMultiLine]).Matches(pContent) do
+    if not FindConst(VConsts, VMatch.Groups[1].Value, VFound) then
+      Result := VMatch.Groups[1].Value + ' would not be a constant of the unit';
+end;
+
+{ pText with the region blanked. }
+function WithoutRegion(const pText: string; const pRegion: TDlfrRegion): string;
+begin
+  Result := Copy(pText, 1, pRegion.Start.Start - 1) + StringOfChar(' ', pRegion.Finish.Finish - pRegion.Start.Start) +
+    Copy(pText, pRegion.Finish.Finish);
+end;
+
+{ pText = the unit without the region. }
+function MaxLenContent(const pText, pTable: string; const pConsts: TArray<TUnitConst>; const pColumns: TArray<TFrhLength>; var pItem: TFrhItem): string;
+var
+  VScan: TPasScan;
   VColumn: TFrhLength;
-  VName, VHand: string;
+  VName, VEol: string;
+  VHand: TUnitConst;
   VLines: TArray<string>;
 begin
   VLines := nil;
+  VScan := ScanPascal(pText);
+  VEol := EolOf(pText);
   for VColumn in pColumns do
   begin
     VName := MaxLenName(pTable, VColumn.Column);
     if not IsValidIdent(VName) then
       pItem.Notes := pItem.Notes + [VName + ' is not an identifier: left out']
-    else if not HandConstant(pCode, VName, VHand) then
+    else if InConditional(VScan, VName) then
+      pItem.Notes := pItem.Notes + [VName + ' is declared inside a conditional: left out']
+    else if not FindConst(pConsts, VName, VHand) then
       VLines := VLines + [Format('%s/// <summary>Declared length of %s.%s in characters.</summary>%s%s%s = %d;%s',
-        [INDENT, pTable, VColumn.Column, pEol, INDENT, VName, VColumn.Length, pEol])]
-    else if VHand <> IntToStr(VColumn.Length) then
-      pItem.Notes := pItem.Notes + [Format('%s is declared by hand as %s, the repository says %d', [VName, VHand, VColumn.Length])];
+        [INDENT, pTable, VColumn.Column, VEol, INDENT, VName, VColumn.Length, VEol])]
+    else if VHand.Value <> IntToStr(VColumn.Length) then
+      pItem.Notes := pItem.Notes + [Format('%s is declared by hand as %s, the repository says %d', [VName, VHand.Value, VColumn.Length])];
   end;
-  Result := if VLines = nil then '' else 'const' + pEol + string.Join('', VLines);
+  Result := if VLines = nil then '' else 'const' + VEol + string.Join('', VLines);
 end;
 
 { Offset of the line behind the interface type that holds section 2; 0 with the reason. }
@@ -988,10 +1183,14 @@ begin
     Result := Copy(pText, 1, VPos - 1) + RenderDlfrRegion(FRH_MAXLEN_ID, pContent, '', EolOf(pText)) + Copy(pText, VPos);
   end;
   if (FindDlfrRegion(Result, FRH_MAXLEN_ID, VCheck, VReason) = drsIntact) and (VCheck.Content(Result) = pContent) then
+    VReason := MaxLenProblem(Result, pContent)
+  else if VReason = '' then
+    VReason := 'the region is lost';
+  if VReason = '' then
     pItem.State := if Result = pText then fhsUnchanged else if pState = drsIntact then fhsUpdated else fhsInserted
   else
   begin
-    pItem.Reason := if VReason = '' then 'the region is lost' else VReason;
+    pItem.Reason := VReason;
     Result := pText;
   end;
 end;
@@ -1000,7 +1199,8 @@ function ApplyMaxLen(const pText, pTable: string; const pColumns: TArray<TFrhLen
 var
   VRegion: TDlfrRegion;
   VState: TDlfrRegionState;
-  VCode, VContent: string;
+  VConsts: TArray<TUnitConst>;
+  VHand, VContent: string;
 begin
   Result := pText;
   pItem := Default(TFrhItem);
@@ -1015,10 +1215,13 @@ begin
   VState := FindDlfrRegion(pText, FRH_MAXLEN_ID, VRegion, pItem.Reason);
   if VState in [drsEdited, drsUnusable] then
     Exit;
-  VCode := ScanPascal(pText).Code;
-  if VState = drsIntact then
-    VCode := WithoutRegion(VCode, VRegion);
-  VContent := MaxLenContent(VCode, pTable, EolOf(pText), pColumns, pItem);
+  VHand := if VState = drsIntact then WithoutRegion(pText, VRegion) else pText;
+  if not UnitConsts(VHand, VConsts) then
+  begin
+    pItem.Reason := 'the unit does not parse';
+    Exit;
+  end;
+  VContent := MaxLenContent(VHand, pTable, VConsts, pColumns, pItem);
   if VContent <> '' then
     Result := EditMaxLen(pText, VContent, VState, VRegion, pItem)
   else if VState = drsAbsent then
@@ -1055,6 +1258,36 @@ begin
   end;
   Result.NewText := ApplyMaxLen(Result.OldText, pTable, VColumns, VItem);
   Result.Items := [VItem];
+end;
+
+{ The property rows of a DFM, binary or text. }
+function DfmRows(const pFile: string; pBinary: Boolean): TArray<TDfmPropertyRow>;
+var
+  VRaw: TBytes;
+  VIn, VOut: TBytesStream;
+  VParser: TDFMParser;
+begin
+  VRaw := TFile.ReadAllBytes(pFile);
+  if pBinary then
+  begin
+    VIn := TBytesStream.Create(VRaw);
+    VOut := TBytesStream.Create;
+    try
+      VIn.Position := Max(0, Pos(DFM_SIGNATURE, TEncoding.ASCII.GetString(VRaw)) - 1);
+      ObjectBinaryToText(VIn, VOut);
+      VRaw := Copy(VOut.Bytes, 0, VOut.Size);
+    finally
+      VOut.Free;
+      VIn.Free;
+    end;
+  end;
+  VRaw := EnsureUtf8Bytes(VRaw);
+  VParser := TDFMParser.Create;
+  try
+    Result := ExtractDfmPropertyRows(pFile, TEncoding.UTF8.GetString(VRaw), VParser.Parse(VRaw, pFile).DfmObjects);
+  finally
+    VParser.Free;
+  end;
 end;
 
 { The stored body of one event; Body '' = none. }
@@ -1094,6 +1327,15 @@ begin
   end;
 end;
 
+function ComponentsOf(const pFields: TArray<TFrhField>): TArray<string>;
+var
+  VField: TFrhField;
+begin
+  Result := nil;
+  for VField in pFields do
+    Result := Result + [VField.CompName];
+end;
+
 function HasRegion(const pText, pId: string): Boolean;
 var
   VRegion: TDlfrRegion;
@@ -1128,6 +1370,7 @@ begin
   if HasRegion(FPlan.OldText, pRegionId) then
     Report(pRegionId, ExtractFileName(FPlan.FileName), fhsRefused, NOTHING_LEFT);
 end;
+
 constructor TFormPlan.Create(pRepo: TFDConnection; const pDfm: string);
 begin
   inherited Create;
@@ -1146,30 +1389,19 @@ begin
   inherited;
 end;
 
-{ How many events of the form each handler serves. }
+{ How many properties of the whole form name each handler: any event of any component counts. }
 procedure TFormPlan.CountUses;
 var
-  VDataset: TDfmrDataset;
-  VField: TDfmrField;
-  VEvent: TDfmrPair;
-
-  procedure Count(const pHandler: string);
-  var
-    VUses: Integer;
-  begin
-    if not FUses.TryGetValue(pHandler.ToUpper, VUses) then
-      VUses := 0;
-    FUses.AddOrSetValue(pHandler.ToUpper, VUses + 1);
-  end;
-
+  VRow: TDfmPropertyRow;
+  VUses: Integer;
 begin
-  for VDataset in FForm.Datasets do
-  begin
-    Count(VDataset.OnCalcFields);
-    for VField in VDataset.Fields do
-      for VEvent in VField.Events do
-        Count(VEvent.Value);
-  end;
+  for VRow in DfmRows(FForm.FileName, FForm.IsBinary) do
+    if VRow.ValueKind = DFM_IDENT then
+    begin
+      if not FUses.TryGetValue(VRow.ValueText.ToUpper, VUses) then
+        VUses := 0;
+      FUses.AddOrSetValue(VRow.ValueText.ToUpper, VUses + 1);
+    end;
 end;
 
 procedure TFormPlan.Report(const pRegionId, pTarget: string; pState: TFrhState; const pReason: string);
@@ -1227,6 +1459,7 @@ begin
   VJob.RegionId := pDataset.Name + '.' + EVENT_CALC;
   VJob.Method := FForm.FormClass + '.' + pDataset.OnCalcFields;
   VJob.StdParams := [PARAM_DATASET];
+  VJob.Components := ComponentsOf(pFields);
   VWanted := 0;
   for VI := 0 to High(pFields) do
     for VBody in pBodies do
@@ -1256,6 +1489,7 @@ begin
   VJob.RegionId := pField.CompName + '.' + pBody.Event;
   VJob.Method := FForm.FormClass + '.' + VHandler;
   VJob.StdParams := FieldEventParams(pBody.Event).Split([',']);
+  VJob.Components := ComponentsOf(pFields);
   VNotes := nil;
   if VHandler = '' then
     Report(VJob.RegionId, pField.CompName, fhsSkipped, 'the DFM assigns no ' + pBody.Event + ' handler: assign one and run again')
@@ -1300,6 +1534,7 @@ begin
         ReportLeftover(pDataset.Fields[VI].CompName + '.' + VEvent);
     end;
 end;
+
 function TFormPlan.Execute(const pDataset: string): TFrhPlan;
 var
   VReport: TDfmrDatasetReport;

@@ -3,7 +3,8 @@ unit DRagLint.CLI.RepoHandlers;
 { drag-lint 1.54 -- lane TT-HANDLERS: `repo gen-handlers`, `repo gen-maxlen` and `repo renumber-regions` (design
   2026-11-22-field-repository-v2-design.md section 9). DRagLint.CLI.Repo resolves the repository path and dispatches here
   in ONE line; the flags are read from the command line (ParseArgs only has to accept them). Nothing is written without
-  --apply; every unit is written as a whole or not at all. }
+  --apply; every unit is planned once, and written as a whole or not at all. A unit that cannot be written stops no other
+  one and is reported like the ones that were. }
 
 interface
 
@@ -22,8 +23,8 @@ function IsRepoHandlersSub(const pSub: string): Boolean;
 /// <param name="pSub">The sub-verb, IsRepoHandlersSub(pSub) is True.</param>
 /// <param name="pPath">The repository file (already resolved from --repo / --project); renumber-regions does not read it.</param>
 /// <param name="pJson">--json.</param>
-/// <returns>0 = ok; 1 = failure, or at least one region / unit refused (hand-edited, not ASCII, ...); 2 = usage error.</returns>
-/// <remarks>A refused region does not stop the others. --dry-run wins over --apply.</remarks>
+/// <returns>0 = ok; 1 = failure, at least one region / unit refused (hand-edited, not ASCII, ...) or not written; 2 = usage error.</returns>
+/// <remarks>A refused region or a unit that cannot be written does not stop the others. --dry-run wins over --apply.</remarks>
 function RunRepoHandlersVerb(const pSub, pPath: string; pJson: Boolean): Integer;
 
 implementation
@@ -69,6 +70,16 @@ type
 
   { Plans of one run. }
   TPlans = TArray<TFrhPlan>;
+
+  { A plan and what became of it. }
+  TOutcome = record
+    Plan: TFrhPlan;
+    Written: Boolean;
+    Error: string; // '' or why the changed unit was not written
+  end;
+
+  { One per plan. }
+  TOutcomes = TArray<TOutcome>;
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -120,17 +131,30 @@ begin
   Result.Items := [VItem];
 end;
 
+{ Full paths, each file once. }
+function UniqueFiles(const pFiles: TArray<string>): TArray<string>;
+var
+  VFile: string;
+begin
+  Result := nil;
+  for VFile in pFiles do
+    if not MatchText(ExpandFileName(VFile), Result) then
+      Result := Result + [ExpandFileName(VFile)];
+end;
+
 function PlanForms(pRepo: TFDConnection; const pOptions: TRunOptions): TPlans;
 var
   VFile: string;
 begin
   Result := nil;
-  for VFile in pOptions.Files do
+  for VFile in UniqueFiles(pOptions.Files) do
     try
-      Result := Result + [PlanHandlers(pRepo, ExpandFileName(VFile), pOptions.Dataset)];
+      Result := Result + [PlanHandlers(pRepo, VFile, pOptions.Dataset)];
     except
-      on E: EDlfrError do
-        Result := Result + [RefusedPlan(ChangeFileExt(ExpandFileName(VFile), PAS_EXT), E.Message)];
+      on E: ERepoError do
+        raise; // says nothing about this form
+      on E: Exception do
+        Result := Result + [RefusedPlan(ChangeFileExt(VFile, PAS_EXT), E.Message)];
     end;
 end;
 
@@ -153,24 +177,47 @@ begin
   end;
 end;
 
+function InterfaceUnit(const pOptions: TRunOptions; const pTable: string): string;
+begin
+  Result := TPath.Combine(pOptions.CodeDir, 'i' + pTable.ToUpper.Replace('$', '_') + PAS_EXT);
+end;
+
+{ The tables of the repository whose interface unit is that file, comma-separated (A$B and A_B share one). }
+function TablesOfUnit(const pOptions: TRunOptions; const pTables: TArray<string>; const pFile: string): string;
+var
+  VTable: string;
+begin
+  Result := '';
+  for VTable in pTables do
+    if SameText(InterfaceUnit(pOptions, VTable), pFile) then
+      Result := Result + (if Result = '' then '' else ', ') + VTable;
+end;
+
 { Interface units of the tables. A table without a unit is planned only when it was named. }
 function PlanLengths(pRepo: TFDConnection; const pOptions: TRunOptions): TPlans;
 var
+  VAll, VSeen: TArray<string>;
   VTable, VFile: string;
 begin
   if not HasSchema(pRepo) then
     raise ERepoError.Create('the repository has no schema facts (run repo refresh-schema first)');
   Result := nil;
-  for VTable in if Length(pOptions.Tables) > 0 then pOptions.Tables else RepositoryTables(pRepo) do
+  VSeen := nil;
+  VAll := RepositoryTables(pRepo);
+  for VTable in if Length(pOptions.Tables) > 0 then pOptions.Tables else VAll do
   begin
-    VFile := TPath.Combine(pOptions.CodeDir, 'i' + VTable.Replace('$', '_') + PAS_EXT);
-    if TFile.Exists(VFile) or (Length(pOptions.Tables) > 0) then
-      try
-        Result := Result + [PlanMaxLen(pRepo, VFile, VTable.ToUpper)];
-      except
-        on E: EDlfrError do
-          Result := Result + [RefusedPlan(VFile, E.Message)];
-      end;
+    VFile := InterfaceUnit(pOptions, VTable);
+    if MatchText(VFile, VSeen) or not (TFile.Exists(VFile) or (Length(pOptions.Tables) > 0)) then
+      Continue;
+    VSeen := VSeen + [VFile];
+    try
+      Result := Result + [if TablesOfUnit(pOptions, VAll, VFile).Contains(',') then
+        RefusedPlan(VFile, 'the unit belongs to more than one table: ' + TablesOfUnit(pOptions, VAll, VFile)) else
+        PlanMaxLen(pRepo, VFile, VTable.ToUpper)];
+    except
+      on E: Exception do
+        Result := Result + [RefusedPlan(VFile, E.Message)];
+    end;
   end;
 end;
 
@@ -200,18 +247,17 @@ var
   VPlan: TFrhPlan;
 begin
   Result := nil;
-  for VFile in if pOptions.CodeDir = '' then pOptions.Files else TDirectory.GetFiles(pOptions.CodeDir, PAS_MASK) do
-    if ContainsText(TEncoding.ANSI.GetString(TFile.ReadAllBytes(VFile)), DB_RAD) then
-    begin
-      try
-        VPlan := PlanRenumber(ExpandFileName(VFile));
-      except
-        on E: EDlfrError do
-          VPlan := RefusedPlan(VFile, E.Message);
-      end;
-      if Length(VPlan.Items) > 0 then
-        Result := Result + [VPlan];
+  for VFile in UniqueFiles(if pOptions.CodeDir = '' then pOptions.Files else TDirectory.GetFiles(pOptions.CodeDir, PAS_MASK)) do
+  begin
+    try
+      VPlan := if ContainsText(TEncoding.ANSI.GetString(TFile.ReadAllBytes(VFile)), DB_RAD) then PlanRenumber(VFile) else Default(TFrhPlan);
+    except
+      on E: Exception do
+        VPlan := RefusedPlan(VFile, E.Message);
     end;
+    if Length(VPlan.Items) > 0 then
+      Result := Result + [VPlan];
+  end;
 end;
 
 { ---- output ---- }
@@ -236,6 +282,40 @@ begin
   for VPlan in pPlans do
     if VPlan.OldText <> VPlan.NewText then
       Inc(Result);
+end;
+
+function CountWritten(const pOutcomes: TOutcomes): Integer;
+var
+  VOutcome: TOutcome;
+begin
+  Result := 0;
+  for VOutcome in pOutcomes do
+    if VOutcome.Written then
+      Inc(Result);
+end;
+
+function CountFailed(const pOutcomes: TOutcomes): Integer;
+var
+  VOutcome: TOutcome;
+begin
+  Result := 0;
+  for VOutcome in pOutcomes do
+    if VOutcome.Error <> '' then
+      Inc(Result);
+end;
+
+{ The units that were and that were not written. }
+procedure PrintOutcomes(const pOutcomes: TOutcomes);
+var
+  VOutcome: TOutcome;
+begin
+  for VOutcome in pOutcomes do
+    if VOutcome.Written then
+      Writeln('  written ', VOutcome.Plan.FileName)
+    else if VOutcome.Error <> '' then
+      Writeln('  NOT WRITTEN ', VOutcome.Plan.FileName, ': ', VOutcome.Error);
+  Writeln(Format('written: %d units', [CountWritten(pOutcomes)]),
+    if CountFailed(pOutcomes) > 0 then Format(', NOT WRITTEN: %d units', [CountFailed(pOutcomes)]) else '');
 end;
 
 procedure PrintText(const pPlans: TPlans);
@@ -278,30 +358,33 @@ begin
     VNotes.Add(VNote);
 end;
 
-procedure PrintJson(const pPlans: TPlans; pWritten: Integer);
+procedure PrintJson(const pOutcomes: TOutcomes; pRefused: Integer);
 var
   VRoot, VUnit: TJSONObject;
   VUnits, VItems: TJSONArray;
-  VPlan: TFrhPlan;
+  VOutcome: TOutcome;
   VItem: TFrhItem;
 begin
   VRoot := TJSONObject.Create;
   try
     VUnits := TJSONArray.Create;
     VRoot.AddPair('units', VUnits);
-    for VPlan in pPlans do
+    for VOutcome in pOutcomes do
     begin
       VUnit := TJSONObject.Create;
       VUnits.AddElement(VUnit);
-      VUnit.AddPair('file', VPlan.FileName);
-      VUnit.AddPair('changed', TJSONBool.Create(VPlan.OldText <> VPlan.NewText));
+      VUnit.AddPair('file', VOutcome.Plan.FileName);
+      VUnit.AddPair('changed', TJSONBool.Create(VOutcome.Plan.OldText <> VOutcome.Plan.NewText));
+      VUnit.AddPair('written', TJSONBool.Create(VOutcome.Written));
+      VUnit.AddPair('error', VOutcome.Error);
       VItems := TJSONArray.Create;
       VUnit.AddPair('regions', VItems);
-      for VItem in VPlan.Items do
+      for VItem in VOutcome.Plan.Items do
         VItems.AddElement(ItemJson(VItem));
     end;
-    VRoot.AddPair('refused', TJSONNumber.Create(CountState(pPlans, fhsRefused)));
-    VRoot.AddPair('written', TJSONNumber.Create(pWritten));
+    VRoot.AddPair('refused', TJSONNumber.Create(pRefused));
+    VRoot.AddPair('written', TJSONNumber.Create(CountWritten(pOutcomes)));
+    VRoot.AddPair('not_written', TJSONNumber.Create(CountFailed(pOutcomes)));
     Writeln(VRoot.ToJSON);
   finally
     VRoot.Free;
@@ -349,14 +432,24 @@ begin
   end;
 end;
 
-function WritePlans(const pPlans: TPlans): Integer;
+function RunPlans(const pPlans: TPlans; pWrite: Boolean): TOutcomes;
 var
   VPlan: TFrhPlan;
+  VOutcome: TOutcome;
 begin
-  Result := 0;
+  Result := nil;
   for VPlan in pPlans do
-    if SaveAsciiUnit(VPlan.FileName, VPlan.OldText, VPlan.NewText) then
-      Inc(Result);
+  begin
+    VOutcome := Default(TOutcome);
+    VOutcome.Plan := VPlan;
+    try
+      VOutcome.Written := pWrite and SaveAsciiUnit(VPlan.FileName, VPlan.OldText, VPlan.NewText);
+    except
+      on E: Exception do
+        VOutcome.Error := E.Message;
+    end;
+    Result := Result + [VOutcome];
+  end;
 end;
 
 { True when renumbering would leave units update-orm no longer reads. }
@@ -370,22 +463,25 @@ end;
 function RunSub(const pSub, pPath: string; const pOptions: TRunOptions): Integer;
 var
   VPlans: TPlans;
-  VWritten: Integer;
+  VOutcomes: TOutcomes;
   VStrand: Boolean;
 begin
   VPlans := MakePlans(pSub, pPath, pOptions);
   VStrand := WouldStrand(pSub, VPlans);
-  VWritten := if pOptions.Write and not VStrand then WritePlans(VPlans) else 0;
+  VOutcomes := RunPlans(VPlans, pOptions.Write and not VStrand);
   if pOptions.Json then
-    PrintJson(VPlans, VWritten)
+    PrintJson(VOutcomes, CountState(VPlans, fhsRefused))
   else
   begin
     PrintText(VPlans);
-    Writeln(if pOptions.Write then Format('written: %d units', [VWritten]) else DRY_RUN_LINE);
+    if pOptions.Write then
+      PrintOutcomes(VOutcomes)
+    else
+      Writeln(DRY_RUN_LINE);
   end;
   if VStrand then
     Writeln(ErrOutput, 'repo ', pSub, ': ', NOT_READ_YET);
-  Result := if (CountState(VPlans, fhsRefused) > 0) or (VStrand and pOptions.Write) then EXIT_FAIL else EXIT_OK;
+  Result := if (CountState(VPlans, fhsRefused) + CountFailed(VOutcomes) > 0) or (VStrand and pOptions.Write) then EXIT_FAIL else EXIT_OK;
 end;
 
 function RunRepoHandlersVerb(const pSub, pPath: string; pJson: Boolean): Integer;

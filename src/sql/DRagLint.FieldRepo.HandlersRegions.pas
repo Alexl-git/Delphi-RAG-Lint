@@ -187,8 +187,9 @@ function LoadAsciiUnit(const pFile: string): string;
 /// <param name="pOldText">What LoadAsciiUnit read.</param>
 /// <param name="pNewText">New text. Equal to pOldText: the file is not touched.</param>
 /// <returns>True when the file was written.</returns>
-/// <exception cref="EDlfrError">The new text is not ASCII, or the file is not what was read.</exception>
-/// <remarks>Written beside the file first and then moved over it, so a failed write leaves the unit as it was.</remarks>
+/// <exception cref="EDlfrError">The new text is not ASCII, the file is not what was read, or it cannot be written.</exception>
+/// <remarks>Written beside the file first and then moved over it, so a failed write leaves the unit as it was and no
+/// temporary file.</remarks>
 function SaveAsciiUnit(const pFile, pOldText, pNewText: string): Boolean;
 
 implementation
@@ -488,7 +489,7 @@ end;
 
 function ContentHash(const pContent: string): string;
 begin
-  Result := THashSHA2.GetHashString(pContent.Replace(CR, '')).Substring(0, HASH_LEN).ToLower;
+  Result := THashSHA2.GetHashString(pContent.Replace(DLFR_CRLF, LF)).Substring(0, HASH_LEN).ToLower;
 end;
 
 function StartMarker(const pId, pContent: string): string;
@@ -665,23 +666,26 @@ begin
     Rx(PAT_DBRAD_WORD).Replace(Copy(pText, pDirective.Start, pDirective.Len), NAME_DLFR, 1) + Copy(pText, pDirective.Finish);
 end;
 
-{ Why the numbered regions of a unit cannot be renamed; fills the ids of each spelling. }
+function IsOldMarker(const pDirective: TPasDirective): Boolean;
+begin
+  Result := IsDbRad(pDirective.RegionName) and (OrmRegionId(pDirective.RegionName) <> '');
+end;
+
+{ Why the numbered regions of a unit cannot be renamed; fills the ids of the old spelling. }
 function RenumberProblem(const pRegions: TArray<TDlfrRegion>; pOld: TStrings): string;
 var
   VRegion: TDlfrRegion;
-  VName, VId: string;
+  VId: string;
 begin
   Result := '';
   for VRegion in pRegions do
-  begin
-    VName := VRegion.Start.RegionName;
-    VId := OrmRegionId(VName);
-    if (VId = '') or not IsDbRad(VName) then
-      Continue;
-    pOld.Add(VId);
-    if OrmRegionId(VRegion.Finish.RegionName) <> VId then
-      Exit(Format('the end marker of %s is "%s"', [VName, VRegion.Finish.RegionName]));
-  end;
+    if IsOldMarker(VRegion.Start) or IsOldMarker(VRegion.Finish) then
+    begin
+      VId := OrmRegionId(VRegion.Start.RegionName);
+      pOld.Add(VId);
+      if (OrmRegionId(VRegion.Finish.RegionName) <> VId) or (IsOldMarker(VRegion.Start) <> IsOldMarker(VRegion.Finish)) then
+        Exit(Format('the end marker of "%s" is "%s"', [VRegion.Start.RegionName, VRegion.Finish.RegionName]));
+    end;
   for VRegion in pRegions do
     if StartsText(NAME_DLFR, VRegion.Start.RegionName) and (pOld.IndexOf(OrmRegionId(VRegion.Start.RegionName)) >= 0) then
       Exit('the unit has the region in both spellings: ' + VRegion.Start.RegionName);
@@ -772,9 +776,40 @@ begin
   Result := TEncoding.ASCII.GetString(VBytes);
 end;
 
-function SaveAsciiUnit(const pFile, pOldText, pNewText: string): Boolean;
+{ pFile with the letter case the folder has: a move onto another case would rename the file. }
+function NameOnDisk(const pFile: string): string;
 var
-  VTemp, VError: string;
+  VFound: TSearchRec;
+begin
+  Result := pFile;
+  if System.SysUtils.FindFirst(pFile, faAnyFile, VFound) = 0 then
+  begin
+    Result := ExtractFilePath(pFile) + VFound.Name;
+    System.SysUtils.FindClose(VFound);
+  end;
+end;
+
+{ Writes pText beside pFile and moves it over pFile; no temporary file stays behind. }
+procedure ReplaceFile(const pFile, pText: string);
+var
+  VTemp: string;
+begin
+  VTemp := pFile + TEMP_EXT;
+  try
+    try
+      TFile.WriteAllBytes(VTemp, TEncoding.ASCII.GetBytes(pText));
+    except
+      on E: Exception do
+        raise EDlfrError.Create('cannot write ' + VTemp + ': ' + E.Message);
+    end;
+    if not MoveFileEx(PChar(VTemp), PChar(NameOnDisk(pFile)), MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
+      raise EDlfrError.Create('cannot replace ' + pFile + ': ' + SysErrorMessage(GetLastError));
+  finally
+    Winapi.Windows.DeleteFile(PChar(VTemp)); // after the move there is none
+  end;
+end;
+
+function SaveAsciiUnit(const pFile, pOldText, pNewText: string): Boolean;
 begin
   Result := pOldText <> pNewText;
   if not Result then
@@ -783,14 +818,7 @@ begin
     raise EDlfrError.Create('the new text is not 7-bit ASCII: ' + pFile);
   if LoadAsciiUnit(pFile) <> pOldText then
     raise EDlfrError.Create('the file changed since it was read: ' + pFile);
-  VTemp := pFile + TEMP_EXT;
-  TFile.WriteAllBytes(VTemp, TEncoding.ASCII.GetBytes(pNewText));
-  if not MoveFileEx(PChar(VTemp), PChar(pFile), MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
-  begin
-    VError := SysErrorMessage(GetLastError);
-    TFile.Delete(VTemp);
-    raise EDlfrError.Create('cannot replace ' + pFile + ': ' + VError);
-  end;
+  ReplaceFile(pFile, pNewText);
 end;
 
 end.
