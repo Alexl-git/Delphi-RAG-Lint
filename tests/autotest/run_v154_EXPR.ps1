@@ -79,6 +79,12 @@ function Compare-Rule([string]$Rule) {
   Check "$Rule is silent elsewhere" ($extra.Count -eq 0) ($extra -join ', ')
 }
 
+# positive-control: duplicate-logical-operand
+# positive-control: contradictory-condition
+# positive-control: boolean-comparison-precedence
+# positive-control: function-name-reads-itself
+# positive-control: warnings-off-not-restored
+# positive-control: homoglyph-identifier
 Write-Host 'THE SIX RULES' -ForegroundColor Cyan
 foreach ($r in 'duplicate-logical-operand', 'contradictory-condition', 'boolean-comparison-precedence',
                'function-name-reads-itself', 'warnings-off-not-restored', 'homoglyph-identifier') { Compare-Rule $r }

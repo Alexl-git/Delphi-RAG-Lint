@@ -32,6 +32,26 @@ Lane SQL (lane/v154-sql):
 
 - NEW rule `sql-param-mismatch` (ON): ParamByName of a parameter the SQL does not have, or a SQL parameter that is never set. NEW rule `query-in-loop` (OFF): a query run once per loop iteration. `field-by-name-in-loop` gets the option `param_by_name` (OFF). Rule count 437 -> 439, 358 -> 359 on by default. Wiki page v154-sql-rules.
 
+Lane DFMWRITE (lane/v154-dfmwrite):
+
+- NEW `repo write-dfm`: brings the persistent fields of a text DFM (and their declarations in its unit) in line with the field repository, as a change set; `--names` adds / removes the fields of one dataset. Dry run by default, `--apply` or `--select` (with the plan id of its dry run) writes with a backup beside each file; bytes outside a planned change stay the same, the new text is checked by Delphi's own reader first, a binary DFM is refused. Wiki page repo-write-dfm.
+
+Lane TT-DIALOG (lane/v154-tt-dialog):
+
+- IDE: three Field Repository menu rows (Read Fields from Dataset..., Read Fields of All Datasets of Form..., Select Fields of Dataset...) with a field-selection dialog and a change list; only checked changes are written. `repo read-dfm --json --dataset` also lists the persistent fields and the repository fields of the table. Wiki page field-repository-forms.
+
+Lane EXPR (lane/v154-expr):
+
+- NEW rules, all ON: `duplicate-logical-operand`, `contradictory-condition`, `boolean-comparison-precedence`, `function-name-reads-itself`, `warnings-off-not-restored`, `homoglyph-identifier`. 0 findings on five corpora (not measured in the field). Wiki page v154-expr-rules.
+
+Lane DFM (lane/v154-dfm):
+
+- NEW rules ON: `dfm-duplicate-tab-order`, `dfm-conflicting-accelerator`, `dfm-conflicting-shortcut`, `dfm-action-and-onclick`; OFF: `db-component-on-form`, `dfm-default-component-name`, `dfm-hint-inactive`. `disallowed-dfm-property` ships a default policy (`Connected = True` on a connection, `Active = True` on a query or table). Wiki page v154-dfm-form-rules. Rule count 439 -> 452, 359 -> 369 on by default (with lane EXPR).
+
+Lane TT-GOLDEN (lane/v154-tt-golden), test side only:
+
+- The param-array and ORM goldens share one known-drift list format (`tests\autotest\lib\GoldenDrift.ps1`), and the param-array golden is now gated.
+
 Lane TT-ALTER (lane/v154-tt-alter):
 
 - NEW `drag-lint repo alter-table` (Table Tools): plans and, with `--apply`, runs the ALTER TABLE that brings a Firebird table in line with a field-repository column; see wiki page repo-alter-table.

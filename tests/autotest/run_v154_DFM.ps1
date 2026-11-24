@@ -45,7 +45,7 @@ function Get-Found([string]$Rule, [string]$Cfg) {
     $raw = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>$null }
     $txt = ($raw | Where-Object { $_ -is [string] }) -join "`n"
     $i = $txt.IndexOf('['); if ($i -lt 0) { continue }
-    foreach ($x in @($txt.Substring($i) | ConvertFrom-Json)) {
+    foreach ($x in @($txt.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ })) {
       $r = if ($x.rule_id) { $x.rule_id } else { $x.rule }
       if ($Rule -and $r -ne $Rule) { continue }
       $p = if ($x.file_path) { $x.file_path } elseif ($x.path) { $x.path } else { $x.file }

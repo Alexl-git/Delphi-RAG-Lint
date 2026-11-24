@@ -34,11 +34,11 @@ $Exe = (Resolve-Path -LiteralPath $Exe).Path
 $work = $WorkDir
 [IO.Directory]::CreateDirectory($work) | Out-Null
 function Run([string[]]$a) {
-  $o = & $Exe @a 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = (($o | ForEach-Object { "$_" }) -join "`n") }
 }
 function Save($name, $r) { $f = Join-Path $work $name; [IO.File]::WriteAllText($f, $r.Out); $f }
-function Model([string[]]$a) { (& (Join-Path $work 'FieldSelectTests.exe') @a 2>&1 | ForEach-Object { "$_" }) -join "`n" }
+function Model([string[]]$a) { (& { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'FieldSelectTests.exe') @a 2>&1 | ForEach-Object { "$_" } }) -join "`n" }
 try {
   # ---- M, F ----
   $bat = Join-Path $Repo 'build\_build_plugin_fieldselect_tests_local.bat'
@@ -46,13 +46,13 @@ try {
   Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + $bat + '" "' + $work + '" > "' + $blog + '" 2>&1"') -Wait -NoNewWindow
   $bl = Get-Content -LiteralPath $blog -Raw
   Check 'M0 the model tests build' (($bl -match 'MODEL_EXITCODE=0') -and ($bl -notmatch 'Error: E\d+')) (($bl -split "`n" | Select-String 'Error' | Select-Object -First 3) -join ' / ')
-  $u = @(& (Join-Path $work 'FieldSelectTests.exe') 2>&1 | ForEach-Object { "$_" }); $uc = $LASTEXITCODE
+  $u = @(& { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'FieldSelectTests.exe') 2>&1 | ForEach-Object { "$_" } }); $uc = $LASTEXITCODE
   $u | Where-Object { $_ -cmatch '^(FAIL|EXCEPTION)' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
   Check "M1 model tests ($($u | Select-Object -Last 1)), none skipped" (($uc -eq 0) -and (($u | Select-Object -Last 1) -eq 'Summary: pass=70 fail=0')) ($u | Select-Object -Last 1)
   if ($SkipForms) { Write-Host 'SKIP F0-F1 (-SkipForms)' }
   else {
     Check 'F0 the forms build without ToolsAPI' ($bl -match 'FORMS_EXITCODE=0') $blog
-    $u = @(& (Join-Path $work 'FieldSelectForms.exe') 2>&1 | ForEach-Object { "$_" }); $uc = $LASTEXITCODE
+    $u = @(& { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'FieldSelectForms.exe') 2>&1 | ForEach-Object { "$_" } }); $uc = $LASTEXITCODE
     $u | Where-Object { $_ -cmatch '^(FAIL|EXCEPTION)' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     Check "F1 form tests ($($u | Select-Object -Last 1)), none skipped" (($uc -eq 0) -and (($u | Select-Object -Last 1) -eq 'Summary: pass=72 fail=0')) "exit $uc"
   }
@@ -76,7 +76,7 @@ try {
   $r = Run ($readAll + @('--select', $sel))
   Check 'E4c the engine takes it and writes exactly that change' (($r.Code -eq 0) -and $r.Out.Contains('applied: 1 changes')) $r.Out
   $r = Run @('repo', 'read-dfm', '--repo', $x, '--dfm', $dfm, '--dataset', 'qryOrders', '--direction', 'dfm-to-repo', '--json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { $j = $null }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null }
   Check 'E1b with --dataset: persistent fields with component, table, column' (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.datasets).Count -eq 1) -and ((@($j.datasets[0].persistent | ForEach-Object { "$($_.component):$($_.kind):$($_.table).$($_.column)" }) -join ' ') -eq 'qryOrdersID:data:ORDERS.ID qryOrdersQTY:data:ORDERS.QTY qryOrdersOLD:data:ORDERS.OLD')) $r.Out
   Check 'E1c with --dataset: the repository''s fields with kind and body' (($null -ne $j) -and ((@($j.datasets[0].tableFields | ForEach-Object { "$($_.field):$($_.kind)" }) -join ' ') -eq 'ID:data NOTE:data PRICE:data QTY:data TOTAL:calc') -and (@($j.datasets[0].tableFields)[4].body -eq '{{TOTAL}}.Value := {{QTY}}.Value * {{PRICE}}.Value;')) $r.Out
   $f = Save 'read.json' $r
@@ -104,7 +104,7 @@ try {
     Check 'E6 the same file again: refused, nothing written' (($s2.Code -ne 0) -and ([IO.File]::ReadAllText($dfm) -ceq $after)) $s2.Out
   }
   # ---- R ----
-  $entry = Get-Content (Join-Path $Repo 'features\entries\field-repository-forms.json') -Raw | ConvertFrom-Json
+  $entry = Get-Content (Join-Path $Repo 'features\entries\field-repository-forms.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   $paths = @($entry.surfaces | Where-Object type -eq 'ide-menu' | ForEach-Object { $_.path })
   $want = @('Read Fields from Dataset...', 'Read Fields of All Datasets of Form...', 'Select Fields of Dataset...' | ForEach-Object { "drag-lint > Field Repository > $_" })
   Check 'R1 the entry registers exactly the three ide-menu paths' (($paths -join '|') -eq ($want -join '|')) ($paths -join '|')

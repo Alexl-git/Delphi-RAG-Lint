@@ -68,7 +68,7 @@ text, also a message that happens to have the word). A control of
 another dataset that binds the same name counts too. A selection that deletes a field and also makes the form name it is
 refused (exit 2). Other forms and units are not searched.
 
-**Safety.** Every byte outside a planned change stays the same: encoding, line ends, indentation, hand formatting. A
+**Safety.** Every byte outside a change stays the same: encoding, line ends, indentation, hand formatting. A
 binary DFM is refused, and so is one that Delphi cannot convert. The result is converted to binary and read back before
 anything is written; a file that changed since it was read, or cannot be opened for writing, stops the whole run. Each
 file is replaced by a complete new one; when that fails for one file, those before it get their old bytes back and the

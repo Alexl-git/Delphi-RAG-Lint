@@ -6,13 +6,55 @@
   "status": "shipped",
   "since": "1.54.0-alpha",
   "summary": "Brings the persistent fields of a text DFM, and their declarations in its unit, in line with the field repository as a change set, dry run by default",
-  "intro": "Read this when a form should follow the field repository. drag-lint repo write-dfm prints the property changes of existing persistent fields and, for a field selection, the fields to add or remove; --apply or --select writes them with a backup, and a --select file must hold the plan id of the dry run its ids are from. Every byte outside a planned change stays the same, the new text is checked by Delphi's own reader before it is written, and a binary DFM is refused.",
+  "intro": "Read this when a form should follow the field repository. drag-lint repo write-dfm prints the property changes of existing persistent fields and, for a field selection, the fields to add or remove; --apply or --select writes them with a backup, and a --select file must hold the plan id of the dry run its ids are from. Every byte outside a change stays the same, the new text is checked by Delphi's own reader before it is written, and a binary DFM is refused.",
   "wikiPage": "repo-write-dfm",
   "surfaces": [
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "write-dfm"
+      "sub": "write-dfm",
+      "usage": "drag-lint repo write-dfm --dfm <file.dfm>[;...] [--dataset <Name> [--names <FIELD,...>|all]] --direction repo-to-dfm (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]",
+      "flags": [
+        {
+          "name": "--dfm",
+          "arg": "<file.dfm>[;...]"
+        },
+        {
+          "name": "--dataset",
+          "arg": "<Name>"
+        },
+        {
+          "name": "--names",
+          "arg": "<FIELD,...>|all"
+        },
+        {
+          "name": "--direction",
+          "arg": "repo-to-dfm"
+        },
+        {
+          "name": "--repo",
+          "arg": "<file>"
+        },
+        {
+          "name": "--project",
+          "arg": "<project file>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--select",
+          "arg": "<id file>"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "helpOrder": 114,
+      "help": ["  drag-lint repo write-dfm      --dfm <file.dfm>[;...] [--dataset <Name> [--names <FIELD,...>|all]] --direction repo-to-dfm (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]   (the property changes that bring the persistent fields of a text DFM in line with the repository, and with --names the fields of one dataset to add or remove, declarations in the unit included; every byte outside a change stays, the new text is checked by Delphi's own reader first, each changed file gets a backup; what cannot be settled is BLOCKED with the reason; the repository is only read; no --apply = dry run; a --select file needs the # plan line of its dry run; a binary DFM is refused; exit 1 plan / write failure or a changed plan, 2 usage)"]
     }
   ],
   "audience": "both",
@@ -25,5 +67,11 @@
       "ask": "How do I add every repository field of a table to a dataset as persistent fields?",
       "command": "drag-lint repo write-dfm --dfm <form.dfm> --dataset <name> --names all --direction repo-to-dfm --repo <file>"
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-11-24",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha",
+    "surfaceHash": "af8c01190b3727b13052f04ac9d242c57db58377b85828489e90aa28bdc10dd6"
+  }
 }

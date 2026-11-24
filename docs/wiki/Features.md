@@ -143,11 +143,11 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**439 rules. 131 have an auto-fix. 359 are on by default.** 326 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**452 rules. 131 have an auto-fix. 369 are on by default.** 339 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 156 | 40 |
+| bug-patterns | 166 | 40 |
 | complexity | 15 | 2 |
 | data-flow | 11 | 3 |
 | dead-code | 23 | 15 |
@@ -163,9 +163,9 @@ Rules, autofix, suppression markers and project-wide checks.
 | refactoring | 27 | 11 |
 | resource-lifetime | 22 | 9 |
 | review-markers | 6 | 2 |
-| security | 27 | 2 |
-| structure | 18 | 9 |
-| **Total** | **439** | **131** |
+| security | 28 | 2 |
+| structure | 20 | 9 |
+| **Total** | **452** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -210,10 +210,12 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Initialization reaching a unit that initializes later (lint rule)](init-order-hazard) | `lint-all` |  |
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
+| [Lint rules for form files: tab order, accelerators, shortcuts, actions, hints](v154-dfm-form-rules) | `lint` |  |
+| [Lint rules for repeated, impossible and misleading expressions and source text](v154-expr-rules) | `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
 | [Lint rules sql-param-mismatch and query-in-loop](v154-sql-rules) | `lint` |  |
 | [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
-| [Lint rules](rules) | 439 rules, 131 fixable; `rules` |  |
+| [Lint rules](rules) | 452 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |
@@ -462,6 +464,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](dump-refs) | `dump-refs` |  |
 | [Feature registry](Feature-Registry) | `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [featuregen](featuregen) | `featuregen.exe`; `build\_build_featuregen_local.bat builds featuregen.exe from this checkout`; `tools\featuregen-gate.ps1 -Repo -Full`; procedure: `docs\wiki\featuregen.md` | internal |
+| [Field repository: fields of a form in the IDE](field-repository-forms) | drag-lint > Field Repository > Read Fields from Dataset...; drag-lint > Field Repository > Read Fields of All Datasets of Form...; drag-lint > Field Repository > Select Fields of Dataset... |  |
 | [Field repository: generated handlers](field-repository-handlers) | `repo gen-handlers`; `repo gen-maxlen`; `repo renumber-regions` |  |
 | [Field repository](field-repository) | `dl-field-repo.exe`; `dl-field-repo-std.exe`; `repo init`; `repo info`; `repo import-fb`; `repo seed-fb`; `repo refresh-schema`; `repo backup`; `repo restore`; `repo gen-memtable`; `repo gen-param-array`; `repo gen-orm`; `repo update-orm`; `repo upgrade-orm-headers`; `repo gen-dataservice`; `repo migrate`; `repo check`; `repo gen-const`; `repo check-const`; drag-lint > Field Repository > Open Field Repository Editor...; drag-lint > Field Repository > Refresh Schema from Database...; drag-lint > Field Repository > FDMemTable from CSV...; drag-lint > Field Repository > Generate / Update ORM Source...; drag-lint > Field Repository > Generate DataService Units...; drag-lint > Field Repository > Param Array Assistant...; `repo` |  |
 | [info](info) | `info` |  |
@@ -478,6 +481,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [stop-now](Features) | `stop-now` |  |
 | [test-store-freshness](Maintenance) | `test-store-freshness` | internal |
 | [Verified database backups and their purge](repo-db-backup) | `repo backup` |  |
+| [Write the field repository into a form](repo-write-dfm) | `repo write-dfm` |  |
 
 ## Uses and Dependencies
 

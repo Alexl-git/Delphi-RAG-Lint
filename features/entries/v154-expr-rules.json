@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.54.0-alpha",
-  "summary": "Warns about a repeated operand in an and / or chain, comparisons that cannot all hold, a Boolean comparison with the wrong precedence, a function that reads its own name, warnings switched off for good and look-alike letters inside identifiers",
+  "summary": "Warns about repeated or impossible conditions, misleading Boolean precedence, a function reading its own name, warnings left off, look-alike letters",
   "intro": "Read this to see what each of the six expression and source-text rules reports, what it leaves alone and how often it was wrong on real code.",
   "wikiPage": "v154-expr-rules",
   "surfaces": [
@@ -15,5 +15,11 @@
       "example": "drag-lint lint <file.pas> --rule contradictory-condition"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-24",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha",
+    "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
+  }
 }
