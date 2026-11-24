@@ -319,7 +319,8 @@ try {
   $got = ProbeOut $o 'P.dpr' 'dcc64'
   Check 'N2c gen-maxlen finds the renamed section 2; compiles' ($got -ceq '40 11') "$got $($r.Out)"
   $m1 = [regex]::Match((ReadText $iu), "(?s)\{\`$REGION 'DLFR 2a hash=.*?ENDREGION 'DLFR 2a'\}").Value
-  function Update { Run @('repo', 'update-orm', '--repo', $x, '--code-dir', $o, '--table', 'ORDERS', '--apply', '--no-backup') }
+  $u = NewRepo 'u' '0.2' '40' @(, (FieldRow 'AAA' '1')) # update-orm needs a data field
+  function Update { Run @('repo', 'update-orm', '--repo', $u, '--code-dir', $o, '--table', 'ORDERS', '--apply', '--no-backup') }
   $r = Update
   $upd = ReadText $iu
   WriteText $iu $iold
