@@ -716,15 +716,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.PlanUpdateOrm.One (DRagLint.FieldRepo.OrmGen.pas)</para>
-    /// <para>Calls: DRagLint.FieldRepo.OrmGen.IsOrmRegionEnd, DRagLint.FieldRepo.OrmGen.IsOrmRegionStart, DRagLint.FieldRepo.OrmGen.OrmJoinLines, DRagLint.FieldRepo.OrmGen.SplitRawLines, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable</para>
-    /// <para>Returns: SB.ToString</para>
+    /// <para>Calls: Copy, DRagLint.FieldRepo.OrmGen.OrmJoinLines, DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion, DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable, DRagLint.FieldRepo.OrmGen.TrustedRegions</para>
+    /// <para>Returns: SB.Append(Copy(pText, Kept, MaxInt)).ToString</para>
     /// <para>Reads: FLoadedTable</para>
     /// <para>Mutates: pRegionCount (out)</para>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.IsOrmRegionEnd"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.IsOrmRegionStart"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.OrmJoinLines"/>
-    /// <seealso cref="DRagLint.FieldRepo.OrmGen.SplitRawLines"/>
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateRegion"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable"/>
+    /// <seealso cref="DRagLint.FieldRepo.OrmGen.TrustedRegions"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function UpdateRegions(const pText, pTableName: string; pIsInterface: Boolean;
@@ -783,10 +782,10 @@ type
 /// <returns>True for a '{$REGION 'DB-RAD &lt;id&gt;'}' line, known id or not.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.FieldRepo.OrmGen.TOrmGenerator.UpdateRegions (DRagLint.FieldRepo.OrmGen.pas)</para>
-/// <para>Calls: DRagLint.FieldRepo.OrmGen.RegionName</para>
-/// <para>Returns: False; pRegionId &lt;&gt; ''</para>
+/// <para>Calls: DRagLint.FieldRepo.HandlersRegions.OrmRegionId, DRagLint.FieldRepo.OrmGen.RegionName</para>
+/// <para>Returns: pRegionId &lt;&gt; ''</para>
 /// <para>Mutates: pRegionId (out)</para>
+/// <seealso cref="DRagLint.FieldRepo.HandlersRegions.OrmRegionId"/>
 /// <seealso cref="DRagLint.FieldRepo.OrmGen.RegionName"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -797,9 +796,10 @@ function IsOrmRegionStart(const pLine: string; out pRegionId: string): Boolean; 
 /// <returns>True for a '{$ENDREGION 'DB-RAD &lt;id&gt;'}' line.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.FieldRepo.OrmGen.OrmChangeDiff (DRagLint.FieldRepo.OrmGen.pas), DRagLint.FieldRepo.OrmGen.TOrmGenerator.UpdateRegions (DRagLint.FieldRepo.OrmGen.pas)</para>
-/// <para>Calls: DRagLint.FieldRepo.OrmGen.RegionName</para>
-/// <para>Returns: RegionName(pLine, '{$ENDREGION').StartsWith(DB_RAD)</para>
+/// <para>Called from: DRagLint.FieldRepo.OrmGen.OrmChangeDiff (DRagLint.FieldRepo.OrmGen.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.HandlersRegions.OrmRegionId, DRagLint.FieldRepo.OrmGen.RegionName</para>
+/// <para>Returns: OrmRegionId(RegionName(pLine, '{$ENDREGION')) &lt;&gt; ''</para>
+/// <seealso cref="DRagLint.FieldRepo.HandlersRegions.OrmRegionId"/>
 /// <seealso cref="DRagLint.FieldRepo.OrmGen.RegionName"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
