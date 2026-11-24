@@ -1807,7 +1807,7 @@ begin
   end; // try
 end; // procedure
 
-procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok method-too-long@44fb, param-name-prefix@f0af -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
+procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok method-too-long@12b7, param-name-prefix@f0af -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22); REVIEWED 2026-11-23 v154 GENFIX-3: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; grew by the Assign overload lines
 var
   IntfGUID    : TGUID;
   TableId   : string;
