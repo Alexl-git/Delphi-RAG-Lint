@@ -25,7 +25,6 @@ implementation
 
 uses
   System.SysUtils,
-  System.Classes,
   System.IOUtils,
   System.JSON,
   FireDAC.Comp.Client,

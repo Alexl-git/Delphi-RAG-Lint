@@ -79,7 +79,6 @@ function ApplyAlterPlan(const pProvider: IFrDbProvider; const pPlan: TFrAlterPla
 implementation
 
 uses
-  System.StrUtils,
   System.Generics.Collections;
 
 const
