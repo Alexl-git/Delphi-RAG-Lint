@@ -432,6 +432,7 @@ const
   NEW_FORM = '    object TB: TIntegerField' + NL + '      FieldName = ''B''' + NL + '    end' + NL;
   NEW_DECL = '    TB: TIntegerField;' + NL;
   BACKUP_MARK = '.before-write-dfm-';
+  FILES_OF_TWO = 4; // two forms with their units
   STAMP_SECONDS = 20; // the names a backup could get while the test runs
   SECONDS_PER_DAY = 86400;
 
@@ -468,22 +469,24 @@ begin
       Result := Result + [VFile];
 end;
 
-{ Plans one added field in each form pNames[i].dfm, whose unit has the text pUnits[i]. }
-function AddPlan(const pNames, pUnits: TArray<string>): TDfmwPlan;
+{ Plans one added field in each of the forms a.dfm, b.dfm, whose units have the texts pUnits. }
+function AddPlan(const pUnits: TArray<string>): TDfmwPlan;
 var
   VI: Integer;
+  VName: string;
   VFile: TDfmwFile;
   VItem: TDfmwItem;
   VChange: TFrChange;
 begin
   Result := Default(TDfmwPlan);
-  for VI := 0 to High(pNames) do
+  for VI := 0 to High(pUnits) do
   begin
-    PutFile(pNames[VI] + '.dfm', WRITE_FORM);
-    PutFile(pNames[VI] + '.pas', pUnits[VI]);
-    VFile.DfmName := TPath.Combine(GWork, pNames[VI] + '.dfm');
+    VName := Char(Ord('a') + VI);
+    PutFile(VName + '.dfm', WRITE_FORM);
+    PutFile(VName + '.pas', pUnits[VI]);
+    VFile.DfmName := TPath.Combine(GWork, VName + '.dfm');
     VFile.DfmBytes := ToBytes(WRITE_FORM);
-    VFile.PasName := TPath.Combine(GWork, pNames[VI] + '.pas');
+    VFile.PasName := TPath.Combine(GWork, VName + '.pas');
     VFile.PasBytes := ToBytes(pUnits[VI]);
     VFile.FormClass := 'TF';
     VItem := Default(TDfmwItem);
@@ -534,11 +537,11 @@ var
   VFile: string;
 begin
   NewWork;
-  VPlan := AddPlan(['a', 'b'], [WRITE_UNIT, WRITE_UNIT]);
+  VPlan := AddPlan([WRITE_UNIT, WRITE_UNIT]);
   CheckText('F1 two forms', Applied(VPlan), '');
   CheckForm('F1', 'a', True);
   CheckForm('F1', 'b', True);
-  Check('F1 four backups, no other file', Length(OtherFiles) = 4);
+  Check('F1 four backups, no other file', Length(OtherFiles) = FILES_OF_TWO);
   for VFile in OtherFiles do
     CheckText('F1 a backup holds the old bytes', FileText(ExtractFileName(VFile)), if VFile.Contains('.dfm.') then WRITE_FORM else WRITE_UNIT);
 end;
@@ -548,7 +551,7 @@ var
   VPlan: TDfmwPlan;
 begin
   NewWork;
-  VPlan := AddPlan(['a', 'b'], [WRITE_UNIT, WRITE_UNIT]);
+  VPlan := AddPlan([WRITE_UNIT, WRITE_UNIT]);
   PutFile('b.pas', WRITE_UNIT + '{ saved meanwhile }' + NL);
   Check('F2 a file that changed since it was read is refused', Applied(VPlan).Contains('changed since it was read'));
   CheckForm('F2', 'a', False);
@@ -564,7 +567,7 @@ var
   VMessage: string;
 begin
   NewWork;
-  VPlan := AddPlan(['a', 'b'], [WRITE_UNIT, WRITE_UNIT]);
+  VPlan := AddPlan([WRITE_UNIT, WRITE_UNIT]);
   VHold := TFileStream.Create(TPath.Combine(GWork, 'b.pas'), fmOpenRead or fmShareDenyNone);
   try
     VMessage := Applied(VPlan);
@@ -575,7 +578,7 @@ begin
   Check('F3 the message names the backups', VMessage.Contains('a.dfm' + BACKUP_MARK) and VMessage.Contains('b.pas' + BACKUP_MARK), VMessage);
   CheckForm('F3', 'a', False);
   CheckForm('F3', 'b', False);
-  Check('F3 only the backups are left', Length(OtherFiles) = 4, string.Join(' ', OtherFiles));
+  Check('F3 only the backups are left', Length(OtherFiles) = FILES_OF_TWO, string.Join(' ', OtherFiles));
 end;
 
 procedure TestBackupNames;
@@ -587,7 +590,7 @@ var
   VFile: string;
 begin
   NewWork;
-  VPlan := AddPlan(['a'], [WRITE_UNIT]);
+  VPlan := AddPlan([WRITE_UNIT]);
   for VI := 0 to STAMP_SECONDS do
     PutFile('a.dfm' + BACKUP_MARK + FormatDateTime('yyyymmdd-hhnnss', Now + VI / SECONDS_PER_DAY), TAKEN);
   CheckText('F4 applied', Applied(VPlan), '');
@@ -608,19 +611,19 @@ var
 begin
   NewWork;
   VText := WRITE_UNIT.Replace(NL, #10);
-  CheckText('F5 LF unit', Applied(AddPlan(['a'], [VText])), '');
+  CheckText('F5 LF unit', Applied(AddPlan([VText])), '');
   CheckText('F5 LF line ends stay', FileText('a.pas'), Added(VText, #10'    TB: TIntegerField;'));
   NewWork;
   VText := WRITE_UNIT.Replace('unit U;', 'unit U; // caf'#233#232);
-  CheckText('F6 ANSI unit', Applied(AddPlan(['a'], [VText])), '');
+  CheckText('F6 ANSI unit', Applied(AddPlan([VText])), '');
   CheckText('F6 high bytes stay', FileText('a.pas'), Added(VText, NL + '    TB: TIntegerField;'));
   NewWork;
   VText := #$EF#$BB#$BF + WRITE_UNIT.Replace('unit U;', 'unit U; // caf'#$C3#$A9);
-  CheckText('F7 UTF-8 unit', Applied(AddPlan(['a'], [VText])), '');
+  CheckText('F7 UTF-8 unit', Applied(AddPlan([VText])), '');
   CheckText('F7 the BOM and the UTF-8 bytes stay', FileText('a.pas'), Added(VText, NL + '    TB: TIntegerField;'));
   NewWork;
   VText := #$FF#$FE'u'#0;
-  Check('F8 a UTF-16 unit is refused', Applied(AddPlan(['a'], [VText])).Contains('UTF-16'));
+  Check('F8 a UTF-16 unit is refused', Applied(AddPlan([VText])).Contains('UTF-16'));
   CheckForm('F8', 'a', False, VText);
   Check('F8 no backup', Length(OtherFiles) = 0);
 end;
