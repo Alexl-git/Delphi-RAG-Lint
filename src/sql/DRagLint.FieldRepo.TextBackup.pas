@@ -109,7 +109,8 @@ procedure BackupRepositoryToStrings(pConnection: TFDConnection; pLines: TStrings
 procedure BackupRepository(pConnection: TFDConnection; const pFileName: string);
 
 /// <summary>Parses and validates the lines, then replaces every row of the repository in
-/// one transaction. A column omitted in the text is inserted as NULL, never as its default.</summary>
+/// one transaction. A column omitted in the text is inserted as NULL, never as its default. An older backup restored
+/// into a repository of schema REPO_SCHEMA_VERSION gets the data steps of `repo migrate`.</summary>
 /// <param name="pConnection">Open read-write repository connection.</param>
 /// <param name="pLines">Backup text lines without terminators.</param>
 /// <param name="pReplace">Must be True when the repository already holds rows.</param>
@@ -151,7 +152,7 @@ procedure RestoreRepository(pConnection: TFDConnection; const pFileName: string;
 
 /// <summary>Reads the schema version a backup file declares on its first line.</summary>
 /// <param name="pFileName">Backup file (ASCII).</param>
-/// <returns>1 for `#DLREPO 1`, 2 for `#DLREPO 2`, 0 when the first line is neither (or the file is empty).</returns>
+/// <returns>1 for `#DLREPO 1`, 2 for `#DLREPO 2`, 3 for `#DLREPO 3`, 0 for any other first line (or an empty file).</returns>
 /// <remarks>Used by `repo restore` to create a missing repository at the backup's own version.</remarks>
 function BackupFileVersion(const pFileName: string): Integer;
 
@@ -781,7 +782,7 @@ var
   VKeys: TDictionary<string, Integer>;
 begin
   if (FLines.Count = 0) or (BackupLineVersion(FLines[0]) = 0) then
-    Fail(1, 'first line must be "' + BACKUP_MAGIC_PREFIX + '1" or "' + BACKUP_MAGIC_PREFIX + '2"');
+    Fail(1, Format('first line must be "%0:s%1:d" to "%0:s%2:d"', [BACKUP_MAGIC_PREFIX, REPO_SCHEMA_MIN_VERSION, REPO_SCHEMA_VERSION]));
   FVersion := BackupLineVersion(FLines[0]);
   FTables := RepoTablesFor(FVersion);
   VNo := 2;
@@ -841,8 +842,8 @@ var
   VCell: TCell;
   VParam: TFDParam;
 begin
-  { every table of the repository's own version is emptied, also the schema-2 tables a
-    `#DLREPO 1` backup does not carry (they are restored empty) }
+  { every table of the repository's own version is emptied, also the tables an older
+    backup does not carry (they are restored empty) }
   for VTable in RepoTablesFor(RepoSchemaVersion(pConnection)) do
     pConnection.ExecSQL('DELETE FROM ' + QuoteRepoIdent(VTable.Name));
   for VT := 0 to High(pParser.Tables) do
@@ -894,12 +895,16 @@ begin
   end;
 end;
 
-function SchemaTwoTablesEmpty(pConnection: TFDConnection): Boolean;
+{ True when the tables RepoIsEmpty leaves out, but a restore would empty, hold no rows. }
+function UserTablesEmpty(pConnection: TFDConnection): Boolean;
+var
+  VTable: TRepoTable;
 begin
-  Result := RepoSchemaVersion(pConnection) < 2;
-  if not Result then
-    Result := (RepoRowCount(pConnection, REPO_TABLE_LAYOUT_EVENTS) = 0)
-      and (RepoRowCount(pConnection, REPO_TABLE_EXCEPTIONS) = 0);
+  for VTable in RepoTablesFor(RepoSchemaVersion(pConnection)) do
+    if MatchText(VTable.Name, [REPO_TABLE_LAYOUT_EVENTS, REPO_TABLE_EXCEPTIONS, REPO_TABLE_GRID_COLUMNS])
+      and (RepoRowCount(pConnection, VTable.Name) > 0) then
+      Exit(False);
+  Result := True;
 end;
 
 procedure RestoreRepositoryFromStrings(pConnection: TFDConnection; pLines: TStrings;
@@ -913,11 +918,13 @@ begin
     if VParser.Version > RepoSchemaVersion(pConnection) then
       raise ERepoError.CreateFmt('backup schema %d does not match repository schema %d: migrate first (repo migrate --apply)',
         [VParser.Version, RepoSchemaVersion(pConnection)]);
-    if (not pReplace) and ((not RepoIsEmpty(pConnection)) or (not SchemaTwoTablesEmpty(pConnection))) then
+    if (not pReplace) and ((not RepoIsEmpty(pConnection)) or (not UserTablesEmpty(pConnection))) then
       raise ERepoError.Create('the repository already holds rows; restore needs replace');
     pConnection.StartTransaction;
     try
       InsertRows(pConnection, VParser);
+      if (VParser.Version < REPO_SCHEMA_VERSION) and (RepoSchemaVersion(pConnection) = REPO_SCHEMA_VERSION) then
+        MigrateRepoRows(pConnection, VParser.Version);
       pConnection.Commit;
     except
       on Exception do

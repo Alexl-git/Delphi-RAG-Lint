@@ -13,10 +13,14 @@ unit DRagLint.FieldRepo.DfmReadCalc;
   Side effects of other functions called in a dropped expression are not seen. Local variables / constants become
   inline declarations.
 
-  Persistent fields become field macros (spec 4.3) where the macro means the same thing (Value, or the typed accessor of
-  the field class). Whatever a macro cannot express (IsNull, another accessor, a Variant read, `with`, Exit,
-  conditional code) BLOCKS the body with the reason; nothing is rewritten by guess. A top-level Exit guard (if C then Exit) becomes a block: if not (C) then begin
-  ... end. }
+  A persistent field becomes a field macro; the macro names the field COMPONENT and the code keeps the member (ruling R3
+  of 2026-11-23): tblQTY.IsNull is macro QTY + .IsNull, DataSet.FieldByName('QTY').Value and DataSet['QTY'] are macro QTY +
+  .AsVariant. What a macro cannot express (a field of another table, `with`, Exit, conditional code, a calculated field's
+  component handed to other code) BLOCKS the body with the reason; nothing is rewritten by guess. A top-level Exit guard
+  (if C then Exit) becomes a block: if not (C) then begin ... end.
+
+  The text of generated DLFR regions is blanked before the unit is parsed: it came from the repository. A field whose
+  code is in a region of the handler, and an event handler with a region, are not read. }
 
 interface
 
@@ -34,8 +38,6 @@ type
     DataName: string;
     /// <summary>Repository FIELD_NAME the macro names; '' = not a field of the dataset's table.</summary>
     MacroName: string;
-    /// <summary>Typed accessor of the field class; '' = none.</summary>
-    Accessor: string;
     /// <summary>True for calc and internal-calc fields.</summary>
     IsCalc: Boolean;
   end;
@@ -56,7 +58,7 @@ type
   TDfmrBody = record
     /// <summary>Pascal statements with macros (CRLF between lines); '' = nothing found.</summary>
     Text: string;
-    /// <summary>Non-empty = the text must not be stored, and why.</summary>
+    /// <summary>Non-empty = the text must not be stored (or, with Text '', why there is none).</summary>
     Blocked: string;
     /// <summary>Form components the body names besides the dataset's own fields: it is not portable as is.</summary>
     FormNames: TArray<string>;
@@ -66,10 +68,21 @@ type
   /// <remarks>Read only; not thread-safe. Holds the parse tree until freed.</remarks>
   TDfmrUnit = class
   strict private
+  type
+    TGenerated = record
+      Id: string;
+      First: Integer; // byte offset
+      Text: string;
+    end;
+  strict private
     FRaw: TBytes;
     FSource: TBytes;
     FTree: TTSTree;
+    FRegions: TArray<TGenerated>;
+    procedure BlankRegions;
     procedure Parse(const pFile: string);
+    function GeneratedIn(const pNode: TTSNode; const pField: string): string;
+    function FindHandler(const pContext: TDfmrCodeContext; const pHandler, pField: string; out pNode: TTSNode): string;
   public
     /// <summary>Reads and parses a unit.</summary>
     /// <param name="pFile">Path of the .pas. A file that cannot be read raises what TFile.ReadAllBytes raises.</param>
@@ -83,13 +96,14 @@ type
     /// <param name="pContext">Form and dataset.</param>
     /// <param name="pHandler">Handler method name.</param>
     /// <param name="pField">Component name of the calculated field.</param>
-    /// <returns>The body; Text '' with Blocked '' = the handler does not assign the field.</returns>
+    /// <returns>The body; Text '' with Blocked '' = the handler does not assign the field. Text '' with a reason also when
+    /// a generated region of the handler assigns it.</returns>
     function CalcBody(const pContext: TDfmrCodeContext; const pHandler, pField: string): TDfmrBody;
     /// <summary>The whole body of a TField event handler.</summary>
     /// <param name="pContext">Form and dataset.</param>
     /// <param name="pHandler">Handler method name.</param>
     /// <param name="pParams">Standard parameter names of the event, in order.</param>
-    /// <returns>The body.</returns>
+    /// <returns>The body; Text '' with a reason when the handler holds a generated region.</returns>
     function EventBody(const pContext: TDfmrCodeContext; const pHandler: string;
       const pParams: TArray<string>): TDfmrBody;
   end;
@@ -104,7 +118,8 @@ uses
   System.Generics.Defaults,
   DRagLint.Core.Encoding,
   DRagLint.Diagnostics.ParseCache,
-  DRagLint.LSP.SyntaxTree;
+  DRagLint.LSP.SyntaxTree,
+  DRagLint.FieldRepo.HandlersRegions;
 
 type
   TByteRange = record
@@ -133,6 +148,7 @@ type
     Fields: TArray<string>;   // calculated field components it assigns, lower case
     Locals: TArray<string>;   // locals it assigns, lower case
     Mentions: TArray<string>; // locals it names, lower case
+    Bare: TArray<string>;     // calculated field components it uses as a whole, lower case
     Other: Boolean;           // any effect not listed above
     IsInherited: Boolean;
     Kept: Boolean;            // part of the body being read
@@ -163,6 +179,8 @@ type
     procedure AssignEffect(const pNode: TTSNode; var pStatement: TStatement);
     procedure CallEffect(const pNode: TTSNode; var pStatement: TStatement);
     procedure CollectMentions(const pNode: TTSNode; var pStatement: TStatement);
+    procedure CollectBare(const pNode: TTSNode; var pStatement: TStatement);
+    function FieldOf(const pNode: TTSNode; out pField: TDfmrCodeField): Boolean;
     function FindField(const pComp: string; out pField: TDfmrCodeField): Boolean;
     function FieldByDataName(const pName: string; out pField: TDfmrCodeField): Boolean;
     function ComponentOf(const pNode: TTSNode): string;
@@ -180,10 +198,10 @@ type
     function GuardCondition(const pNode: TTSNode): string;
     procedure Problem(const pText: string);
     procedure AddEdit(const pNode: TTSNode; const pText: string);
-    procedure UseField(const pNode: TTSNode; const pField: TDfmrCodeField; const pMember: string);
+    procedure UseField(const pNode: TTSNode; const pField: TDfmrCodeField; const pMember: string = '');
+    procedure UseByName(const pNode: TTSNode; const pName, pMember: string);
     procedure ScanDot(const pNode: TTSNode);
     procedure ScanIdentifier(const pNode: TTSNode);
-    procedure ScanAssignment(const pNode: TTSNode);
     procedure Scan(const pNode: TTSNode);
     procedure CutOthers(const pNode: TTSNode; const pKeep: string);
     function IsCut(const pNode: TTSNode): Boolean;
@@ -194,6 +212,7 @@ type
     function InlineDecls: string;
     function Slice(const pField: string): Boolean;
     procedure CheckKept(pCalc: Boolean);
+    procedure CheckBare(const pField: string);
     procedure CheckLocals;
     procedure CheckLaterWrites(pIndex: Integer; const pField: string);
     procedure CheckBraces;
@@ -212,6 +231,7 @@ const
   INDENT = '  ';
   KEYWORD_CONST = 'const';
   MACRO_OPEN = '{{';
+  MACRO_CLOSE = '}}';
   N_PROC = 'defProc';
   N_BLOCK = 'block';
   N_STATEMENT = 'statement';
@@ -233,7 +253,12 @@ const
   MEMBER_VALUE = 'Value';
   MEMBER_BY_NAME = 'FieldByName';
   MEMBER_VALUES = 'FieldValues';
-  MEMBER_CLEAR = 'Clear';
+  MEMBER_AS_VARIANT = 'AsVariant';
+  BARE_USE = 'the field component %s itself is used';
+  NO_FIELD = '%s has no persistent field';
+  PAT_GENERATED = '^DLFR\s+(\S+)\s+hash=[0-9a-f]+$';
+  PAT_WRITES = '\b%s\s*\.\s*(\w+\s*:=|Clear\b)';
+  LATIN_1 = 28591; // one character per byte: offsets stay byte offsets
   { Functions that move the cursor of a dataset (the procedures that do are statements of their own). }
   MOVERS: array[0..9] of string = ('Locate', 'LocateEx', 'LocateNext', 'FindKey', 'FindFirst', 'FindNext', 'FindLast',
     'FindPrior', 'GotoKey', 'MoveBy');
@@ -393,6 +418,7 @@ begin
   VStatement.IsGuard := IsExitGuard(pNode);
   CollectEffects(pNode, VStatement);
   CollectMentions(pNode, VStatement);
+  CollectBare(pNode, VStatement);
   FStatements := FStatements + [VStatement];
 end;
 
@@ -611,7 +637,8 @@ begin
     pStatement.Other := True;
 end;
 
-{ A call statement: `Field.Clear` on a calculated field writes that field, anything else is an unknown effect. }
+{ A call statement: a method of a calculated field (Clear, Assign, ...) writes that field, anything else is an unknown
+  effect. }
 procedure THandler.CallEffect(const pNode: TTSNode; var pStatement: TStatement);
 var
   VCall: TTSNode;
@@ -622,8 +649,7 @@ begin
   VCall := pNode.NamedChild(0);
   if VCall.NodeType = N_CALL then
     VCall := VCall.NamedChild(0);
-  if (VCall.NodeType = N_DOT) and SameText(LastChildText(VCall), MEMBER_CLEAR)
-    and FindField(TargetField(VCall), VField) and VField.IsCalc then
+  if (VCall.NodeType = N_DOT) and FindField(TargetField(VCall), VField) and VField.IsCalc then
     AddName(pStatement.Fields, VField.CompName)
   else if not pStatement.IsInherited then
     pStatement.Other := True;
@@ -654,6 +680,33 @@ begin
     CollectMentions(pNode.NamedChild(VI), pStatement);
 end;
 
+{ The field a node is as a whole: `Comp`, `Self.Comp` or `DS.FieldByName('X')`. }
+function THandler.FieldOf(const pNode: TTSNode; out pField: TDfmrCodeField): Boolean;
+var
+  VName: string;
+begin
+  Result := if FieldNameArgument(pNode, VName) then FieldByDataName(VName, pField) else FindField(ComponentOf(pNode), pField);
+end;
+
+{ Calculated fields used as a whole: the code they are handed to may write them. }
+procedure THandler.CollectBare(const pNode: TTSNode; var pStatement: TStatement);
+var
+  VI, VLast: Integer;
+  VField: TDfmrCodeField;
+begin
+  if FieldOf(pNode, VField) then
+  begin
+    if VField.IsCalc then
+      AddName(pStatement.Bare, VField.CompName);
+    Exit;
+  end;
+  if (pNode.NodeType = N_DOT) and FieldOf(pNode.NamedChild(0), VField) then
+    Exit;
+  VLast := if pNode.NodeType = N_DOT then 0 else Integer(pNode.NamedChildCount) - 1;
+  for VI := 0 to VLast do
+    CollectBare(pNode.NamedChild(VI), pStatement);
+end;
+
 procedure THandler.AddEdit(const pNode: TTSNode; const pText: string);
 var
   VEdit: TTextEdit;
@@ -674,7 +727,7 @@ begin
       Exit(True);
 end;
 
-{ Cuts the assignments to (and Clear calls on) calculated fields other than pKeep; the semicolon stays, so every
+{ Cuts the assignments to (and method calls on) calculated fields other than pKeep; the semicolon stays, so every
   construct around a cut stays well formed. }
 procedure THandler.CutOthers(const pNode: TTSNode; const pKeep: string);
 var
@@ -704,37 +757,41 @@ begin
     CutOthers(pNode.NamedChild(VI), pKeep);
 end;
 
+{ pNode is the field component; pMember is what the macro needs behind it to mean the same. }
 procedure THandler.UseField(const pNode: TTSNode; const pField: TDfmrCodeField; const pMember: string);
 begin
   if pField.IsCalc then
     AddName(FReads, pField.CompName);
   if pField.MacroName = '' then
     Problem(pField.CompName + ' is not a field of the dataset''s table')
-  else if (pMember <> '') and SameText(pMember, pField.Accessor) then
-    AddEdit(pNode, '{{' + pField.MacroName + '}}')
   else
-    Problem(pField.CompName + '.' + pMember + ' is not its typed accessor'
-      + (if pField.Accessor = '' then '' else ' (' + pField.Accessor + ')'));
+    AddEdit(pNode, MACRO_OPEN + pField.MacroName + MACRO_CLOSE + (if pMember = '' then '' else '.' + pMember));
+end;
+
+procedure THandler.UseByName(const pNode: TTSNode; const pName, pMember: string);
+var
+  VField: TDfmrCodeField;
+begin
+  if FieldByDataName(pName, VField) then
+    UseField(pNode, VField, pMember)
+  else
+    Problem(Format(NO_FIELD, [if pNode.NodeType = N_SUBSCRIPT then NodeText(FSource, pNode) else MEMBER_BY_NAME + '(''' + pName + ''')']));
 end;
 
 procedure THandler.ScanDot(const pNode: TTSNode);
 var
   VBase: TTSNode;
   VField: TDfmrCodeField;
-  VMember, VName: string;
+  VName: string;
 begin
   VBase := pNode.NamedChild(0);
-  VMember := LastChildText(pNode);
-  if FieldNameArgument(VBase, VName) then
-  begin
-    { FieldByName gives a TField: its Value is a Variant, so only the typed accessor is the same thing }
-    if FieldByDataName(VName, VField) then
-      UseField(pNode, VField, VMember)
-    else
-      Problem('FieldByName(''' + VName + ''') has no persistent field');
-  end
+  { FieldByName gives a TField: its Value is a Variant, the Value of a typed component is not }
+  if FieldNameArgument(VBase, VName) and SameText(LastChildText(pNode), MEMBER_VALUE) then
+    UseByName(pNode, VName, MEMBER_AS_VARIANT)
+  else if FindField(ComponentOf(pNode), VField) then
+    UseField(pNode, VField)
   else if FindField(ComponentOf(VBase), VField) then
-    UseField(pNode, VField, if SameText(VMember, MEMBER_VALUE) and (VField.Accessor <> '') then VField.Accessor else VMember)
+    UseField(VBase, VField)
   else if ComponentOf(pNode) <> '' then
     ScanIdentifier(pNode.NamedChild(pNode.NamedChildCount - 1))
   else
@@ -754,26 +811,9 @@ begin
   if (VI >= 0) or IsLocal(VName) then
     Exit;
   if FindField(VName, VField) then
-    Problem('the field component ' + VName + ' itself is used')
+    UseField(pNode, VField)
   else if MatchText(VName, FContext.Components) then
     FFormNames.Add(VName);
-end;
-
-{ The target of an assignment: DS['X'] := v is fine, reading DS['X'] is not (a Variant). }
-procedure THandler.ScanAssignment(const pNode: TTSNode);
-var
-  VName: string;
-  VField: TDfmrCodeField;
-  VI, VFirst: Integer;
-begin
-  VFirst := 0;
-  if SubscriptField(pNode.NamedChild(0), VName) and FieldByDataName(VName, VField) then
-  begin
-    UseField(pNode.NamedChild(0), VField, VField.Accessor);
-    VFirst := 1;
-  end;
-  for VI := VFirst to Integer(pNode.NamedChildCount) - 1 do
-    Scan(pNode.NamedChild(VI));
 end;
 
 procedure THandler.Scan(const pNode: TTSNode);
@@ -788,12 +828,10 @@ begin
     ScanDot(pNode)
   else if VType = N_IDENT then
     ScanIdentifier(pNode)
-  else if VType = N_ASSIGNMENT then
-    ScanAssignment(pNode)
   else if SubscriptField(pNode, VName) then
-    Problem('reads the Variant ' + NodeText(FSource, pNode))
+    UseByName(pNode, VName, MEMBER_AS_VARIANT)
   else if FieldNameArgument(pNode, VName) then
-    Problem('FieldByName(''' + VName + ''') itself is used')
+    UseByName(pNode, VName, '')
   else
   begin
     if VType = N_WITH then
@@ -958,9 +996,23 @@ begin
       Continue;
     if pCalc and (not FStatements[VI].IsGuard) and HasExit(FStatements[VI].Node) then
       Problem('Exit would skip the other generated calculations');
-    if FStatements[VI].Node.HasError then
-      Problem('the handler does not parse');
   end;
+  if FNode.HasError then
+    Problem('the handler does not parse');
+end;
+
+{ Refuses a calculated field's component that other code gets: that code may write the field. pField's own counts
+  anywhere in the handler, another one's in the statements of the body. }
+procedure THandler.CheckBare(const pField: string);
+var
+  VStatement: TStatement;
+  VField: TDfmrCodeField;
+  VName: string;
+begin
+  for VStatement in FStatements do
+    for VName in VStatement.Bare do
+      if (VStatement.Kept or SameText(VName, pField)) and FindField(VName, VField) then
+        Problem(Format(BARE_USE, [VField.CompName]));
 end;
 
 { Refuses a needed variable no kept statement sets while an earlier dropped one names it (a var argument). }
@@ -1030,6 +1082,7 @@ begin
   if not Slice(pField) then
     Exit(Default(TDfmrBody));
   CheckKept(True);
+  CheckBare(pField);
   CheckLocals;
   for VI := 0 to High(FStatements) do
     if FStatements[VI].Kept then
@@ -1078,8 +1131,62 @@ begin
   inherited;
 end;
 
+{ Blanks the generated regions: their code came from the repository. The semicolon a region starts with, which ends the
+  hand code before it, stays. A region the engine cannot trust stays, and its
+  directive blocks the handler around it. }
+procedure TDfmrUnit.BlankRegions;
+var
+  VText, VReason: string;
+  VDirective: TPasDirective;
+  VMatch: TMatch;
+  VRegion: TDlfrRegion;
+  VItem: TGenerated;
+  VI, VFirst: Integer;
+  VLatin: TEncoding;
+begin
+  VLatin := TEncoding.GetEncoding(LATIN_1);
+  try
+    VText := VLatin.GetString(FRaw);
+  finally
+    VLatin.Free;
+  end;
+  if not VText.Contains('DLFR ') then
+    Exit;
+  for VDirective in ScanPascal(VText).Directives do
+  begin
+    VMatch := TRegEx.Match(VDirective.RegionName, PAT_GENERATED);
+    if (not VMatch.Success) or (FindDlfrRegion(VText, VMatch.Groups[1].Value, VRegion, VReason) not in [drsIntact, drsEdited]) then
+      Continue;
+    VItem.Id := VRegion.Id;
+    VItem.First := VRegion.Start.Start - 1;
+    VItem.Text := Copy(VText, VRegion.Start.Start, VRegion.Finish.Finish - VRegion.Start.Start);
+    FRegions := FRegions + [VItem];
+    for VI := VRegion.Start.Start to VRegion.Finish.Finish - 1 do
+      if not CharInSet(VText[VI], [#13, #10]) then
+        FRaw[VI - 1] := Ord(' ');
+    VFirst := VRegion.Body.First;
+    while (VFirst < VRegion.Body.Last) and (VText[VFirst] <= ' ') do
+      Inc(VFirst);
+    if (VFirst < VRegion.Body.Last) and (VText[VFirst] = ';') then
+      FRaw[VFirst - 1] := Ord(';');
+  end;
+end;
+
+{ The region of a handler that holds the code of pField ('' = any region); '' = none. }
+function TDfmrUnit.GeneratedIn(const pNode: TTSNode; const pField: string): string;
+var
+  VItem: TGenerated;
+begin
+  Result := '';
+  for VItem in FRegions do
+    if (VItem.First >= Integer(pNode.StartByte)) and (VItem.First < Integer(pNode.EndByte))
+      and ((pField = '') or TRegEx.IsMatch(VItem.Text, Format(PAT_WRITES, [pField]), [roIgnoreCase])) then
+      Exit('its code is in the generated region DLFR ' + VItem.Id);
+end;
+
 procedure TDfmrUnit.Parse(const pFile: string);
 begin
+  BlankRegions;
   FSource := TAstParseCache.ApplyPreprocess(FRaw, pFile);
   FTree := ParseDelphiUtf8(FSource, pFile);
 end;
@@ -1101,26 +1208,21 @@ begin
     FindMethods(pSource, pNode.NamedChild(VI), pQualified, pList);
 end;
 
-{ The handler, or nil and the reason it cannot be read. }
-function OpenHandler(const pSource, pRaw: TBytes; const pRoot: TTSNode; const pContext: TDfmrCodeContext;
-  const pHandler: string; const pParams: TArray<string>; out pReason: string): THandler;
+{ '' and the handler, or the reason it is not read; pField as GeneratedIn. }
+function TDfmrUnit.FindHandler(const pContext: TDfmrCodeContext; const pHandler, pField: string; out pNode: TTSNode): string;
 var
   VList: TList<TTSNode>;
   VQualified: string;
 begin
-  Result := nil;
-  pReason := '';
   VQualified := pContext.FormClass + '.' + pHandler;
+  pNode := FTree.RootNode;
   VList := TList<TTSNode>.Create;
   try
-    FindMethods(pSource, pRoot, VQualified, VList);
-    if VList.Count = 1 then
-    begin
-      Result := THandler.Create(pSource, VList[0], pContext, pParams);
-      Result.RefuseDirectives(pRaw);
-    end
-    else
-      pReason := VQualified + (if VList.Count = 0 then ' is not in the unit' else ' is in the unit more than once');
+    FindMethods(FSource, FTree.RootNode, VQualified, VList);
+    if VList.Count <> 1 then
+      Exit(VQualified + (if VList.Count = 0 then ' is not in the unit' else ' is in the unit more than once'));
+    pNode := VList[0];
+    Result := GeneratedIn(pNode, pField);
   finally
     VList.Free;
   end;
@@ -1129,12 +1231,15 @@ end;
 function TDfmrUnit.CalcBody(const pContext: TDfmrCodeContext; const pHandler, pField: string): TDfmrBody;
 var
   VHandler: THandler;
+  VNode: TTSNode;
 begin
   Result := Default(TDfmrBody);
-  VHandler := OpenHandler(FSource, FRaw, FTree.RootNode, pContext, pHandler, [PARAM_DATASET], Result.Blocked);
-  if VHandler = nil then
+  Result.Blocked := FindHandler(pContext, pHandler, pField, VNode);
+  if Result.Blocked <> '' then
     Exit;
+  VHandler := THandler.Create(FSource, VNode, pContext, [PARAM_DATASET]);
   try
+    VHandler.RefuseDirectives(FRaw);
     Result := VHandler.CalcBody(pField);
   finally
     VHandler.Free;
@@ -1145,12 +1250,15 @@ function TDfmrUnit.EventBody(const pContext: TDfmrCodeContext; const pHandler: s
   const pParams: TArray<string>): TDfmrBody;
 var
   VHandler: THandler;
+  VNode: TTSNode;
 begin
   Result := Default(TDfmrBody);
-  VHandler := OpenHandler(FSource, FRaw, FTree.RootNode, pContext, pHandler, pParams, Result.Blocked);
-  if VHandler = nil then
+  Result.Blocked := FindHandler(pContext, pHandler, '', VNode);
+  if Result.Blocked <> '' then
     Exit;
+  VHandler := THandler.Create(FSource, VNode, pContext, pParams);
   try
+    VHandler.RefuseDirectives(FRaw);
     Result := VHandler.EventBody;
   finally
     VHandler.Free;

@@ -101,7 +101,7 @@ const
 function IsEditableTable(const pTable: TRepoTable): Boolean;
 begin
   Result := not (SameText(pTable.Name, REPO_META_TABLE) or SameText(pTable.Name, REPO_TABLE_LAYOUT_EVENTS)
-    or SameText(pTable.Name, REPO_TABLE_EXCEPTIONS)); { schema-2 tables are edited through repo verbs, not as tabs }
+    or SameText(pTable.Name, REPO_TABLE_EXCEPTIONS) or SameText(pTable.Name, REPO_TABLE_GRID_COLUMNS)); { written through repo verbs, not as tabs }
 end;
 
 constructor TRepoEditorForm.CreateEditor(pOwner: TComponent);

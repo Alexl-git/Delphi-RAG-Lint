@@ -5,9 +5,9 @@
   PART 1  builds and runs tests\fieldrepo\DfmReadTests.dpr (selection rules, SELECT reader, handler slices + macros).
   PART 2  the built engine on tests\fixtures\fieldrepo\dfmread (TTable, TQuery, TFDQuery, TFDMemTable; every field kind):
     D1  dry run: kinds, tables, unresolved datasets and fields, header counts, no byte written; inherited fields reported
-    D2  calc bodies with macros, another field's statement left out, IsNull body BLOCKED
+    D2  calc bodies with component macros, another field's statement left out, IsNull
     D3  lookups: same form, data module of the same folder, unresolved dataset + multi-field key BLOCKED
-    D4  OnGetText -> DL_LAYOUT_EVENTS, OnValidate only reported; a value too long for its column BLOCKED
+    D4  OnGetText -> ONGETTEXT_BODY, an empty handler is reported; a value too long for its column BLOCKED
     D5  two datasets that disagree = unchecked alternatives
     D6  a binary DFM gives the same change set as its text form
     D7  --dataset reads one dataset; an unknown one exits 1
@@ -19,6 +19,10 @@
     D13 a second folder: lookup datasets come from the folder of each DFM; an unreadable DFM beside it is a warning
     D14 continued + quoted strings, two components of one field, an inline frame's dataset, a dataset without fields
     D15 apply is one transaction; repository columns the DFM does not state survive apply
+    D16 the four TField events and the two DBTable column events -> their columns; Clear / IsNull bodies
+    D17 grid column order: bound, twice bound, unbound, banded, data source of a data module, join; other views reported
+    D18 apply, repo check, second read; a moved column = one update per index; a vanished column = unchecked delete
+    D19 a schema-2 repository is refused until repo migrate; D20 two datasets + alignment: a new row has no ALIGNMENT -2
   Run: pwsh -File tests\autotest\run_fieldrepo_dfmread.ps1 [-Exe <drag-lint.exe>] [-SkipUnit]
 #>
 [CmdletBinding()]
@@ -68,19 +72,19 @@ try {
   Check 'D1a kinds and table of a TTable' (Has $r 'tblOrders (TTable) -> ORDERS: 5 data, 3 calc, 3 lookup, 1 internal-calc, 1 aggregate') $r.Out
   Check 'D1b one-table SELECT; the computed column has no table column' ((Has $r 'qryTools2 (TFDQuery) -> TOOLS: 3 data') -and (Has $r "`n  no table column: Cnt`n")) $r.Out
   Check 'D1c join and TFDMemTable unresolved, named, never guessed' ((Has $r 'qryJoin (TQuery) -> UNRESOLVED (the SQL reads 2 tables: ORDERS TOOLS)') -and (Has $r 'memX (TFDMemTable) -> UNRESOLVED (no TableName and no SQL in the DFM)')) $r.Out
-  Check 'D1d totals, header, dry run, no byte written' (($r.Code -eq 0) -and (Has $r 'total 6 datasets, 2 unresolved; 13 data, 4 calc, 3 lookup, 1 internal-calc, 1 aggregate; 3 without a table column') -and (Has $r 'direction dfm-to-repo, 23 changes, 5 blocked, 2 unchecked') -and (Has $r 'dry run: nothing written') -and ($h0 -eq (Get-FileHash -LiteralPath $x).Hash)) "exit=$($r.Code)`n$($r.Out)"
+  Check 'D1d totals, header, dry run, no byte written' (($r.Code -eq 0) -and (Has $r 'total 6 datasets, 2 unresolved; 13 data, 4 calc, 3 lookup, 1 internal-calc, 1 aggregate; 3 without a table column') -and (Has $r 'direction dfm-to-repo, 21 changes, 4 blocked, 2 unchecked') -and (Has $r 'dry run: nothing written') -and ($h0 -eq (Get-FileHash -LiteralPath $x).Hash)) "exit=$($r.Code)`n$($r.Out)"
   $ri = Dfm @() (Join-Path $fix 'uChild.dfm')
   Check 'D1e inherited dataset and fields are reported, not guessed' ((Has $ri 'tblOrders (TTable) -> UNRESOLVED (no TableName and no SQL in the DFM (inherited: its own properties are in the ancestor''s DFM))') -and (Has $ri '1 inherited fields not read (FieldName is in the ancestor''s DFM): tblOrdersQTY')) $ri.Out
-  Check 'D2a calc body with macros' (Has $r 'ORDERS|TOTAL:  -> FIELD_KIND=2; FIELD_AS_TYPE=AsFloat; VAR_TYPE=double; CALC_BODY={{TOTAL}} := {{QTY}} * {{PRICE}};') $r.Out
-  Check 'D2b internal-calc body holds only its own statement' (Has $r "CALC_BODY=if {{TOTAL}} > 100 then\r\n  {{BIG}} := 'yes'\r\nelse\r\n  {{BIG}} := 'no';`n") $r.Out
-  Check 'D2c IsNull has no macro: BLOCKED' (Has $r "ORDERS|LATE CALC_BODY:  -> {{LATE}} := not tblOrdersPRICE.IsNull;`n  BLOCKED: tblOrdersPRICE.IsNull is not its typed accessor (AsFloat)") $r.Out
+  Check 'D2a calc body with macros' (Has $r 'ORDERS|TOTAL:  -> FIELD_KIND=2; FIELD_AS_TYPE=AsFloat; VAR_TYPE=double; CALC_BODY={{TOTAL}}.Value := {{QTY}}.Value * {{PRICE}}.Value;') $r.Out
+  Check 'D2b internal-calc body holds only its own statement' (Has $r "CALC_BODY=if {{TOTAL}}.Value > 100 then\r\n  {{BIG}}.AsString := 'yes'\r\nelse\r\n  {{BIG}}.AsString := 'no';`n") $r.Out
+  Check 'D2c IsNull travels with the insert' (Has $r 'CALC_BODY={{LATE}}.Value := not {{PRICE}}.IsNull;') $r.Out
   Check 'D2d a calc field nobody assigns is reported' (Has $r 'tblOrdersORPHAN: no CALC_BODY: tblOrdersCalcFields does not assign it') $r.Out
   Check 'D2e aggregate expression' (Has $r 'ORDERS|SUMQ:  -> FIELD_KIND=5; CALC_BODY=SUM(Qty)') $r.Out
   Check 'D3a lookup wiring, dataset of the form' (Has $r 'SOURCEKEY=TOOLID; DESTKEY=ID; DESTVALUE=NAME; DESTTABLE=TOOLS') $r.Out
   Check 'D3b lookup dataset of a data module in the folder' (Has $r 'DESTKEY=CODE; DESTVALUE=TEXT; DESTTABLE=REASONS') $r.Out
   Check 'D3c unresolved dataset and multi-field key BLOCKED' ((Has $r "ORDERS|GONE SOURCEKEY:  -> A;B`n  BLOCKED: multi-field lookup key") -and (Has $r "ORDERS|GONE DESTTABLE:  -> dmNowhere.tblX`n  BLOCKED: unresolved lookup dataset dmNowhere.tblX")) $r.Out
-  Check 'D4a OnGetText stored as a Field layout event' (Has $r "insert DL_LAYOUT_EVENTS ORDERS|QTY|Field|OnGetText EVENT_CODE:  -> if {{LATE}} then\r\n  Text := '!' + Sender.AsString;") $r.Out
-  Check 'D4b OnValidate reported, not stored' (Has $r 'tblOrdersQTY.OnValidate = tblOrdersQTYValidate: not stored') $r.Out
+  Check 'D4a OnGetText stored in its column' (($r.Out -match 'insert DL_FIELDS_INFO ORDERS\|QTY: [^\n]*ONGETTEXT_BODY=if \{\{LATE\}\}\.Value then\\r\\n  Text := ''!'' \+ Sender\.AsString;') -and -not (Has $r 'DL_LAYOUT_EVENTS')) $r.Out
+  Check 'D4b an empty handler is reported' (Has $r 'tblOrdersQTY.OnValidate: not read: the handler is empty') $r.Out
   Check 'D4c too long for its column BLOCKED' (Has $r "ORDERS|NOTE DISPLAY_FORMAT:  -> a display format that is too long`n  BLOCKED: longer than DISPLAY_FORMAT(20)") $r.Out
   Check 'D5 disagreeing datasets: unchecked alternatives' ((Has $r "TOOLS|NAME DISPLAY_LABEL:  -> Tool name`n  (unchecked)") -and (Has $r "TOOLS|NAME DISPLAY_LABEL:  -> Other name`n  (unchecked)")) $r.Out
   # binary
@@ -105,11 +109,11 @@ try {
   $e = Dfm @('--apply', '--dry-run')
   Check 'D8 usage errors exit 2, --dry-run wins, nothing written' ((($a.Code, $b.Code, $c.Code, $d.Code, $e.Code) -join ',') -eq '2,2,2,2,0' -and (Has $d 'unknown change id 999') -and ($h0 -eq (Get-FileHash -LiteralPath $x).Hash)) (($a.Code, $b.Code, $c.Code, $d.Code, $e.Code) -join ',')
   $r = Dfm @('--apply')
-  Check 'D9a --apply writes the 16 checked changes, one log line each' (($r.Code -eq 0) -and (Has $r 'applied: 16 changes') -and ([regex]::Matches($r.Out, '(?m)^replacing ').Count -eq 16)) $r.Out
+  Check 'D9a --apply writes the 15 checked changes, one log line each' (($r.Code -eq 0) -and (Has $r 'applied: 15 changes') -and ([regex]::Matches($r.Out, '(?m)^replacing ').Count -eq 15)) $r.Out
   $k = Run @('repo', 'check', '--repo', $x)
   Check 'D9b repo check: kinds and macros consistent (only the blocked lookup is incomplete)' ((-not (Has $k 'kind-flag-mismatch')) -and (-not (Has $k 'calc-')) -and (-not (Has $k 'layout-event')) -and (Has $k 'lookup-incomplete ORDERS.GONE')) $k.Out
   $r2 = Dfm @()
-  Check 'D9c a second read: nothing checked is left' ((Has $r2 'direction dfm-to-repo, 7 changes, 5 blocked, 2 unchecked')) $r2.Out
+  Check 'D9c a second read: nothing checked is left' ((Has $r2 'direction dfm-to-repo, 6 changes, 4 blocked, 2 unchecked')) $r2.Out
   # select
   $ids = [regex]::Matches($r2.Out, '(?m)^\[(\d+)\] update DL_FIELDS_INFO TOOLS\|NAME DISPLAY_LABEL') | ForEach-Object { $_.Groups[1].Value }
   [IO.File]::WriteAllText($sel, ($ids -join "`n"))
@@ -118,7 +122,8 @@ try {
   $s2 = Dfm @('--select', $sel)
   Check 'D10a both alternatives refused, one applied' (($s1.Code -eq 1) -and (Has $s1 'set the same value') -and ($s2.Code -eq 0) -and (Has $s2 'applied: 1 changes')) "$($s1.Out)`n$($s2.Out)"
   $y = NewRepo 'y.dlrepo'
-  [IO.File]::WriteAllText($sel, '22')
+  $upd = [regex]::Match((Dfm @() $dfm $y).Out, '(?m)^\[(\d+)\] update DL_FIELDS_INFO TOOLS\|NAME DISPLAY_LABEL').Groups[1].Value
+  [IO.File]::WriteAllText($sel, $upd)
   $s3 = Dfm @('--select', $sel) $dfm $y
   Check 'D10b an update without its row is refused, nothing written' (($s3.Code -eq 1) -and (Has $s3 'does not exist (select its insert too)') -and ((Run @('repo', 'info', '--json', '--repo', $y)).Out -match '"DL_FIELDS_INFO":0')) $s3.Out
   # schema facts
@@ -206,7 +211,7 @@ end
   Check 'D14c an inline dataset is reported, its new field gives no change' ((Has $r 'tblIn (TTable) -> UNRESOLVED (no TableName and no SQL in the DFM (inherited') -and -not (Has $r '|NEWONE')) $r.Out
   Check 'D14d a dataset without fields' (Has $r 'tblNone (TTable) -> NONE: 0 data') $r.Out
   # transaction + hand-kept columns
-  [IO.File]::WriteAllText($sel, "1`n22")
+  [IO.File]::WriteAllText($sel, "1`n$upd")
   $hy = (Get-FileHash -LiteralPath $y).Hash
   $s4 = Dfm @('--select', $sel) $dfm $y
   Check 'D15a a failing change rolls the good one back' (($s4.Code -eq 1) -and ((Run @('repo', 'info', '--json', '--repo', $y)).Out -match '"DL_FIELDS_INFO":0')) "$hy $($s4.Out)"
@@ -228,7 +233,59 @@ end
   # json
   $o = & $Exe repo read-dfm --repo $y --dfm $dfm --direction dfm-to-repo --json 2>$null
   $j = ($o -join "`n") | ConvertFrom-Json
-  Check 'D12 --json: one object, same counts' (($j.totals.datasets -eq 6) -and ($j.totals.unresolved -eq 2) -and ($j.totals.fields.calc -eq 4) -and ($j.changeSet.count -eq 23) -and ($j.changeSet.blocked -eq 5) -and ($j.applied -eq 0) -and ($j.datasets.Count -eq 6)) ($o -join "`n")
+  Check 'D12 --json: one object, same counts' (($j.totals.datasets -eq 6) -and ($j.totals.unresolved -eq 2) -and ($j.totals.fields.calc -eq 4) -and ($j.changeSet.count -eq 21) -and ($j.changeSet.blocked -eq 4) -and ($j.applied -eq 0) -and ($j.datasets.Count -eq 6)) ($o -join "`n")
+
+  # ---- grid columns and event columns ----
+  $g = Join-Path $fix 'uGrid.dfm'
+  $q = NewRepo 'q.dlrepo'
+  $r = Dfm @() $g $q
+  Check 'D16a the four TField events' (Has $r 'ONGETTEXT_BODY=Text := Sender.AsString;; ONSETTEXT_BODY=Sender.AsString := Trim(Text);; ONVALIDATE_BODY=if Sender.AsInteger < 0 then\r\n  Abort;; ONCHANGE_BODY=') $r.Out
+  Check 'D16b OnChange with the component itself' (Has $r 'ONCHANGE_BODY={{NOTE}}.AsString := ''q'' + DataSetOf(Sender, {{QTY}});') $r.Out
+  Check 'D16c the DBTable column events, parameters renamed' ((Has $r 'GRID_DISPLAYTEXT_BODY=if {{QTY}}.IsNull then\r\n  AText := ''-'';') -and (Has $r 'GRID_DRAWCELL_BODY=ACanvas.Font.Color := clRed;')) $r.Out
+  Check 'D16d a Clear branch' (Has $r 'CALC_BODY=if {{QTY}}.IsNull then\r\n  {{TOTAL}}.Clear\r\nelse\r\n  {{TOTAL}}.AsFloat := {{QTY}}.AsInteger * 2;') $r.Out
+  Check 'D16e events of an unbound column and of a banded column are reported, not stored' ((Has $r 'uGrid.dfm colDraw.OnCustomDrawCell = colDrawCustomDrawCell: not stored (the column has no field)') -and (Has $r 'uGrid.dfm bandCode.OnCustomDrawCell = colDrawCustomDrawCell: not stored (a column event is stored for a TcxGridDBTableView only)')) $r.Out
+  Check 'D16f an event of a column whose field has no row is reported, no row is made for it' ((Has $r 'ORDERS.GHOST GRID_DISPLAYTEXT_BODY: not stored: the repository has no row for the field (uGrid.dfm colGhost.OnGetDisplayText)') -and -not (Has $r 'DL_FIELDS_INFO ORDERS|GHOST')) $r.Out
+  Check 'D17a order, a field bound twice, an unbound column' ((Has $r "] insert DL_GRID_COLUMNS frmGrid|view1|colTotal:  -> TABLE_NAME=ORDERS; FIELD_NAME=TOTAL; COLUMN_INDEX=0`n") -and (Has $r "] insert DL_GRID_COLUMNS frmGrid|view1|colQty:  -> TABLE_NAME=ORDERS; FIELD_NAME=QTY; COLUMN_INDEX=1`n") -and (Has $r "] insert DL_GRID_COLUMNS frmGrid|view1|colDraw:  -> COLUMN_INDEX=2`n") -and (Has $r "] insert DL_GRID_COLUMNS frmGrid|view1|colQty2:  -> TABLE_NAME=ORDERS; FIELD_NAME=QTY; COLUMN_INDEX=3`n")) $r.Out
+  Check 'D17b banded view, data source of a data module' (Has $r "] insert DL_GRID_COLUMNS frmGrid|band1|bandCode:  -> TABLE_NAME=REASONS; FIELD_NAME=CODE; COLUMN_INDEX=0`n") $r.Out
+  Check 'D17c a join: the column the SQL names, a computed one without table' ((Has $r "] insert DL_GRID_COLUMNS frmGrid|viewJ|jName:  -> TABLE_NAME=TOOLS; FIELD_NAME=NAME; COLUMN_INDEX=0`n") -and (Has $r "] insert DL_GRID_COLUMNS frmGrid|viewJ|jDbl:  -> FIELD_NAME=DBL; COLUMN_INDEX=1`n")) $r.Out
+  Check 'D17d an unknown data source: stored without table, reported' ((Has $r "] insert DL_GRID_COLUMNS frmGrid|viewNone|nOne:  -> FIELD_NAME=ONE; COLUMN_INDEX=0`n") -and (Has $r 'uGrid.dfm viewNone: the dataset of its data source dsGone is not found: no table for its columns')) $r.Out
+  Check 'D17e a card view and an inherited view are reported, not stored' ((Has $r 'uGrid.dfm card1 (TcxGridDBCardView): column order not read') -and (Has $r 'uGrid.dfm viewIn: inherited grid view not read (its own properties are in the ancestor''s DFM)') -and -not (Has $r '|card1|') -and -not (Has $r '|viewIn|')) $r.Out
+  $rd = Dfm @('--dataset', 'qryJoin') $g $q
+  Check 'D17f --dataset limits the views too' ((Has $rd '|viewJ|jName') -and -not (Has $rd '|view1|') -and -not (Has $rd '|viewNone|')) $rd.Out
+  $r = Dfm @('--apply') $g $q
+  $k = Run @('repo', 'check', '--repo', $q)
+  Check 'D18a apply; check has no macro or cycle finding, and warns of grid columns without a field row' (($r.Code -eq 0) -and (Has $r 'applied: ') -and ($k.Out -cnotmatch 'calc-|event-|ERROR') -and (Has $k 'grid-column-unknown-field grid frmGrid.view1.colGhost')) "$($r.Out)`n$($k.Out)"
+  $r = Dfm @() $g $q
+  Check 'D18b a second read has no change' (Has $r 'direction dfm-to-repo, 0 changes, 0 blocked, 0 unchecked') $r.Out
+  $gt = [IO.File]::ReadAllText($g)
+  $blk = [regex]::Match($gt, '(?s)      object colTotal: .*?\r\n      end\r\n').Value
+  $blkJ = [regex]::Match($gt, '(?s)      object jDbl: .*?\r\n      end\r\n').Value
+  Check 'D18c0 the fixture blocks were found' (($blk.Length -gt 0) -and ($blkJ.Length -gt 0))
+  [IO.File]::WriteAllText($g, $gt.Replace($blk, '').Replace('      object colDraw: ', $blk + '      object colDraw: ').Replace($blkJ, ''))
+  $r = Dfm @() $g $q
+  Check 'D18c two swapped columns: two updates of COLUMN_INDEX; a vanished column: an unchecked delete' ((Has $r 'direction dfm-to-repo, 3 changes, 0 blocked, 1 unchecked') -and (Has $r "] update DL_GRID_COLUMNS frmGrid|view1|colQty COLUMN_INDEX: 1 -> 0`n") -and (Has $r "] update DL_GRID_COLUMNS frmGrid|view1|colTotal COLUMN_INDEX: 0 -> 1`n") -and (Has $r "] delete DL_GRID_COLUMNS frmGrid|viewJ|jDbl: FIELD_NAME=DBL; COLUMN_INDEX=1 -> `n  (unchecked)")) $r.Out
+  $r = Dfm @('--apply') $g $q
+  $r2 = Dfm @() $g $q
+  Check 'D18d apply leaves only the delete' (($r.Code -eq 0) -and (Has $r 'applied: 2 changes') -and (Has $r2 'direction dfm-to-repo, 1 changes, 0 blocked, 1 unchecked')) "$($r.Out)`n$($r2.Out)"
+  [IO.File]::WriteAllText($sel, '1')
+  $r = Dfm @('--select', $sel) $g $q
+  Check 'D18e the delete by its id' (($r.Code -eq 0) -and (Has $r 'applied: 1 changes') -and (Has (Dfm @() $g $q) 'direction dfm-to-repo, 0 changes')) $r.Out
+  [IO.File]::WriteAllText($g, [IO.File]::ReadAllText($g).Replace("object colQty2: TcxGridDBColumn$([char]13)$([char]10)", "object colQty2: TcxGridDBColumn$([char]13)$([char]10)        Index = 0$([char]13)$([char]10)"))
+  $r = Dfm @() $g $q
+  Check 'D18g a stated Index moves the column, the others close up' ((Has $r 'direction dfm-to-repo, 4 changes, 0 blocked') -and (Has $r "view1|colQty2 COLUMN_INDEX: 3 -> 0$([char]10)") -and (Has $r "view1|colQty COLUMN_INDEX: 0 -> 1$([char]10)") -and (Has $r "view1|colTotal COLUMN_INDEX: 1 -> 2$([char]10)") -and (Has $r "view1|colDraw COLUMN_INDEX: 2 -> 3$([char]10)")) $r.Out
+  [IO.File]::WriteAllText($g, [IO.File]::ReadAllText($g).Replace('Index = 0', 'Index = 99'))
+  $r = Dfm @() $g $q
+  Check 'D18h an Index behind the columns read so far moves nothing' (Has $r 'direction dfm-to-repo, 0 changes') $r.Out
+  [IO.File]::WriteAllText($g, $gt.Replace($blk, '').Replace('      object colDraw: ', $blk + '      object colDraw: ').Replace($blkJ, ''))
+  $rd = Dfm @('--dataset', 'tblO') $g $q
+  Check 'D18f --dataset proposes no delete for other views' (Has $rd 'direction dfm-to-repo, 0 changes') $rd.Out
+  $v2 = Join-Path $work 'v2.dlrepo'
+  $null = Run @('repo', 'restore', '--repo', $v2, '--in', (Join-Path $Repo 'tests\fixtures\fieldrepo\golden_v2.txt'))
+  $r = Dfm @() $g $v2
+  Check 'D19 a schema-2 repository: run repo migrate first (exit 1)' (($r.Code -eq 1) -and (Has $r 'the repository is schema 2: run repo migrate first')) $r.Out
+  $null = Run @('repo', 'backup', '--repo', $x, '--output', (Join-Path $work 'x2.txt'))
+  $xt = [IO.File]::ReadAllText((Join-Path $work 'x2.txt'))
+  Check 'D20 ALIGNMENT: taCenter = 2, not stated = NULL' (([regex]::Matches($xt, '(?m)^ALIGNMENT=').Count -eq 1) -and ($xt -match '(?s)ORDERS\|QTY\][^\[]*ALIGNMENT=2')) $xt
 }
 finally {
   if ($env:DL_KEEP_WORKDIR -ne '1') { try { [IO.Directory]::Delete($work, $true) } catch { } }

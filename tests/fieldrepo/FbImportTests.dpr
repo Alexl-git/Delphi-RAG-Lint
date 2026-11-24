@@ -426,6 +426,17 @@ begin
         (RepoRowCount(Conn, 'DL_FIELDS_INFO') = 1) and
         VarIsNull(Scalar(Conn, 'SELECT "CALC_BODY" FROM "DL_FIELDS_INFO"', [])) and
         VarIsNull(Scalar(Conn, 'SELECT "DOMAIN_NAME" FROM "DL_FIELDS_INFO"', [])));
+      for N := -2 to 2 do
+      begin
+        Src.EmptyDataSet;
+        AddKeyRow(Src, 'T1', 'AL' + IntToStr(N + 2));
+        Src.Edit;
+        Src.FieldByName('ALIGNMENT').AsInteger := N;
+        Src.Post;
+        ImportSourceDataSet(Src, Conn, 'DL_FIELDS_INFO');
+      end;
+      Check('9e ALIGNMENT -2 becomes NULL, -1 / 0 / 1 / 2 are copied (R5)', VarIsNull(Scalar(Conn, 'SELECT "ALIGNMENT" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" = ''AL0''', []))
+        and (VarToStr(Scalar(Conn, 'SELECT GROUP_CONCAT("ALIGNMENT") FROM (SELECT "ALIGNMENT" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" LIKE ''AL%'' ORDER BY "FIELD_NAME")', [])) = '-1,0,1,2'));
       Src.EmptyDataSet;
       Msg := RaisedMsg(procedure begin ImportTableFromDataSet(Src, Conn, RepoTablesFor(2)[1]); end, Cls);
       Check('9c control: comparing the same source against the v2 column list reports CALC_BODY missing',

@@ -361,7 +361,7 @@ begin
       (FieldVal(vConn, 'CODES', 'CODE', 'SEQUENCE_NAME') = '<null>'));
     Check('S7 TableTools new-row values', (FieldVal(vConn, 'ORDERS', 'QTY', 'DISPLAY_LABEL') = '') and
       (BoolVal(vConn, 'ORDERS', 'QTY', 'VISIBLE') = 0) and
-      (FieldVal(vConn, 'ORDERS', 'QTY', 'ALIGNMENT') = '-2') and
+      (FieldVal(vConn, 'ORDERS', 'QTY', 'ALIGNMENT') = '<null>') and
       (FieldVal(vConn, 'ORDERS', 'QTY', 'DISPLAY_WIDTH') = '0') and
       (FieldVal(vConn, 'ORDERS', 'QTY', 'DESTTABLE') = '') and
       (FieldVal(vConn, 'ORDERS', 'QTY', 'DOC_SUMMARY') = 'Summary here') and
