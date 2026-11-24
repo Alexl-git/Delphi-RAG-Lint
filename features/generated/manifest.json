@@ -6483,6 +6483,37 @@
       }
     },
     {
+      "id": "v154-own-filter",
+      "title": "Third-party code in a project lint-all",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.54.0-alpha",
+      "summary": "A project lint-all leaves findings in vendored and library code out, says how many and why, and never hides your own shared units",
+      "intro": "Read this to see which files lint-all treats as third-party, how to declare the exceptions, and how to show the skipped findings.",
+      "wikiPage": "v154-own-filter",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --lint-third-party"
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Why does lint-all not report findings in a third-party folder, and how do I see them?",
+          "command": "drag-lint lint-all --db <project.sqlite> --lint-third-party"
+        }
+      ],
+      "verified": {
+        "date": "2026-11-24",
+        "by": "ENGINE",
+        "build": "1.54.0-alpha",
+        "surfaceHash": "563d6196bbf11d9e058857f5620b69f23c822d22ea12b0326457de84c8a42b71"
+      }
+    },
+    {
       "id": "v151-thr-a-rules",
       "title": "Thread lifetime lint rules (v151 THR-A)",
       "group": "linting",

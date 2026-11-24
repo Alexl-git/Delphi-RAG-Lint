@@ -14,7 +14,8 @@ several projects, or when the DB spans more than the project you are
 reviewing. `--quiet` suppresses per-file progress lines written to stderr.
 `--lint-third-party` restores the old unscoped whole-index count instead of
 only the project's own roots. The own roots come from `ownRoots` in
-`<project>\_D-RAG\drag-lint-project.json` (default: the project folder);
+`<project>\_D-RAG\drag-lint-project.json` (default: the project folder, and since 1.54
+every undeclared file that is not third-party, see [v154-own-filter](v154-own-filter));
 `excludeRoots` carves a vendored subfolder out of them, e.g.
 `{ "ownRoots": ["."], "excludeRoots": ["vendor"] }` -- an excluded folder is
 named in the skip block like any third-party root. `--disable id,...` turns off specific rule ids;

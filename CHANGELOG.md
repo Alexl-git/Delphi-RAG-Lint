@@ -58,6 +58,10 @@ Lane SCHEMA (lane/v154-schema):
 
 1.53.1 (lane/v153-1531 beb317768) is merged: see its section below.
 
+Lane OWNFILTER (lane/v154-ownfilter):
+
+- `lint-all` leaves third-party code out of a project report (vendored folder names, library paths; `vendored_folders` / `own_paths` in drag-lint-lint.json), says how many files and findings it skipped (text, report, a `third-party-skipped` note row in `--json`) and never hides undeclared shared folders of your own; `--lint-third-party` shows everything. A malformed drag-lint-project.json is reported (`own-roots-malformed`). Wiki page v154-own-filter.
+
 Lane FPBATCH2 (lane/v154-fpbatch2; ORM3 server lint, batch 2):
 
 - Fewer false positives: `sql-injection-concat` drops a splice of a local that only holds IntToStr / literal text; `dataset-open-without-close` ignores `Active := True` on a class that is no dataset; `read-never-assigned` consults the sibling projects of a shared unit; `used-before-assignment` accepts an array filled in a `for .. to High(x)` / `Length(x)` loop. `duplicate-global-decl` no longer says identical when the signature names other declarations. (Class 8, `try-except-swallowed` with E.Message kept in a field or global, is held back for an owner ruling.)

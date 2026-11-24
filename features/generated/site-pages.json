@@ -840,7 +840,7 @@
     "version": "1.52.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "5c270053f61e6cfa4c3f3ee26fd8b0946e798a891cbbf830727c78668fbfa778",
+    "hash": "2ed27ce7fa246936e2f2c6bf40b72f36f6429666c303079b0eef474fd1ffc9dc",
     "version": "1.54.0-alpha"
   },
   "features/safe-delete.md": {
@@ -1155,12 +1155,16 @@
     "hash": "98969d3a45aadd7b6ae27b4048cdaf87551ff533c3b336746ea211770637a5e9",
     "version": "1.54.0-alpha"
   },
+  "features/v154-own-filter.md": {
+    "hash": "6b1e48327358e33bc7e11e7d3604dbdb1634474d6180242f7b3a8d5987f169cc",
+    "version": "1.54.0-alpha"
+  },
   "features/v154-schema-rules.md": {
-    "hash": "8498c8960d815e4cda40f2380163711ee1de130c7a2b9efbc741e16df92156b4",
+    "hash": "ac485b354ddfd79d95175a52d3d8253d5b99b429266ef30c3eebaa78e12d16fb",
     "version": "1.54.0-alpha"
   },
   "features/v154-sql-rules.md": {
-    "hash": "ed9725484f9bf99bc17a8f5f2d970110ea0f6d7472c36ed1f143e053ff677ea8",
+    "hash": "401fd3a0a2ddba6d50474af04aeff5e5c39ad0439be12228670a81c65e3947eb",
     "version": "1.54.0-alpha"
   },
   "features/vscode-extension.md": {
@@ -1168,7 +1172,7 @@
     "version": "1.51.1-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "12f855403dcd5f69e52deac82c556878521b5cda26a3236d42d3bfe0bf4605f3",
+    "hash": "cc5849c579db8e1209b0c9ec952bcb71fbef3a9a5e9b1adb8ca4ea3f4a76b0d8",
     "version": "1.54.0-alpha"
   },
   "features/wiki-blocks-authoring.md": {

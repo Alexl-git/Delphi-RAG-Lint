@@ -244,6 +244,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
 | [Target compiler (--target-compiler)](target-compiler) | `lint`; `lint-all`; `rules`; `index`; `lsp workspace/executeCommand`; drag-lint > Code Quality > Run Lint All (Full Report)... |  |
 | [Text rules: bidi, invisible, control chars, TODO, header, strings](text-rules) | `lint-all` |  |
+| [Third-party code in a project lint-all](v154-own-filter) | `lint-all` |  |
 | [Thread lifetime lint rules (v151 THR-A)](v151-thr-a-rules) | `lint`; `lint-all` |  |
 | [Thread race and blocking rules](v151-thread-race-rules) | `lint` |  |
 | [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
