@@ -10,9 +10,10 @@ type
     function Indirect(I: Integer): Integer;
     function Text(I: Integer): string;
     procedure TwoDown(I: Integer);
+    procedure ByConn(C: TFDConnection);
   public
     procedure Fires(Q, D: TFDQuery);
-    procedure Silent(Q, D: TFDQuery; List: TArray<TFDQuery>; Mem: TFDMemTable; Names: TArray<string>);
+    procedure Silent(Q, D: TFDQuery; List: TArray<TFDQuery>; Mem: TFDMemTable; Names: TArray<string>; Conns: TArray<TFDConnection>);
   end;
 implementation
 
@@ -48,6 +49,15 @@ begin
   Indirect(I);
 end;
 
+procedure TRepo.ByConn(C: TFDConnection);
+var
+  Q: TFDQuery;
+begin
+  Q := TFDQuery.Create(nil);
+  Q.SQL.Text := 'SELECT A FROM ORDERS WHERE ID = 1';
+  Q.Open;
+end;
+
 function TRepo.Text(I: Integer): string;
 begin
   Result := 'SELECT A FROM ORDERS WHERE ID = 1';
@@ -71,13 +81,20 @@ begin
     Indirect(I); // FIRE query-in-loop
     if I > 2 then D.Active := True; // FIRE query-in-loop
   end;
+  for var C in Q.Conns do ByConn(nil); // FIRE query-in-loop
+  I := 0;
+  while I < Q.List.Count do
+  begin
+    D.Open; // FIRE query-in-loop
+    Inc(I);
+  end;
   repeat
     D.ExecSQL; // FIRE query-in-loop
     Q.Next;
   until Q.Eof;
 end;
 
-procedure TRepo.Silent(Q, D: TFDQuery; List: TArray<TFDQuery>; Mem: TFDMemTable; Names: TArray<string>);
+procedure TRepo.Silent(Q, D: TFDQuery; List: TArray<TFDQuery>; Mem: TFDMemTable; Names: TArray<string>; Conns: TArray<TFDConnection>);
 var
   I: Integer;
 begin
@@ -114,6 +131,32 @@ begin
       D.Open;
       Exit;
     end;
+  for I := 0 to High(Names) do
+  begin
+    D.SQL.Text := 'SELECT COUNT(*) FROM ' + Names[I];
+    D.Open;
+  end;
+  for I := 0 to MAX_DEPTH do
+  begin
+    D.Open;
+    Lookup(I);
+  end;
+  for I := 0 to High(Names) do
+  begin
+    D.SQL.Text := 'PRAGMA table_info(' + Names[I] + ')';
+    D.Open;
+  end;
+  while Work.Count > 0 do
+  begin
+    D.Open;
+    Lookup(1);
+  end;
+  for var C in Conns do
+  begin
+    D.Connection := C;
+    D.Open;
+    ByConn(C);
+  end;
   for I := 0 to High(Names) do
   begin
     D.DatabaseName := Names[I];

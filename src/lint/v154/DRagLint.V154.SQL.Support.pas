@@ -76,6 +76,13 @@ const
   CACHE_PATTERN = '\b(TryGetValue|ContainsKey|IndexOf|Find\w*|Contains|Active|State|Assigned)\b|\bnil\b';
   POLL_PATTERN = '\b(Terminated|Sleep|WaitFor)\b';
   RETRY_PATTERN = '(retr(y|ies)|attempt|tries|\bBreak\b|\bExit\b)';
+  { a while / repeat that steps over rows or a list; a chain or worklist walk is not one }
+  STEP_PATTERN = '\b(Eof|Bof)\b|<=?\s*[\w.]*(Count|Length|High)\b';
+  { the table itself comes from an expression: one statement per table is all there is }
+  TABLE_PATTERN = '\b(FROM|INTO|UPDATE|JOIN|TABLE)\s+"?''\s*\+|\bPRAGMA\s+\w+\(';
+  { for Depth := 0 to MAX_CHAIN: a bounded walk along a chain, not one step per row }
+  BOUND_PATTERN = '\bto\s+\w*(Max|Limit)\w*\s+do\b';
+  CONNECTION_PATTERN = '(Connection|Database|Session|Store)$';
 
 { ---- text and tree ---- }
 
@@ -183,6 +190,16 @@ begin
   Result:= MatchStr(Cond.NodeType, ['kTrue', 'kFalse']) or TRegEx.IsMatch(SourceText(ALoop, ASrc), POLL_PATTERN, [roIgnoreCase]);
 end;
 
+{ A while / repeat / bounded for over a chain or a worklist: the next step depends on what this one read. }
+function Walks(const ALoop: TTSNode; const ASrc: TBytes): Boolean;
+var
+  Cond: TTSNode;
+begin
+  if ALoop.NodeType = 'for' then Exit(TRegEx.IsMatch(SourceText(ALoop, ASrc), '^for\b[^;]*?' + BOUND_PATTERN, [roIgnoreCase]));
+  Cond  := LoopCondition(ALoop);
+  Result:= (not Cond.IsNull) and (not TRegEx.IsMatch(SourceText(Cond, ASrc), STEP_PATTERN, [roIgnoreCase]));
+end;
+
 { The call stands in the try part of a try .. except that the loop leaves on success, or counts attempts. }
 function Retries(const ALoop, ASite: TTSNode; const ASrc: TBytes): Boolean;
 var
@@ -238,6 +255,13 @@ begin
   Result:= False;
 end;
 
+{ The loop is no row loop, or it runs ANode once or not per step. }
+function NoRowLoop(const ALoop, ANode: TTSNode; const ASrc: TBytes): Boolean;
+begin
+  if SmallBound(ALoop, ASrc) or Walks(ALoop, ASrc) or Polls(ALoop, ASrc) then Exit(True);
+  Result:= Retries(ALoop, ANode, ASrc) or LeavesLoop(ALoop, ANode, ASrc) or Guarded(ALoop, ANode, ASrc);
+end;
+
 { The first loop around ANode that runs it once per step; null when none. ARecv is the receiver text, '' for a call. }
 function RowLoop(const ANode: TTSNode; const ASrc: TBytes; const ARecv: string): TTSNode;
 var
@@ -247,9 +271,7 @@ begin
   Result:= Default(TTSNode);
   for Loop in LoopsAround(ANode) do
   begin
-    if SmallBound(Loop, ASrc) or Polls(Loop, ASrc) or Retries(Loop, ANode, ASrc) or LeavesLoop(Loop, ANode, ASrc) or
-       Guarded(Loop, ANode, ASrc) then
-      Continue;
+    if NoRowLoop(Loop, ANode, ASrc) then Continue;
     Cond:= SourceText(LoopCondition(Loop), ASrc);
     if (ARecv <> '') and (MentionsWord(ARecv, LoopVariable(Loop, ASrc)) or MentionsWord(Cond, ARecv)) then Exit(Default(TTSNode));
     Exit(Loop);
@@ -375,16 +397,53 @@ begin
       { the enclosing call or assignment holds no literal: the text is not written here }
       Node:= Site.Node.Parent;
       while (not Node.IsNull) and (not MatchStr(Node.NodeType, ['exprCall', 'assignment', 'statement'])) do Node:= Node.Parent;
-      if not SourceText(Node, ASrc).Contains('''') then Exit(True);
+      if (not SourceText(Node, ASrc).Contains('''')) or TRegEx.IsMatch(SourceText(Node, ASrc), TABLE_PATTERN, [roIgnoreCase]) then Exit(True);
     end;
   Result:= False;
 end;
 
-{ The loop points the dataset at another database, table or procedure in each step: there is no set to read. }
+{ The loop points the dataset at another database, table or procedure in each step: there is no set to read. A
+  Connection counts when it comes from the loop variable or from a name the loop assigns. }
 function Repointed(const AData: TSqlDataset; const ALoop: TTSNode; const ASrc: TBytes): Boolean;
+var
+  Text: string;
+  M   : TMatch;
+  Word: TMatch;
 begin
-  Result:= TRegEx.IsMatch(SourceText(ALoop, ASrc),
-    '\b' + TRegEx.Escape(AData.Name) + '\s*\.\s*(DatabaseName|TableName|ConnectionName|StoredProcName)\s*:=', [roIgnoreCase]);
+  Text:= SourceText(ALoop, ASrc);
+  if TRegEx.IsMatch(Text, '\b' + TRegEx.Escape(AData.Name) + '\s*\.\s*(DatabaseName|TableName|ConnectionName|StoredProcName)\s*:=', [roIgnoreCase]) then
+    Exit(True);
+  if MentionsWord(AData.Name, LoopVariable(ALoop, ASrc)) then Exit(True);
+  for M in TRegEx.Matches(Text, '\bConnection\s*:=\s*([^;]+);', [roIgnoreCase]) do
+    for Word in TRegEx.Matches(M.Groups[1].Value, '[A-Za-z_]\w*') do
+      if SameText(Word.Value, LoopVariable(ALoop, ASrc)) or
+         TRegEx.IsMatch(Text, '(?<![.\w])' + Word.Value + '\s*(:\s*[\w.]+\s*)?:=', [roIgnoreCase]) then
+        Exit(True);
+  Result:= False;
+end;
+
+{ The call gets the loop variable and that is a connection or a store: each step asks another database. }
+function AsksOtherDatabase(const AScan: TSqlTextScan; const AName, ALoop: TTSNode; const ASrc: TBytes): Boolean;
+var
+  Call, Args: TTSNode;
+  I: Integer;
+begin
+  Result:= False;
+  if LoopVariable(ALoop, ASrc) = '' then Exit;
+  Call:= AName.Parent;
+  if (not Call.IsNull) and (Call.NodeType = 'exprDot') then
+  begin
+    if MentionsWord(SourceText(Call.ChildByField('lhs'), ASrc), LoopVariable(ALoop, ASrc)) then
+      Exit(TRegEx.IsMatch(AScan.StaticType(Call.ChildByField('lhs')), CONNECTION_PATTERN));
+    Call:= Call.Parent;
+  end;
+  if Call.IsNull or (Call.NodeType <> 'exprCall') then Exit;
+  Args:= Call.ChildByField('args');
+  if Args.IsNull then Exit;
+  for I:= 0 to Args.NamedChildCount - 1 do
+    if SameText(SourceText(Args.NamedChild(I), ASrc), LoopVariable(ALoop, ASrc)) and
+       TRegEx.IsMatch(AScan.StaticType(Args.NamedChild(I)), CONNECTION_PATTERN) then
+      Exit(True);
 end;
 
 { The receiver is taken from somewhere else in the loop, or the dataset sends its rows as one array. }
@@ -444,7 +503,7 @@ begin
   Facts:= Query('SELECT COALESCE(f.sql_reads, f.sql_writes), ' +
     '(SELECT COUNT(*) FROM refs r WHERE r.enclosing_symbol_id = f.symbol_id AND r.name_text COLLATE NOCASE IN (''Open'', ''ExecSQL'', ''Execute'', ''ExecProc'')), ' +
     '(SELECT COUNT(*) FROM refs r WHERE r.enclosing_symbol_id = f.symbol_id AND r.name_text COLLATE NOCASE IN (''TryGetValue'', ''ContainsKey'', ''AddOrSetValue'')) ' +
-    'FROM symbol_facts f WHERE f.symbol_id = :i', AId);
+    'FROM symbol_facts f WHERE f.symbol_id = :i AND COALESCE(f.sql_reads, '''') <> ''SQLITE_MASTER''', AId);
   try
     Facts.Open;
     if (not Facts.Eof) and (Facts.Fields[1].AsInteger > 0) and (Facts.Fields[2].AsInteger = 0) then Result:= Facts.Fields[0].AsString;
@@ -463,7 +522,7 @@ begin
   if Result = '' then
   begin
     Calls:= Query('SELECT DISTINCT e.target_symbol_id, s.name FROM refs r JOIN call_edges e ON e.ref_id = r.id AND e.confidence = ''certain'' ' +
-      'JOIN symbols s ON s.id = e.target_symbol_id WHERE r.enclosing_symbol_id = :i AND e.target_symbol_id <> :i ' +
+      'JOIN symbols s ON s.id = e.target_symbol_id AND s.kind <> ''constructor'' WHERE r.enclosing_symbol_id = :i AND e.target_symbol_id <> :i ' +
       'AND NOT EXISTS (SELECT 1 FROM refs c WHERE c.enclosing_symbol_id = r.enclosing_symbol_id ' +
       'AND c.name_text COLLATE NOCASE IN (''TryGetValue'', ''ContainsKey'', ''AddOrSetValue''))', AId);
     try
@@ -515,7 +574,7 @@ begin
     Query.Connection:= (ACtx.Store as TSQLiteSymbolStore).GetConnection;
     Query.SQL.Text  := 'SELECT r.start_line, r.start_col, e.target_symbol_id, s.name FROM refs r JOIN call_edges e ON e.ref_id = r.id ' +
       'AND e.confidence = ''certain'' JOIN symbols s ON s.id = e.target_symbol_id WHERE r.file_id = :f ' +
-      'AND COALESCE(s.directives, '''') NOT LIKE ''%abstract%''';
+      'AND s.kind <> ''constructor'' AND COALESCE(s.directives, '''') NOT LIKE ''%abstract%''';
     Query.ParamByName('f').AsLargeInt:= ACtx.FileId;
     Query.Open;
     while not Query.Eof do
@@ -530,12 +589,12 @@ begin
 end;
 
 { Calls in a loop of a routine that runs SQL. ADone holds the positions already reported. }
-function CallsInLoop(const ACtx: TV151FileCtx; const ASrc: TBytes; const ARoot: TTSNode; ADone: TDictionary<string, Boolean>): TArray<TLintFinding>;
+function CallsInLoop(const ACtx: TV151FileCtx; const AScan: TSqlTextScan; const ASrc: TBytes; const ARoot: TTSNode; ADone: TDictionary<string, Boolean>): TArray<TLintFinding>;
 var
   Edges: TDictionary<string, TPair<Int64, string>>;
   Facts: TCallFacts;
   Names: TList<TTSNode>;
-  Node : TTSNode;
+  Node, Loop: TTSNode;
   Edge : TPair<Int64, string>;
   Site : TSqlSite;
   Runs : string;
@@ -557,7 +616,9 @@ begin
       Site.EndCol:= TAstParseCache.CharCol(ACtx.Path, Node.EndPoint);
       if ADone.ContainsKey(SiteKey(Site.Line, Site.Col)) or (not Edges.TryGetValue(SiteKey(Site.Line, Site.Col), Edge)) then Continue;
       Runs:= Facts.Runs(Edge.Key);
-      if (Runs = '') or RowLoop(Node, ASrc, '').IsNull then Continue;
+      if Runs = '' then Continue;
+      Loop:= RowLoop(Node, ASrc, '');
+      if Loop.IsNull or AsksOtherDatabase(AScan, Node, Loop, ASrc) then Continue;
       ADone.Add(SiteKey(Site.Line, Site.Col), True);
       Result:= Result + [NewFinding(ACtx, RULE_QUERY_LOOP, SEVERITY_HINT,
         Format('%s runs a query per iteration of this loop (%s) -- read or write the rows as one set', [Edge.Value, Runs]), Site)];
@@ -594,7 +655,7 @@ begin
           Result:= Result + [NewFinding(ACtx, RULE_QUERY_LOOP, SEVERITY_HINT,
             Format('%s.%s runs a query per iteration of this loop -- read or write the rows as one set', [Data.Name, SourceText(Site.Node, Parsed.Src)]), Site)];
         end;
-    Result:= Result + CallsInLoop(ACtx, Parsed.Src, Parsed.Tree.RootNode, Done);
+    Result:= Result + CallsInLoop(ACtx, AScan, Parsed.Src, Parsed.Tree.RootNode, Done);
   finally
     Done.Free;
   end;

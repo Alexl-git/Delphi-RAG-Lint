@@ -224,7 +224,7 @@ type
     procedure LoadRefs;
     function RefAt(const ANode: TTSNode): TPair<Int64, string>;
     function SymbolAt(const ANode: TTSNode): Int64;
-    function TypeAt(const ANode: TTSNode): string;
+
     procedure LoadDfm(const ADfm: string);
     procedure BindDfm(const AData: TSqlDataset);
     procedure BindSymbol(const AData: TSqlDataset; const ANode: TTSNode);
@@ -260,6 +260,10 @@ type
     /// <param name="AReason">Receives why there is none ('' when found).</param>
     /// <returns>True when the SELECT or the table property states the column.</returns>
     function ColumnOf(const AData: TSqlDataset; const AField: string; out ATable, AColumn, AReason: string): Boolean;
+    /// <summary>The static type the index records for a name.</summary>
+    /// <param name="ANode">An identifier of this file.</param>
+    /// <returns>The type name without a unit prefix; '' without an index or a fact.</returns>
+    function StaticType(const ANode: TTSNode): string;
     /// <summary>The datasets, in order of first use. Owned by the scan.</summary>
     property Datasets: TObjectList<TSqlDataset> read FDatasets;
   end;
@@ -1441,8 +1445,7 @@ begin
   Result:= RefAt(ANode).Key;
 end;
 
-{ The static type ref_types records for the name at ANode, as a leaf; '' = none. }
-function TSqlTextScan.TypeAt(const ANode: TTSNode): string;
+function TSqlTextScan.StaticType(const ANode: TTSNode): string;
 begin
   Result:= LeafName(RefAt(ANode).Value);
 end;
@@ -1643,7 +1646,7 @@ end;
 procedure TSqlTextScan.BindSymbol(const AData: TSqlDataset; const ANode: TTSNode);
 begin
   AData.SymbolId:= SymbolAt(ANode);
-  if AData.DataClass = '' then AData.DataClass:= TypeAt(ANode);
+  if AData.DataClass = '' then AData.DataClass:= StaticType(ANode);
 end;
 
 procedure TSqlTextScan.BindDfm(const AData: TSqlDataset);

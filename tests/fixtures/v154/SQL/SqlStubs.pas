@@ -26,12 +26,16 @@ type
     Params: TParams;
     ParamCheck: Boolean;
     MasterSource: TObject;
+    Connection: TFDConnection;
     constructor Create(O: TObject);
     function ParamByName(const N: string): TParam; virtual; abstract;
     function FindParam(const N: string): TParam; virtual; abstract;
     function FieldByName(const N: string): TParam; virtual; abstract;
     procedure ExecSQL; virtual; abstract;
     procedure Execute(N: Integer); virtual; abstract;
+  end;
+  TFDConnection = class
+    procedure ExecSQL(const S: string); virtual; abstract;
   end;
   TFDMemTable = class(TDataSet)
   end;

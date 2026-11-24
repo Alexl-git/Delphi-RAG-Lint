@@ -37,7 +37,9 @@ Silent when:
   `MasterSource` / `DataSource` fills the parameters; the form stores a value in `ParamData`; the statement is a stored
   procedure call or has `RETURNING .. INTO :x`; a component whose parameters no code of the unit sets.
 
-## query-in-loop (hint, firedac)
+## query-in-loop (hint, firedac, OFF by default)
+
+Turn it on with `--enable query-in-loop` or `"enabled": ["query-in-loop"]`.
 
 A dataset is opened or executed once per loop iteration:
 
@@ -50,6 +52,11 @@ Silent when:
 * the receiver is the loop variable or is taken from it (`for DS in List do DS.Open`, `List[I].Open`), or is assigned in
   the loop from something else than a `Create`;
 * the loop has at most ten literal steps (`for I := 0 to 3`, `for S in ['A', 'B']`);
+* a `while` / `repeat` that does not step over rows or a list (its condition names neither `Eof` / `Bof` nor `< Count`), or
+  `for X := 0 to MaxDepth`: a chain or worklist walk, where the next step depends on what this one read;
+* each step asks another table, database or connection: the table name is an expression (`'.. FROM ' + T`), a `PRAGMA`,
+  `DatabaseName` / `TableName` / `ConnectionName` / `StoredProcName` is set in the loop, `Connection` comes from the loop
+  variable, or the loop variable is a connection handed to the called routine;
 * it is a retry loop (`try .. except` around the call and a way out, or a counter named retry / attempt / tries) or a
   polling loop (`while True`, `Terminated`, `Sleep`); the loop condition names the same dataset (`until Q.RowsAffected = 0`);
 * the branch leaves the loop (`Break`, `Exit`, `raise` at the end of its statement list): the query runs once;
@@ -61,8 +68,8 @@ Silent when:
 ## field-by-name-in-loop: ParamByName (option, OFF)
 
 `"thresholds": {"field-by-name-in-loop.param_by_name": 1}` makes the rule also report `ParamByName` in a loop, one
-finding per outermost loop (hint). Not reported: a loop that sets the SQL, creates the dataset or passes it on. There is
-no automatic fix for this part.
+finding per outermost loop (hint). Not reported: a loop that sets the SQL, creates the dataset or passes it on, and a loop
+with a `FieldByName` (that finding and its fix come first). There is no automatic fix for this part.
 
 ## What the rules add over the compiler
 
@@ -71,6 +78,16 @@ line runs.
 
 ## Measured
 
-See the numbers below; the corpora are copies of real project indexes.
+Read-only copies of four project indexes, 2026-11-23, one file and one rule at a time. Not measured yet: the largest units
+of drag-lint (over 900 KB), the Micronite and ORM3 projects (the Micronite copy at hand is an old index without form facts).
 
-<!-- measured -->
+| corpus | sql-param-mismatch | query-in-loop |
+|---|---|---|
+| drag-lint (73 units) | 0 | 97, then 65 after the refinements; 33 read: about 13 walk a chain or ask one database per step |
+| Loader2025 (78 units) | 0 | 12 before, of which 10 open a table in another folder per step (now silent), 2 right |
+| TableTools370P (6 units) | 0 | 9, all right |
+| YADF GuardTest, FDGPRuntime | 0 | 0 |
+
+`sql-param-mismatch` had 325 queries with one known SQL text to judge, 146 of them with `ParamByName`, and found no
+mistake: it ships ON, not measured in the field. `query-in-loop` is above the 10 % limit on drag-lint's own graph code
+and ships OFF; on the two database applications every finding left was right. The ParamByName option stays OFF.
