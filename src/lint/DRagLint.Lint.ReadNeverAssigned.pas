@@ -955,7 +955,7 @@ var
                    try
                      Src:= TFile.ReadAllLines(S.GetFilePath(R.FileId));
                    except
-                     Src:= nil;  { unreadable: counts as no write evidence from this file }
+                     on Exception do Src:= nil;  { unreadable: counts as no write evidence from this file }
                    end;
                    Cache.Add(R.FileId, Src);
                  end;
