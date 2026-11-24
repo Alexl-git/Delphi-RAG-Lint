@@ -52,4 +52,4 @@ function GetQ: TFDQuery;
 begin
   Result := nil;
 end;
-end.
+end.

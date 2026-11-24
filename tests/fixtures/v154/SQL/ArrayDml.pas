@@ -29,4 +29,4 @@ begin
   for I := 0 to N do
     Q.ParamByName('A').AsInteger := Q.FieldByName('B').AsInteger; // FIRE field-by-name-in-loop
 end;
-end.
+end.
