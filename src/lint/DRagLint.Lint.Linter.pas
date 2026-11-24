@@ -401,6 +401,110 @@ uses
   DRagLint.Diagnostics.ParseCache,
   System.Diagnostics; { TStopwatch -- the parse-vs-query split below }
 
+{ FPBATCH2 class 1 (v154): sql-injection-concat is a syntactic candidate generator
+  (literal + identifier). It cannot see that the identifier only ever holds
+  digits: F:= IntToStr(Id); Q.SQL.Text:= 'DELETE FROM T WHERE ID=' + F carries
+  no text from outside, so there is nothing to parameterise. This post-filter
+  drops a candidate only when the spliced identifier is a LOCAL of the enclosing
+  routine and EVERY assignment to it in that routine is IntToStr(..) / IntToHex(..)
+  or a string literal. A parameter, a field, a global, a compound assignment
+  (F:= F + AParam), any other right-hand side, or no assignment at all keeps the
+  finding -- unknown fails towards reporting. }
+function SqlNodeText(const N: TTSNode; const ASrc: TBytes): string;
+begin
+  Result:= '';
+  if N.IsNull or (N.EndByte <= N.StartByte) or (Integer(N.EndByte) > Length(ASrc)) then Exit;
+  Result:= Trim(TEncoding.UTF8.GetString(ASrc, Integer(N.StartByte), Integer(N.EndByte - N.StartByte)));
+end;
+
+function SqlDeclaresLocal(const N: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if N.IsNull then Exit;
+  if N.NodeType = 'declVar' then
+    for I:= 0 to N.NamedChildCount - 1 do
+      if (N.NamedChild(I).NodeType = 'identifier') and SameText(SqlNodeText(N.NamedChild(I), ASrc), AName) then Exit(True);
+  for I:= 0 to N.ChildCount - 1 do
+    if (N.Child(I).NodeType <> 'defProc') and SqlDeclaresLocal(N.Child(I), AName, ASrc) then Exit(True);
+end;
+
+procedure SqlScanAssigns(const N: TTSNode; const AName: string; const ASrc: TBytes; var ASafe, AUnsafe: Integer);
+var
+  I     : Integer;
+  Lhs   : TTSNode;
+  Rhs   : TTSNode;
+  Callee: string;
+begin
+  if N.IsNull then Exit;
+  if N.NodeType = 'assignment' then
+  begin
+    Lhs:= N.ChildByField('lhs');
+    if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(SqlNodeText(Lhs, ASrc), AName) then
+    begin
+      Rhs:= N.ChildByField('rhs');
+      Callee:= '';
+      if (not Rhs.IsNull) and (Rhs.NodeType = 'exprCall') then Callee:= SqlNodeText(Rhs.ChildByField('entity'), ASrc);
+      if SameText(Callee, 'IntToStr') or SameText(Callee, 'IntToHex')
+         or ((not Rhs.IsNull) and (Rhs.NodeType = 'literalString')) then Inc(ASafe)
+      else Inc(AUnsafe);
+    end;
+  end;
+  for I:= 0 to N.ChildCount - 1 do SqlScanAssigns(N.Child(I), AName, ASrc, ASafe, AUnsafe);
+end;
+
+function SqlRhsIsDigitsOnly(const ARoutine, ARhs: TTSNode; const ASrc: TBytes): Boolean;
+var
+  Name         : string;
+  Safe, Unsafe: Integer;
+begin
+  Result:= False;
+  if ARoutine.IsNull then Exit;
+  Name:= SqlNodeText(ARhs, ASrc);
+  Safe:= 0;
+  Unsafe:= 0;
+  SqlScanAssigns(ARoutine, Name, ASrc, Safe, Unsafe);
+  Result:= (Safe > 0) and (Unsafe = 0) and SqlDeclaresLocal(ARoutine, Name, ASrc);
+end;
+
+procedure SqlWalkConcats(const N, ARoutine: TTSNode; const ASrc: TBytes; ALine: Integer; var AFound, ABad: Integer);
+var
+  I      : Integer;
+  Routine: TTSNode;
+  Op     : TTSNode;
+  Lhs    : TTSNode;
+  Rhs    : TTSNode;
+begin
+  if N.IsNull then Exit;
+  Routine:= ARoutine;
+  if N.NodeType = 'defProc' then Routine:= N;
+  if (N.NodeType = 'exprBinary') and (Integer(N.StartPoint.Row) + 1 = ALine) then
+  begin
+    Op := N.ChildByField('operator');
+    Lhs:= N.ChildByField('lhs');
+    Rhs:= N.ChildByField('rhs');
+    if (not Op.IsNull) and (Op.NodeType = 'kAdd') and (not Lhs.IsNull) and (Lhs.NodeType = 'literalString')
+       and (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
+    begin
+      Inc(AFound);
+      if not SqlRhsIsDigitsOnly(Routine, Rhs, ASrc) then Inc(ABad);
+    end;
+  end;
+  for I:= 0 to N.ChildCount - 1 do SqlWalkConcats(N.Child(I), Routine, ASrc, ALine, AFound, ABad);
+end;
+
+function SqlConcatIsDigitsOnly(const ARoot: TTSNode; const ASrc: TBytes; ALine: Integer): Boolean;
+var
+  Found, Bad: Integer;
+  NoRoutine : TTSNode;
+begin
+  Found:= 0;
+  Bad  := 0;
+  NoRoutine:= Default(TTSNode);
+  SqlWalkConcats(ARoot, NoRoutine, ASrc, ALine, Found, Bad);
+  Result:= (Found > 0) and (Bad = 0);
+end;
 { SESSION 25 B2 follow-up, DIAGNOSTIC ONLY. `Linter.LintFile` is 56.17 s of
   ORM3's 145.86 s per-file scan and this splits it into READ+PARSE versus
   executing the 114 .scm queries. Read by LinterParseProfile, printed under
@@ -1064,6 +1168,7 @@ begin
             branch's last child, so it fired whether or not the comment was
             there and the documented escape hatch did not exist. Honour it. }
           if SameText(F.RuleId, 'empty-case-branch') and EmptyBranchIsCommented(Source, F.StartLine) then Continue;
+          if SameText(F.RuleId, 'sql-injection-concat') and SqlConcatIsDigitsOnly(Tree.RootNode, Source, F.StartLine) then Continue;
           Findings.Add(F);
         end;
       end;
