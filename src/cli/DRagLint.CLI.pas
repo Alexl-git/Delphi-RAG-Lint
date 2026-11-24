@@ -2640,7 +2640,7 @@ procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
   APreprocess: Boolean; const APlatform, ACfgLimb: string); forward;
 { What a completed --resolve-only may stamp: it walked nothing. See its own comment. }
 procedure CommitAfterResolveOnly(const AStore: ISymbolStore;
-  APreprocess: Boolean; const APlatform, ACfgLimb: string); forward;
+  APreprocess: Boolean; const APlatform, ACfgLimb: string; const AWhat: string = 'Resolve-only'); forward;
 
 
 /// <summary>
@@ -3352,11 +3352,14 @@ const
     damage the guard could only ever be observed NOT firing -- and a guard never
     seen fire is a guard that may be incapable of firing. Set to 1, this appends
     one synthetic edit that deletes a CODE line, which is the shape reported.
+    DAMAGE_BANNER deletes a banner (four-slash) line instead.
     Undocumented in --help on purpose: a test hook, not a feature. }
   DOC_SELFTEST_DAMAGE_ENV = 'DRAGLINT_DOC_SELFTEST_DAMAGE';
+  DAMAGE_BANNER           = 'banner';
 
 /// <summary>The part of a unit a doc write must never change: every line that
-/// is not a <c>///</c> comment, joined.</summary>
+/// is not a <c>///</c> comment -- a banner line of four or more slashes is not
+/// one -- joined.</summary>
 /// <remarks>Compared before and after an apply. Leading whitespace is kept, so
 /// a re-indent counts as a change too -- the writer has no business reflowing
 /// code either.</remarks>
@@ -3371,7 +3374,7 @@ begin
   try
     L.Text:= AText;
     for I:= 0 to L.Count - 1 do
-      if not StartsText('///', TrimLeft(L[I])) then Keep.Add(L[I]);
+      if not StartsText('///', TrimLeft(L[I])) or IsBannerSlashLine(L[I]) then Keep.Add(L[I]);
     Result:= Keep.Text;
   finally
     Keep.Free;
@@ -3420,14 +3423,15 @@ begin
 
     { The seam. Appended AFTER the snapshot so the restore is measured against
       the real pre-write bytes. }
-    if (GetEnvironmentVariable(DOC_SELFTEST_DAMAGE_ENV) = '1') and (Paths.Count > 0) then
+    var Damage: string:= GetEnvironmentVariable(DOC_SELFTEST_DAMAGE_ENV);
+    if MatchText(Damage, ['1', DAMAGE_BANNER]) and (Paths.Count > 0) then
     begin
       var Victim: TStringList:= TStringList.Create;
       try
         Victim.Text:= TEncoding.ANSI.GetString(Snapshot[Paths[0]]);
         for I:= 0 to Victim.Count - 1 do
-          if (not StartsText('///', TrimLeft(Victim[I]))) and (Trim(Victim[I]) <> '') and
-             (StartsText('function', TrimLeft(Victim[I])) or StartsText('procedure', TrimLeft(Victim[I]))) then
+          if (if Damage = DAMAGE_BANNER then IsBannerSlashLine(Victim[I])
+              else StartsText('function', TrimLeft(Victim[I])) or StartsText('procedure', TrimLeft(Victim[I]))) then
           begin
             E:= Default(TTextEdit);
             E.FilePath:= Paths[0];
@@ -5906,9 +5910,12 @@ end;
         plain run re-parses just those files (resume keeps the good parses).
 
   The resolver stamp is written on every path because the pass really completed.
-  Pinned by tests\autotest\run_resolve_only_stale_stamp_guard.ps1. }
+  Pinned by tests\autotest\run_resolve_only_stale_stamp_guard.ps1.
+
+  1.53.1: a ONE-FILE run into a database that already holds an index is the same case -- it walked one
+  file, so it may not claim the others (AWhat names the run in the note). See TOneFilePlan. }
 procedure CommitAfterResolveOnly(const AStore: ISymbolStore;
-  APreprocess: Boolean; const APlatform, ACfgLimb: string);
+  APreprocess: Boolean; const APlatform, ACfgLimb: string; const AWhat: string = 'Resolve-only');
 var
   Cur, Prev: string;
   NotCurrent: Int64;
@@ -5923,11 +5930,130 @@ begin
   end;
   AStore.SetMetaValue(RESOLVER_FP_KEY, ResolverFingerprint(AStore));
   if AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) <> '' then
-    Writeln('Resolve-only: an interrupted --rebuild is still open; the next plain index finishes its walk.')
+    Writeln(AWhat, ': an interrupted --rebuild is still open; the next plain index finishes its walk.')
   else if Prev = '' then
-    Writeln('Resolve-only: this DB records no indexer fingerprint yet; the next plain index records it.')
+    Writeln(AWhat, ': this DB records no indexer fingerprint yet; the next project or folder index, or one with --rebuild, records it.')
   else
-    Writeln(Format('Resolve-only: %d file(s) not at the current indexer fingerprint; the next plain index re-parses them (resuming, good parses kept).', [NotCurrent]));
+    Writeln(Format('%s: %d file(s) not at the current indexer fingerprint; the next plain index re-parses them (resuming, good parses kept).', [AWhat, NotCurrent]));
+end;
+
+type
+  { 1.53.1 (AUTODOC review HIGH-1 / M1 / M2): how a ONE-FILE index run into a database that already
+    holds an index parses its file. The stored fingerprint names the build every other file was parsed
+    with, so that build is taken from it; the DB-level stamp stays what it was (FinishOneFileRun). }
+  TOneFilePlan = record
+    Applies     : Boolean; { one file, into a database already indexed (or left open by a killed run) }
+    IsProject   : Boolean; { the database is a project's index }
+    Stored      : string ; { its indexer_fingerprint, '' = no run ever completed it }
+    Platform    : string ; { stored platform, '' = none }
+    Config      : string ; { stored build config, '' = none named }
+    BuildDproj  : string ; { the project file whose defines it was built with, '' = built-ins }
+    ScopeProject: string ; { the project file whose include / used-unit context applies, '' = none }
+    NoPreprocess: Boolean;
+    CompilerVer : Integer;
+  end;
+
+const
+  FP_LIMB_PLATFORM = 'plat=';
+  FP_LIMB_CONFIG   = 'cfg=';
+  FP_LIMB_MIXED    = 'mixed=1'; { a folder DB holding a file parsed with another build: FinishOneFileRun }
+  FP_CONFIG_JSON   = '<json>';  { IndexCfgLimb's word for a delphilsp.json define set: no named config }
+
+{ The fingerprint limbs that name the BUILD: everything but the engine's own v= / schema= and the
+  mixed mark. }
+function BuildLimbsOf(const AFingerprint: string): string;
+begin
+  Result:= '';
+  for var L: string in AFingerprint.Split([';']) do
+    if not (L.StartsWith('v=') or L.StartsWith('schema=') or (L = FP_LIMB_MIXED)) then Result:= Result + L + ';';
+end;
+
+{ The project files a project index may have been built from, the likeliest first: for the .dpr / .dpk it
+  holds (the one its project_tag names; the .dproj itself is not a row) the .dproj beside it, then the
+  file itself; else a .dproj of that name in the folder of an indexed file (a MainSource not named like
+  its .dproj is no row either); else the .dproj at the database's proper place. Empty = none is on disk. }
+function ProjectFilesOfStore(const AStore: ISymbolStore; const ADbPath: string): TArray<string>;
+begin
+  Result:= nil;
+  var Tag: string:= Trim(AStore.GetMetaValue(PROJECT_TAG_KEY));
+  for var FS: TFileStamp in AStore.GetAllFileStamps do
+    if MatchText(ExtractFileExt(FS.Path), ['.dproj', '.dpr', '.dpk']) and
+       ((Tag = '') or SameText(Tag, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(FS.Path)))) then
+      for var Candidate: string in [ChangeFileExt(FS.Path, '.dproj'), FS.Path] do
+        if TFile.Exists(Candidate) and not MatchText(Candidate, Result) then Result:= Result + [Candidate];
+  if (Length(Result) = 0) and (Tag <> '') then
+  begin
+    var Folders: TArray<string>:= nil;
+    for var FS: TFileStamp in AStore.GetAllFileStamps do
+      if not MatchText(ExtractFileDir(FS.Path), Folders) then Folders:= Folders + [ExtractFileDir(FS.Path)];
+    for var Folder: string in Folders do
+      if TDirectory.Exists(Folder) then
+        for var Candidate: string in TDirectory.GetFiles(Folder, '*.dproj') do
+          if SameText(Tag, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(Candidate))) then Result:= Result + [Candidate];
+  end;
+  if (Length(Result) = 0) and (ProjectOfDb(ADbPath) <> '') then Result:= [ProjectOfDb(ADbPath)];
+end;
+
+{ Reads how the database was built (TOneFilePlan). Inactive for a project / folder run, for --rebuild
+  (it clears the database and walks afresh) and for a database nothing was ever indexed into. }
+function PlanOneFileIndex(const AStore: ISymbolStore; const ADbPath: string; const AArgs: TArgs; ADbWasEmpty: Boolean): TOneFilePlan;
+begin
+  Result:= Default(TOneFilePlan);
+  if (AArgs.ProjectPath <> '') or AArgs.ScanLibraries or AArgs.Rebuild or not TFile.Exists(AArgs.Path) then Exit;
+  Result.Stored:= AStore.GetMetaValue(INDEXER_FP_KEY);
+  if ADbWasEmpty and (Result.Stored = '') and (AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) = '') then Exit;
+  Result.Applies  := True;
+  var Cfg: string := FingerprintLimbValue(Result.Stored, FP_LIMB_CONFIG);
+  Result.IsProject:= (Cfg <> '') or SameText(AStore.GetMetaValue(SCAN_TYPE_KEY), SCAN_TYPE_PROJECT) or
+    (Trim(AStore.GetMetaValue(PROJECT_TAG_KEY)) <> '') or ((Result.Stored = '') and (ProjectOfDb(ADbPath) <> ''));
+  if Result.Stored = '' then Exit;
+  Result.Platform    := FingerprintLimbValue(Result.Stored, FP_LIMB_PLATFORM);
+  Result.NoPreprocess:= FingerprintLimbValue(Result.Stored, 'pp=') = '0';
+  Result.CompilerVer := StrToIntDef(FingerprintLimbValue(Result.Stored, 'cv='), DEFAULT_COMPILER_VERSION);
+  if not Result.IsProject then Exit;
+  if Cfg <> FP_CONFIG_JSON then Result.Config:= Cfg;
+  var Projects: TArray<string>:= ProjectFilesOfStore(AStore, ADbPath);
+  if Length(Projects) = 0 then Exit;
+  var Proj: string:= Projects[0];
+  if Cfg <> '' then
+  begin
+    { a .dpr and the .dproj beside it are two builds: the one that gives the stored limbs built the index }
+    for var Candidate: string in Projects do
+    begin
+      var Build: TActiveBuild:= ResolveIndexBuild(Candidate, Result.Platform, Result.Config);
+      if not BuildLimbsOf(Result.Stored).Contains(IndexCfgLimb(Build) + ';') then Continue;
+      Proj:= Candidate;
+      Break;
+    end;
+    Result.BuildDproj:= Proj;
+  end;
+  if MatchText(ExtractFileExt(AArgs.Path), ['.pas', '.inc']) then Result.ScopeProject:= Proj;
+end;
+
+{ Why a one-file run must not write a PROJECT index: '' = it may. A folder / ad-hoc database is never
+  refused. ACur is the fingerprint this run would parse with. }
+function OneFileRefusal(const APlan: TOneFilePlan; const ACur: string): string;
+begin
+  Result:= '';
+  if not (APlan.Applies and APlan.IsProject) then Exit;
+  if APlan.Stored = '' then Exit('no index run ever completed it, so the build its files are parsed with is unknown');
+  if (FingerprintLimbValue(APlan.Stored, FP_LIMB_CONFIG) <> '') and (APlan.BuildDproj = '') then
+    Exit('its project file is not on disk, so the defines it was built with cannot be read');
+  if BuildLimbsOf(ACur) <> BuildLimbsOf(APlan.Stored) then
+    Result:= Format('it was built as %s, this run would parse the file as %s', [APlan.Stored, ACur]);
+end;
+
+{ The end of a one-file run: never a claim about the files it did not walk (CommitAfterResolveOnly's
+  rule). A folder database whose file was parsed with ANOTHER build (an explicit --platform /
+  --no-preprocess) keeps its stamp plus the mixed mark, so the next folder run sees a difference and
+  re-parses exactly the files not at its fingerprint. }
+procedure FinishOneFileRun(const AStore: ISymbolStore; APreprocess: Boolean; const APlatform, ACfgLimb: string);
+begin
+  CommitAfterResolveOnly(AStore, APreprocess, APlatform, ACfgLimb, 'One file');
+  var Stored: string:= AStore.GetMetaValue(INDEXER_FP_KEY);
+  if (Stored = '') or Stored.Contains(FP_LIMB_MIXED) then Exit;
+  if BuildLimbsOf(Stored) <> BuildLimbsOf(IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb)) then
+    AStore.SetMetaValue(INDEXER_FP_KEY, Stored + ';' + FP_LIMB_MIXED);
 end;
 
 { v21: opens --library-db paths as read-only extra stores for cross-DB call
@@ -6320,11 +6446,26 @@ begin
   // --no-preprocess reverts to the prior raw all-branch behaviour. Profile comes
   // from --project (a .dproj -> per-config defines) when given, else the platform
   // built-ins (--platform, else the project's active Platform, else Win32 -- ruling a3).
-  var IdxBuild: TActiveBuild:= ResolveIndexBuild(AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.BuildConfig);
+  // 1.53.1: one file into an already indexed database is parsed with the build the DB's fingerprint
+  // names (INBOX-orm3-server-153 item 3, AUTODOC review HIGH-1 / M1 / M2) -- see TOneFilePlan.
+  var OneFile: TOneFilePlan:= PlanOneFileIndex(Store, ResolvedDb, AArgs, DbWasEmpty);
+  var NoPp: Boolean:= AArgs.NoPreprocess or OneFile.NoPreprocess;
+  if OneFile.Applies and (OneFile.Stored <> '') and (Trim(AArgs.TargetCompiler) = '') then
+    SetTargetCompilerVersion(OneFile.CompilerVer);
+  var IdxBuild: TActiveBuild:= ResolveIndexBuild((if OneFile.Applies then OneFile.BuildDproj else AArgs.ProjectPath),
+    (if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else OneFile.Platform),
+    (if AArgs.BuildConfig <> '' then AArgs.BuildConfig else OneFile.Config));
   var PpPlatform: string:= IdxBuild.Platform;
   var IdxCfgLimb: string:= IndexCfgLimb(IdxBuild);
-  Indexer.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
-  if not AArgs.NoPreprocess then WriteIndexDefinesLine(IdxBuild);
+  var Refusal: string:= OneFileRefusal(OneFile, IndexerFingerprint(Store, not NoPp, PpPlatform, IdxCfgLimb));
+  if (Refusal <> '') and not AArgs.ResolveOnly then
+  begin
+    Writeln(ErrOutput, 'ERROR: index: refusing to index one file into the project index ', ResolvedDb, ': ', Refusal, '.');
+    Writeln(ErrOutput, '       Nothing was parsed. Run: drag-lint index --project <file.dproj> --db "', ResolvedDb, '"');
+    Exit(2);
+  end;
+  Indexer.SetPreprocess(not NoPp, IdxBuild.Profile);
+  if not NoPp then WriteIndexDefinesLine(IdxBuild);
   { SIZE GUARD ON THE INDEX PATH TOO (INBOX-library-reindex-25x-slower-on-large-db).
 
     SizeGuardCheck was wired only into the CONSUMER commands (lint / lsp /
@@ -6343,11 +6484,11 @@ begin
     else IdxGuardMB:= CwdManifest.Settings.SizeGuardMB;
     SizeGuardCheck(ResolvedDb, IdxGuardMB, AArgs.Force32);
   end;
-  if not AArgs.NoPreprocess then Writeln('Preprocess: ON  (per-config directive resolution; platform=', PpPlatform, ')')
+  if not NoPp then Writeln('Preprocess: ON  (per-config directive resolution; platform=', PpPlatform, ')')
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
   { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
     even when every byte on disk is identical. }
-  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb, AArgs.ResolveOnly);  // dl:ok duplicate-code@ee09 -- REVIEWED 2026-11-05 (extract-136 review; AResolveOnly added to both): DoIndex (single root) and BuildPlanItem (index --all manifest path) run the SAME fingerprint + resolver-staleness gate on purpose (INBOX 2.3); the duplicated block is that gate's call sequence with each path's own args
+  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not NoPp, PpPlatform, IdxCfgLimb, AArgs.ResolveOnly);  // dl:ok duplicate-code@fbcc -- REVIEWED 2026-11-05 (extract-136 review; AResolveOnly added to both): DoIndex (single root) and BuildPlanItem (index --all manifest path) run the SAME fingerprint + resolver-staleness gate on purpose (INBOX 2.3); the duplicated block is that gate's call sequence with each path's own args
 
   { RESOLVER STALENESS -- the sibling question, asked separately because its
     remedy is minutes rather than the ~5 hours a reparse costs.
@@ -6424,9 +6565,11 @@ begin
     Writeln(Format('Resolved %d unique library/browsing folders:', [Length(Folders)]));
     PrintScopeListing(Folders, AArgs.DryRun);
   end
-  else if AArgs.ProjectPath <> '' then
+  else if (AArgs.ProjectPath <> '') or (OneFile.ScopeProject <> '') then
   begin
-    Writeln('Project: ', AArgs.ProjectPath);
+    { a one-file run resolves the closure for its CONTEXT only (include search path, used-unit constants) }
+    var ScopeProject: string:= if AArgs.ProjectPath <> '' then AArgs.ProjectPath else OneFile.ScopeProject;
+    if AArgs.ProjectPath <> '' then Writeln('Project: ', AArgs.ProjectPath);
     { A project's index must hold exactly that project's COMPILE CLOSURE.
 
       This arm used to resolve the project's search-path FOLDERS
@@ -6450,7 +6593,7 @@ begin
       finally agree about what X is. Library units stay out: they live in
       library-Win32.sqlite / library-Win64.sqlite, which a consumer reaches by
       passing a second --db. }
-    IdxStudio:= ResolveTargetStudio(AArgs.ProjectPath);
+    IdxStudio:= ResolveTargetStudio(ScopeProject);
     Resolver:= IdxStudio.OpenResolver;
     try
       var IdxTail: TArray<string>:= Resolver.ClosureSearchTail(IdxBuild.Platform);
@@ -6461,13 +6604,17 @@ begin
           disagree about which $IFDEF branch is live -- a unit reachable only
           from an inactive branch would be pulled in and then parsed as though
           it were not compiled, and vice versa. }
-        Cl.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
+        Cl.SetPreprocess(not NoPp, IdxBuild.Profile);
         { Lane INC3: IF names resolve in the used units -- the closure's
           project files are scanned (order-independent), library units come
           from the library DB (--library-db, else the manifest's). }
         var PPSrc: TPPUnitSourceResolver:= nil;
-        if not AArgs.NoPreprocess then
-          PPSrc:= InstallPPUnitSource(IdxBuild.Profile, nil, [LintLibraryDb(AArgs)]);
+        if not NoPp then
+        begin
+          var LibArgs: TArgs:= AArgs;
+          if OneFile.Applies then LibArgs.CheckPlatform:= IdxBuild.Platform; { the library the project run reads }
+          PPSrc:= InstallPPUnitSource(IdxBuild.Profile, nil, [LintLibraryDb(LibArgs)]);
+        end;
         { INCR18 CLOSURE CACHE: what the last walk read out of each unit, reused
           while the unit, every include file its scan read and the walk's
           fingerprint are unchanged (TClosureResolver.EnableScanCache). Not on a
@@ -6488,7 +6635,7 @@ begin
             Cl.SeedScanCache(StoredFp, StoredScans);
           end;
         end;
-        var CR: TClosureResult:= ResolveTargetClosure(Cl, AArgs.ProjectPath, AArgs.ExcludeGlobs, IdxTail);
+        var CR: TClosureResult:= ResolveTargetClosure(Cl, ScopeProject, AArgs.ExcludeGlobs, IdxTail);
         { The first pass could not see the project's own units yet; when an IF
           asked for a name it could not answer, resolve once more with them. }
         if PPSrc <> nil then
@@ -6497,7 +6644,7 @@ begin
           PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
           if PPMissed then
           begin
-            CR:= ResolveTargetClosure(Cl, AArgs.ProjectPath, AArgs.ExcludeGlobs, IdxTail);
+            CR:= ResolveTargetClosure(Cl, ScopeProject, AArgs.ExcludeGlobs, IdxTail);
             PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
           end;
         end;
@@ -6519,49 +6666,53 @@ begin
         end;
         { Lane INC: each .inc is parsed in its includer's define context, with
           include names resolved on the same search path the closure used. }
-        Indexer.SetIncludeContext(not AArgs.NoPreprocess, CR.SearchPaths);
+        Indexer.SetIncludeContext(not NoPp, CR.SearchPaths);
         for var W: string in CR.Warnings do Writeln('  ', W);
 
-        { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
-          sibling .dfm and the project file(s). See its remarks for why both are
-          load-bearing. }
-        Folders:= ExpandProjectScope(AArgs.ProjectPath, CR.Files);
-        { v151 EXCL (owner OQ4): a project index never drops a closure unit. --exclude-under prunes
-          library (folder) walks only; a closure unit under such a root stays and is named here. }
-        var KeptUnder: TArray<string>:= PathsUnderExcludeRoots(Folders, AArgs.ExcludeUnder);
-        if Length(KeptUnder) > 0 then
+        if OneFile.Applies then Folders:= [AArgs.Path]
+        else
         begin
-          Writeln(Format('  NOTE: --exclude-under prunes library walks only; a project index keeps every ' +
-            'compile-closure unit. Kept %d file(s) under an excluded root:', [Length(KeptUnder)]));
-          for var K: string in KeptUnder do Writeln('    ', K);
-        end;
-        { v151 EXCL (owner OQ4): closure units the project files do not list are members all the same;
-          say so now, so they are added (lint --rule unit-not-in-dpr, reconcile-project --apply). }
-        if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then
-          for var PF: TLintFinding in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(
-            AArgs.ProjectPath, CR.Files, False, UnitNotInDprLibraryRoots(AArgs.ProjectPath)) do
-            Writeln(Format('  unit-not-in-dpr: %s', [PF.Message]));
+          { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
+            sibling .dfm and the project file(s). See its remarks for why both are
+            load-bearing. }
+          Folders:= ExpandProjectScope(AArgs.ProjectPath, CR.Files);
+          { v151 EXCL (owner OQ4): a project index never drops a closure unit. --exclude-under prunes
+            library (folder) walks only; a closure unit under such a root stays and is named here. }
+          var KeptUnder: TArray<string>:= PathsUnderExcludeRoots(Folders, AArgs.ExcludeUnder);
+          if Length(KeptUnder) > 0 then
+          begin
+            Writeln(Format('  NOTE: --exclude-under prunes library walks only; a project index keeps every ' +
+              'compile-closure unit. Kept %d file(s) under an excluded root:', [Length(KeptUnder)]));
+            for var K: string in KeptUnder do Writeln('    ', K);
+          end;
+          { v151 EXCL (owner OQ4): closure units the project files do not list are members all the same;
+            say so now, so they are added (lint --rule unit-not-in-dpr, reconcile-project --apply). }
+          if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then
+            for var PF: TLintFinding in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(
+              AArgs.ProjectPath, CR.Files, False, UnitNotInDprLibraryRoots(AArgs.ProjectPath)) do
+              Writeln(Format('  unit-not-in-dpr: %s', [PF.Message]));
 
-        { FAIL LOUDLY. A project that resolves to nothing must NOT fall back to
-          a folder walk -- that fallback is the defect above returning -- and
-          must not quietly write an empty index either. Lint, coverage and the
-          doc engine all report a clean bill of health over an empty DB, so a
-          silent empty index is the most dangerous artefact this tool can
-          produce.
+          { FAIL LOUDLY. A project that resolves to nothing must NOT fall back to
+            a folder walk -- that fallback is the defect above returning -- and
+            must not quietly write an empty index either. Lint, coverage and the
+            doc engine all report a clean bill of health over an empty DB, so a
+            silent empty index is the most dangerous artefact this tool can
+            produce.
 
-          Guarded on the EXPANDED SCOPE, not on CR.Files. A single-file program
-          whose `uses` names only library units has an empty project-local
-          closure by construction, and indexing its program file is the correct
-          outcome -- the CR.Files test failed OCRPDF.dpr and
-          TestCachedUpdates.dproj, both legitimate. ScopeHasIndexableFile
-          explains why the test is not simply Length(Folders) = 0. }
-        if not ScopeHasIndexableFile(Folders) then
-        begin
-          Writeln(ErrOutput, Format('ERROR: %s resolves to an EMPTY compile scope -- no ' +
-            'DCCReference entries, no resolvable .dpr member units, and no program file on ' +
-            'disk. Refusing to write an empty index; a folder walk is NOT a fallback (it ' +
-            'indexes files the project does not compile).', [AArgs.ProjectPath]));
-          Exit(2);
+            Guarded on the EXPANDED SCOPE, not on CR.Files. A single-file program
+            whose `uses` names only library units has an empty project-local
+            closure by construction, and indexing its program file is the correct
+            outcome -- the CR.Files test failed OCRPDF.dpr and
+            TestCachedUpdates.dproj, both legitimate. ScopeHasIndexableFile
+            explains why the test is not simply Length(Folders) = 0. }
+          if not ScopeHasIndexableFile(Folders) then
+          begin
+            Writeln(ErrOutput, Format('ERROR: %s resolves to an EMPTY compile scope -- no ' +
+              'DCCReference entries, no resolvable .dpr member units, and no program file on ' +
+              'disk. Refusing to write an empty index; a folder walk is NOT a fallback (it ' +
+              'indexes files the project does not compile).', [AArgs.ProjectPath]));
+            Exit(2);
+          end;
         end;
       finally
         Cl.Free;
@@ -6576,9 +6727,12 @@ begin
       That is fine: a unit that left the CLOSURE has usually not left the disk,
       so prune was never the mechanism for it. Out-of-scope eviction, below,
       is -- and it takes Folders as its in-scope set. }
-    Writeln(Format('Compile closure: %d file(s):', [Length(Folders)]));
-    PrintScopeListing(Folders, AArgs.DryRun);
-    if AArgs.DryRun then WriteIndexStudioSummary(IdxStudio, AArgs.AsJson, nil);
+    if AArgs.ProjectPath <> '' then
+    begin
+      Writeln(Format('Compile closure: %d file(s):', [Length(Folders)]));
+      PrintScopeListing(Folders, AArgs.DryRun);
+      if AArgs.DryRun then WriteIndexStudioSummary(IdxStudio, AArgs.AsJson, nil);
+    end;
   end
   else Folders:= [AArgs.Path];
 
@@ -7059,8 +7213,9 @@ begin
     Stage('', 'search', procedure begin Store.BuildSymbolSearch; end);
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
-    if AArgs.ResolveOnly then CommitAfterResolveOnly(Store, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb)
-    else CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);
+    if AArgs.ResolveOnly then CommitAfterResolveOnly(Store, not NoPp, PpPlatform, IdxCfgLimb)
+    else if OneFile.Applies then FinishOneFileRun(Store, not NoPp, PpPlatform, IdxCfgLimb)
+    else CommitIndexerFingerprint(Store, not NoPp, PpPlatform, IdxCfgLimb);
     { --watch: ResolverStale was read ONCE, before the loop. This tick derived
       the edges with the current resolver and stamped it, so a later tick must
       not clear every edge again (it did, on every tick of a new or restamped DB,
@@ -17771,6 +17926,40 @@ begin
   end; // try
 end; // function
 
+{ A doc verb's project reindex keeps the platform and the build config the database was built with (the
+  IDE passes --platform, a user --build-config; the .dproj marker may name others). What the command line
+  names itself wins; a database that records none, or cannot be opened, changes nothing. }
+procedure KeepStoredBuild(var AIndexArgs: TArgs; const ADbPath: string);
+begin
+  var Ok: Boolean;
+  var Store: ISymbolStore:= OpenReadOnlyStore(ADbPath, Ok, True);
+  if not Ok then Exit;
+  var Stored: string:= Store.GetMetaValue(INDEXER_FP_KEY);
+  var Cfg: string:= FingerprintLimbValue(Stored, FP_LIMB_CONFIG);
+  if AIndexArgs.CheckPlatform = '' then AIndexArgs.CheckPlatform:= FingerprintLimbValue(Stored, FP_LIMB_PLATFORM);
+  if (AIndexArgs.BuildConfig = '') and (Cfg <> FP_CONFIG_JSON) then AIndexArgs.BuildConfig:= Cfg;
+end;
+
+{ 1.53.1: `document` on an index no run finished (killed before or during its resolve, a --rebuild left
+  open, or a run still at work) renders facts from missing edges: callers, reads and exceptions read as "none". --apply is
+  REFUSED (True; the verb exits 1, nothing written); a dry run WARNs on stderr and goes on. --strip reads
+  no facts and is never asked. }
+function DocIndexUnfinished(const AArgs: TArgs; const AStore: ISymbolStore): Boolean;
+begin
+  if AArgs.DocStrip then Exit(False);
+  var Why: string:=
+    if AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) <> '' then 'a --rebuild of it'
+    else if AStore.GetMetaValue(INDEXER_FP_KEY) = '' then 'its index run'
+    else if AStore.GetMetaValue(RESOLVER_FP_KEY) = '' then 'the resolve of its last index run'
+    else '';
+  Result:= (Why <> '') and AArgs.Apply;
+  if Why <> '' then
+    Writeln(ErrOutput, Format('doc: %s -- %s is running or did not finish, so callers, reads and exceptions may be missing from the facts.%s ' +
+      'If no index run is at work on it, finish it: drag-lint index --project <file.dproj> --db "%s" ' +
+      '(a project index), drag-lint index <folder> (a folder index), or drag-lint index <file> --rebuild (a one-file index).',
+      [(if Result then 'REFUSED' else 'WARN'), Why, (if Result then ' NOTHING was written.' else ''), AArgs.DbPath]));
+end;
+
 // v(PHASE A2 + ruling D-2): the doc verbs' recovery step when the applier's
 // stale-anchor guard refused an edit.
 //
@@ -17799,14 +17988,23 @@ begin
   EmitStatusLine(AArgs, 'doc: the index disagrees with the file on where a declaration is -- reindexing and retrying once (ruling D-2).');
   IndexArgs         := AArgs;
   IndexArgs.IndexAll:= False;
-  if AArgs.ProjectPath <> '' then IndexArgs.Path:= ''    // ProjectPath drives the closure
+  if AArgs.ProjectPath <> '' then
+  begin
+    IndexArgs.Path:= '';    // ProjectPath drives the closure
+    KeepStoredBuild(IndexArgs, AArgs.DbPath); { 1.53.1: a doc verb's reindex never flips the DB's build }
+  end
   // 152b DOCU2: the ONE stale file, never its folder. `index <dir> --db
   // <projectDb>` is the widening the index verb refuses (exit 2), so the folder
   // form made this recovery fail on every project DB, and on an unstamped DB it
   // walked every loose .pas beside the unit into the index. A single-file index
   // is the endorsed incremental move: it cannot widen a scope and it leaves the
   // scan_type stamp alone. ExpandFileName: a bare `--unit foo.pas` is cwd-relative.
-  else IndexArgs.Path:= ExpandFileName(AFilePath);
+  else
+  begin
+    IndexArgs.Path:= ExpandFileName(AFilePath);
+    IndexArgs.CheckPlatform:= ''; { the DB's stored build decides (TOneFilePlan) }
+    IndexArgs.BuildConfig  := '';
+  end;
   Result:= DoIndexForDoc(AArgs, IndexArgs) = 0;
   if not Result then
     EmitStatusLine(AArgs, 'doc: the reindex FAILED. Nothing was written at the unverified coordinate(s).');
@@ -17872,10 +18070,14 @@ end;
   Rescan BOTH sides -- the documented file and every file its facts were read from -- with
   --force-reparse (the stamp fast path would skip them), say so on stderr as a WARN, and
   re-open AStore so the caller runs on the fresh rows. Returns True when it rescanned;
-  False (nothing touched) when every stamp-clean file agrees with its source. }
-function RescanTamperedFacts(const AArgs: TArgs; var AStore: ISymbolStore; const AOwnFile: string): Boolean;
+  False (nothing touched) when every stamp-clean file agrees with its source.
+  1.53.1: a rescan that FAILED (the one-file index refused: a define changed since the project was
+  indexed) leaves rows known to be wrong, so ARefused comes back True under --apply and the caller exits
+  1 with nothing written; a dry run only WARNs. --strip reads no facts and is never refused. }
+function RescanTamperedFacts(const AArgs: TArgs; var AStore: ISymbolStore; const AOwnFile: string; out ARefused: Boolean): Boolean;
 begin
   Result:= False;
+  ARefused:= False;
   var Files: TArray<string>:= nil;
   if AOwnFile <> '' then Files:= [AOwnFile];
   for var R: string in SourceFilesRead do
@@ -17899,8 +18101,16 @@ begin
     IndexArgs.IndexAll     := False;
     IndexArgs.ForceReparse := True;
     IndexArgs.Path         := ExpandFileName(F);
-    if DoIndexForDoc(AArgs, IndexArgs) <> 0 then
-      Writeln(ErrOutput, 'doc: WARN -- the rescan of ' + F + ' FAILED; the facts for it may still be stale.');
+    { one file, never the closure: with ProjectPath left set, `document --project` force-reparsed the WHOLE
+      project once per file that disagreed }
+    IndexArgs.ProjectPath  := '';
+    IndexArgs.CheckPlatform:= ''; { the DB's stored build decides (TOneFilePlan) }
+    IndexArgs.BuildConfig  := '';
+    if DoIndexForDoc(AArgs, IndexArgs) = 0 then Continue;
+    ARefused:= AArgs.Apply and not AArgs.DocStrip;
+    Writeln(ErrOutput, Format('doc: %s -- the rescan of %s FAILED; the facts stored for it do not match the source.%s',
+      [(if ARefused then 'REFUSED' else 'WARN'), F, (if ARefused then ' NOTHING was written. Reindex first: drag-lint index --project ' +
+       '<file.dproj> --db "' + AArgs.DbPath + '"' else '')]));
   end;
   var Ok: Boolean;
   var Fresh: ISymbolStore:= OpenReadOnlyStore(AArgs.DbPath, Ok);
@@ -18019,6 +18229,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
+  if DocIndexUnfinished(AArgs, Store) then Exit(1);
   TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
 
   Opts:= Default(TDocBatchOptions);
@@ -18039,8 +18250,10 @@ begin
   Opts.IncludeAccessors:= AArgs.DocIncludeAccessors; // ADP1 T2: --include-accessors disables the trivial-accessor skip for this run.
   ResetSourceFilesRead; // 152b DOCU: record what the facts read, then refuse on stale text
   Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
-  if RescanTamperedFacts(AArgs, Store, AArgs.DocUnit) then // v151 DOCU5 (OQ5)
+  var Refused: Boolean;
+  if RescanTamperedFacts(AArgs, Store, AArgs.DocUnit, Refused) then // v151 DOCU5 (OQ5)
   begin
+    if Refused then Exit(1);
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentUnit(Store, AArgs.DocUnit, Opts);
   end;
@@ -18251,6 +18464,7 @@ begin
     var IndexArgs: TArgs := AArgs;
     IndexArgs.IndexAll := False;  // incremental (default)
     IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
+    KeepStoredBuild(IndexArgs, AArgs.DbPath);
     var IndexResult := DoIndexForDoc(AArgs, IndexArgs);
     if IndexResult <> 0 then
     begin
@@ -18263,6 +18477,7 @@ begin
   begin
     Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
     if not Ok then Exit(2);
+    if DocIndexUnfinished(AArgs, Store) then Exit(1);
     TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
   end;
 
@@ -18285,8 +18500,10 @@ begin
   // Step 2: document --apply (shifts lines, which makes index stale)
   ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
-  if RescanTamperedFacts(AArgs, Store, '') then
+  var Refused: Boolean;
+  if RescanTamperedFacts(AArgs, Store, '', Refused) then
   begin
+    if Refused then Exit(1);
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   end;
@@ -18303,6 +18520,7 @@ begin
     var IndexArgs: TArgs := AArgs;
     IndexArgs.IndexAll := False;  // incremental
     IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
+    KeepStoredBuild(IndexArgs, AArgs.DbPath);
     var IndexResult := DoIndexForDoc(AArgs, IndexArgs);
     if IndexResult <> 0 then
     begin
@@ -18332,6 +18550,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
+  if DocIndexUnfinished(AArgs, Store) then Exit(1);
   TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
 
   Opts:= Default(TDocBatchOptions);
@@ -18353,8 +18572,10 @@ begin
   TSharedFacts.MigrateLegacyPure:= AArgs.DocMigratePure; // 2026-09-23: --migrate-pure regenerates a stored legacy `Pure` line.
   ResetSourceFilesRead; // v151 DOCU5 (OQ5)
   Res:= TDocBatch.DocumentAll(Store, Opts);
-  if RescanTamperedFacts(AArgs, Store, '') then
+  var Refused: Boolean;
+  if RescanTamperedFacts(AArgs, Store, '', Refused) then
   begin
+    if Refused then Exit(1);
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentAll(Store, Opts);
   end;
@@ -18828,6 +19049,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
+  if DocIndexUnfinished(AArgs, Store) then Exit(1);
   TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
 
   if AArgs.DocStrip then Exit(DoDocumentStripQName(AArgs, Store)); // v(ADP3 T2)
@@ -18837,8 +19059,10 @@ begin
     AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,
     LoadDocComplexityMin); // gap 3: manifest docs.dialog_routines / max_handles for 'Catches:'. ADF T5: --since (git <since> date) + --base-dir repo root; multi-db: other resolved --db's searched for callers; Task 10: manifest docs.max_return_cases cap; ADP1 T1: manifest docs.max_callers cap; ADP2 T3: manifest docs.complexity_min threshold.
 
-  if (Res.Action <> DRagLint.Doc.Document.daNotFound) and RescanTamperedFacts(AArgs, Store, Res.FilePath) then // v151 DOCU5 (OQ5)
+  var Refused: Boolean;
+  if (Res.Action <> DRagLint.Doc.Document.daNotFound) and RescanTamperedFacts(AArgs, Store, Res.FilePath, Refused) then // v151 DOCU5 (OQ5)
   begin
+    if Refused then Exit(1);
     ResetSourceFilesRead;
     Res:= DRagLint.Doc.Document.TDocumenter.BuildFor(Store, AArgs.QName, LoadDocHandlesOptions, AArgs.DocSeeAlso,
       AArgs.DocSince, AArgs.DocBaseDir, OpenExtraStores(AArgs), LoadDocMaxReturnCases, LoadDocMaxCallers,

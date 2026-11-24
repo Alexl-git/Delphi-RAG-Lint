@@ -195,15 +195,17 @@ uses
   // functions only (its own uses clause is System.SysUtils alone), so this does
   // NOT give the unit an index dependency -- the property the unit header calls
   // out is preserved.
-  DRagLint.Core.Model;
+  DRagLint.Core.Model,
+  DRagLint.Doc.Harvest; { IsBannerSlashLine, EndPastBanners: pure text }
 
-// True when S is a doc-comment line: its trimmed form starts with '///'.
+// True when S is a doc-comment line: its trimmed form starts with '///' and it is
+// not a banner (four or more slashes), which separates two blocks.
 // Matches every other line-oriented /// scan in this codebase (e.g. the
 // run_doc_multiline.ps1 runner's own OrphanDocLines check) -- lenient on
 // whitespace after the slashes.
 function IsDocLine(const S: string): Boolean;
 begin
-  Result:= StartsStr('///', TrimLeft(S));
+  Result:= StartsStr('///', TrimLeft(S)) and not IsBannerSlashLine(S);
 end;
 
 // v(ADP3 T3j, register S1): True when 1-based source line ALine1Based exists in
@@ -677,7 +679,9 @@ begin
         Lo:= I;
         Hi:= I;
         while (Hi + 1 < Lines.Count) and IsDocLine(Lines[Hi + 1]) do Inc(Hi);
-        Fits:= if Length(ASymStartLines) > 0 then DocRegionFitsDecl(Hi + 1, ADeclLine, DOC_ALLOW_GAP, ASymStartLines) else DocRegionInGapWindow(Hi + 1, ADeclLine, DOC_ALLOW_GAP) and ((Hi + 1 = ADeclLine - 1) or IsBlankSourceLine(Lines, ADeclLine - 1));
+        var GapEnd: Integer:= EndPastBanners(Lines.ToStringArray, Hi + 1);
+        Fits:= if Length(ASymStartLines) > 0 then DocRegionFitsDecl(GapEnd, ADeclLine, DOC_ALLOW_GAP, ASymStartLines)
+               else DocRegionInGapWindow(GapEnd, ADeclLine, DOC_ALLOW_GAP) and ((GapEnd = ADeclLine - 1) or IsBlankSourceLine(Lines, ADeclLine - 1));
         if Fits then
         begin
           RegionLo:= Lo;

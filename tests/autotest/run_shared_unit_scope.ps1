@@ -70,6 +70,10 @@ unit Shared.Ctl;
 
 interface
 
+const
+  CTextOnly = 2;
+  CTextDead = 3;
+
 var
   GLive: Integer;
   GDead: Integer;
@@ -117,6 +121,9 @@ implementation
 
 uses Shared.Ctl;
 
+{$IF CTextOnly > 1}
+{$IFEND}
+{ CTextDead }
 procedure RunTwo;
 begin
   Beat;
@@ -163,6 +170,9 @@ Check 'POSITIVE CONTROL: DeadBeat (dead in both) IS reported' ($u -match 'DeadBe
 Check 'POSITIVE CONTROL: GDead (dead in both) IS reported' ($u -match 'GDead') $u
 Check 'Beat (called only in P2) is NOT reported' ($u -notmatch '\bBeat\b') $u
 Check 'GLive (written only in P2) is NOT reported' ($u -notmatch 'GLive') $u
+Check 'CTextOnly (no ref: named only in a directive of P2) is NOT reported' ($u -notmatch 'CTextOnly') $u
+Check 'POSITIVE CONTROL: CTextDead (only a comment of P2 names it) IS reported' ($u -match 'CTextDead') $u
+Check 'fresh siblings: no withheld note (control)' ($u -notmatch 'withheld as undecidable') $u
 
 Write-Host 'undecided: P2 index stale' -ForegroundColor Cyan
 Start-Sleep -Seconds 2
@@ -172,6 +182,7 @@ $m2 = Join-Path $p2 'P2Main.pas'
 $s = Lint-P1
 Check 'stale listing DB: DeadBeat is NOT reported (cannot prove it dead)' ($s -notmatch 'DeadBeat') $s
 Check 'stale listing DB: GDead is NOT reported' ($s -notmatch 'GDead') $s
+Check 'stale listing DB: the withheld checks are SAID, naming P2 (INBOX-orm3-server-153 item 2)' ($s -match 'note: cross-project: \d+ check\(s\) on units shared with P2 were withheld as undecidable') $s
 
 Write-Host 'DLOK-UNDECIDED: a dl:ok on an undecided site is not review-marker-unused' -ForegroundColor Cyan
 $ctl = Join-Path $sh 'Shared.Ctl.pas'

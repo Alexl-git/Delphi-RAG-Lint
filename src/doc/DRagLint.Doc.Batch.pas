@@ -300,7 +300,7 @@ type
 /// <param name="AFiles">Candidate paths: the documented file plus every file its
 /// facts were read from. Files the index does not hold are ignored.</param>
 /// <returns>Paths (as given) where an interface-section symbol's stored name is not
-/// on its stored start line. Files whose stamp already changed are NOT returned:
+/// on its stored start line (past that line's attribute groups, when it is decorated). Files whose stamp already changed are NOT returned:
 /// the stale-fact refusal and the stale-anchor retry own that case.</returns>
 /// <remarks>
 /// Read-only. A same-size edit with the mtime put back (tampering, a
@@ -322,7 +322,8 @@ implementation
 uses
   { System.SysUtils is in the INTERFACE uses now -- TDocBatchOptions.IsExcluded
     needs TFunc there -- so repeating it here is E2004. }
-  System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
+  System.StrUtils, System.Math, System.Generics.Collections, System.Generics.Defaults,
+  DRagLint.Doc.Facts, { SkipDeclAttributeGroup }
   DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Strip, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   DRagLint.Index.Closure, DRagLint.Project.Resolver, DRagLint.Project.TargetStudio,
   { Ownership for DocumentProject -- the same declaration lint-all reads, so the
@@ -745,6 +746,31 @@ begin
   end;
 end;
 
+{ INBOX-orm3-server-153 item 3: is AName on the declaration that starts on ALine (1-based)? A decorated
+  declaration's indexed start line is its ATTRIBUTE line (`[Inject]` above `constructor Create`), so the
+  attribute groups -- and the comment lines between them and the heading -- are read past first. Taking the
+  attribute line for the declaration made every unit with such a member read as tampered, for ever. A
+  multi-line attribute cannot be judged and counts as agreeing: no rescan on a guess. }
+function DeclarationNames(const ALines: TArray<string>; ALine: Integer; const AName: string): Boolean;
+const
+  MAX_ATTR_LINES = 8; { as Doc.Facts.ReadDeclLine }
+begin
+  Result:= True;
+  if not Trim(ALines[ALine - 1]).StartsWith('[') then Exit(ContainsText(ALines[ALine - 1], AName));
+  var Open: string:= ''; { closer of a comment that runs over a line end }
+  for var I: Integer:= ALine - 1 to Min(ALine - 1 + MAX_ATTR_LINES, High(ALines)) do
+  begin
+    var S: string:= SkipLeadingComments(ALines[I], Open);
+    while S.StartsWith('[') do
+    begin
+      var GroupEnd: Integer:= SkipDeclAttributeGroup(S);
+      if GroupEnd = 0 then Exit;
+      S:= SkipLeadingComments(Copy(S, GroupEnd + 1, MaxInt), Open);
+    end;
+    if S <> '' then Exit(ContainsText(S, AName));
+  end;
+end;
+
 function DocFilesDisagreeingWithSource(const AStore: ISymbolStore;
   const AFiles: TArray<string>): TArray<string>;
 var
@@ -767,7 +793,7 @@ begin
     begin
       if not SameText(S.Section, 'interface') then Continue;
       if (S.Name = '') or (S.StartLine < 1) then Continue;
-      if (S.StartLine > Length(Lines)) or not ContainsText(Lines[S.StartLine - 1], S.Name) then
+      if (S.StartLine > Length(Lines)) or not DeclarationNames(Lines, S.StartLine, S.Name) then
       begin
         Result:= Result + [F];
         Break;

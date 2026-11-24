@@ -1137,7 +1137,7 @@ warning and hint counts of both builds, every error line, and the warnings / hin
 |---|---|---|
 | `document --qname <q>` | Generate/repair a managed DocInsight comment for one symbol (every overload of the name) | `--apply`, `--json` |
 | `document --unit <f.pas>` | Document every public decl in a unit (facts-only by default; trivial accessors skipped) | `--apply`, `--stubs`, `--include-accessors` |
-| `document --project <p>` | Document every public decl the project owns (vendored roots skipped unless told otherwise) | `--stubs`, `--apply`, `--reindex`, `--document-third-party` |
+| `document --project <p>` | Document every public decl the project owns (vendored roots skipped unless told otherwise); `--apply` refuses (exit 1) an unfinished index and a file whose rescan failed | `--stubs`, `--apply`, `--reindex`, `--document-third-party` |
 | [`document-all`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/document-all) | Document every public decl in every indexed unit (no project scope) | `--stubs`, `--apply` |
 | `document ... --strip` | Remove drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched) | works on `--qname` / `--unit` / `--project` / `document-all` |
 | `document ... --no-seealso` / `--since` | `<seealso cref>` links to related symbols (callees + siblings) are emitted **by default** in every document mode; `--no-seealso` turns them off (`--seealso` is still accepted and does nothing -- it was the opt-in before it became the default). `--since [--base-dir <repoRoot>]` adds a git-derived `<since>` date and degrades silently when git is absent | works on `--qname` / `--unit` / `--project` / `document-all` |

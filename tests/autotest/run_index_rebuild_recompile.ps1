@@ -491,8 +491,9 @@ try {
   Check '7b. and the content is unchanged' ((Snap $sectionDb) -eq $asnap) (Leaves (Snap $sectionDb))
 
   # 7c. --rebuild on the manifest arm: clears ROWS, keeps the FILE. Pollute the
-  #     section DB with the out-of-root Outsider first, so "cleared" is visible.
-  & { $ErrorActionPreference = 'Continue'; & $exePath index $outsider --db $sectionDb --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  #     section DB with the out-of-root Outsider first, so "cleared" is visible. (No --platform:
+  #     the section DB is Win32, and 1.53.1 refuses one file parsed for another platform into it.)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $outsider --db $sectionDb --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '7c. the pollution landed' ((Snap $sectionDb) -like '*outsider.pas*') (Leaves (Snap $sectionDb))
   $cout = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only ModeSection --jobs 1 --rebuild 2>&1 | ForEach-Object { "$_" } })
   $crc  = $LASTEXITCODE

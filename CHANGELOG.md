@@ -62,6 +62,18 @@ Lane TT-ALTER (lane/v154-tt-alter):
 - `repo alter-table` now refuses a --connection string through the shared `DRagLint.Sql.FbConnString` (OpenMode, CreateDatabase, DropDatabase, ConnectionDef, ConnectionDefName, and a line break) instead of a private copy of the key list; test L9 in run_repo_cli_alter.ps1.
 - `repo alter-table` review: `--select` with `--apply` needs the `plan <hash>` line of its dry run; drops run last, after the safe changes; leading zeros, TODAY / NOW words and values the scan cannot compare are value losses; OCTETS, WITH TIME ZONE and delimited mixed-case names are refused; a domain change keeps NOT NULL; another DriverID than FB is refused; the swap is READ COMMITTED under its table lock; a lost connection is reported as `unknown`; `not applied` names what an apply left out.
 
+## v1.53.1-alpha -- 2026-11-24
+
+Tail release of 1.53 (lane/v153-1531). No re-parse: extractor stays 1.43.0-alpha, resolver 1.31.0-alpha. VS Code extension unchanged (1.6.12).
+
+- AUTODOC: a banner line (`//////`) is no longer taken for documentation, rewritten as a summary or deleted; a slashes-only `<summary>` that 1.53.0 wrote is dropped on the next run; the doc-damage guard sees a deleted banner. A multi-line `///` note keeps its lines when it becomes a `<summary>`. `Registered as` / `Dataset` entries are listed once. A declaration under an attribute (`[Inject]`) is not a tampered file.
+- AUTODOC: a doc verb's rescan or retry re-parses only the files concerned, with the platform, config and defines the index was built with (1.53.0 force-reparsed the whole project per file and could flip the index to Win32). `document --reindex` keeps the build too.
+- `index <file>` into an existing index parses with the build the index records and never stamps the whole index; a project index refuses the file (exit 2) when that build cannot be reproduced. The project file is also found when its MainSource is not named like the .dproj.
+- `document --apply` refuses (exit 1, nothing written) an index that is still being written or whose run did not finish, and a file whose stored facts disagree with its source when the rescan of it failed. A dry run WARNs.
+- `unused-global`: a mention in a comment no longer hides a dead declaration; multi-line strings are read as one string; the sibling projects' own files are searched too. A lint run says when a missing or stale sibling index withheld the verdicts of a shared unit.
+- `repo update-orm` (data loss): region markers are paired by id with a Pascal scan and a unit it cannot trust is refused and left as it is; 1.53.0 read on to the next DB-RAD end whatever its id and emptied a region with an unknown id. The output for the 528 ORM3 units is byte-identical to 1.53.0.
+- `repo backup` over an existing file replaces it atomically; a failed backup keeps the old file and leaves no `.tmp`.
+
 ## v1.53.0-alpha -- 2026-11-23
 
 In integration (lane/v153-int2). One re-parse for 1.53.0: extractor 1.42.0 -> 1.43.0-alpha (GRAMMAR); resolver stays 1.31.0-alpha. VS Code extension 1.6.12.

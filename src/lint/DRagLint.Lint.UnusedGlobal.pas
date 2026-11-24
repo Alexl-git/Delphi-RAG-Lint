@@ -28,11 +28,13 @@ unit DRagLint.Lint.UnusedGlobal;
 
   TEXT FALLBACK (measured on src\cli: 5 of the first 14 findings were false):
   the index records no ref for a name used only as an array bound
-  (`array[0..CONST - 1]`), behind a pointer type (`^TFoo`) or in a doc comment
-  (`<see cref>`). A candidate with no ref therefore gets one whole-word text
-  count over its scope (the declaring file; every indexed file for an interface
-  symbol); a second occurrence anywhere -- code, comment or string -- keeps it
-  silent. Only ref-less suspects are tokenised, so the cost is one pass over the
+  (`array[0..CONST - 1]`) or behind a pointer type (`^TFoo`). A candidate with no
+  ref therefore gets one whole-word text count over its scope (the declaring file;
+  every indexed file for an interface symbol); a second occurrence in code, a
+  compiler directive or a string keeps it silent. COMMENTS DO NOT COUNT
+  (INBOX-orm3-server-153 item 2): `document --apply` writes symbol names into /// blocks
+  (seealso cref, managed facts), and a name only a comment holds is not a use.
+  Only ref-less suspects are tokenised, so the cost is one pass over the
   sources, paid only when a suspect exists. }
 
 interface
@@ -61,8 +63,8 @@ const
 /// unless another project that lists the unit names them (see AShared). Anchored at the declaration.</returns>
 /// <remarks>
 /// Name-keyed and conservative: a homonym used anywhere in scope keeps
-/// a symbol silent, and so does a mention in a comment or string (text
-/// fallback). Not thread-safe. A symbol used only inside an inactive {$IFDEF}
+/// a symbol silent, and so does a mention in a string or a compiler directive
+/// (text fallback); a mention in a comment does not. Not thread-safe. A symbol used only inside an inactive {$IFDEF}
 /// branch is invisible to the refs but visible to the text fallback.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
@@ -110,6 +112,7 @@ var
   DeclAt    : TDictionary<string, Boolean>; { DeclKey of every candidate's own declaration }
   UsedFiles : TObjectDictionary<string, TDictionary<Int64, Boolean>>; { lower name -> files naming it }
   TextHits  : TObjectDictionary<string, TDictionary<Int64, Integer>>; { suspect lower name -> file id -> whole-word count }
+  SiblingHits: TObjectDictionary<Pointer, TObjectDictionary<string, TDictionary<Int64, Integer>>>; { sibling store -> the same counts over its own files }
   Findings  : TList<TLintFinding>;
 
   procedure AddCandidates(const AKind: string; const ASection: string);
@@ -182,29 +185,98 @@ var
     Result:= if SameText(ASym.Section, SECTION_IMPL) then Files.ContainsKey(ASym.FileId) else Files.Count > 0;
   end;
 
-  { Counts whole-word occurrences of every suspect name in one file. }
-  procedure CountSuspects(AFileId: Int64);
+  { AFrom sits on a comment opener (`//`, `{`, `(*`, never a directive's `$` form): the index of
+    the comment's last character, else 0. }
+  function CommentEnd(const AText: string; AFrom: Integer): Integer;
+  begin
+    Result:= 0;
+    var Head: string:= Copy(AText, AFrom, Length('(*$'));
+    if Head.StartsWith('//') then
+    begin
+      Result:= AFrom;
+      while (Result < Length(AText)) and not CharInSet(AText[Result + 1], [#13, #10]) do Inc(Result);
+      Exit;
+    end;
+    if Head.StartsWith('{$') or Head.StartsWith('(*$') then Exit;
+    if Head.StartsWith('{') then Result:= Pos('}', AText, AFrom)
+    else if Head.StartsWith('(*') then
+    begin
+      Result:= Pos('*)', AText, AFrom + Length('(*'));
+      if Result > 0 then Inc(Result);
+    end
+    else Exit;
+    if Result = 0 then Result:= Length(AText); { unterminated: the rest of the file is comment }
+  end;
+
+  { How many quotes stand in a row at AFrom. }
+  function QuoteRun(const AText: string; AFrom: Integer): Integer;
+  begin
+    Result:= 0;
+    while (AFrom + Result <= Length(AText)) and (AText[AFrom + Result] = '''') do Inc(Result);
+  end;
+
+  { AFrom sits on a quote that opens a multi-line string (Delphi 12: an odd run of three or more quotes
+    ending its line): the index of the last quote of the closing run -- the same count, first on its line --
+    else 0. }
+  function TextBlockEnd(const AText: string; AFrom: Integer): Integer;
+  const
+    MIN_QUOTES = 3;
+  begin
+    Result:= 0;
+    var Quotes: Integer:= QuoteRun(AText, AFrom);
+    if (Quotes < MIN_QUOTES) or not Odd(Quotes) then Exit;
+    var K: Integer:= AFrom + Quotes;
+    while (K <= Length(AText)) and CharInSet(AText[K], [' ', #9]) do Inc(K);
+    if (K <= Length(AText)) and not CharInSet(AText[K], [#13, #10]) then Exit;
+    while K <= Length(AText) do
+    begin
+      while (K <= Length(AText)) and CharInSet(AText[K], [' ', #9, #13, #10]) do Inc(K);
+      if QuoteRun(AText, K) = Quotes then Exit(K + Quotes - 1);
+      while (K <= Length(AText)) and not CharInSet(AText[K], [#13, #10]) do Inc(K);
+    end;
+  end;
+
+  { AFrom sits on a quote: the index of the closing quote, else AFrom (no quote left on the line). }
+  function StringEnd(const AText: string; AFrom: Integer): Integer;
+  begin
+    Result:= TextBlockEnd(AText, AFrom);
+    if Result > 0 then Exit;
+    Result:= AFrom;
+    var K: Integer:= AFrom + 1;
+    while (K <= Length(AText)) and not CharInSet(AText[K], [#13, #10]) do
+    begin
+      if AText[K] = '''' then Exit(K);
+      Inc(K);
+    end;
+  end;
+
+  { Counts whole-word occurrences of every suspect name in one file, comments excluded: AHits[name][AFileId]. }
+  procedure CountSuspects(const APath: string; AFileId: Int64; AHits: TObjectDictionary<string, TDictionary<Int64, Integer>>);
   var
     Text: string;
   begin
     try
-      Text:= TFile.ReadAllText(AStore.GetFilePath(AFileId), TEncoding.ANSI);
+      Text:= TFile.ReadAllText(APath, TEncoding.ANSI);
     except   // dl:ok try-except-swallowed@3756 -- an unreadable file must keep every suspect silent, never abort the run
       on Exception do
       begin
-        for var Pair in TextHits do Pair.Value.AddOrSetValue(AFileId, UNREADABLE_HITS);
+        for var Pair in AHits do Pair.Value.AddOrSetValue(AFileId, UNREADABLE_HITS);
         Exit;
       end;
     end;
     var I: Integer:= 1;
+    var InString: Integer:= 0; { last index of the string literal I is in }
     while I <= Length(Text) do
     begin
-      if CharInSet(Text[I], ['A'..'Z', 'a'..'z', '_']) then
+      if (I > InString) and (Text[I] = '''') then InString:= StringEnd(Text, I);
+      var Skip: Integer:= if I > InString then CommentEnd(Text, I) else 0;
+      if Skip > 0 then I:= Skip + 1
+      else if CharInSet(Text[I], ['A'..'Z', 'a'..'z', '_']) then
       begin
         var J: Integer:= I;
         while (J <= Length(Text)) and CharInSet(Text[J], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(J);
         var Counts: TDictionary<Int64, Integer>;
-        if TextHits.TryGetValue(LowerCase(Copy(Text, I, J - I)), Counts) then
+        if AHits.TryGetValue(LowerCase(Copy(Text, I, J - I)), Counts) then
         begin
           var N: Integer:= 0;
           Counts.TryGetValue(AFileId, N);
@@ -231,6 +303,30 @@ var
     Result:= Total > 1;
   end;
 
+  { The same text fallback over a sibling project: True when a file only ASibling holds names ALow (the
+    files both projects hold were counted with the own ones). One pass per sibling, over every suspect. }
+  function NamedInSibling(const ASibling: ISymbolStore; const ALow: string): Boolean;
+  begin
+    var Hits: TObjectDictionary<string, TDictionary<Int64, Integer>>;
+    if not SiblingHits.TryGetValue(Pointer(ASibling), Hits) then
+    begin
+      Hits:= TObjectDictionary<string, TDictionary<Int64, Integer>>.Create([doOwnsValues]);
+      SiblingHits.Add(Pointer(ASibling), Hits);
+      for var Name: string in TextHits.Keys do Hits.Add(Name, TDictionary<Int64, Integer>.Create);
+      for var Fi: Int64 in ASibling.GetAllFileIds do
+        if AStore.FindFileIdByPath(ASibling.GetFilePath(Fi)) <= 0 then CountSuspects(ASibling.GetFilePath(Fi), Fi, Hits);
+    end;
+    var Counts: TDictionary<Int64, Integer>;
+    Result:= Hits.TryGetValue(ALow, Counts) and (Counts.Count > 0);
+  end;
+
+  function NamedInAnySibling(const ASiblings: TArray<ISymbolStore>; const ALow: string): Boolean;
+  begin
+    Result:= False;
+    for var S: ISymbolStore in ASiblings do
+      if NamedInSibling(S, ALow) then Exit(True);
+  end;
+
   procedure Report(const ASym: TSymbol);
   begin
     var Fd: TLintFinding:= TLintFinding.AtSymbol(UNUSED_GLOBAL_RULE, AStore.GetFilePath(ASym.FileId), ASym, 'hint');
@@ -251,6 +347,7 @@ begin
   CandNames:= TDictionary<string, Boolean>.Create;
   UsedFiles:= TObjectDictionary<string, TDictionary<Int64, Boolean>>.Create([doOwnsValues]);
   TextHits := TObjectDictionary<string, TDictionary<Int64, Integer>>.Create([doOwnsValues]);
+  SiblingHits:= TObjectDictionary<Pointer, TObjectDictionary<string, TDictionary<Int64, Integer>>>.Create([doOwnsValues]);
   Findings := TList<TLintFinding>.Create;
   try
     for var U in AStore.FindSymbolsByKind(KIND_UNIT, False, MaxInt) do UnitIds.AddOrSetValue(U.Id, True);
@@ -275,7 +372,7 @@ begin
             TextHits.Add(LowerCase(C.Name), TDictionary<Int64, Integer>.Create);
         end;
       if Suspects.Count > 0 then
-        for var Fi in AStore.GetAllFileIds do CountSuspects(Fi);
+        for var Fi in AStore.GetAllFileIds do CountSuspects(AStore.GetFilePath(Fi), Fi, TextHits);
       for var C in Suspects do
       begin
         if NamedInText(C) then Continue;
@@ -292,13 +389,16 @@ begin
             var Low: string:= LowerCase(C.Name);
             var DeclLine: Integer:= C.StartLine;
             var Projs: string;
+            var Siblings: TArray<ISymbolStore>:= []; { asked, and showing no ref }
             var Verdict: TSharedVerdict:= AShared.Judge(Path,
               function(const S: ISymbolStore): Boolean
               begin
                 Result:= False;
                 for var R in S.FindRefsNamingInFiles(S.GetAllFileIds, [Low]) do
                   if not (SameText(S.GetFilePath(R.FileId), Path) and (R.StartLine = DeclLine)) then Exit(True);
+                Siblings:= Siblings + [S];
               end, Projs);
+            if (Verdict = svUnusedEverywhere) and NamedInAnySibling(Siblings, Low) then Continue;
             if Verdict = svUndecided then NoteUndecidedSite(Path, DeclLine, UNUSED_GLOBAL_RULE);
             if Verdict in [svUsedElsewhere, svUndecided] then Continue;
           end;
@@ -312,6 +412,7 @@ begin
     Result:= Findings.ToArray;
   finally
     Findings.Free;
+    SiblingHits.Free;
     TextHits.Free;
     UsedFiles.Free;
     CandNames.Free;

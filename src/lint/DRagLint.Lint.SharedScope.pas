@@ -83,6 +83,7 @@ type
     FListing : TDictionary<string, TArray<string>>;
     FWhyNot  : TDictionary<string, string>;
     FUsable  : TDictionary<string, Boolean>;
+    FBlocked : TDictionary<string, Integer>;  { listing project whose index could not be asked -> verdicts withheld }
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->ISymbolStore -- Observed: nil;
     /// FResolve(Trim(AName)).</returns>
@@ -172,6 +173,8 @@ type
                        const ALister: TSiblingProjectLister);
     /// <summary>Frees the caches; the stores belong to the resolver's owner.</summary>
     /// <remarks>
+    /// Console processes: first writes one stderr line per listing project whose missing or stale index
+    /// made verdicts svUndecided (how many, and the reindex command) -- a withheld finding is never silent.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Reads: FUsable, FWhyNot, FListing</para>
     /// <para>Directives: override</para>
@@ -517,6 +520,20 @@ const
   META_INDEXED_AT = 'indexed_at_unix';
   META_PROJECT_TAG = 'project_tag';
 
+{ INBOX-orm3-server-153 item 2: one stderr line per listing project that could not be asked. Without it a
+  stale sibling (every shared unit rewritten by `document --apply`, only this project reindexed) emptied
+  unused-global / unused-public-symbol and read as "fixed". }
+procedure AnnounceBlocked(const AName: string; ACount: Integer);
+begin
+  try
+    Writeln(ErrOutput, Format('drag-lint: note: cross-project: %d check(s) on units shared with %s were withheld as undecidable -- ' +
+      'the index of %s is missing or not fresh, so unused-global / unused-public findings on those units are not reported. ' +
+      'Reindex %s, then lint again.', [ACount, AName, AName, AName]));
+  except  // dl:ok try-except-swallowed@2bb3 -- an info line that cannot be written must not fail the lint run
+    on E: Exception do Exit;
+  end;
+end;
+
 constructor TSharedScope.Create(const AStore: ISymbolStore; const AResolve: TSiblingStoreResolver;
   const ALister: TSiblingProjectLister);
 begin
@@ -527,10 +544,15 @@ begin
   FListing:= TDictionary<string, TArray<string>>.Create;
   FWhyNot := TDictionary<string, string>.Create;
   FUsable := TDictionary<string, Boolean>.Create;
+  FBlocked:= TDictionary<string, Integer>.Create;
 end;
 
 destructor TSharedScope.Destroy;
 begin
+  if IsConsole and (FBlocked <> nil) then
+    for var Blocked: TPair<string, Integer> in FBlocked do
+      AnnounceBlocked(Blocked.Key, Blocked.Value);
+  FBlocked.Free;
   FUsable.Free;
   FWhyNot.Free;
   FListing.Free;
@@ -662,6 +684,9 @@ begin
     St:= Open(N);
     if (St = nil) or not IsUsable(N, St) then
     begin
+      var Withheld: Integer;
+      if not FBlocked.TryGetValue(N, Withheld) then Withheld:= 0;
+      FBlocked.AddOrSetValue(N, Withheld + 1);
       AProjects:= Format('the index of %s is missing or not fresh', [N]);
       Exit(svUndecided);
     end;

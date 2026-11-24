@@ -41,4 +41,6 @@ in `Unit1.pas`.
 
 ## Refusals
 
+`--apply` refuses the whole run (exit 1, nothing written) on an index that is still being written or whose run did not finish, and when the rescan of a file known to disagree with its source fails (1.53.1) -- see [Document project](Document-project).
+
 A declaration whose stored block names `Calls:` entries of a unit the chosen `--db` cannot see is left untouched: `document --apply` prints `doc: REFUSED <qname> ...` on stderr, a summary line, and the JSON `refused` count (`--qname`: `refused` text). Index that unit, or edit the block by hand. Exit code stays 0. The ` (+N more)` tail of a capped list is not an entry: a capped list whose units the index holds is regenerated, not refused.

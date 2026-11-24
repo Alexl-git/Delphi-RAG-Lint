@@ -64,6 +64,13 @@ Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then
 | `upgrade-orm-headers` | `--code-dir` | one time (1.54): in the existing `u<T>.PAS`, the generated text AROUND regions 4 / 6 (`if not (Source is T) then inherited else with Source as T do`) becomes `if Source is not T then inherited else`, and the `StreamSize` / `ByteTemp` locals of `Reader` go when nothing uses them; in each `i<T>.PAS` + `u<T>.PAS` pair the generated `AssignI` becomes the overloaded `Assign` (below), both units or neither. Only the exact generated shape is recognised, in any layout; a hand-edited header or pair is listed as `skipped` and left alone, and every remaining call of `AssignI` in the units under `--code-dir` is listed as `file(line)` and never edited |
 | `gen-dataservice` | `--server-dir` `--client-dir` | new `u<T>_SERVER.PAS` + `u<T>_CLIENT.PAS` and the two DI container units; prints `add to project:` per new file |
 
+`update-orm` pairs region markers by id with a Pascal scan (1.53.1; 1.54 reads `DLFR n` as `DB-RAD n`). It refuses a whole unit --
+`<file>: REFUSED, the unit is left unchanged: <why>` among the skipped files, the other units go on -- when a start marker has no end of its
+own id (missing, unnamed, another id, inside a comment), an id is unknown (`DB-RAD notes`, `DB-RAD 99`), a marker shares
+its line with code, a region holds another DB-RAD region or a part of a conditional, or the text has an unclosed comment
+or string. Up to 1.53.0 it read on to the next DB-RAD end whatever its id and emptied a region with an unknown id. A
+marker inside a comment or a multi-line string is text.
+
 **Assign / AssignTo (1.54).** TableTools wrote `fX:= X` inside `with Source as T do` and `X:= fX` inside
 `with Dest as T do`: both copy the other object onto itself, so nothing was ever copied. Regions 4 / 6 now name
 both objects (`var LSource:= TmcT(Source); Self.fX:= LSource.X;`), which is right inside the old `with` header and

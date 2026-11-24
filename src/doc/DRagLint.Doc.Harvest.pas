@@ -211,6 +211,31 @@ function HarvestReasonToString(const AReason: THarvestReason): string;
 /// </remarks>
 function IsDlMarkerLine(const ALine: string): Boolean;
 
+/// <summary>True when ALine starts with FOUR or more slashes: a banner / separator
+/// comment, never a DocInsight line (which starts with exactly three).</summary>
+/// <param name="ALine">One physical source line; indentation is ignored.</param>
+/// <returns>True for `//////...` and `//// text`; False for `/// text`, a bare `///`,
+/// `// text` and everything else.</returns>
+/// <remarks>
+/// Pure. TDocCommentScanner (extraction surface) types such a line as a /// doc line, so
+/// every doc reader and writer OUTSIDE the extractor asks this first (INBOX-orm3-server-153
+/// item 1: the banner was deleted and rewritten as a summary).
+/// </remarks>
+function IsBannerSlashLine(const ALine: string): Boolean;
+
+/// <summary>The last line of a doc region once the banner lines directly under it are
+/// counted as part of it.</summary>
+/// <param name="ALines">The file's lines.</param>
+/// <param name="AEndLine">The region's 1-based last line.</param>
+/// <returns>The 1-based line of the last adjacent banner, or AEndLine.</returns>
+/// <remarks>
+/// Pure. Only for the distance to the declaration below (DOC_ALLOW_GAP): a banner is
+/// decoration, so `doc + banner + blank + declaration` is one blank line away. `document
+/// --apply` and `--strip` both ask it, so they attribute a region alike. The region itself
+/// (what is rewritten or deleted) never includes the banner.
+/// </remarks>
+function EndPastBanners(const ALines: TArray<string>; AEndLine: Integer): Integer;
+
 implementation
 
 uses
@@ -670,6 +695,17 @@ var
 begin
   T:= Trim(ALine);
   Result:= T.StartsWith('//') and (not T.StartsWith('///')) and Trim(Copy(T, Length('//') + 1, MaxInt)).StartsWith('dl:');
+end;
+
+function IsBannerSlashLine(const ALine: string): Boolean;
+begin
+  Result:= TrimLeft(ALine).StartsWith('////');
+end;
+
+function EndPastBanners(const ALines: TArray<string>; AEndLine: Integer): Integer;
+begin
+  Result:= AEndLine;
+  while (Result > 0) and (Result < Length(ALines)) and IsBannerSlashLine(ALines[Result]) do Inc(Result);
 end;
 
 function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarvestResult;  // dl:ok cyclomatic-complexity@4d4a, too-many-exit-points@b58a -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 45 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)

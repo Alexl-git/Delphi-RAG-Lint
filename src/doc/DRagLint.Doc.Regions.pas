@@ -2861,7 +2861,13 @@ begin
   begin
     var DiPart: string:= '';
     var DsPart: string:= '';
+    var Shown: TArray<string>:= [];
     for var WEntry in AFacts.Wiring.Split(['; ']) do
+    begin
+      { INBOX-orm3-server-153 item 4: two containers registering one type store the
+        same entry twice (one di_bindings row per registration); it is ONE fact. }
+      if MatchStr(WEntry, Shown) then Continue;
+      Shown:= Shown + [WEntry];
       if StartsStr('di:', WEntry) then
       begin
         if DiPart <> '' then DiPart:= DiPart + ', ';
@@ -2872,6 +2878,7 @@ begin
         if DsPart <> '' then DsPart:= DsPart + ', ';
         DsPart:= DsPart + Copy(WEntry, 4, MaxInt);  // dl:ok magic-literal@1cf7 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       end;
+    end;
     if DiPart <> '' then ALines.Add('Registered as: ' + EscXml(DiPart));
     if DsPart <> '' then ALines.Add('Dataset: ' + EscXml(DsPart));
   end;
@@ -3621,6 +3628,31 @@ begin
   if Length(Raw) = 0 then Exit(McEmitTagged(C, AOpen, AValue, AClose));
   Result:= ALinePrefix + string.Join(sLineBreak + ALinePrefix, Raw);
 end;
+// INBOX-orm3-server-153 item 5: a plain, UNTAGGED /// note becomes a <summary> with
+// its own line breaks kept (a numbered list must not collapse into one line). The
+// parser's Summary is whitespace-collapsed, so the lines are taken from RawBlock. ''
+// when the comment is not an untagged one or has a single line -- McEmitPreserved's
+// rebuild is already verbatim there. The next run meets a TAGGED multi-line summary,
+// which VerbatimTagLines carries through unchanged, so this is written once.
+function McEmitUntaggedSummary(const C: TMergeCtx): string;
+var
+  Lines: TArray<string>;
+  First: Integer;
+  Last : Integer;
+begin
+  Result:= '';
+  if C.AExisting.Format <> dfOneline then Exit;
+  Lines:= StringReplace(C.Eff.RawBlock, #13#10, #10, [rfReplaceAll]).Split([#10]);
+  First:= 0;
+  Last := High(Lines);
+  while (First <= Last) and (Trim(Lines[First]) = '') do Inc(First);
+  while (Last >= First) and (Trim(Lines[Last]) = '') do Dec(Last);
+  if First >= Last then Exit;
+  Result:= C.APrefix + '<summary>' + Trim(Lines[First]);
+  for var I: Integer:= First + 1 to Last do
+    Result:= Result + sLineBreak + C.LinePrefix + TrimRight(Lines[I]);
+  Result:= Result + '</summary>';
+end;
 // v(ADP3 T9): the body of this test now lives on TDocRegions itself, as
 // IsEngineOwnedTagText -- Doc.Drift's harvest-drift check needs the SAME
 // ownership test, and a second hand-expansion of its two arms is exactly how
@@ -3728,6 +3760,14 @@ end;
 function McIsBlankBody(const AText: string): Boolean;
 begin
   Result:= Trim(TDocMarkers.StripMark(AText)) = '';
+end;
+// INBOX-orm3-server-153 item 1, the heal: 1.53.0 turned a banner line (`//////`)
+// into a <summary> made of slashes alone, unmarked, so the next run kept it as a
+// human's. A body of slashes only says nothing and is blank; one letter beside
+// them is a human's text and stays.
+function McIsBlankSummary(const AText: string): Boolean;
+begin
+  Result:= McIsBlankBody(StringReplace(TDocMarkers.StripMark(AText), '/', '', [rfReplaceAll]));
 end;
 // The engine's own declared-type baseline is regenerable, not a human's
 // meaning -- decided LEXICALLY by its marker. See AUTO_TYPE for why this is a
@@ -4290,8 +4330,13 @@ begin
   // harvested summary (if any) gets its chance below, and otherwise no tag is
   // written at all.
   if C.StandaloneSummary.HasSummaryTag and (not McIsEngineOwnedRegardlessOfContent(C.SummaryRaw))
-     and (not McIsBlankBody(C.SummaryRaw)) then
-    C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'summary', '<summary>', C.SummaryRaw, '</summary>'))
+     and (not McIsBlankSummary(C.SummaryRaw)) then
+  begin
+    var Untagged: string:= McEmitUntaggedSummary(C);
+    if Untagged = '' then
+      Untagged:= McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'summary', '<summary>', C.SummaryRaw, '</summary>');
+    C.Sb.AppendLine(Untagged);
+  end
   // v(SESSION 74): AUTO_SUM, not AUTO_MARK. This arm is also the MIGRATION
   // for every legacy bare-AUTO_MARK summary: reaching it means the source
   // comment still yields prose, so the tag is the engine's, and it is
@@ -4334,7 +4379,7 @@ begin
   // breaks are not reflowed to the engine's column budget.
   else if C.StandaloneSummary.HasSummaryTag and TDocMarkers.IsManagedText(C.SummaryRaw)
      and (not TDocMarkers.IsEngineSummaryBody(C.SummaryRaw))
-     and (not McIsBlankBody(C.SummaryRaw)) then
+     and (not McIsBlankSummary(C.SummaryRaw)) then
     C.Sb.AppendLine(McEmitTagged(C, '<summary>', Trim(TDocMarkers.StripMark(C.SummaryRaw)), '</summary>'));
   // else: engine-owned-and-EMPTY, or genuinely absent, and nothing
   // harvested -- omit the tag entirely (v(ADP3 T3), narrowed above from

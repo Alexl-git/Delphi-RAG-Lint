@@ -872,9 +872,71 @@ begin
   Result.StartLine:= ARegion.StartLine + LastIx;
 end;
 
+{ INBOX-orm3-server-153 item 1: TDocCommentScanner.Scan's regions with every banner line
+  (four or more slashes) taken out of the /// ones. The scanner types such a line as a /// doc line and
+  folds it into the run around it, so the repair path DELETED the banner and wrote its slashes back as a
+  <summary>. A run is split at each banner line; the real /// lines between banners stay regions of their
+  own. Not fixed in the scanner: src\parser is extraction surface (see NarrowToTrailingDocBlock).
+  The caller frees the list. }
+function ScanDocRegions(const ASrc: string): System.Generics.Collections.TList<TDocCommentRegion>;
+const
+  DOC_SLASHES = '///';
+var
+  Lines: TArray<string>;
+  Piece: TDocCommentRegion;
+  Open : Boolean;
+
+  procedure ClosePiece;
+  begin
+    if Open then Result.Add(Piece);
+    Open:= False;
+  end;
+
+  function HasBanner: Boolean;
+  begin
+    Result:= False;
+    for var Line: string in Lines do
+      if IsBannerSlashLine(DOC_SLASHES + Line) then Exit(True);
+  end;
+
+begin
+  Result:= System.Generics.Collections.TList<TDocCommentRegion>.Create;
+  var Scanned: System.Generics.Collections.TList<TDocCommentRegion>:= TDocCommentScanner.Scan(ASrc);
+  try
+    for var Region: TDocCommentRegion in Scanned do
+    begin
+      Lines:= Region.RawText.Split([sLineBreak]); { one entry per source line, its /// already stripped }
+      if (Region.Kind <> dckTripleSlash) or not HasBanner then
+      begin
+        Result.Add(Region);
+        Continue;
+      end;
+      Open:= False;
+      for var I: Integer:= 0 to High(Lines) do
+        if IsBannerSlashLine(DOC_SLASHES + Lines[I]) then ClosePiece
+        else if Open then
+        begin
+          Piece.RawText:= Piece.RawText + sLineBreak + Lines[I];
+          Piece.EndLine:= Region.StartLine + I;
+        end
+        else
+        begin
+          Piece:= Region;
+          Piece.StartLine:= Region.StartLine + I;
+          Piece.EndLine  := Piece.StartLine;
+          Piece.RawText  := Lines[I];
+          Open:= True;
+        end;
+      ClosePiece;
+    end;
+  finally
+    Scanned.Free;
+  end;
+end;
+
 function FindDocRegionAbove(ADocRegions: System.Generics.Collections.TList<TDocCommentRegion>;
   ASymStartLine: Integer; AAllowGap: Integer; ACaptureLoose: Boolean;
-  const ASymStartLines: TArray<Integer>): TDocCommentRegion;
+  const ASymStartLines: TArray<Integer>; const ALines: TArray<string>): TDocCommentRegion;
 var
   I      : Integer          ;
   Best   : TDocCommentRegion;
@@ -889,7 +951,7 @@ begin
     // DocRegionInGapWindow (DRagLint.Core.Model) -- same arithmetic, one
     // declaration. Control flow deliberately unchanged: pick the last region
     // satisfying the window, THEN apply the declaration guard to it below.
-    if DocRegionInGapWindow(ADocRegions[I].EndLine, ASymStartLine, AAllowGap) then
+    if DocRegionInGapWindow(EndPastBanners(ALines, ADocRegions[I].EndLine), ASymStartLine, AAllowGap) then
     begin
       Best:= ADocRegions[I];
       HasBest:= True;
@@ -1005,14 +1067,14 @@ begin
 
   // Same live-scan the Documenter uses: nearest doc-comment above the decl,
   // allow a 1-line gap, skip loose regions. Kind = TDocCommentKind(-1) = none.
-  Regions:= TDocCommentScanner.Scan(Src);
+  Regions:= ScanDocRegions(Src);
   try
     // v(ADP3 T3j review round 2, Important 2): DOC_ALLOW_GAP, not a literal 1.
     // The constant existed to close the literal-drift channel between the apply
     // and strip paths, but only Doc.Strip actually read it -- so setting it to 2
     // would have widened `--strip` alone, silently recreating the very
     // apply/strip asymmetry this task exists to prevent.
-    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines);
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines, SourceLines(Src));
     if (Region.Kind <> TDocCommentKind(-1)) and (not RegionGluedToCode(Src, Region)) then
     begin
       Result := TDocCommentParser.Dispatch(Region);
@@ -1128,14 +1190,14 @@ begin
   // Existing doc-comment above the declaration (allow a 1-line gap; skip loose).
   // FindDocRegionAbove signals "not found" with Kind = TDocCommentKind(-1).
   Existing:= Default(TParsedDoc);
-  Regions := TDocCommentScanner.Scan(Src);
+  Regions := ScanDocRegions(Src);
   try
     // v(ADP3 T3j review round 2, Important 2): DOC_ALLOW_GAP, not a literal 1.
     // The constant existed to close the literal-drift channel between the apply
     // and strip paths, but only Doc.Strip actually read it -- so setting it to 2
     // would have widened `--strip` alone, silently recreating the very
     // apply/strip asymmetry this task exists to prevent.
-    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines);
+    Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines, SourceLines(Src));
     if Region.Kind <> TDocCommentKind(-1) then
     begin
       if RegionGluedToCode(Src, Region) then
