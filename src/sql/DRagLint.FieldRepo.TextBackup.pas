@@ -93,11 +93,12 @@ function UnescapeRepoValue(const pText: string): string;
 /// </remarks>
 procedure BackupRepositoryToStrings(pConnection: TFDConnection; pLines: TStrings);
 
-/// <summary>Writes the backup text to a file: ASCII bytes, CRLF, no BOM, through
-/// "file.tmp" and a rename so a failed write never leaves a half file.</summary>
+/// <summary>Writes the backup text to a file: ASCII bytes, CRLF, no BOM, through a
+/// temporary file beside it and one rename. A failure leaves an existing file as it was and no temporary file.</summary>
 /// <param name="pConnection">Open repository connection; read only.</param>
 /// <param name="pFileName">Target file; replaced when it exists.</param>
 /// <exception cref="ERepoError">A character above 0x7F survived escaping (a bug).</exception>
+/// <exception cref="EOSError">The target cannot be replaced (in use, read-only).</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Repo.RepoBackup (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas)</para>
@@ -158,6 +159,7 @@ function BackupFileVersion(const pFileName: string): Integer;
 implementation
 
 uses
+  Winapi.Windows,
   System.Generics.Collections,
   System.IOUtils,
   System.StrUtils,
@@ -449,6 +451,23 @@ begin
   end;
 end;
 
+{ The whole content goes into a new file beside the target, then one rename replaces the target: whatever fails, the old
+  file is complete and no temporary file stays. Not TFile.Replace: its wrapper refuses an empty backup name. }
+procedure WriteFileAtomic(const pFileName: string; const pBytes: TBytes);
+var
+  VTmp: string;
+begin
+  VTmp := pFileName + '.' + TGUID.NewGuid.ToString.Trim(['{', '}']) + '.tmp';
+  try
+    TFile.WriteAllBytes(VTmp, pBytes);
+    if not MoveFileEx(PChar(VTmp), PChar(pFileName), MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
+      RaiseLastOSError;
+  except
+    System.SysUtils.DeleteFile(VTmp);
+    raise;
+  end;
+end;
+
 procedure BackupRepository(pConnection: TFDConnection; const pFileName: string);
 var
   VLines: TStringList;
@@ -456,7 +475,6 @@ var
   VText: string;
   VBytes: TBytes;
   VI: Integer;
-  VTmp: string;
 begin
   VLines := TStringList.Create;
   VSb := TStringBuilder.Create;
@@ -476,12 +494,7 @@ begin
       raise ERepoError.Create('backup text holds a non-ASCII character after escaping');
     VBytes[VI - 1] := Byte(Ord(VText[VI]));
   end;
-  VTmp := pFileName + '.tmp';
-  TFile.WriteAllBytes(VTmp, VBytes);
-  if TFile.Exists(pFileName) then
-    TFile.Replace(VTmp, pFileName, '')
-  else
-    TFile.Move(VTmp, pFileName);
+  WriteFileAtomic(pFileName, VBytes);
 end;
 
 { ---- restore: parse ------------------------------------------------------- }
