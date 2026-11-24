@@ -289,12 +289,16 @@ type
     FBound    : TList<TNarrowBound>;
     FScoped   : Boolean;
     FAlready  : Integer;
+    FCallPos  : TObjectDictionary<Int64, TDictionary<Int64, Boolean>>;  // file id -> start positions of its call refs; filled per file on demand
+    FStray    : TDictionary<string, Integer>;  // lowercase name -> StrayReferences' answer
     FAccessors: TDictionary<string, Boolean>;  // every name after `read` / `write` in the index's files; nil = not read yet
     function SourceOf(const pPath: string): TMaskedSource;
     function ClassesNamed(const pName: string): TArray<TChainClass>;
     function ChainOf(const pClass: TChainClass; out pMissing: string): TArray<TChainClass>;
     function MemberRows(const pClass: TChainClass; const pName: string; out pOverload: Boolean): Integer;
     function Scalar(const pSql: string; const pParams: array of const): Int64;
+    function IsCallPosition(pFileId: Int64; pLine, pCol: Integer): Boolean;
+    function StrayReferences(const pName: string): Integer;
     function CheckRoutine(const pR: TRoutineRow; const pParam: TParamRow; out pVerdict: TVerdict): Boolean;
     function ScanBody(const pR: TRoutineRow; const pParam: TParamRow; pSource: TMaskedSource; pMembers: TList<string>; out pVerdict: TVerdict): Boolean;
     function ReachesUnit(pFromFile, pToFile: Int64): Boolean;
@@ -363,10 +367,14 @@ begin
   FClasses:= TDictionary<string, TArray<TChainClass>>.Create;
   FFixes  := TList<TNarrowSite>.Create;
   FRefused:= TList<TNarrowSite>.Create;
+  FCallPos:= TObjectDictionary<Int64, TDictionary<Int64, Boolean>>.Create([doOwnsValues]);
+  FStray  := TDictionary<string, Integer>.Create;
 end;
 
 destructor TNarrowPlanner.Destroy;
 begin
+  FStray.Free;
+  FCallPos.Free;
   FBound.Free;
   FAccessors.Free;
   FRefused.Free;
@@ -410,6 +418,67 @@ begin
   finally
     Q.Free;
   end;
+end;
+
+// Does a call ref of pFileId start at this position? Each file's call positions are read once per plan.
+function TNarrowPlanner.IsCallPosition(pFileId: Int64; pLine, pCol: Integer): Boolean;
+const
+  CLineShift = 32; // line in the high half of the key, column in the low half
+var
+  Calls: TDictionary<Int64, Boolean>;
+
+  function Position(pAtLine, pAtCol: Integer): Int64;
+  begin
+    Result:= (Int64(pAtLine) shl CLineShift) or Cardinal(pAtCol);
+  end;
+
+begin
+  if not FCallPos.TryGetValue(pFileId, Calls) then
+  begin
+    Calls:= TDictionary<Int64, Boolean>.Create;
+    FCallPos.Add(pFileId, Calls);
+    var Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      Q.SQL.Text:= 'SELECT start_line, start_col FROM refs WHERE file_id = :f AND kind = ''call''';
+      Q.ParamByName('f').AsLargeInt:= pFileId;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        Calls.AddOrSetValue(Position(Q.Fields[0].AsInteger, Q.Fields[1].AsInteger), True);
+        Q.Next;
+      end;
+    finally
+      Q.Free;
+    end;
+  end;
+  Result:= Calls.ContainsKey(Position(pLine, pCol));
+end;
+
+{ How many unbound read / member-access refs carry pName and are not the name of a call at the same position. One pass over
+  the refs of that name; the same test as a NOT EXISTS subquery read the WHOLE file's refs per candidate (no index on the
+  position): 18 s for the name Create on this project's own index (v154 LINTPERF). }
+function TNarrowPlanner.StrayReferences(const pName: string): Integer;
+begin
+  var Key:= LowerCase(pName);
+  if FStray.TryGetValue(Key, Result) then Exit;
+  Result:= 0;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT file_id, start_line, start_col FROM refs WHERE symbol_id IS NULL AND name_text = :n COLLATE NOCASE ' +
+                 'AND kind IN (''read'', ''member-access'')';
+    Q.ParamByName('n').AsWideString:= pName;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      if not IsCallPosition(Q.Fields[0].AsLargeInt, Q.Fields[1].AsInteger, Q.Fields[2].AsInteger) then Inc(Result);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+  FStray.Add(Key, Result);
 end;
 
 function TNarrowPlanner.ClassesNamed(const pName: string): TArray<TChainClass>;
@@ -616,8 +685,7 @@ begin
     Q.Free;
   end;
   { also a by-name reference the resolver left unbound: `H.ViaPointed` with no list }
-  var Stray:= Scalar('SELECT COUNT(*) FROM refs r WHERE r.symbol_id IS NULL AND r.name_text = :a COLLATE NOCASE AND r.kind IN (''read'', ''member-access'') ' +
-    'AND NOT EXISTS (SELECT 1 FROM refs c WHERE c.file_id = r.file_id AND c.start_line = r.start_line AND c.start_col = r.start_col AND c.kind = ''call'')', [pR.Name]);
+  var Stray:= StrayReferences(pR.Name);
   if Stray > 0 then
   begin
     pVerdict:= Verdict('routine-as-value', Format('%d unbound reference(s) to the name %s may take it as a value', [Stray, pR.Name]));
