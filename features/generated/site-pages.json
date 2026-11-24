@@ -280,8 +280,8 @@
     "version": "1.48.0-alpha"
   },
   "features/doc-forget.md": {
-    "hash": "ba2760adc999a0106bfe4b06165969369f928aa11bbceb968b6483c5062ef7f6",
-    "version": "1.47.0-alpha"
+    "hash": "20ad30c291bf5f1b88b4f0a6ded4de7c922938102b3a2ee334822610fb91cf67",
+    "version": "1.54.0-alpha"
   },
   "features/document-all.md": {
     "hash": "dafbf0296e8305b1995ec2c61058bb479da685b843cdb7ad1e87e2c879d875a5",
@@ -868,7 +868,7 @@
     "version": "1.54.0-alpha"
   },
   "features/shared-unit.md": {
-    "hash": "dd0aa02ab27cefb84593e4c6368554e432eee00294c13afd6b31476a206ce4cb",
+    "hash": "d6f1869f88773357e0973df7aa42588fcf5d9a9f4935ab460a45c2ca35848544",
     "version": "1.54.0-alpha"
   },
   "features/show-completion.md": {

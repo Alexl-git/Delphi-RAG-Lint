@@ -3,6 +3,10 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.54.1-alpha -- unreleased
+
+- AUTODOC (REGTAG, Q21): `Registered as:` on a unit two projects compile is tagged per project -- `[CliApp]IFoo (singleton), [SrvApp]IFoo (transient)` -- and a run adds and removes only its own tag, so `document` and doc-drift reach a fixpoint; before, each project replaced the other's line on every run. Old untagged lines are tagged once; a unit of one project is unchanged. `doc-forget` sees these tags. No re-parse.
+
 ## v1.54.0-alpha -- 2026-11-24
 
 Released 2026-11-24. Contains 1.53.1, 1.53.0 and 1.52.3 (sections below; they have no tags of their own).

@@ -532,7 +532,7 @@ Described in [doc-drift](../../docs/wiki/doc-drift.md).
 
 ### doc-forget
 
-Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply.
+Reap or rename the project tags on inbound and Registered as: documentation facts; a dry run unless told to apply.
 
 ```text
 drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup] - reap project tags on inbound doc facts
