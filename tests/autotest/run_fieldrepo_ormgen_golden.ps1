@@ -41,6 +41,7 @@ param([string]$Repo = '',
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 # H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
 . (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+. (Join-Path $PSScriptRoot 'lib\GoldenDrift.ps1')
 try {
 if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
@@ -74,6 +75,10 @@ if ($null -eq $sum -or $sum.Line -notmatch 'fail=0$' -or $code -ne 0) {
 } else {
   Write-Host "ORMGEN UNIT: PASS -- $($sum.Line)" -ForegroundColor Green
 }
+
+# ---- part 1b: positive control of the known-drift comparison (both failure directions must fire) ----
+if (Test-GoldenDriftControl) { Write-Host 'ORMGEN DRIFT CONTROL: PASS -- unlisted and stale drift both fail' -ForegroundColor Green }
+else { Write-Host 'ORMGEN DRIFT CONTROL: FAIL -- the known-drift comparison cannot fail' -ForegroundColor Red; $failed = $true }
 
 # ---- part 2: golden over a COPY of ORM3 ----
 if ($RepoFile -eq '' -and [string]::IsNullOrWhiteSpace($Connection)) {
@@ -114,19 +119,21 @@ if ($RepoFile -eq '' -and [string]::IsNullOrWhiteSpace($Connection)) {
     Write-Host "ORMGEN GOLDEN PARITY: $same / $units byte-identical ($pct percent); outside the regions: unchanged"
     if ($RequireParity -and $same -ne $units) { Write-Host 'ORMGEN GOLDEN: FAIL -- -RequireParity' -ForegroundColor Red; $failed = $true }
     if ($RequireForm) {
-      $known = @(Get-Content -LiteralPath (Join-Path $Repo 'tests\fieldrepo\ormgen-golden-known-drift.txt') |
-        Where-Object { $_ -match '^\S' -and $_ -notmatch '^[#@]' } | ForEach-Object { ($_ -split '\s+')[0].ToUpper() })
+      $driftFile = Join-Path $Repo 'tests\fieldrepo\ormgen-golden-known-drift.txt'
+      $drift = Read-GoldenDrift -Path $driftFile
+      $drift.Errors | ForEach-Object { Write-Host "  DRIFT FILE $_" -ForegroundColor Red }
+      if ($drift.Errors.Count -gt 0) { Write-Host 'ORMGEN GOLDEN FORM: FAIL -- the known-drift file is malformed' -ForegroundColor Red; exit 1 }
+      $known = Get-GoldenDriftKeys $drift
       # 1.54 TT-GENFIX: region ids that may differ ONLY by the named change (OrmGenTests LegacyForm)
-      $okIds = @(Get-Content -LiteralPath (Join-Path $Repo 'tests\fieldrepo\ormgen-golden-known-drift.txt') |
-        Where-Object { $_ -match '^@region\s+\S+' } | ForEach-Object { ($_ -split '\s+')[1] })
+      $okIds = Get-GoldenDriftKeys $drift 'region'
       $seenIds = @($lines | Where-Object { $_ -match '^UNIT ' } | ForEach-Object { [regex]::Match($_, 'deliberate=(.*)$').Groups[1].Value -split ' ' } | Where-Object { $_ } | Sort-Object -Unique)
-      $badIds = @($seenIds | Where-Object { $okIds -notcontains $_ })
-      $staleIds = @($okIds | Where-Object { $seenIds -notcontains $_ })
+      $cmpId = Compare-GoldenDrift -Listed $okIds -Actual $seenIds
+      $badIds = @($cmpId.New); $staleIds = @($cmpId.Stale)
       $badIds | ForEach-Object { Write-Host "  UNLISTED deliberate region $_" -ForegroundColor Red }
       $staleIds | ForEach-Object { Write-Host "  STALE @region entry $_" -ForegroundColor Red }
       $diff = @($lines | Where-Object { $_ -match '^UNIT (\S+) DIFFERENT' } | ForEach-Object { ([regex]::Match($_, '^UNIT (\S+)')).Groups[1].Value.ToUpper() })
-      $new = @($diff | Where-Object { $known -notcontains $_ })
-      $stale = @($known | Where-Object { $diff -notcontains $_ })
+      $cmp = Compare-GoldenDrift -Listed $known -Actual $diff
+      $new = @($cmp.New); $stale = @($cmp.Stale)
       $new | ForEach-Object { Write-Host "  NEW-DIFFERENT $_" -ForegroundColor Red }
       $stale | ForEach-Object { Write-Host "  STALE known-drift entry $_" -ForegroundColor Red }
       if ($new.Count -gt 0 -or $stale.Count -gt 0 -or $badIds.Count -gt 0 -or $staleIds.Count -gt 0) {

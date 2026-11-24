@@ -1,0 +1,73 @@
+# gen-param-array golden (tests\autotest\run_fieldrepo_paramarray_golden.ps1): Loader2019 units whose live loop differs from the generated block.
+# Key = <unit>:<class> (hand-edited = same parameters, a triple differs; diverged = a parameter is assigned on one side only). Format shared with
+# ormgen-golden-known-drift.txt (tests\autotest\lib\GoldenDrift.ps1). A unit not listed that is not "same" fails; a listed line that no longer happens fails (STALE).
+uCOMPFTR:diverged  no existing loop in the unit
+uCOMPHIST:diverged  DFM or loop edited after generation
+uCUSTOMER:diverged  DFM or loop edited after generation
+uFOLDERS:diverged  DFM or loop edited after generation
+uGINSP:diverged  no existing loop in the unit
+uHEATS:diverged  DFM or loop edited after generation
+uINSPRSLT:diverged  DFM or loop edited after generation
+uIPCHART:diverged  DFM or loop edited after generation
+uMACHINES:diverged  DFM or loop edited after generation
+uMET1:diverged  DFM or loop edited after generation
+uMSCLIST:diverged  DFM or loop edited after generation
+uPLANLIST:diverged  DFM or loop edited after generation
+uPROBLEMS:diverged  DFM or loop edited after generation
+uTOOLADJ:diverged  multi-query DFM (2 TFDQuery; LAST-query heuristic)
+uTOOLFLDR:diverged  DFM or loop edited after generation
+uTOOLLIFE:diverged  DFM or loop edited after generation
+uTOOLS:diverged  DFM or loop edited after generation
+uCHIPFORM:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uCORRACT:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uCPSET:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uDATACHAN:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uDFCTLIST:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uDOETPL:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uDRA1:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uDRA2:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uDUEIN:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uENDPROC:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uENTGRP:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uENTVAR:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uFOLHEAT:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uFSCHECKS:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uFSREPCHK:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uFSREPORTS:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uGAGELYT:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uGONOFF:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uGRIDLAYT:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uHEATBOOK:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uIINSP:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uJOBSTN:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uLOGEDON:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uLONGFLDR:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uLOOPLOG:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uMACHPOS:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uMACHTYP:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uMETPL:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uMUSET:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uOPERAT:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uOPERNAME:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uOSUBLOT:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uPARLIST:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uPPSET:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uPROBLIST:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uPROCPAR:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uPROCPARO:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uPROCPART:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uREADINGS:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uSERID:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uSERPART:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uSERREAD:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uSOLLIST:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uSPCTPL:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uSTOPREAS:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uSURFFIN:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uTLLWEAR:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uTOOLASSG:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uTOOLDEF:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uTOOLGR12:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uTOOLSTAT:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uTOOLTAGS:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)
+uVARNAMES:hand-edited  live loop hand-finished after the IDE assistant (same parameters, an accessor / right-hand side differs)

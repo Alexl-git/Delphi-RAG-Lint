@@ -11,24 +11,27 @@
     diverged      a parameter is assigned in one set and not the other (cause tagged in the table)
     not-generated status <> planned (no table / query, binary or missing DFM, excluded, ...)
   Runs on a COPY of Loader2019 (sources + project files only) under -WorkDir; never touches the real tree;
-  uses --plan, so no compiler. Writes golden-report.txt beside the copy. Exit 0 = the report was produced.
+  uses --plan, so no compiler. Writes golden-report.txt beside the copy. Gate (v154): every hand-edited / diverged unit must be listed as <unit>:<class> in tests\fieldrepo\paramarray-golden-known-drift.txt (shared format, lib\GoldenDrift.ps1); an unlisted drift or a stale line = FAIL (exit 1); -ReportOnly skips the gate. Prints PARAMARRAY GOLDEN: PASS on success.
 #>
 [CmdletBinding()]
 param(
   [string]$Exe     = '',
   [string]$Corpus  = 'C:\Projects\Loader2019',
   [string]$WorkDir = "$env:TEMP\drag-lint-genpa-golden-$PID",
-  [string]$ProgressForm = 'frmLoader2019_Main'
+  [string]$ProgressForm = 'frmLoader2019_Main',
+  [string]$DriftFile = '',
+  [switch]$ReportOnly
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 # H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
 . (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+. (Join-Path $PSScriptRoot 'lib\GoldenDrift.ps1')
 try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
-if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 1 }
-if (-not (Test-Path "$Corpus\Loader2019.dproj")) { Write-Host "FATAL: corpus not found: $Corpus" -ForegroundColor Red; exit 1 }
+if (-not (Test-Path $Exe)) { Write-Host "PARAMARRAY GOLDEN: FAIL -- exe not found: $Exe" -ForegroundColor Red; exit 1 }
+if (-not (Test-Path "$Corpus\Loader2019.dproj")) { Write-Host "PARAMARRAY GOLDEN: FAIL -- corpus not found: $Corpus" -ForegroundColor Red; exit 1 }
 $Exe = (Resolve-Path $Exe).Path
 $copy = Join-Path $WorkDir 'corpus'
 [IO.Directory]::CreateDirectory($copy) | Out-Null
@@ -36,7 +39,7 @@ foreach ($pat in '*.pas', '*.dfm', '*.dproj', '*.dpr') { Copy-Item (Join-Path $C
 
 $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\err.txt"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe repo gen-param-array --project "$copy\Loader2019.dproj" --all --plan --json --progress-form $ProgressForm 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
 $j = ($out | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json | ForEach-Object { $_ }
-if ($null -eq $j) { Write-Host 'FATAL: no JSON from the verb' -ForegroundColor Red; exit 1 }
+if ($null -eq $j) { Write-Host 'PARAMARRAY GOLDEN: FAIL -- no JSON from the verb' -ForegroundColor Red; exit 1 }
 
 $tripleRx = [regex]'\.Params\[\s*(par\w+)\s*\]\.(As\w+)\[I\]\s*:=\s*(.*)$'
 $fieldRx  = [regex]'\b(tbl\w+)\s*\.\s*As\w+'
@@ -108,5 +111,24 @@ $report = Join-Path $WorkDir 'golden-report.txt'
 [IO.File]::WriteAllText($report, $sb.ToString())
 Write-Host $sb.ToString().Substring(0, [Math]::Min(1500, $sb.Length))
 Write-Host "report: $report"
+
+# ---- gate (v154 TT-GOLDEN): every non-"same" unit must be listed, with its class, in the known-drift file ----
+if (-not $DriftFile) { $DriftFile = Join-Path $PSScriptRoot '..\fieldrepo\paramarray-golden-known-drift.txt' }
+if (-not (Test-Path -LiteralPath $DriftFile)) { Write-Host "PARAMARRAY GOLDEN: FAIL -- known-drift file missing: $DriftFile" -ForegroundColor Red; exit 1 }
+if (-not (Test-GoldenDriftControl)) { Write-Host 'PARAMARRAY DRIFT CONTROL: FAIL -- the known-drift comparison cannot fail' -ForegroundColor Red; exit 1 }
+Write-Host 'PARAMARRAY DRIFT CONTROL: PASS -- unlisted and stale drift both fail' -ForegroundColor Green
+if ($ReportOnly) { Write-Host 'PARAMARRAY GOLDEN: PASS -- report only (-ReportOnly), no gate'; exit 0 }
+$drift = Read-GoldenDrift -Path $DriftFile
+$drift.Errors | ForEach-Object { Write-Host "  DRIFT FILE $_" -ForegroundColor Red }
+if ($drift.Errors.Count -gt 0) { Write-Host 'PARAMARRAY GOLDEN: FAIL -- the known-drift file is malformed' -ForegroundColor Red; exit 1 }
+$actual = @($rows | Where-Object { $_.class -in 'hand-edited', 'diverged' } | ForEach-Object { "$($_.unit):$($_.class)" })
+$cmp = Compare-GoldenDrift -Listed (Get-GoldenDriftKeys $drift) -Actual $actual
+$cmp.New | ForEach-Object { Write-Host "  NEW-DRIFT $_" -ForegroundColor Red }
+$cmp.Stale | ForEach-Object { Write-Host "  STALE known-drift entry $_" -ForegroundColor Red }
+if ($cmp.New.Count -gt 0 -or $cmp.Stale.Count -gt 0) {
+  Write-Host "PARAMARRAY GOLDEN: FAIL -- $($cmp.New.Count) unlisted drift, $($cmp.Stale.Count) stale (report: $report)" -ForegroundColor Red
+  exit 1
+}
+Write-Host "PARAMARRAY GOLDEN: PASS -- $(@($rows | Where-Object { $_.class -eq 'same' }).Count) same, $($actual.Count) known drift, $(@($rows | Where-Object { $_.class -eq 'not-generated' }).Count) not generated"
 exit 0
 } finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
