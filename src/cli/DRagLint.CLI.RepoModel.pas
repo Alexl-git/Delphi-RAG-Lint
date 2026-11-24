@@ -60,7 +60,7 @@ begin
   VRes := MigrateRepository(pPath, VApply);
   if VRes.AlreadyCurrent then
   begin
-    Writeln('already at schema 2');
+    Writeln('already at schema ', REPO_SCHEMA_VERSION);
     Exit(EXIT_OK);
   end;
   Writeln(VRes.Plan);

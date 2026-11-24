@@ -27,6 +27,7 @@ directory (same walk-up). None of them: exit 2, `no project`.
 | `excludeRoots` | path list | `[]` | no | yes | vendored folders inside the project, not linted as your own |
 | `reportsDir` | path | `<project>\drag-lint-reports` | no | yes | snapshot / report folder |
 | `fieldRepository` | path | none | no | yes | field repository for the `repo` verbs (`--repo` overrides) |
+| `backupDir` | path | beside the database | no | yes | folder of the database backups of `repo backup --connection` and `repo alter-table --apply` (`--backup-dir` overrides), see [[repo-db-backup]] |
 | `popupForms` | object list | `[]` | no | no | forms opened as popups; edit the file by hand |
 | `checkInit` | object | `{}` | no | no | `check-init` callee answers; edit the file by hand |
 | `lint.config` | path | the discovery chain | yes | yes | lint config file (relative to the project folder); `--config` overrides |

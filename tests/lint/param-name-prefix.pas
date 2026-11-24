@@ -1,9 +1,9 @@
 unit pnp;
 interface
-procedure Go(Value: Integer; pName: string);  // 'Value' fires; 'pName' clean
+procedure Go(Amount: Integer; pName: string);  // 'Amount' fires; 'pName' clean
 procedure Ok(pName: string; AValue: Integer);  // clean: both accepted prefixes (p, A)
 implementation
-procedure Go(Value: Integer; pName: string);
+procedure Go(Amount: Integer; pName: string);
 begin
 end;
 procedure Ok(pName: string; AValue: Integer);

@@ -6,7 +6,11 @@ unit DRagLint.FieldRepo.DfmReadPlan;
   Facts of every read dataset are collected per repository field, then compared with the repository. A dataset's
   table comes from UpdateOptions.UpdateTableName, TableName or a SELECT over one table; otherwise the dataset is
   reported unresolved and gives no change. Two datasets that disagree give one unchecked change per alternative.
-  Only what the DFM states makes a change; a read never deletes. *)
+  Only what the DFM states makes a change; a read never deletes a field.
+
+  EVCOLS (rulings 2026-11-23): the TField events and the column events of a DBTable view become event columns of the
+  field row (R2); the columns of every table / banded view become DL_GRID_COLUMNS rows (R6), where a column that is gone
+  from the form is an unchecked delete. *)
 
 interface
 
@@ -43,11 +47,13 @@ type
 
   /// <summary>What one change writes; parallel to the change set.</summary>
   TDfmrChangeItem = record
-    /// <summary>Repository key.</summary>
+    /// <summary>Key of a DL_FIELDS_INFO change.</summary>
     TableName: string;
     FieldName: string;
-    /// <summary>'' = a DL_FIELDS_INFO change, else the event of a DL_LAYOUT_EVENTS change.</summary>
-    EventName: string;
+    /// <summary>Key of a DL_GRID_COLUMNS change; FormName '' = a DL_FIELDS_INFO change.</summary>
+    FormName: string;
+    ViewName: string;
+    ColumnName: string;
     /// <summary>Columns to write.</summary>
     Columns: TArray<TDfmrPair>;
   end;
@@ -64,18 +70,15 @@ type
     Warnings: TArray<string>;
   end;
 
-const
-  /// <summary>LAYOUT_TYPE of a TField event stored in DL_LAYOUT_EVENTS (the v2 model has no column for it).</summary>
-  LAYOUT_TYPE_FIELD = 'Field';
-
 /// <summary>Reads DFMs and plans the changes that bring the repository in line with them.</summary>
-/// <param name="pRepo">Open repository connection, schema 2; only SELECTs run.</param>
+/// <param name="pRepo">Open repository connection, schema 3; only SELECTs run.</param>
 /// <param name="pFiles">DFM files; the unit of the same name is read for handler code when it exists.</param>
 /// <param name="pDataset">Dataset component name (case-insensitive); '' = every dataset of every file.</param>
 /// <returns>The plan. Every change is checked, except alternatives that contradict each other, a data field the
-/// repository knows as calc / lookup, and a body or lookup wiring of a field that does not become that kind; a value that cannot be stored is blocked.</returns>
+/// repository knows as calc / lookup, a body or lookup wiring of a field that does not become that kind, and the delete
+/// of a grid column that is gone from the form; a value that cannot be stored is blocked.</returns>
 /// <exception cref="EDfmReadError">A file cannot be read, or no file holds the dataset.</exception>
-/// <exception cref="ERepoError">The repository is schema 1 (run repo migrate first).</exception>
+/// <exception cref="ERepoError">The repository is schema 1 or 2 (run repo migrate first).</exception>
 /// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids.</remarks>
 function PlanDfmRead(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string): TDfmrPlan;
 
@@ -107,7 +110,7 @@ uses
 
 const
   FIELDS_TABLE = 'DL_FIELDS_INFO';
-  SCHEMA_WITH_BODIES = 2;
+  SCHEMA_WITH_EVENTS = 3;
   COL_TABLE = 'TABLE_NAME';
   COL_FIELD = 'FIELD_NAME';
   COL_KIND = 'FIELD_KIND';
@@ -118,21 +121,19 @@ const
   COL_DEST_TABLE = 'DESTTABLE';
   COL_DEST_KEY = 'DESTKEY';
   COL_DEST_VALUE = 'DESTVALUE';
-  COL_ALIGNMENT = 'ALIGNMENT';
   COL_VISIBLE = 'VISIBLE';
-  COL_EVENT_CODE = 'EVENT_CODE';
-  COL_LAYOUT = 'LAYOUT_TYPE';
-  COL_EVENT = 'EVENT_NAME';
-  EVENT_GET_TEXT = 'OnGetText';
-  ALIGNMENT_UNSET = '-2'; // TableTools' new-row value
+  COL_FORM = 'FORM_NAME';
+  COL_VIEW = 'VIEW_NAME';
+  COL_COLUMN = 'COLUMN_NAME';
+  COL_INDEX = 'COLUMN_INDEX';
+  OBJECT_KIND = 'object';
   SQL_FIELD_ROW = 'SELECT * FROM "DL_FIELDS_INFO" WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F';
-  SQL_EVENT_ROW = 'SELECT * FROM "DL_LAYOUT_EVENTS" WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F AND "LAYOUT_TYPE" = :L ' +
-    'AND "EVENT_NAME" = :E';
+  SQL_GRID_ROW = 'SELECT * FROM "DL_GRID_COLUMNS" WHERE "FORM_NAME" = :F AND "VIEW_NAME" = :V AND "COLUMN_NAME" = :C';
+  SQL_GRID_FORM = 'SELECT * FROM "DL_GRID_COLUMNS" WHERE UPPER("FORM_NAME") = UPPER(:F) ORDER BY "VIEW_NAME", "COLUMN_INDEX", "COLUMN_NAME"';
   MULTI_FIELD = ';';
   WARN_VALUE_LEN = 60; // a warning shows the start of a value; the change set has all of it
   { Columns the schema owns: written with a new row, never updated from a DFM. }
   INSERT_ONLY: array[0..2] of string = ('FIELD_AS_TYPE', 'VAR_TYPE', 'STRING_SIZE');
-  GET_TEXT_PARAMS: array[0..2] of string = ('Sender', 'Text', 'DisplayText');
 
 type
   { One value a dataset states for a column. }
@@ -154,9 +155,7 @@ type
     TableName: string;
     FieldName: string;
     Columns: TArray<TFactColumn>;
-    Events: TArray<TFactColumn>;
     procedure Add(const pColumn, pValue, pBlocked, pSource: string);
-    procedure AddEvent(const pEvent: string; const pBody: TDfmrBody; const pSource: string);
     function Kinds: TArray<TFactValue>;
   end;
 
@@ -168,12 +167,32 @@ type
     Kind: TFrFieldKind;
   end;
 
+  { A column of a grid view, read or stored. }
+  TGridRow = record
+    FormName: string;
+    ViewName: string;
+    ColumnName: string;
+    Values: TArray<TDfmrPair>; // TABLE_NAME, FIELD_NAME, COLUMN_INDEX; '' = NULL
+    function Key: string;
+    function Text: string;
+  end;
+
   { Where a dataset's fields come from. }
   TDatasetSource = record
     TableName: string;  // table of calc / lookup fields, and of data fields without a SELECT
     Sql: TDfmrSqlSource;
     HasSql: Boolean;
     Reason: string;
+  end;
+
+  { The dataset behind a grid view. }
+  TViewSource = record
+    Found: Boolean;
+    Local: Boolean; // the dataset is on the form of the view
+    Form: TDfmrForm;
+    Dataset: TDfmrDataset;
+    Source: TDatasetSource;
+    Context: TDfmrCodeContext;
   end;
 
   TDfmRead = class  // dl:ok high-response@c61e -- REVIEWED 2026-11-23 TT-DFMREAD: one read = collect facts + compare; private to the unit, its response set is FireDAC, dictionary and string calls
@@ -188,6 +207,8 @@ type
     FUnits: TObjectDictionary<string, TDfmrUnit>;
     FFacts: TObjectDictionary<string, TFieldFacts>;
     FOrder: TList<TFieldFacts>;
+    FGridRows: TList<TGridRow>;
+    FGridSeen: TDictionary<string, Boolean>; // key of every row of FGridRows
     FChanges: TList<TFrChange>;
     FItems: TList<TDfmrChangeItem>;
     procedure LoadRows;
@@ -203,18 +224,28 @@ type
       const pSource: string);
     procedure ReadCalc(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pContext: TDfmrCodeContext;
       const pField: TDfmrField; pFacts: TFieldFacts; var pReport: TDfmrDatasetReport);
-    procedure ReadEvents(const pForm: TDfmrForm; const pContext: TDfmrCodeContext; const pField: TDfmrField;
-      pFacts: TFieldFacts);
+    procedure ReadEvents(const pForm: TDfmrForm; const pContext: TDfmrCodeContext; const pEvents: TArray<TDfmrPair>;
+      const pOwner: string; pFacts: TFieldFacts);
+    function OwnerForm(const pForm: TDfmrForm; const pName: string; out pOwner: TDfmrForm; out pLocal: string): Boolean;
+    function ViewSource(const pForm: TDfmrForm; const pView: TDfmrGridView): TViewSource;
+    procedure ReadView(const pForm: TDfmrForm; const pView: TDfmrGridView; const pDataset: string);
+    procedure ReadColumn(const pForm: TDfmrForm; const pView: TDfmrGridView; const pSource: TViewSource; pIndex: Integer);
+    procedure ReadColumnEvents(const pForm: TDfmrForm; const pView: TDfmrGridView; const pSource: TViewSource;
+      const pColumn: TDfmrGridColumn; const pTable, pField: string);
+    procedure WarnEvents(const pWhere, pWhy: string; const pEvents: TArray<TDfmrPair>);
+    procedure PlanGridForm(const pForm: string; pDeletes: Boolean);
+    procedure PlanGridRow(const pRow: TGridRow; pOld: TDictionary<string, TGridRow>);
+    function AddGridChange(pOp: TFrChangeOp; const pRow: TGridRow; const pProp, pOldValue, pNewValue: string): Integer;
     procedure WarnForm(const pWhere: string; const pBody: TDfmrBody);
     function AddChange(pOp: TFrChangeOp; const pFacts: TFieldFacts; const pProp, pOld, pNew: string): Integer;
+    procedure WarnNoRow(pFacts: TFieldFacts);
     procedure PlanNew(pFacts: TFieldFacts);
     procedure PlanExisting(pFacts: TFieldFacts; const pRow: TRepoRow);
     procedure ListRoots(const pFolder: string);
     function PlanKind(pFacts: TFieldFacts; const pRow: TRepoRow; pQuery: TFDQuery): TFrFieldKind;
     procedure PlanColumn(pFacts: TFieldFacts; const pColumn: TFactColumn; const pOld: string);
-    procedure PlanEvents(pFacts: TFieldFacts);
     function NewRowBlock(pFacts: TFieldFacts): string;
-    procedure PlanAll;
+    procedure PlanAll(const pFiles: TArray<string>; pDeletes: Boolean);
   public
     constructor Create(pRepo: TFDConnection);
     destructor Destroy; override;
@@ -297,11 +328,6 @@ begin
   AddFact(Columns, pColumn, pValue, VBlocked, pSource);
 end;
 
-procedure TFieldFacts.AddEvent(const pEvent: string; const pBody: TDfmrBody; const pSource: string);
-begin
-  AddFact(Events, pEvent, pBody.Text, pBody.Blocked, pSource);
-end;
-
 function TFieldFacts.Kinds: TArray<TFactValue>;
 var
   VColumn: TFactColumn;
@@ -365,13 +391,42 @@ begin
   begin
     VCode.CompName := VField.CompName;
     VCode.DataName := VField.FieldName;
-    VCode.Accessor := FieldClassAccessor(VField.FieldClass);
     VCode.IsCalc := VField.Kind in [frkCalc, frkInternalCalc];
     VCode.MacroName := '';
     if FieldSource(pSource, VField, VTable, VColumn, VReason) and (VTable = pSource.TableName) and IsValidIdent(VColumn) then
       VCode.MacroName := VColumn;
     Result.Fields := Result.Fields + [VCode];
   end;
+end;
+
+{ TGridRow }
+
+function TGridRow.Key: string;
+begin
+  Result := UpperCase(FormName + '|' + ViewName + '|' + ColumnName);
+end;
+
+{ The stored values, NULLs left out. }
+function TGridRow.Text: string;
+var
+  VPair: TDfmrPair;
+begin
+  Result := '';
+  for VPair in Values do
+    if VPair.Value <> '' then
+      Result := Result + (if Result = '' then '' else '; ') + VPair.Name + '=' + VPair.Value;
+end;
+
+{ The persistent field of a dataset by its FieldName; a data field of that name when it has none. }
+function NamedField(const pDataset: TDfmrDataset; const pName: string): TDfmrField;
+var
+  VField: TDfmrField;
+begin
+  Result := Default(TDfmrField);
+  Result.FieldName := pName;
+  for VField in pDataset.Fields do
+    if SameText(VField.FieldName, Trim(pName)) then
+      Exit(VField);
 end;
 
 { TDfmRead }
@@ -388,6 +443,8 @@ begin
   FUnits := TObjectDictionary<string, TDfmrUnit>.Create([doOwnsValues]);
   FFacts := TObjectDictionary<string, TFieldFacts>.Create([doOwnsValues]);
   FOrder := TList<TFieldFacts>.Create;
+  FGridRows := TList<TGridRow>.Create;
+  FGridSeen := TDictionary<string, Boolean>.Create;
   FChanges := TList<TFrChange>.Create;
   FItems := TList<TDfmrChangeItem>.Create;
 end;
@@ -396,6 +453,8 @@ destructor TDfmRead.Destroy;
 begin
   FItems.Free;
   FChanges.Free;
+  FGridSeen.Free;
+  FGridRows.Free;
   FOrder.Free;
   FFacts.Free;
   FUnits.Free;
@@ -503,33 +562,41 @@ begin
   FOrder.Add(Result);
 end;
 
+{ The form that owns `Name` (this one) or `Module.Name` (a form of the same folder), and the name there. }
+function TDfmRead.OwnerForm(const pForm: TDfmrForm; const pName: string; out pOwner: TDfmrForm; out pLocal: string): Boolean;
+var
+  VFile: string;
+  VDot: Integer;
+begin
+  pOwner := pForm;
+  pLocal := pName;
+  VDot := pName.IndexOf('.');
+  if VDot <= 0 then
+    Exit(True);
+  VFile := SiblingForm(pForm.FileName, pName.Substring(0, VDot));
+  Result := VFile <> '';
+  if not Result then
+    Exit;
+  pOwner := Form(VFile);
+  pLocal := pName.Substring(VDot + 1);
+end;
+
 { The dataset `Name` of this form or `Module.Name` of a form of the same folder. }
 function TDfmRead.LookupTarget(const pForm: TDfmrForm; const pName: string; out pDataset: TDfmrDataset): Boolean;
 var
   VForm: TDfmrForm;
   VDataset: TDfmrDataset;
-  VName, VFile: string;
-  VDot: Integer;
+  VName: string;
 begin
   pDataset := Default(TDfmrDataset);
-  VForm := pForm;
-  VName := pName;
-  VDot := pName.IndexOf('.');
-  if VDot > 0 then
-  begin
-    VFile := SiblingForm(pForm.FileName, pName.Substring(0, VDot));
-    if VFile = '' then
-      Exit(False);
-    VForm := Form(VFile);
-    VName := pName.Substring(VDot + 1);
-  end;
   Result := False;
-  for VDataset in VForm.Datasets do
-    if SameText(VDataset.Name, VName) then
-    begin
-      pDataset := VDataset;
-      Exit(True);
-    end;
+  if OwnerForm(pForm, pName, VForm, VName) then
+    for VDataset in VForm.Datasets do
+      if SameText(VDataset.Name, VName) then
+      begin
+        pDataset := VDataset;
+        Exit(True);
+      end;
 end;
 
 { The column behind a dataset field a lookup names; pBlocked = why it is none of the dataset's table. An unresolved dataset
@@ -537,22 +604,13 @@ end;
 function LookupColumn(const pDataset: TDfmrDataset; const pSource: TDatasetSource; const pName: string;
   out pBlocked: string): string;
 var
-  VField, VNamed: TDfmrField;
   VTable, VColumn: string;
 begin
   pBlocked := '';
   Result := UpperCase(Trim(pName));
   if pSource.TableName = '' then
     Exit;
-  VNamed := Default(TDfmrField);
-  VNamed.FieldName := pName;
-  for VField in pDataset.Fields do
-    if SameText(VField.FieldName, Trim(pName)) then
-    begin
-      VNamed := VField;
-      Break;
-    end;
-  if FieldSource(pSource, VNamed, VTable, VColumn, pBlocked) and SameText(VTable, pSource.TableName) then
+  if FieldSource(pSource, NamedField(pDataset, pName), VTable, VColumn, pBlocked) and SameText(VTable, pSource.TableName) then
     Exit(VColumn);
   pBlocked := Format('%s is not a column of %s (%s)', [Result, pSource.TableName,
     if pBlocked = '' then 'it comes from ' + VTable else pBlocked]);
@@ -638,36 +696,33 @@ begin
   WarnForm(VWhere, VBody);
 end;
 
-procedure TDfmRead.ReadEvents(const pForm: TDfmrForm; const pContext: TDfmrCodeContext; const pField: TDfmrField;
-  pFacts: TFieldFacts);
+{ The code of assigned events (pOwner = component) as facts of the field's event columns. }
+procedure TDfmRead.ReadEvents(const pForm: TDfmrForm; const pContext: TDfmrCodeContext; const pEvents: TArray<TDfmrPair>;
+  const pOwner: string; pFacts: TFieldFacts);
 var
   VEvent: TDfmrPair;
+  VColumn: TFrEventColumn;
   VUnit: TDfmrUnit;
   VBody: TDfmrBody;
   VWhere: string;
-  VParams: TArray<string>;
-  VI: Integer;
 begin
-  for VI := 0 to High(GET_TEXT_PARAMS) do
-    VParams := VParams + [GET_TEXT_PARAMS[VI]];
-  for VEvent in pField.Events do
-  begin
-    VWhere := ExtractFileName(pForm.FileName) + ' ' + pField.CompName + '.' + VEvent.Name;
-    if VEvent.Name <> EVENT_GET_TEXT then
-    begin
-      FWarnings.Add(VWhere + ' = ' + VEvent.Value + ': not stored (the repository keeps OnGetText only)');
-      Continue;
-    end;
-    VUnit := UnitOf(pForm.FileName);
-    if VUnit = nil then
-      Continue;
-    VBody := VUnit.EventBody(pContext, VEvent.Value, VParams);
-    if VBody.Text = '' then
-      FWarnings.Add(VWhere + ': not read: ' + (if VBody.Blocked = '' then 'the handler is empty' else VBody.Blocked))
-    else
-      pFacts.AddEvent(VEvent.Name, VBody, VWhere);
-    WarnForm(VWhere, VBody);
-  end;
+  if Length(pEvents) = 0 then
+    Exit;
+  VUnit := UnitOf(pForm.FileName);
+  if VUnit = nil then
+    Exit;
+  for VEvent in pEvents do
+    for VColumn in FR_EVENT_COLUMNS do
+      if VColumn.Event = VEvent.Name then
+      begin
+        VWhere := ExtractFileName(pForm.FileName) + ' ' + pOwner + '.' + VEvent.Name;
+        VBody := VUnit.EventBody(pContext, VEvent.Value, VColumn.Params.Split([',']));
+        if VBody.Text = '' then
+          FWarnings.Add(VWhere + ': not read: ' + (if VBody.Blocked = '' then 'the handler is empty' else VBody.Blocked))
+        else
+          pFacts.Add(VColumn.Column, VBody.Text, VBody.Blocked, VWhere);
+        WarnForm(VWhere, VBody);
+      end;
 end;
 
 procedure TDfmRead.ReadField(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pField: TDfmrField;
@@ -719,12 +774,116 @@ begin
     ReadField(pForm, pDataset, VField, VTable, VColumn);
     if VField.Kind in [frkCalc, frkInternalCalc] then
       ReadCalc(pForm, pDataset, VContext, VField, FactsOf(VTable, VColumn), VReport);
-    ReadEvents(pForm, VContext, VField, FactsOf(VTable, VColumn));
+    ReadEvents(pForm, VContext, VField.Events, VField.CompName, FactsOf(VTable, VColumn));
   end;
   if Length(pDataset.InheritedFields) > 0 then
     FWarnings.Add(Format('%s %s: %d inherited fields not read (FieldName is in the ancestor''s DFM): %s', [VReport.DfmName,
       pDataset.Name, Length(pDataset.InheritedFields), string.Join(', ', pDataset.InheritedFields)]));
   FPlan.Datasets := FPlan.Datasets + [VReport];
+end;
+
+{ ---- grid views ---- }
+
+procedure TDfmRead.WarnEvents(const pWhere, pWhy: string; const pEvents: TArray<TDfmrPair>);
+var
+  VEvent: TDfmrPair;
+begin
+  for VEvent in pEvents do
+    FWarnings.Add(Format('%s.%s = %s: not stored (%s)', [pWhere, VEvent.Name, VEvent.Value, pWhy]));
+end;
+
+{ The dataset behind the data source of a view. Event code names the fields of a dataset on another form by that form, so
+  the context has no fields then. }
+function TDfmRead.ViewSource(const pForm: TDfmrForm; const pView: TDfmrGridView): TViewSource;
+var
+  VName: string;
+  VPair: TDfmrPair;
+  VOwner: TDfmrForm;
+begin
+  Result := Default(TViewSource);
+  Result.Context.FormClass := pForm.FormClass;
+  Result.Context.Components := pForm.Components;
+  if (pView.DataSource = '') or not OwnerForm(pForm, pView.DataSource, VOwner, VName) then
+    Exit;
+  for VPair in VOwner.DataSources do
+    if SameText(VPair.Name, VName) and (VPair.Value <> '') then
+    begin
+      Result.Found := LookupTarget(VOwner, VPair.Value, Result.Dataset);
+      Result.Local := SameText(VOwner.FileName, pForm.FileName) and not VPair.Value.Contains('.');
+    end;
+  if not Result.Found then
+    Exit;
+  Result.Source := SourceOf(Result.Dataset);
+  if Result.Local then
+    Result.Context := CodeContext(pForm, Result.Dataset, Result.Source);
+end;
+
+procedure TDfmRead.ReadColumnEvents(const pForm: TDfmrForm; const pView: TDfmrGridView; const pSource: TViewSource;
+  const pColumn: TDfmrGridColumn; const pTable, pField: string);
+var
+  VWhere: string;
+begin
+  VWhere := ExtractFileName(pForm.FileName) + ' ' + pColumn.Name;
+  if pView.Kind <> dvkTable then
+    WarnEvents(VWhere, 'a column event is stored for a TcxGridDBTableView only', pColumn.Events)
+  else if pField = '' then
+    WarnEvents(VWhere, 'the column has no field', pColumn.Events)
+  else if pTable = '' then
+    WarnEvents(VWhere, 'the column has no table', pColumn.Events)
+  else if Length(pColumn.Events) > 0 then
+    ReadEvents(pForm, pSource.Context, pColumn.Events, pColumn.Name, FactsOf(pTable, pField));
+end;
+
+procedure TDfmRead.ReadColumn(const pForm: TDfmrForm; const pView: TDfmrGridView; const pSource: TViewSource; pIndex: Integer);
+var
+  VColumn: TDfmrGridColumn;
+  VRow: TGridRow;
+  VTable, VField, VReason: string;
+begin
+  VColumn := pView.Columns[pIndex];
+  VTable := '';
+  VField := UpperCase(VColumn.FieldName);
+  if pSource.Found and (VField <> '')
+    and not FieldSource(pSource.Source, NamedField(pSource.Dataset, VColumn.FieldName), VTable, VField, VReason) then
+  begin
+    VTable := '';
+    VField := UpperCase(VColumn.FieldName);
+  end;
+  VRow.FormName := pForm.FormName;
+  VRow.ViewName := pView.Name;
+  VRow.ColumnName := VColumn.Name;
+  VRow.Values := [MakePair(COL_TABLE, VTable), MakePair(COL_FIELD, VField), MakePair(COL_INDEX, IntToStr(pIndex))];
+  if VColumn.Name = '' then
+    FWarnings.Add(Format('%s %s: column %d has no name: not stored', [ExtractFileName(pForm.FileName), pView.Name, pIndex]))
+  else if FGridSeen.TryAdd(VRow.Key, True) then
+    FGridRows.Add(VRow)
+  else
+    FWarnings.Add(Format('%s %s.%s: another DFM with the form name %s has this column: not stored', [ExtractFileName(pForm.FileName),
+      pView.Name, VColumn.Name, pForm.FormName]));
+  ReadColumnEvents(pForm, pView, pSource, VColumn, VTable, VField);
+end;
+
+procedure TDfmRead.ReadView(const pForm: TDfmrForm; const pView: TDfmrGridView; const pDataset: string);
+var
+  VSource: TViewSource;
+  VWhere: string;
+  VI: Integer;
+begin
+  VWhere := ExtractFileName(pForm.FileName) + ' ' + pView.Name;
+  VSource := ViewSource(pForm, pView);
+  if (pDataset <> '') and not (VSource.Local and SameText(VSource.Dataset.Name, pDataset)) then
+    Exit;
+  if pView.ObjKind <> OBJECT_KIND then
+    FWarnings.Add(VWhere + ': inherited grid view not read (its own properties are in the ancestor''s DFM)')
+  else if pView.Kind = dvkOther then
+    FWarnings.Add(VWhere + ' (' + pView.ViewClass + '): column order not read')
+  else
+  begin
+    if not VSource.Found then
+      FWarnings.Add(VWhere + ': the dataset of its data source ' + pView.DataSource + ' is not found: no table for its columns');
+    for VI := 0 to High(pView.Columns) do
+      ReadColumn(pForm, pView, VSource, VI);
+  end;
 end;
 
 { ---- change set ---- }
@@ -800,6 +959,16 @@ begin
     Result := 'name too long';
 end;
 
+{ Facts without a persistent field: code of a grid column whose field the repository does not have. }
+procedure TDfmRead.WarnNoRow(pFacts: TFieldFacts);
+var
+  VColumn: TFactColumn;
+begin
+  for VColumn in pFacts.Columns do
+    FWarnings.Add(Format('%s.%s %s: not stored: the repository has no row for the field (%s)', [pFacts.TableName, pFacts.FieldName,
+      VColumn.Name, VColumn.Values[0].Source]));
+end;
+
 { A new row: the storable agreed values travel with the insert, the rest follows as its own changes. }
 procedure TDfmRead.PlanNew(pFacts: TFieldFacts);
 var
@@ -810,6 +979,11 @@ var
   VSummary, VBlock: string;
   VI: Integer;
 begin
+  if Length(pFacts.Kinds) = 0 then
+  begin
+    WarnNoRow(pFacts);
+    Exit;
+  end;
   VCols := nil;
   VSummary := '';
   for VColumn in pFacts.Columns do
@@ -833,7 +1007,6 @@ begin
     if (Length(VValues) > 1) or (VValues[0].Blocked <> '') then
       PlanColumn(pFacts, VColumn, '');
   end;
-  PlanEvents(pFacts);
 end;
 
 { A kind change of an existing row; FIELD_KIND carries ISCALCULATED and ISLOOKUP with it. Returns the kind the row has
@@ -894,46 +1067,137 @@ begin
   finally
     VQuery.Free;
   end;
-  PlanEvents(pFacts);
 end;
 
-procedure TDfmRead.PlanEvents(pFacts: TFieldFacts);
+function TDfmRead.AddGridChange(pOp: TFrChangeOp; const pRow: TGridRow; const pProp, pOldValue, pNewValue: string): Integer;
 var
-  VEvent: TFactColumn;
-  VValue: TFactValue;
-  VOld: Variant;
-  VI: Integer;
-  VText: string;
+  VChange: TFrChange;
+  VItem: TDfmrChangeItem;
 begin
-  for VEvent in pFacts.Events do
+  Result := FChanges.Count;
+  VChange := Default(TFrChange);
+  VChange.Id := Result + 1;
+  VChange.Op := pOp;
+  VChange.Target := REPO_TABLE_GRID_COLUMNS + ' ' + pRow.FormName + '|' + pRow.ViewName + '|' + pRow.ColumnName;
+  VChange.Prop := pProp;
+  VChange.OldValue := pOldValue;
+  VChange.NewValue := pNewValue;
+  VChange.Checked := pOp <> fcoDelete;
+  VItem := Default(TDfmrChangeItem);
+  VItem.FormName := pRow.FormName;
+  VItem.ViewName := pRow.ViewName;
+  VItem.ColumnName := pRow.ColumnName;
+  if pProp <> '' then
+    VItem.Columns := [MakePair(pProp, pNewValue)]
+  else if pOp = fcoInsert then
+    VItem.Columns := pRow.Values;
+  FChanges.Add(VChange);
+  FItems.Add(VItem);
+end;
+
+{ Why a grid row cannot be stored. }
+function GridRowBlock(const pRow: TGridRow): string;
+var
+  VTable: TRepoTable;
+  VColumn: TRepoColumn;
+  VPair: TDfmrPair;
+begin
+  Result := '';
+  if not FindRepoTable(REPO_TABLE_GRID_COLUMNS, VTable) then
+    Exit;
+  for VPair in pRow.Values + [MakePair(COL_FORM, pRow.FormName), MakePair(COL_VIEW, pRow.ViewName), MakePair(COL_COLUMN, pRow.ColumnName)] do
+    if VTable.FindColumn(VPair.Name, VColumn) and (VColumn.MaxLen > 0) and (Length(VPair.Value) > VColumn.MaxLen) then
+      Exit(Format('longer than %s(%d)', [VPair.Name, VColumn.MaxLen]));
+end;
+
+{ One read column against its stored row, which is taken out of pOld. }
+procedure TDfmRead.PlanGridRow(const pRow: TGridRow; pOld: TDictionary<string, TGridRow>);
+var
+  VOld: TGridRow;
+  VI, VChange: Integer;
+  VBlock: string;
+begin
+  VBlock := GridRowBlock(pRow);
+  if not pOld.TryGetValue(pRow.Key, VOld) then
   begin
-    VOld := FRepo.ExecSQLScalar('SELECT "EVENT_CODE" FROM "DL_LAYOUT_EVENTS" WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F ' +
-      'AND "LAYOUT_TYPE" = :L AND "EVENT_NAME" = :E', [pFacts.TableName, pFacts.FieldName, LAYOUT_TYPE_FIELD, VEvent.Name]);
-    VText := VarToStr(VOld);
-    for VValue in VEvent.Good do
+    VChange := AddGridChange(fcoInsert, pRow, '', '', pRow.Text);
+    FChanges.List[VChange].Blocked := VBlock;
+    FChanges.List[VChange].Checked := VBlock = '';
+    Exit;
+  end;
+  pOld.Remove(pRow.Key);
+  for VI := 0 to High(pRow.Values) do
+    if pRow.Values[VI].Value <> VOld.Values[VI].Value then
     begin
-      if SameValue(VText, VValue.Value) then
-        Continue;
-      VI := AddChange(if VText = '' then fcoInsert else fcoUpdate, pFacts, COL_EVENT_CODE, VText, VValue.Value);
-      FChanges.List[VI].Target := REPO_TABLE_LAYOUT_EVENTS + ' ' + pFacts.TableName + '|' + pFacts.FieldName + '|'
-        + LAYOUT_TYPE_FIELD + '|' + VEvent.Name;
-      FChanges.List[VI].Blocked := VValue.Blocked;
-      FChanges.List[VI].Checked := (Length(VEvent.Good) = 1) and (VValue.Blocked = '');
-      FItems.List[VI].EventName := VEvent.Name;
+      VChange := AddGridChange(fcoUpdate, VOld, pRow.Values[VI].Name, VOld.Values[VI].Value, pRow.Values[VI].Value);
+      FChanges.List[VChange].Blocked := VBlock;
+      FChanges.List[VChange].Checked := VBlock = '';
     end;
+end;
+
+{ The columns of one form; with pDeletes the stored columns the form no longer has. }
+procedure TDfmRead.PlanGridForm(const pForm: string; pDeletes: Boolean);
+var
+  VQuery: TFDQuery;
+  VForm, VView, VColumn, VTable, VField, VIndex: TField;
+  VOld: TDictionary<string, TGridRow>;
+  VOrder: TArray<TGridRow>;
+  VRow: TGridRow;
+begin
+  VOld := TDictionary<string, TGridRow>.Create;
+  VQuery := TFDQuery.Create(nil);
+  try
+    VQuery.Connection := FRepo;
+    VQuery.Open(SQL_GRID_FORM, [pForm]);
+    VForm := VQuery.FieldByName(COL_FORM);
+    VView := VQuery.FieldByName(COL_VIEW);
+    VColumn := VQuery.FieldByName(COL_COLUMN);
+    VTable := VQuery.FieldByName(COL_TABLE);
+    VField := VQuery.FieldByName(COL_FIELD);
+    VIndex := VQuery.FieldByName(COL_INDEX);
+    VOrder := nil;
+    while not VQuery.Eof do
+    begin
+      VRow.FormName := VForm.AsString;
+      VRow.ViewName := VView.AsString;
+      VRow.ColumnName := VColumn.AsString;
+      VRow.Values := [MakePair(COL_TABLE, VTable.AsString), MakePair(COL_FIELD, VField.AsString), MakePair(COL_INDEX, VIndex.AsString)];
+      VOld.AddOrSetValue(VRow.Key, VRow);
+      VOrder := VOrder + [VRow];
+      VQuery.Next;
+    end;
+    for VRow in FGridRows do
+      if SameText(VRow.FormName, pForm) then
+        PlanGridRow(VRow, VOld);
+    if pDeletes then
+      for VRow in VOrder do
+        if VOld.ContainsKey(VRow.Key) then
+          AddGridChange(fcoDelete, VRow, '', VRow.Text, '');
+  finally
+    VQuery.Free;
+    VOld.Free;
   end;
 end;
 
-procedure TDfmRead.PlanAll;
+procedure TDfmRead.PlanAll(const pFiles: TArray<string>; pDeletes: Boolean);
 var
   VFacts: TFieldFacts;
   VRow: TRepoRow;
+  VFile: string;
+  VForms: TArray<string>;
 begin
   for VFacts in FOrder do
     if FRows.TryGetValue(KeyOf(VFacts.TableName, VFacts.FieldName), VRow) then
       PlanExisting(VFacts, VRow)
     else
       PlanNew(VFacts);
+  VForms := nil;
+  for VFile in pFiles do
+    if not MatchText(Form(VFile).FormName, VForms) then
+    begin
+      VForms := VForms + [Form(VFile).FormName];
+      PlanGridForm(Form(VFile).FormName, pDeletes);
+    end;
 end;
 
 function TDfmRead.Execute(const pFiles: TArray<string>; const pDataset: string): TDfmrPlan;
@@ -941,6 +1205,7 @@ var
   VFile: string;
   VForm: TDfmrForm;
   VDataset: TDfmrDataset;
+  VView: TDfmrGridView;
 begin
   FPlan := Default(TDfmrPlan);
   FPlan.ChangeSet.Direction := fdDfmToRepo;
@@ -951,11 +1216,13 @@ begin
     for VDataset in VForm.Datasets do
       if (pDataset = '') or SameText(pDataset, VDataset.Name) then
         ReadDataset(VForm, VDataset);
+    for VView in VForm.Views do
+      ReadView(VForm, VView, pDataset);
     FUnits.Clear;
   end;
   if (pDataset <> '') and (Length(FPlan.Datasets) = 0) then
     raise EDfmReadError.CreateFmt('no dataset %s in the DFM', [pDataset]);
-  PlanAll;
+  PlanAll(pFiles, pDataset = '');
   FPlan.ChangeSet.Changes := FChanges.ToArray;
   FPlan.Items := FItems.ToArray;
   FPlan.Warnings := FWarnings.ToStringArray;
@@ -966,8 +1233,8 @@ function PlanDfmRead(pRepo: TFDConnection; const pFiles: TArray<string>; const p
 var
   VRead: TDfmRead;
 begin
-  if RepoSchemaVersion(pRepo) < SCHEMA_WITH_BODIES then
-    raise ERepoError.Create('the repository is schema 1: run repo migrate first');
+  if RepoSchemaVersion(pRepo) < SCHEMA_WITH_EVENTS then
+    raise ERepoError.CreateFmt('the repository is schema %d: run repo migrate first', [RepoSchemaVersion(pRepo)]);
   VRead := TDfmRead.Create(pRepo);
   try
     Result := VRead.Execute(pFiles, pDataset);
@@ -1016,7 +1283,6 @@ begin
     pQuery.FieldByName(COL_TABLE).AsString := pItem.TableName;
     pQuery.FieldByName(COL_FIELD).AsString := pItem.FieldName;
     pQuery.FieldByName(COL_VISIBLE).AsBoolean := True; // TField.Visible defaults to True
-    pQuery.FieldByName(COL_ALIGNMENT).AsString := ALIGNMENT_UNSET;
   end
   else
     pQuery.Edit;
@@ -1024,19 +1290,23 @@ begin
   pQuery.Post;
 end;
 
-procedure ApplyEvent(pRepo: TFDConnection; pQuery: TFDQuery; const pChange: TFrChange; const pItem: TDfmrChangeItem);
+procedure ApplyGrid(pQuery: TFDQuery; const pChange: TFrChange; const pItem: TDfmrChangeItem);
 begin
-  if Integer(pRepo.ExecSQLScalar('SELECT COUNT(*) FROM "DL_FIELDS_INFO" WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F',
-    [pItem.TableName, pItem.FieldName])) = 0 then
-    raise ERepoError.CreateFmt('change %d: the field row of %s does not exist (select its insert too)', [pChange.Id, pChange.Target]);
-  pQuery.Open(SQL_EVENT_ROW, [pItem.TableName, pItem.FieldName, LAYOUT_TYPE_FIELD, pItem.EventName]);  // dl:ok dataset-open-without-close@49ef -- REVIEWED 2026-11-23 TT-DFMREAD: the caller ApplyDfmRead owns the query: closes it per change and on an exception, frees it in finally
-  if pQuery.Eof then
+  pQuery.Open(SQL_GRID_ROW, [pItem.FormName, pItem.ViewName, pItem.ColumnName]);  // dl:ok dataset-open-without-close@5642 -- REVIEWED 2026-11-23 EVCOLS: the caller ApplyDfmRead owns the query: closes it per change and on an exception, frees it in finally
+  if (pChange.Op = fcoInsert) <> pQuery.Eof then
+    raise ERepoError.CreateFmt('change %d: the row of %s %s', [pChange.Id, pChange.Target,
+      if pQuery.Eof then 'does not exist' else 'already exists']);
+  if pChange.Op = fcoDelete then
+  begin
+    pQuery.Delete;
+    Exit;
+  end;
+  if pChange.Op = fcoInsert then
   begin
     pQuery.Append;
-    pQuery.FieldByName(COL_TABLE).AsString := pItem.TableName;
-    pQuery.FieldByName(COL_FIELD).AsString := pItem.FieldName;
-    pQuery.FieldByName(COL_LAYOUT).AsString := LAYOUT_TYPE_FIELD;
-    pQuery.FieldByName(COL_EVENT).AsString := pItem.EventName;
+    pQuery.FieldByName(COL_FORM).AsString := pItem.FormName;
+    pQuery.FieldByName(COL_VIEW).AsString := pItem.ViewName;
+    pQuery.FieldByName(COL_COLUMN).AsString := pItem.ColumnName;
   end
   else
     pQuery.Edit;
@@ -1080,10 +1350,10 @@ begin
     try
       for VChange in pChosen do
       begin
-        if pPlan.Items[VChange.Id - 1].EventName = '' then
+        if pPlan.Items[VChange.Id - 1].FormName = '' then
           ApplyField(VQuery, VChange, pPlan.Items[VChange.Id - 1])
         else
-          ApplyEvent(pRepo, VQuery, VChange, pPlan.Items[VChange.Id - 1]);
+          ApplyGrid(VQuery, VChange, pPlan.Items[VChange.Id - 1]);
         VQuery.Close;
         Result := Result + [ApplyLogLine(VChange)];
       end;

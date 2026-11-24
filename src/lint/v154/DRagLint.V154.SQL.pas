@@ -1,7 +1,7 @@
 unit DRagLint.V154.SQL;
 
-{ Wave v154 (1.54.0-alpha) lane SQL -- sql-param-mismatch, query-in-loop (G-02 G-10).
-  Scaffold created EMPTY by lane FRAME; lane SQL owns this unit and DRagLint.V154.SQL.Support.
+{ Wave v154 (1.54.0-alpha) lane SQL -- sql-param-mismatch (G-02), query-in-loop (G-10) and ParamByName for
+  field-by-name-in-loop. The checks are in DRagLint.V154.SQL.Support, over the datasets DRagLint.V154.SqlText reads.
   Called only by DRagLint.V151.Dispatch (the ONE provider mechanism; v154 lanes reuse the
   DRagLint.V151.Api types). }
 
@@ -46,30 +46,49 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V154.SQL.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V154.SqlText
+  , DRagLint.V154.SQL.Support
+  ;
 
 class procedure TV154SQLRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_SQL_PARAM, 'firedac', 'warning', 'ParamByName of a parameter the SQL does not have, or a SQL parameter that is never set'));
+  ADecls.Add(V151Rule(RULE_QUERY_LOOP, 'firedac', 'hint', 'Query run once per loop iteration, directly or through a call', False));  // OFF: see "Measured" in docs\wiki\v154-sql-rules.md
+  ADecls.Add(V151Host(RULE_FIELD_LOOP));
 end;
 
 class function TV154SQLRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  Scan : TSqlTextScan;
+  Param, Loop, Field: Boolean;
+begin
+  Result:= nil;
+  Param:= ACtx.Wants(RULE_SQL_PARAM);
+  Loop := ACtx.Wants(RULE_QUERY_LOOP);
+  Field:= ACtx.Wants(RULE_FIELD_LOOP) and (ACtx.Cfg.ThresholdFor(OPT_PARAM_LOOP, 0) > 0);
+  if (not (Param or Loop or Field)) or (not MayUseSql(ACtx.Path)) then Exit;
+  Scan:= TSqlTextScan.Create(ACtx.Path, ACtx.Store, ACtx.FileId);
+  try
+    if Param then Result:= CheckSqlParams(ACtx, Scan);
+    if Loop and ACtx.Wants(RULE_QUERY_LOOP) then Result:= Result + CheckQueryInLoop(ACtx, Scan);
+    if Field then Result:= Result + CheckParamByNameInLoop(ACtx, Scan);
+  finally
+    Scan.Free;
+  end;
+end;
+
+class function TV154SQLRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@a752 -- REVIEWED 2026-11-23 v154 SQL: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV154SQLRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV154SQLRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@d6aa -- REVIEWED 2026-11-23 v154 SQL: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV154SQLRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
-begin
-  Result:= nil;
-end;
-
-class function TV154SQLRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV154SQLRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@e3d3 -- REVIEWED 2026-11-23 v154 SQL: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;

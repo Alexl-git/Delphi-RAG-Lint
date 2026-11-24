@@ -1,0 +1,77 @@
+{
+  "id": "repo-db-backup",
+  "title": "Verified database backups and their purge",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Backs a Firebird database up through the service API, restores it into a temporary database to prove it, lists and purges only its own files",
+  "intro": "Read this when you are about to change a Firebird database, or when old backups fill the disk. drag-lint repo backup --connection makes a backup without gbak.exe, restores it into a temporary database and compares it; repo alter-table --apply does the same by itself. repo backup list and repo backup purge look only at the backups drag-lint made.",
+  "wikiPage": "repo-db-backup",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "backup",
+      "usage": "drag-lint repo backup --connection \"<Firebird connection string>\" [--verify <full|quick>] [--table <T>] [--backup-dir <folder>] [--project <project file>] [--json]",
+      "flags": [
+        {
+          "name": "--connection",
+          "arg": "<Firebird connection string>"
+        },
+        {
+          "name": "--verify",
+          "arg": "<full|quick>"
+        },
+        {
+          "name": "--table",
+          "arg": "<T>"
+        },
+        {
+          "name": "--backup-dir",
+          "arg": "<folder>"
+        },
+        {
+          "name": "--project",
+          "arg": "<project file>"
+        },
+        {
+          "name": "--keep",
+          "arg": "<N>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "helpOrder": 112,
+      "help": ["  drag-lint repo backup         --connection \"<Firebird connection string>\" [--verify <full|quick>] [--table <T>] [--backup-dir <folder>] [--project <project file>] [--json]   (a backup of the DATABASE through the Firebird service API: restored into a temporary database and compared unless --verify quick; free space checked first; the server must be on this machine; recorded in %LOCALAPPDATA%\\drag-lint\\db-backups.json)", "  drag-lint repo backup         list [--connection <..>] [--json] | purge --keep <N> [--connection <..> [--apply]] [--dry-run] [--json]   (the recorded backups; purge is a dry run without --apply and deletes only backups of the database --connection opens, only recorded files whose size and date did not change, and never the newest or the newest verified one)"]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I make a Firebird backup that is proven to restore?",
+      "command": "drag-lint repo backup --connection \"Database=localhost:C:\\db\\x.fdb;User_Name=..;Password=..\" --json"
+    },
+    {
+      "ask": "Which database backups did drag-lint make, and how much space do they take?",
+      "command": "drag-lint repo backup list --json"
+    },
+    {
+      "ask": "How do I delete old database backups safely?",
+      "command": "drag-lint repo backup purge --keep 3"
+    }
+  ],
+  "verified": {
+    "date": "2026-11-23",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha",
+    "surfaceHash": "37b540d43831079de0c27b35ebc3651d5a96df2aa2a02e7fce778284b6cd864d"
+  }
+}

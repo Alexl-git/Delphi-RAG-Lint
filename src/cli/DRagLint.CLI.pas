@@ -321,7 +321,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..97] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..98] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -406,6 +406,7 @@ const
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
     (Name: 'DRAGLINT_TEST_RULE_SLEEP_MS';              Purpose: 'test hook: ''<rule-id>=<ms>'' sleeps that long the first time a lane asks for the rule in a file'),
     (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
+    (Name: 'DRAGLINT_TEST_SEARCH_HOLD_MS';            Purpose: 'test hook: holds the filled search index uncommitted'),
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
     (Name: 'DRAGLINT_TEST_SCOPE_NO_NAMES';            Purpose: 'test hook: the scoped resolve pass re-resolves the changed files only (a wrong scope)'),
     (Name: 'DRAGLINT_TEST_STREAM_COUNT_DELAY_MS';     Purpose: 'test hook: delay in the stream count'),
@@ -1832,6 +1833,10 @@ begin
     end
     { 1.52 TTGEN: repo gen-orm / update-orm / gen-dataservice read these values with ParamStr (CLI.Repo) }
     else if (Result.Command = 'repo') and (A = '--code-dir') and (i < ParamCount) then Inc(i)
+    { 1.54 ALTERBK: repo backup / alter-table; DRagLint.CLI.RepoBackup reads the values with ParamStr }
+    else if (Result.Command = 'repo') and (A = '--backup-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--verify') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--keep') and (i < ParamCount) then Inc(i)
     else if (Result.Command = 'repo') and (A = '--server-dir') and (i < ParamCount) then Inc(i)
     else if (Result.Command = 'repo') and (A = '--client-dir') and (i < ParamCount) then Inc(i)
     else if (Result.Command = 'repo') and (A = '--save-form') and (i < ParamCount) then Inc(i) { --table: the gen-param-array branch above already consumes it }

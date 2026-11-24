@@ -65,21 +65,36 @@ const
 /// <remarks>Scans the table once per pre-check. A blocked change keeps its earlier reason and is not scanned.</remarks>
 function RunPrechecks(const pProvider: IFrDbProvider; var pPlan: TFrAlterPlan): TFrPrecheckTicket;
 
+/// <summary>Resolves the lines of a --select file against a plan.</summary>
+/// <param name="pPlan">The plan (after the pre-checks).</param>
+/// <param name="pLines">One id per line, or 'all'; blank lines and lines starting with # are ignored.</param>
+/// <returns>The ids in plan order. 'all' takes every change that is not blocked EXCEPT a DROP COLUMN: a drop needs its
+/// own id (beside 'all' or alone).</returns>
+/// <exception cref="EFrChangeSetError">An unknown id, a blocked change named by id, or a line that is neither an id nor
+/// 'all'.</exception>
+function SelectAlterIds(const pPlan: TFrAlterPlan; const pLines: TArray<string>): TArray<Integer>;
+
 /// <summary>Executes the chosen changes of a plan.</summary>
 /// <param name="pProvider">The connection the pre-checks ran on.</param>
 /// <param name="pPlan">The pre-checked plan.</param>
 /// <param name="pTicket">The ticket of RunPrechecks.</param>
 /// <param name="pIds">Ids to apply.</param>
+/// <param name="pBeforeWrite">Runs once, after every refusal check and before the first write, when there is something to
+/// apply (the backup of ruling R9). An exception of it goes to the caller and nothing is executed.</param>
 /// <returns>The state of every group; a failure inside a group is reported there, not raised.</returns>
 /// <exception cref="EFrAlterRefused">Nothing was executed: no ticket, a ticket of another connection or plan, the
-/// table changed since the plan was made, an unknown or blocked id, or a missing prerequisite.</exception>
+/// table changed since the plan was made (asked again after pBeforeWrite), an unknown or blocked id, or a missing
+/// prerequisite.</exception>
+/// <remarks>A backup takes time: what changed in the DATA meanwhile is not scanned again. Firebird itself refuses a NOT
+/// NULL that has NULLs by then, and the safe path compares every row in its swap transaction.</remarks>
 function ApplyAlterPlan(const pProvider: IFrDbProvider; const pPlan: TFrAlterPlan; const pTicket: TFrPrecheckTicket;
-  const pIds: TArray<Integer>): TFrAlterOutcome;
+  const pIds: TArray<Integer>; const pBeforeWrite: TProc = nil): TFrAlterOutcome;
 
 implementation
 
 uses
-  System.Generics.Collections;
+  System.Generics.Collections,
+  DRagLint.FieldRepo.ChangeSet;
 
 const
   GROUP_BEFORE = 'hook-before';
@@ -129,6 +144,34 @@ begin
   end;
   Result.SessionId := pProvider.SessionId;
   Result.PlanHash := pPlan.Hash;
+end;
+
+function SelectAlterIds(const pPlan: TFrAlterPlan; const pLines: TArray<string>): TArray<Integer>;
+const
+  SELECT_ALL = 'all';
+var
+  VLine: string;
+  VNamed: TArray<string>;
+  VPicked: TArray<Integer>;
+  VAll: Boolean;
+  VChange: TFrChange;
+  VPlanned: TFrAlterChange;
+begin
+  VNamed := nil;
+  VAll := False;
+  for VLine in pLines do
+    if SameText(Trim(VLine), SELECT_ALL) then
+      VAll := True
+    else
+      VNamed := VNamed + [VLine];
+  VPicked := nil;
+  for VChange in SelectChanges(pPlan.ChangeSet, VNamed) do
+    VPicked := VPicked + [VChange.Id];
+  Result := nil;
+  for VPlanned in pPlan.Changes do
+    if TArray.Contains<Integer>(VPicked, VPlanned.Change.Id) or
+      (VAll and (VPlanned.Kind <> fakDrop) and (VPlanned.Change.Blocked = '')) then
+      Result := Result + [VPlanned.Change.Id];
 end;
 
 function FindPlanned(const pPlan: TFrAlterPlan; pId: Integer; out pChange: TFrAlterChange): Boolean;
@@ -369,7 +412,7 @@ begin
 end;
 
 function ApplyAlterPlan(const pProvider: IFrDbProvider; const pPlan: TFrAlterPlan; const pTicket: TFrPrecheckTicket;
-  const pIds: TArray<Integer>): TFrAlterOutcome;
+  const pIds: TArray<Integer>; const pBeforeWrite: TProc): TFrAlterOutcome;
 var
   VGroups: TArray<TGroup>;
   VFailed: Boolean;
@@ -380,6 +423,11 @@ begin
   CheckSelection(pPlan, pIds);
   if Length(pIds) = 0 then
     Exit;
+  if Assigned(pBeforeWrite) then
+  begin
+    pBeforeWrite();
+    CheckTicket(pProvider, pPlan, pTicket);
+  end;
   VGroups := BuildGroups(pPlan, pIds);
   VFailed := False;
   for i := 0 to High(VGroups) do

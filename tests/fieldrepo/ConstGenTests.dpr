@@ -275,6 +275,23 @@ begin
   end;
 end;
 
+procedure TestV3;
+var
+  vC: TFDConnection;
+  vText: string;
+begin
+  vC := RepoFrom('golden_v3.txt', 3);
+  try
+    vText := GenRepoConstUnit(vC, Opts('uFieldRegistry'));
+    Check('5f v3: the event columns are in the record', (Pos('ONGETTEXT_BODY: string;', vText) > 0) and (Pos('GRID_DRAWCELL_BODY: string;', vText) > 0));
+    Check('5g v3: DL_GRID_COLUMNS never generated', Pos('DL_GRID_COLUMNS', vText) = 0);
+    Check('5h v3: DL_GRID_COLUMNS refused by name', RaisedClass(procedure begin GenRepoConstUnit(vC, Opts('U', ['DL_GRID_COLUMNS'])); end) = 'EConstGenError');
+    Check('5i v3: ASCII + CRLF', IsCleanAscii(vText));
+  finally
+    vC.Free;
+  end;
+end;
+
 procedure Exec(pConn: TFDConnection; const pSql: string);
 begin
   if pConn.ExecSQL(pSql) < 0 then
@@ -460,6 +477,7 @@ begin
       TestEmptyTable;
       TestLongValue;
       TestV2;
+    TestV3;
       TestMark;
       TestDataModule;
       TestCheckUnit;

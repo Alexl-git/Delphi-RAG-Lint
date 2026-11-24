@@ -549,6 +549,52 @@ begin
   TFile.WriteAllText(vPath, 'hello' + #13#10, TEncoding.ASCII);
   Check('23c BackupFileVersion of a file without the magic line is 0 (control)', BackupFileVersion(vPath) = 0);
 
+  { EVCOLS: #DLREPO 3 }
+  vV2 := NewRepo(3);
+  try
+    RestoreRepository(vV2, Fixture('golden_v3.txt'), False);
+    vOut := TPath.Combine(GDir, 'out-golden_v3.txt');
+    BackupRepository(vV2, vOut);
+    vWant := TFile.ReadAllBytes(Fixture('golden_v3.txt'));
+    vGot := TFile.ReadAllBytes(vOut);
+    Check('25a golden_v3.txt round trip is byte-identical', BytesEqual(vWant, vGot), FirstDiff(vWant, vGot));
+    Check('25b an event column restored', ScalarStr(vV2, 'SELECT "ONGETTEXT_BODY" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" = ''AMOUNT''', vNull)
+      = 'if {{AMOUNT}}.IsNull then'#13#10'  Text := '''';');
+    Check('25c an unbound grid column has no table', (ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_GRID_COLUMNS" WHERE "TABLE_NAME" IS NULL AND "FIELD_NAME" IS NULL', vNull) = '1'));
+    RestoreRepository(vV2, Fixture('golden_v2.txt'), True);
+    vOut := TPath.Combine(GDir, 'out-v2-in-v3.txt');
+    BackupRepository(vV2, vOut);
+    Check('25d #DLREPO 2 restores into a v3 repository: the v2 text with #DLREPO 3, schema_version 3 and an empty DL_GRID_COLUMNS',
+      TEncoding.ASCII.GetString(TFile.ReadAllBytes(vOut)) = TEncoding.ASCII.GetString(TFile.ReadAllBytes(Fixture('golden_v2.txt'))).Replace('#DLREPO 2', '#DLREPO 3').Replace('META_VALUE=2', 'META_VALUE=3')
+        + '#end DL_GRID_COLUMNS 0' + #13#10);
+    RestoreRepository(vV2, Fixture('golden.dlrepo.txt'), True);
+    Check('25e #DLREPO 1 restores into a v3 repository', ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO"', vNull) = '6');
+  finally
+    vV2.Free;
+  end;
+  vV2 := NewRepo(2);
+  try
+    vMsg := '';
+    try
+      RestoreRepository(vV2, Fixture('golden_v3.txt'), True);
+    except
+      on E: Exception do
+        vMsg := E.Message;
+    end;
+    Check('25f #DLREPO 3 into a v2 repository is refused: migrate first', vMsg.Contains('migrate first'), vMsg);
+  finally
+    vV2.Free;
+  end;
+  vV2 := NewRepo(3);
+  try
+    vV2.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" VALUES (''f'',''v'',''c'',NULL,NULL,0)');
+    vCls := RaisedClass(procedure begin RestoreRepository(vV2, Fixture('golden.dlrepo.txt'), False); end);
+    Check('25g restore without replace refuses when only DL_GRID_COLUMNS holds rows', vCls = 'ERepoError', vCls);
+  finally
+    vV2.Free;
+  end;
+  Check('25h BackupFileVersion of the v3 golden is 3', BackupFileVersion(Fixture('golden_v3.txt')) = 3);
+
   { restore into a v2 repository that already holds exception rows needs replace }
   vV2 := NewRepo(2);
   try
@@ -560,6 +606,68 @@ begin
       ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_EXCEPTIONS"', vNull) = '0');
   finally
     vV2.Free;
+  end;
+end;
+
+{ M5 (1.53.1): a second backup over the same file replaces it in one step; a failed one leaves the old file and no .tmp. }
+procedure TestBackupOverExisting;
+var
+  vConn: TFDConnection;
+  vDir, vOut, vFail: string;
+  vOld, vNew: TBytes;
+  vHeld: TFileStream;
+
+  function Run: string;
+  begin
+    Result := '';
+    try
+      BackupRepository(vConn, vOut);
+    except
+      on E: Exception do
+        Result := E.ClassName + ': ' + E.Message;
+    end;
+  end;
+
+  function OnlyTheBackup: Boolean;
+  begin
+    Result := Length(TDirectory.GetFileSystemEntries(vDir)) = 1;
+  end;
+
+begin
+  vDir := TPath.Combine(GDir, 'over');
+  TDirectory.CreateDirectory(vDir);
+  vOut := TPath.Combine(vDir, 'twice.dlrepo.txt');
+  vConn := NewRepo;
+  try
+    RestoreRepository(vConn, Fixture('golden.dlrepo.txt'), False);
+    vFail := Run;
+    Check('25a control: the first backup writes a new file', (vFail = '') and TFile.Exists(vOut), vFail);
+    vOld := TFile.ReadAllBytes(vOut);
+    RestoreRepository(vConn, Fixture('edge.dlrepo.txt'), True);
+    vFail := Run;
+    vNew := TFile.ReadAllBytes(vOut);
+    Check('25b a second backup over the same file replaces it', (vFail = '') and BytesEqual(TFile.ReadAllBytes(Fixture('edge.dlrepo.txt')), vNew), vFail);
+    Check('25c and leaves nothing else in the folder', OnlyTheBackup);
+    Check('25d control: the two contents differ', not BytesEqual(vOld, vNew));
+    RestoreRepository(vConn, Fixture('golden.dlrepo.txt'), True);
+    vHeld := TFileStream.Create(vOut, fmOpenRead or fmShareDenyWrite);
+    try
+      vFail := Run;
+    finally
+      vHeld.Free;
+    end;
+    Check('25e a file in use: the backup fails, the old file is as it was', (vFail <> '') and BytesEqual(vNew, TFile.ReadAllBytes(vOut)), vFail);
+    Check('25f and leaves no temporary file', OnlyTheBackup);
+    TFile.SetAttributes(vOut, [TFileAttribute.faReadOnly]);
+    vFail := Run;
+    TFile.SetAttributes(vOut, [TFileAttribute.faNormal]);
+    Check('25g a read-only file: the same', (vFail <> '') and BytesEqual(vNew, TFile.ReadAllBytes(vOut)) and OnlyTheBackup, vFail);
+    TFile.WriteAllText(vOut + '.tmp', 'somebody else''s');
+    vFail := Run;
+    Check('25h a file that happens to be called <backup>.tmp is not touched', (vFail = '') and (TFile.ReadAllText(vOut + '.tmp') = 'somebody else''s'), vFail);
+    Check('25i control: released, the backup replaces the file', BytesEqual(vOld, TFile.ReadAllBytes(vOut)));
+  finally
+    vConn.Free;
   end;
 end;
 
@@ -580,6 +688,7 @@ begin
     TestReplace;
     TestDefaultsDoNotLeak;
     TestV2;
+    TestBackupOverExisting;
   except
     on E: Exception do
     begin

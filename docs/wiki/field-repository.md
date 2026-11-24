@@ -42,9 +42,9 @@ drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]
 
 | Verb | What it does | Exit |
 |---|---|---|
-| `init` | Creates an empty repository (all five tables) and prints its path. | 0; 1 when the file exists |
+| `init` | Creates an empty repository (every table of the current schema) and prints its path. | 0; 1 when the file exists |
 | `info` | Path, schema version, rows per table and the `DL_META` keys; `--json` prints one object (`path`, `schema_version`, `tables`, `meta`). | 0; 1 when the file is missing or not a repository |
-| `import-fb` | The Micronite path: copies the four `FIB$` tables as they are (the `FIB$VERSION` column is not carried). Creates the repository when missing. A non-empty repository needs `--replace`, which first writes `<repo>.before-import-<yyyymmdd-hhnnss>.txt` (a text backup) and prints its path. Prints `<table>: <n> rows (source <m>)` per table; exit 0 only when every n equals m. | 0; 1 failure; 2 when a source table does not match the repository columns (nothing written) |
+| `import-fb` | The Micronite path: copies the four `FIB$` tables as they are (the `FIB$VERSION` column is not carried; `ALIGNMENT` -2, "not set", becomes NULL). Creates the repository when missing. A non-empty repository needs `--replace`, which first writes `<repo>.before-import-<yyyymmdd-hhnnss>.txt` (a text backup) and prints its path. Prints `<table>: <n> rows (source <m>)` per table; exit 0 only when every n equals m. | 0; 1 failure; 2 when a source table does not match the repository columns (nothing written) |
 | `seed-fb` | The non-Micronite start: fills an EMPTY repository from the Firebird schema (`--connection`) or a DDL script (`--ddl`). It prints the change set (all inserts, checked) and writes NOTHING unless `--apply` or `--select <id file>` is given. | 0; 1 (not empty, no or two sources, read error) |
 | `refresh-schema` | The old "Update Fields Info", as a change set (db-to-repo): new tables, fields, domains, constraints and generators are checked inserts, changed schema-derived values are checked updates, rows whose source vanished are UNCHECKED deletes. Hand-kept columns never appear. No flag = dry run; `--apply` writes the checked changes and keeps the vanished rows; `--select <id file>` writes exactly the listed ids (one per line or `all`), which is how a vanished row is deleted. | 0; 1 |
 | `backup` | Writes the diffable text backup (default `<repo>.txt`). Deterministic: the same rows give the same bytes. | 0; 1 |
@@ -171,11 +171,17 @@ repository keeps only the `Database` value (`source_database`).
 
 (1.53) A connection string that names `OpenMode`, `CreateDatabase`, `DropDatabase`, `ConnectionDef` or `ConnectionDefName` is refused (import-fb, seed-fb, refresh-schema, fb-snapshot): `DropDatabase=Yes` used to delete the database. `refresh-schema --json` writes exactly one JSON document to stdout; a `--select` id that is not in the change set exits 2.
 
-## Field kinds, schema 2 and `repo migrate` / `repo check` (1.53)
+## Field kinds, schema versions and `repo migrate` / `repo check` (1.53, 1.54)
 
-A repository created by 1.53 is **schema 2**; a 1.52 file (schema 1) still opens and is handled as
-schema 1 until you run `repo migrate`. Schema 2 adds `DL_FIELDS_INFO.CALC_BODY` (the last column),
-`DL_LAYOUT_EVENTS` and `DL_EXCEPTIONS`; nothing is dropped or renamed.
+A repository created by 1.54 is **schema 3**; a 1.52 file (schema 1) and a 1.53 file (schema 2) still open and are handled
+as their own schema until you run `repo migrate`. Nothing is dropped or renamed.
+
+| Schema | Adds |
+|---|---|
+| 2 (1.53) | `DL_FIELDS_INFO.CALC_BODY`, `DOMAIN_NAME`, `CHAR_LENGTH`; `DL_LAYOUT_EVENTS`, `DL_EXCEPTIONS` and the four schema-fact tables |
+| 3 (1.54) | the six event columns of `DL_FIELDS_INFO` (last, in this order): `ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY`, `GRID_DISPLAYTEXT_BODY`, `GRID_DRAWCELL_BODY`; `DL_GRID_COLUMNS` |
+
+`read-dfm` and `gen-handlers` need schema 3; the other verbs work on every schema.
 
 ### Field kinds
 
@@ -191,15 +197,30 @@ schema 1 until you run `repo migrate`. Schema 2 adds `DL_FIELDS_INFO.CALC_BODY` 
 | 10 | graphical | no data field: a grid column drawn by events |
 
 `ISCALCULATED` must equal "kind is 2 or 4" and `ISLOOKUP` must equal "kind is 3". A calc body names
-other fields of the same table with `{{FIELD}}` macros: `{{TOTAL}} := {{QTY}} * {{PRICE}};`
-(`{{TABLE.FIELD}}` is reserved and an error; there are no escapes). The dependencies of a calc field are
-every macro except its own assignment target.
+other fields of the same table with `{{FIELD}}` macros. A macro is the field COMPONENT of the dataset and the body writes the
+member (1.54): `{{TOTAL}}.AsFloat := {{QTY}}.AsInteger * {{PRICE}}.AsFloat;` (`{{TABLE.FIELD}}` is reserved and an error; there
+are no escapes). A body without members (`{{TOTAL}} := {{QTY}}`, the 1.53 text) still parses but generates no code that
+compiles: read it again from the form. The dependencies of a calc field are every macro except its own assignment
+target (`{{TOTAL}}.AsFloat :=`, `{{TOTAL}}.Clear`) and reads of the field behind such a statement; an internal-calc field may
+read itself.
 
 The per-dataset field selection is NOT stored in the repository: the persistent fields on the dataset
-(the DFM) are the selection. Event code of a graphical column on the common `TcxGridDBTableView` layout
-stays in the field row; for any other layout type the code lives in `DL_LAYOUT_EVENTS`, keyed by
-(`TABLE_NAME`, `FIELD_NAME`, `LAYOUT_TYPE`, `EVENT_NAME`) with the code in `EVENT_CODE`. A field row
-"claims" the field; a layout-event row without a field row is a `repo check` finding.
+(the DFM) are the selection.
+
+### Event code and grid columns (1.54)
+
+One column of the field row per event: `ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY` for the TField
+events, `GRID_DISPLAYTEXT_BODY` (OnGetDisplayText) and `GRID_DRAWCELL_BODY` (OnCustomDrawCell) for the column events of the common
+`TcxGridDBTableView`. `DL_LAYOUT_EVENTS` (`TABLE_NAME`, `FIELD_NAME`, `LAYOUT_TYPE`, `EVENT_NAME`, code in `EVENT_CODE`) holds only
+view-level events (`FIELD_NAME = ''`) and the events of other layout types. The layout type `Field` of 1.54 development builds
+is gone: `repo migrate` moves its rows, `repo check` reports one that is left.
+
+`DL_GRID_COLUMNS`: one row per form + grid view + column (`FORM_NAME`, `VIEW_NAME`, `COLUMN_NAME` = the component names, the
+primary key) with `TABLE_NAME`, `FIELD_NAME` (NULL for an unbound column; `TABLE_NAME` alone NULL when the dataset has no table)
+and the 0-based `COLUMN_INDEX`. `repo read-dfm` writes it. Two columns of one field are two rows.
+
+`ALIGNMENT` is NULL (the default of the field type) or 0 left, 1 right, 2 center. The TableTools value -2 becomes NULL in
+`import-fb` and `repo migrate`; new rows have NULL.
 
 ### `repo migrate`
 
@@ -207,11 +228,11 @@ stays in the field row; for any other layout type the code lives in `DL_LAYOUT_E
 drag-lint repo migrate (--repo <file> | --project <project file>) [--apply]
 ```
 
-Without `--apply` it prints `v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, create
-DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, FIELD_KIND 2 for N ISCALCULATED rows, user_version 2` and changes no byte. With
-`--apply` it first writes `<repo>.before-migrate-<yyyymmdd-hhnnss>.txt` (the schema-1 text backup), then
-runs one transaction; `FIELD_KIND` becomes 2 for the `ISCALCULATED` rows whose kind is NULL or 1. A
-schema-2 file prints `already at schema 2` (exit 0).
+Without `--apply` it prints the plan and changes no byte: `v2 -> v3: add DL_FIELDS_INFO.ONGETTEXT_BODY, ..., create
+DL_GRID_COLUMNS, ALIGNMENT -2 to NULL in N rows, move N Field events into columns, user_version 3`; from schema 1 also the
+columns and tables of schema 2 and `FIELD_KIND 2 for N ISCALCULATED rows` (kind NULL or 1). With `--apply` it first writes
+`<repo>.before-migrate-<yyyymmdd-hhnnss>.txt` (the text backup in the old schema), then runs one transaction. A schema-3
+file prints `already at schema 3` (exit 0). A `Field` event whose field has no row, or that has no column, stays where it is.
 
 ### `repo check`
 
@@ -221,15 +242,17 @@ drag-lint repo check (--repo <file> | --project <project file>) [--json]
 
 Read-only. Reports kind/flag mismatches, lookup wiring that is incomplete or points at an unknown table
 or field (a `DESTKEY` that is not the lookup table's primary key is a warning), calc macros that name an
-unknown field, calc dependency cycles (named once, `A -> B -> A`) and layout-event rows for an unknown
-field. Exit 0 when clean, 1 when there are findings.
+unknown field, calc dependency cycles (named once, `A -> B -> A`; a read of the own field counts unless every path before it has written the field), event code (columns and layout events) whose macros are
+malformed or name an unknown field, layout-event rows for an unknown field; as warnings an `ALIGNMENT` outside NULL / 0 / 1 / 2 and
+a grid column that names a field without a row. Exit 0 when clean, 1 when there are findings.
 
 ### Text backup versions
 
-A schema-2 repository writes `#DLREPO 2` (the two new tables last); a schema-1 file writes `#DLREPO 1`
-byte for byte as before. Restoring `#DLREPO 1` into a schema-2 repository is accepted (new tables empty,
-`CALC_BODY` NULL); restoring `#DLREPO 2` into a schema-1 file is refused with exit 2 ("migrate first");
-restoring into a missing file creates the file at the backup's own version.
+A schema-3 repository writes `#DLREPO 3` (`DL_GRID_COLUMNS` last); a schema-2 file writes `#DLREPO 2` and a schema-1 file
+`#DLREPO 1`, byte for byte as before. Restoring an older backup into a newer repository is accepted (new tables empty, new
+columns NULL); into a schema-3 file its rows get the row changes of `repo migrate` (FIELD_KIND 2, `ALIGNMENT` -2 to NULL,
+`Field` events into the event columns) in the same transaction, so the result is the migrated file; restoring a newer backup into an older file is refused with exit 2 ("migrate first"); restoring into a missing file creates
+the file at the backup's own version.
 
 ### Lint exceptions
 
@@ -251,10 +274,12 @@ drag-lint repo check-const (--repo <file> | --project <project file>) --unit-fil
 * **Where it writes.** Only to `--output`; there is no default path. The shared folder (for example
   `ORM3\COMMON`) is your choice at the first generation; the output folder must already exist.
 * **Tables.** By default `DL_FIELDS_INFO`, `DL_DATASETS_INFO`, `DL_ENUMVALUES`, `DL_ERROR_MESSAGES`. `--table`
-  takes a comma list of these (case-insensitive). `DL_META`, `DL_EXCEPTIONS`, `DL_LAYOUT_EVENTS` and the schema
+  takes a comma list of these (case-insensitive). `DL_META`, `DL_EXCEPTIONS`, `DL_LAYOUT_EVENTS`, `DL_GRID_COLUMNS` and the schema
   tables (`DL_DOMAINS`, `DL_CONSTRAINTS`, `DL_CONSTRAINT_COLUMNS`, `DL_GENERATORS`) are never generated; an
   unknown or refused name exits 2, as does a `--unit` that is not an identifier or a missing `--output`.
-  It works on schema 1 and schema 2 repositories (`CALC_BODY` appears in the schema 2 record).
+  It works on every schema (`CALC_BODY` appears in the schema 2 record, the event columns in the schema 3 record). A
+  migration to schema 3 adds columns to `DL_FIELDS_INFO`, so its hash changes: `check-const` says STALE until the unit is
+  generated again.
 * **Constant arrays (always).** Per table a record `T<TABLE>Row`, `<TABLE>_ROW_COUNT` and
   `<TABLE>_ROWS: array[0..N-1] of T<TABLE>Row` in primary-key order (an empty table gets only the count
   `= 0`: Delphi has no empty constant array). A column that holds a NULL somewhere gets a companion field
@@ -332,7 +357,7 @@ the same family as the plain table view: one set of column properties, the extra
 
 ## Reading a form
 
-`repo read-dfm` (1.54) reads the persistent fields, lookup wiring and calc code of a DFM: see [Read a form into the field repository](repo-read-dfm).
+`repo read-dfm` (1.54) reads the persistent fields, lookup wiring, calc and event code and the grid column order of a DFM: see [Read a form into the field repository](repo-read-dfm).
 
 ## Known limits
 

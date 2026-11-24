@@ -10,7 +10,7 @@ uses
 
 /// <summary>The Firebird SQL text generator (dialect 3, quoted identifiers).</summary>
 /// <returns>A stateless dialect.</returns>
-function FirebirdDialect: IFrDbDialect;  // dl:ok unused-public-symbol@82f6 -- TT-ALTER: the pure SQL generator is the public test seam; tests\fieldrepo\AlterTests.dpr (outside the indexed project) calls it
+function FirebirdDialect: IFrDbDialect;
 
 /// <summary>Opens a Firebird connection for planning and (through DRagLint.FieldRepo.AlterApply) applying.</summary>
 /// <param name="pConnection">FireDAC-style 'Database=..;User_Name=..;Password=..'.</param>
@@ -108,6 +108,7 @@ type
     function ReadKeys(const pTable: string): TArray<TFrKeyFacts>;
     function ReadDependencies(const pTable: string): TArray<TFrDependency>;
     function ReadUpdateTriggers(const pTable: string): TArray<string>;
+    function MaxIndexKey: Integer;
     function RelationKind(const pTable: string; out pReason: string): Boolean;
   public
     constructor Create(const pConnection: string);
@@ -691,10 +692,14 @@ const
   F_TYPE = 2;
   F_IS_CHECK = 3;
   SQL =
-    'SELECT DISTINCT TRIM(D.RDB$FIELD_NAME), TRIM(COALESCE(CC.RDB$CONSTRAINT_NAME, D.RDB$DEPENDENT_NAME)), ' +
-    'D.RDB$DEPENDENT_TYPE, CASE WHEN CC.RDB$CONSTRAINT_NAME IS NULL THEN 0 ELSE 1 END ' +
+    { the expression of a VIEW column is recorded like a computed column, under the column's own RDB$ domain: name the view }
+    'SELECT DISTINCT TRIM(D.RDB$FIELD_NAME), TRIM(COALESCE(CC.RDB$CONSTRAINT_NAME, V.RDB$RELATION_NAME, D.RDB$DEPENDENT_NAME)), ' +
+    'CASE WHEN V.RDB$RELATION_NAME IS NULL THEN D.RDB$DEPENDENT_TYPE ELSE 1 END, ' +
+    'CASE WHEN CC.RDB$CONSTRAINT_NAME IS NULL THEN 0 ELSE 1 END ' +
     'FROM RDB$DEPENDENCIES D LEFT JOIN RDB$CHECK_CONSTRAINTS CC ON CC.RDB$TRIGGER_NAME = D.RDB$DEPENDENT_NAME ' +
     'AND D.RDB$DEPENDENT_TYPE = 2 ' +
+    'LEFT JOIN RDB$RELATION_FIELDS VF ON VF.RDB$FIELD_SOURCE = D.RDB$DEPENDENT_NAME AND D.RDB$DEPENDENT_TYPE = 3 ' +
+    'LEFT JOIN RDB$RELATIONS V ON V.RDB$RELATION_NAME = VF.RDB$RELATION_NAME AND V.RDB$VIEW_BLR IS NOT NULL ' +
     'WHERE D.RDB$DEPENDED_ON_NAME = :T AND D.RDB$DEPENDED_ON_TYPE IN (0, 1) AND D.RDB$FIELD_NAME IS NOT NULL ORDER BY 1, 2';
 var
   VQuery: TFDQuery;
@@ -757,6 +762,22 @@ begin
   end;
 end;
 
+{ Measured on Firebird 4.0.6 for pages of 4, 8 and 16 KB. }
+function TFrFirebirdProvider.MaxIndexKey: Integer;
+const
+  KEYS_PER_PAGE = 4;
+  KEY_OVERHEAD = 9;
+var
+  VQuery: TFDQuery;
+begin
+  VQuery := OpenRead('SELECT MON$PAGE_SIZE FROM MON$DATABASE', []);
+  try
+    Result := VQuery.Fields[0].AsInteger div KEYS_PER_PAGE - KEY_OVERHEAD;
+  finally
+    VQuery.Free;
+  end;
+end;
+
 function TFrFirebirdProvider.ReadTable(const pTable: string): TFrTableFacts;
 begin
   Result := Default(TFrTableFacts);
@@ -770,6 +791,7 @@ begin
       Result.Keys := ReadKeys(pTable);
       Result.Dependencies := ReadDependencies(pTable);
       Result.UpdateTriggers := ReadUpdateTriggers(pTable);
+      Result.MaxIndexKey := MaxIndexKey;
     end;
   finally
     EndRead;

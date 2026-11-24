@@ -174,7 +174,7 @@ const
   HEX_WIDTH         = 4;
   CRLF              = #13#10;
 
-  SETTING_CATALOG: array[0..8] of TSettingDef = (
+  SETTING_CATALOG: array[0..9] of TSettingDef = (
     (Key: 'ownRoots'; Description: 'Folders whose files count as this project''s own code (project folder when unset)';
      Flag: ''; DefaultJson: '[]'; Kind: skPathList; LocalAllowed: False; Settable: True),
     (Key: 'excludeRoots'; Description: 'Folders inside the project that are vendored code, not linted as your own';
@@ -183,6 +183,8 @@ const
      Flag: ''; DefaultJson: '""'; Kind: skPath; LocalAllowed: False; Settable: True),
     (Key: 'fieldRepository'; Description: 'Field repository database path for the repo verbs';
      Flag: '--repo'; DefaultJson: '""'; Kind: skPath; LocalAllowed: False; Settable: True),
+    (Key: 'backupDir'; Description: 'Folder of the database backups (repo backup --connection); beside the database when unset';
+     Flag: '--backup-dir'; DefaultJson: '""'; Kind: skPath; LocalAllowed: False; Settable: True),
     (Key: 'popupForms'; Description: 'Forms opened as popups: [{"form","note"}]; edit the file by hand';
      Flag: ''; DefaultJson: '[]'; Kind: skObjectList; LocalAllowed: False; Settable: False),
     (Key: 'checkInit'; Description: 'check-init callee answers (reads/sets); edit the file by hand';

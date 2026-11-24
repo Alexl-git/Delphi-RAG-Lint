@@ -1,0 +1,25 @@
+{
+  "id": "v154-sql-rules",
+  "title": "Lint rules sql-param-mismatch and query-in-loop",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Warns when ParamByName names a parameter the SQL does not have or a SQL parameter is never set, and hints at a query run once per loop iteration",
+  "intro": "Read this to see which SQL texts the parameter check understands, which loops count as row loops, and what both rules leave alone.",
+  "wikiPage": "v154-sql-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas> --rule sql-param-mismatch --db <index.sqlite>"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-23",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha",
+    "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
+  }
+}

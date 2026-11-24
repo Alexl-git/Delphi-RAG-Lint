@@ -1295,6 +1295,7 @@ Described in:
 * [parameter-type-too-wide ON by default, with an autofix](../../docs/wiki/v152-ptw.md)
 * [Lint rules unconnected-control and hanging-handler](../../docs/wiki/v152-unconn-rules.md)
 * [Fast one-file lint on a large index](../../docs/wiki/one-file-lint-speed.md)
+* [Lint rules sql-param-mismatch and query-in-loop](../../docs/wiki/v154-sql-rules.md)
 
 ### lint-all
 
@@ -1873,7 +1874,7 @@ drag-lint repo info (--repo <file> | --project <project file>) [--json|--format 
 drag-lint repo import-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace] (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)
 drag-lint repo seed-fb (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json] (fill an EMPTY repository from the Firebird schema or a DDL script; prints the change set and writes nothing unless --apply or --select; read-only on Firebird)
 drag-lint repo refresh-schema (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json] (re-read the schema into a filled repository as a change set: new and changed values are checked, vanished ones are unchecked deletes; hand-edited columns are never touched; no --apply = dry run; --select <id file> writes exactly the listed ids)
-drag-lint repo backup (--repo <file> | --project <project file>) [--output <file>] (write the diffable text backup; default <repo>.txt)
+drag-lint repo backup --connection "<Firebird connection string>" [--verify <full|quick>] [--table <T>] [--backup-dir <folder>] [--project <project file>] [--json]
 drag-lint repo restore --in <backup file> (--repo <file> | --project <project file>) [--replace] (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)
 drag-lint repo gen-memtable --in <csv file> [--name <Name>] [--output <file>] (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)
 drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json] (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)
@@ -1885,7 +1886,10 @@ drag-lint repo migrate (--repo <file> | --project <project file>) [--apply] (sch
 drag-lint repo check (--repo <file> | --project <project file>) [--json] (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc macros and dependency cycles, layout-event rows; exit 0 clean, 1 findings)
 drag-lint repo gen-const (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run] (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)
 drag-lint repo check-const (--repo <file> | --project <project file>) --unit-file <file.pas> (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)
-drag-lint repo alter-table --table <T> --direction repo-to-db --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--json]
+drag-lint repo <gen-handlers|gen-maxlen|renumber-regions> (--repo <file> | --project <project file>) [--dfm <file.dfm>[;...]] [--dataset <Name>] [--code-dir <folder>] [--table <T,...>] [--in <file.pas>[;...]] [--apply] [--dry-run] [--json]
+drag-lint repo gen-maxlen --code-dir <folder> [--table <T,...>] (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json] (writes the <TABLE>_<FIELD>_MAXLEN constants into region DLFR 2a of each interface unit i<TABLE>.pas; no --apply = dry run; exit codes as gen-handlers)
+drag-lint repo renumber-regions (--code-dir <folder> | --in <file.pas>[;...]) (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json] (renames the numbered ORM region markers DB-RAD n to DLFR n, whole units only; update-orm reads both; no --apply = dry run; exit codes as gen-handlers)
+drag-lint repo alter-table --table <T> --direction repo-to-db --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--backup-dir <folder>] [--verify <full|quick>] [--json]
 drag-lint repo read-dfm --dfm <file.dfm>[;...] [--dataset <Name>] --direction dfm-to-repo (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json] (the persistent fields of a form's datasets as a change set: data, calc, lookup, internal-calc and aggregate fields, captions / formats / widths, lookup wiring, OnCalcFields code as CALC_BODY with {{FIELD}} macros, OnGetText code; text or binary DFM, BDE or FireDAC; the table comes from UpdateTableName, TableName or a one-table SELECT, anything else is listed as UNRESOLVED; no --apply = dry run; exit 1 read / apply failure, 2 usage or a bad --select file)
 ```
 
@@ -1929,11 +1933,16 @@ drag-lint repo read-dfm --dfm <file.dfm>[;...] [--dataset <Name>] --direction df
 | `--rename` | `<OLD=NEW[,...]>` |  |  |
 | `--order` | `<A,B,...>` |  |  |
 | `--hook` | `<name>` |  |  |
+| `--backup-dir` | `<folder>` |  |  |
+| `--verify` | `<full\|quick>` |  |  |
+| `--keep` | `<N>` |  |  |
 
 Described in:
 
 * [Field repository](../../docs/wiki/field-repository.md)
+* [Field repository: generated handlers](../../docs/wiki/field-repository-handlers.md)
 * [Per-table ALTER from the field repository](../../docs/wiki/repo-alter-table.md)
+* [Verified database backups and their purge](../../docs/wiki/repo-db-backup.md)
 * [Read a form into the field repository](../../docs/wiki/repo-read-dfm.md)
 
 ### resolve-dbs

@@ -31,6 +31,7 @@ uses
   FireDAC.DApt,
   FireDAC.Comp.DataSet,
   FireDAC.Comp.Client,
+  DRagLint.FieldRepo.Kinds in '..\..\src\sql\DRagLint.FieldRepo.Kinds.pas',
   DRagLint.FieldRepo.Schema in '..\..\src\sql\DRagLint.FieldRepo.Schema.pas';
 
 var
@@ -175,8 +176,8 @@ var
   vCol: TRepoColumn;
   vTab: TRepoTable;
 begin
-  vTabs := RepoTables;
-  Check('12a REPO_SCHEMA_VERSION is 2 and RepoTables is the v2 set', (REPO_SCHEMA_VERSION = 2) and (Length(vTabs) = 11));
+  vTabs := RepoTablesFor(2);
+  Check('12a v2 has 11 tables', Length(vTabs) = 11);
   Check('12b v2 order: DL_LAYOUT_EVENTS, DL_EXCEPTIONS, then the four schema tables',
     (vTabs[5].Name = 'DL_LAYOUT_EVENTS') and (vTabs[6].Name = 'DL_EXCEPTIONS'));
   Check('12c v2 DL_FIELDS_INFO has 43 columns: CALC_BODY (TEXT), DOMAIN_NAME, CHAR_LENGTH last',
@@ -190,14 +191,14 @@ begin
     and vTabs[6].FindColumn('REASON', vCol) and vCol.NotNull and (vCol.PkOrder = 0));
   Check('12f RepoTablesFor(1) keeps 40 columns without CALC_BODY (positive control against 12c)',
     (Length(RepoTablesFor(1)[1].Columns) = 40) and not RepoTablesFor(1)[1].FindColumn('CALC_BODY', vCol));
-  Check('12g RepoTablesFor(3) raises ERepoError', RaisedClass(procedure begin RepoTablesFor(3); end) = 'ERepoError');
+  Check('12g RepoTablesFor(4) raises ERepoError', RaisedClass(procedure begin RepoTablesFor(4); end) = 'ERepoError');
   Check('12h FindRepoTable finds a schema-2 table', FindRepoTable('dl_exceptions', vTab));
 
   vFile := NewPath('v2new');
-  CreateRepository(vFile);
+  CreateRepository(vFile, 2);
   vV2 := OpenRepository(vFile, True);
   try
-    Check('13a new repository is user_version 2 and RepoSchemaVersion reads it',
+    Check('13a an explicit v2 repository is user_version 2 and RepoSchemaVersion reads it',
       (ScalarInt(vV2, 'PRAGMA user_version') = 2) and (RepoSchemaVersion(vV2) = 2));
     Check('13b DL_META schema_version is 2', GetRepoMeta(vV2, 'schema_version') = '2');
     Check('13c RepoRowCount works on a schema-2 table', RepoRowCount(vV2, 'DL_EXCEPTIONS') = 0);
@@ -217,8 +218,8 @@ begin
   finally
     vV1.Free;
   end;
-  Check('14e CreateRepository version 3 raises ERepoError',
-    RaisedClass(procedure begin CreateRepository(NewPath('v3'), 3); end) = 'ERepoError');
+  Check('14e CreateRepository version 4 raises ERepoError',
+    RaisedClass(procedure begin CreateRepository(NewPath('v4'), 4); end) = 'ERepoError');
 
   vRaw := RawConn(vFile, 'ReadWrite');
   try
@@ -227,10 +228,10 @@ begin
     vRaw.Free;
   end;
   vCls := RaisedClass(procedure begin OpenRepository(vFile, True).Free; end);
-  Check('15 user_version 3 raises ERepoSchemaError', vCls = 'ERepoSchemaError', vCls);
+  Check('15 a v2 file that only says it is v3 raises ERepoSchemaError', vCls = 'ERepoSchemaError', vCls);
 
   vFile := NewPath('v2keys');
-  CreateRepository(vFile);
+  CreateRepository(vFile, 2);
   vV2 := OpenRepository(vFile, False);
   try
     vV2.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" ("TABLE_NAME","FIELD_NAME","LAYOUT_TYPE","EVENT_NAME") VALUES (''T'',''F'',''TcxGridCardView'',''OnGetText'')');
@@ -258,6 +259,56 @@ begin
       end) = '');
   finally
     vV2.Free;
+  end;
+end;
+
+{ EVCOLS: schema version 3. }
+procedure TestV3;
+var
+  vTabs: TArray<TRepoTable>;
+  vCol: TRepoColumn;
+  vEvent: TFrEventColumn;
+  vI: Integer;
+  vOk: Boolean;
+  vFile: string;
+  vConn: TFDConnection;
+begin
+  vTabs := RepoTables;
+  Check('17a REPO_SCHEMA_VERSION is 3 and RepoTables is the v3 set, DL_GRID_COLUMNS last', (REPO_SCHEMA_VERSION = 3) and (Length(vTabs) = 12)
+    and (vTabs[11].Name = 'DL_GRID_COLUMNS'));
+  vOk := Length(vTabs[1].Columns) = 49;
+  vI := 43;
+  for vEvent in FR_EVENT_COLUMNS do
+  begin
+    vOk := vOk and (vTabs[1].Columns[vI].Name = vEvent.Column) and (vTabs[1].Columns[vI].Kind = rckText) and not vTabs[1].Columns[vI].NotNull;
+    Inc(vI);
+  end;
+  Check('17b DL_FIELDS_INFO: 49 columns, the six nullable event TEXT columns of FR_EVENT_COLUMNS last, in order', vOk);
+  Check('17c they follow CHAR_LENGTH, the last v2 column', vTabs[1].Columns[42].Name = 'CHAR_LENGTH');
+  Check('17d v2 has none of them (control)', not RepoTablesFor(2)[1].FindColumn('ONGETTEXT_BODY', vCol));
+  Check('17e DL_GRID_COLUMNS: key form + view + column, table and field nullable, index not null',
+    (Length(vTabs[11].PkColumns) = 3) and (vTabs[11].PkColumns[0].Name = 'FORM_NAME') and (vTabs[11].PkColumns[1].Name = 'VIEW_NAME')
+    and (vTabs[11].PkColumns[2].Name = 'COLUMN_NAME') and vTabs[11].FindColumn('TABLE_NAME', vCol) and (not vCol.NotNull)
+    and vTabs[11].FindColumn('FIELD_NAME', vCol) and (not vCol.NotNull) and vTabs[11].FindColumn('COLUMN_INDEX', vCol) and vCol.NotNull);
+  vFile := NewPath('v3new');
+  CreateRepository(vFile);
+  vConn := OpenRepository(vFile, False);
+  try
+    Check('17f a new repository is version 3', RepoSchemaVersion(vConn) = 3);
+    vConn.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" VALUES (''frmA'',''view1'',''colA'',''T'',''F'',0)');
+    Check('17g two columns of one field, an unbound column, another form',
+      RaisedClass(procedure begin
+        vConn.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" VALUES (''frmA'',''view1'',''colB'',''T'',''F'',1)');
+        vConn.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" VALUES (''frmA'',''view1'',''colC'',NULL,NULL,2)');
+        vConn.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" VALUES (''frmB'',''view1'',''colA'',''T'',''F'',0)');
+      end) = '');
+    Check('17h the same form + view + column is refused',
+      RaisedClass(procedure begin vConn.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" VALUES (''frmA'',''view1'',''colA'',''T'',''G'',9)'); end) <> '');
+    Check('17i a column without an index is refused',
+      RaisedClass(procedure begin vConn.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" ("FORM_NAME","VIEW_NAME","COLUMN_NAME") VALUES (''a'',''b'',''c'')'); end) <> '');
+    Check('17j RepoIsEmpty ignores DL_GRID_COLUMNS', RepoIsEmpty(vConn) and (RepoRowCount(vConn, 'DL_GRID_COLUMNS') = 4));
+  finally
+    vConn.Free;
   end;
 end;
 
@@ -516,6 +567,7 @@ begin
   try
     TestContract;
     TestV2;
+  TestV3;
     TestCreateOpen;
     TestStructural;
     TestRows;

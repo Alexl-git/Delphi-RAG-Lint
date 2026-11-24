@@ -2,8 +2,8 @@ unit DRagLint.FieldRepo.Check;
 
 { drag-lint 1.53 -- lane FR-MODEL: `repo check`, the read-only consistency check of a repository
   (design 2026-11-22-field-repository-v2-design.md section 4.6): kind / flag consistency (4.1), lookup wiring
-  (4.2), calc macro targets and dependency cycles (4.3), layout-event rows. The 1.54 editor calls the same
-  function to warn early at save (Q13). }
+  (4.2), calc macro targets and dependency cycles (4.3), layout-event rows; 1.54 (rulings 2026-11-23): event bodies,
+  ALIGNMENT, grid column rows. The 1.54 editor calls the same function to warn early at save (Q13). }
 
 interface
 
@@ -20,18 +20,23 @@ type
     Severity: TFrCheckSeverity;
     /// <summary>Stable code: kind-flag-mismatch, unknown-kind, lookup-incomplete, lookup-unknown-table,
     /// lookup-unknown-value, lookup-key-not-pk, calc-macro-error, calc-unknown-field, calc-cycle,
-    /// layout-event-unknown-field.</summary>
+    /// event-macro-error, event-unknown-field, alignment-invalid, layout-event-unknown-field, layout-event-field-type,
+    /// grid-column-unknown-field.</summary>
     Code: string;
-    /// <summary>Where: `TABLE.FIELD`, or `layout TYPE TABLE.FIELD EVENT` for a layout-event row.</summary>
+    /// <summary>Where: `TABLE.FIELD`, `TABLE.FIELD COLUMN` for an event body, `layout TYPE TABLE.FIELD EVENT` for a
+    /// layout-event row, `grid FORM.VIEW.COLUMN` for a grid column row.</summary>
     Where: string;
     /// <summary>Human-readable explanation, ASCII.</summary>
     Message: string;
   end;
 
-/// <summary>Checks a repository (schema 1 or 2); never writes.</summary>
+/// <summary>Checks a repository (any schema version); never writes.</summary>
 /// <param name="pConn">Open repository connection (read-only is enough).</param>
-/// <returns>Every finding, in the order kind/flag, lookup wiring, calc bodies, cycles, layout events; empty = clean.</returns>
-/// <remarks>A schema-1 file has no CALC_BODY and no layout-event table: those checks are skipped. FIELD_KIND NULL
+/// <returns>Every finding, in the order kind/flag, lookup wiring, calc bodies, cycles, layout events, event bodies,
+/// alignment, grid columns; empty = clean.</returns>
+/// <remarks>A schema-1 file has no CALC_BODY and no layout-event table, a schema-2 file no event columns and no grid
+/// columns: those checks are skipped. A view-level layout event (FIELD_NAME '') needs no field row. An internal-calc field
+/// may read its own stored value. FIELD_KIND NULL
 /// reads as data (so a legacy ISCALCULATED row with a NULL kind is a kind/flag mismatch until `repo migrate`).
 /// A cycle is named once, rotated to start at its alphabetically first field: `A -> B -> A`.</remarks>
 function CheckRepository(pConn: TFDConnection): TArray<TFrCheckFinding>;
@@ -59,6 +64,10 @@ uses
   System.Variants,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.Kinds;
+
+const
+  VERSION_MODEL = 2;
+  VERSION_EVENT_COLUMNS = 3;
 
 type
   TFieldRow = record
@@ -243,7 +252,9 @@ begin
     end;
     VKept := nil;
     for VDep in VDeps do
-      if pFields.ContainsKey(Key(VRow.TableName, VDep)) then
+      if SameText(VDep, VRow.FieldName) and (FrKindFromCode(VRow.KindCode) = frkInternalCalc) then
+        Continue
+      else if pFields.ContainsKey(Key(VRow.TableName, VDep)) then
         VKept := VKept + [VDep]
       else
         Add(pOut, fcsError, 'calc-unknown-field', VRow.TableName + '.' + VRow.FieldName,
@@ -347,39 +358,141 @@ begin
   end;
 end;
 
-procedure CheckLayoutEvents(pConn: TFDConnection; pFields: TDictionary<string, string>; var pOut: TArray<TFrCheckFinding>);
+{ An open query; the caller frees it. }
+function OpenQuery(pConn: TFDConnection; const pSql: string): TFDQuery;
+begin
+  Result := TFDQuery.Create(nil);
+  try
+    Result.Connection := pConn;
+    Result.SQL.Text := pSql;
+    Result.Open;  // dl:ok dataset-open-without-close@f8d5 -- REVIEWED 2026-11-23 EVCOLS: the query is returned open; every caller frees it in finally
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+{ The macros of one event body: well formed, and each one a field of the table. }
+procedure CheckEventBody(const pTable, pWhere, pBody: string; pFields: TDictionary<string, string>;
+  var pOut: TArray<TFrCheckFinding>);
+var
+  VMacro: TFrMacro;
+  VSeen: TArray<string>;
+begin
+  VSeen := nil;
+  try
+    for VMacro in ParseMacros(pBody) do
+      if (not pFields.ContainsKey(Key(pTable, VMacro.Name))) and not MatchText(VMacro.Name, VSeen) then
+      begin
+        VSeen := VSeen + [VMacro.Name];
+        Add(pOut, fcsError, 'event-unknown-field', pWhere, 'macro {{' + VMacro.Name + '}} names no field of ' + pTable);
+      end;
+  except
+    on E: EFrKindError do
+      Add(pOut, fcsError, 'event-macro-error', pWhere, E.Message);
+  end;
+end;
+
+procedure CheckLayoutEvents(pConn: TFDConnection; pHasColumns: Boolean; pFields: TDictionary<string, string>;
+  var pOut: TArray<TFrCheckFinding>);
 var
   VQuery: TFDQuery;
+  VTable, VField, VLayout, VWhere: string;
 begin
-  VQuery := TFDQuery.Create(nil);
+  VQuery := OpenQuery(pConn, 'SELECT "TABLE_NAME", "FIELD_NAME", "LAYOUT_TYPE", "EVENT_NAME", "EVENT_CODE" FROM "DL_LAYOUT_EVENTS" ' +
+    'ORDER BY "TABLE_NAME", "FIELD_NAME", "LAYOUT_TYPE", "EVENT_NAME"');
   try
-    VQuery.Connection := pConn;
-    VQuery.Open('SELECT "TABLE_NAME", "FIELD_NAME", "LAYOUT_TYPE", "EVENT_NAME" FROM "DL_LAYOUT_EVENTS" ' +  // dl:ok path-traversal@6088 -- REVIEWED 2026-11-23: SQL text, not a path -- TFDQuery.Open of a constant SELECT, no variable part
-      'ORDER BY "TABLE_NAME", "FIELD_NAME", "LAYOUT_TYPE", "EVENT_NAME"');
     while not VQuery.Eof do
     begin
-      if not pFields.ContainsKey(Key(Trim(VQuery.Fields[0].AsString), Trim(VQuery.Fields[1].AsString))) then
-        Add(pOut, fcsError, 'layout-event-unknown-field',
-          'layout ' + VQuery.Fields[2].AsString + ' ' + VQuery.Fields[0].AsString + '.' + VQuery.Fields[1].AsString
-          + ' ' + VQuery.Fields[3].AsString,
-          'the event code belongs to a field that is not in DL_FIELDS_INFO');
+      VTable := Trim(VQuery.Fields[0].AsString);
+      VField := Trim(VQuery.Fields[1].AsString);
+      VLayout := VQuery.Fields[2].AsString;
+      VWhere := 'layout ' + VLayout + ' ' + VTable + '.' + VField + ' ' + VQuery.Fields[3].AsString;
+      if (VField <> '') and not pFields.ContainsKey(Key(VTable, VField)) then
+        Add(pOut, fcsError, 'layout-event-unknown-field', VWhere, 'the event code belongs to a field that is not in DL_FIELDS_INFO')
+      else if pHasColumns and (VField <> '') and SameText(VLayout, REPO_LAYOUT_FIELD) then
+        Add(pOut, fcsError, 'layout-event-field-type', VWhere, 'a TField event belongs in its DL_FIELDS_INFO column');
+      CheckEventBody(VTable, VWhere, VQuery.Fields[4].AsString, pFields, pOut);
       VQuery.Next;
     end;
   finally
     VQuery.Free;
   end;
 end;
+
+{ One event column of the field rows. }
+procedure CheckEventColumn(pConn: TFDConnection; const pColumn: string; pFields: TDictionary<string, string>;
+  var pOut: TArray<TFrCheckFinding>);
+var
+  VQuery: TFDQuery;
+  VTable: string;
+begin
+  VQuery := OpenQuery(pConn, 'SELECT "TABLE_NAME", "FIELD_NAME", ' + QuoteRepoIdent(pColumn) + ' FROM "DL_FIELDS_INFO" WHERE ' +
+    QuoteRepoIdent(pColumn) + ' IS NOT NULL ORDER BY "TABLE_NAME", "FIELD_NAME"');
+  try
+    while not VQuery.Eof do
+    begin
+      VTable := Trim(VQuery.Fields[0].AsString);
+      CheckEventBody(VTable, VTable + '.' + Trim(VQuery.Fields[1].AsString) + ' ' + pColumn, VQuery.Fields[2].AsString, pFields, pOut);
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
+  end;
+end;
+
+{ ALIGNMENT is NULL or Ord(TAlignment) (ruling R5). }
+procedure CheckAlignment(pConn: TFDConnection; var pOut: TArray<TFrCheckFinding>);
+var
+  VQuery: TFDQuery;
+begin
+  VQuery := OpenQuery(pConn, 'SELECT "TABLE_NAME", "FIELD_NAME", "ALIGNMENT" FROM "DL_FIELDS_INFO" WHERE "ALIGNMENT" NOT IN (0, 1, 2) ' +
+    'ORDER BY "TABLE_NAME", "FIELD_NAME"');
+  try
+    while not VQuery.Eof do
+    begin
+      Add(pOut, fcsWarn, 'alignment-invalid', Trim(VQuery.Fields[0].AsString) + '.' + Trim(VQuery.Fields[1].AsString),
+        'ALIGNMENT ' + VQuery.Fields[2].AsString + ' is none of NULL (the default), 0 left, 1 right, 2 center');
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
+  end;
+end;
+
+{ A grid column that names a table names a field of it. }
+procedure CheckGridColumns(pConn: TFDConnection; pFields: TDictionary<string, string>; var pOut: TArray<TFrCheckFinding>);
+var
+  VQuery: TFDQuery;
+begin
+  VQuery := OpenQuery(pConn, 'SELECT "TABLE_NAME", "FIELD_NAME", "FORM_NAME", "VIEW_NAME", "COLUMN_NAME" FROM "DL_GRID_COLUMNS" ' +
+    'WHERE "TABLE_NAME" IS NOT NULL ORDER BY "FORM_NAME", "VIEW_NAME", "COLUMN_INDEX", "COLUMN_NAME"');
+  try
+    while not VQuery.Eof do
+    begin
+      if not pFields.ContainsKey(Key(Trim(VQuery.Fields[0].AsString), Trim(VQuery.Fields[1].AsString))) then
+        Add(pOut, fcsWarn, 'grid-column-unknown-field', 'grid ' + string.Join('.', [VQuery.Fields[2].AsString,
+          VQuery.Fields[3].AsString, VQuery.Fields[4].AsString]), Trim(VQuery.Fields[0].AsString) + '.' +
+          Trim(VQuery.Fields[1].AsString) + ' is not in DL_FIELDS_INFO');
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
+  end;
+end;
+
 function CheckRepository(pConn: TFDConnection): TArray<TFrCheckFinding>;
 var
-  VHasV2: Boolean;
+  VVersion: Integer;
   VRows: TArray<TFieldRow>;
   VFields: TDictionary<string, string>;
   VEdges: TDictionary<string, TArray<string>>;
   VRow: TFieldRow;
+  VEvent: TFrEventColumn;
 begin
   Result := nil;
-  VHasV2 := RepoSchemaVersion(pConn) >= 2;
-  VRows := LoadRows(pConn, VHasV2);
+  VVersion := RepoSchemaVersion(pConn);
+  VRows := LoadRows(pConn, VVersion >= VERSION_MODEL);
   VFields := TDictionary<string, string>.Create;
   VEdges := TDictionary<string, TArray<string>>.Create;
   try
@@ -389,8 +502,15 @@ begin
     CheckLookups(VRows, VFields, Result);
     CheckBodies(VRows, VFields, VEdges, Result);
     CheckCycles(VEdges, VFields, Result);
-    if VHasV2 then
-      CheckLayoutEvents(pConn, VFields, Result);
+    if VVersion >= VERSION_MODEL then
+      CheckLayoutEvents(pConn, VVersion >= VERSION_EVENT_COLUMNS, VFields, Result);
+    if VVersion >= VERSION_EVENT_COLUMNS then
+    begin
+      for VEvent in FR_EVENT_COLUMNS do
+        CheckEventColumn(pConn, VEvent.Column, VFields, Result);
+      CheckAlignment(pConn, Result);
+      CheckGridColumns(pConn, VFields, Result);
+    end;
   finally
     VEdges.Free;
     VFields.Free;

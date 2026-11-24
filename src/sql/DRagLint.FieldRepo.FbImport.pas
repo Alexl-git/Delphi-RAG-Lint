@@ -76,7 +76,8 @@ function ImportTableFromDataSet(pSource: TDataSet; pTarget: TFDConnection;  // d
 /// <returns>Rows copied.</returns>
 /// <exception cref="ERepoError">The source columns do not match the table, or the table is unknown.</exception>
 /// <remarks>The Firebird registry has the schema-1 columns only: the source is compared against the schema-1 column
-/// list whatever the target version is, and columns a newer schema added (CALC_BODY, DOMAIN_NAME, ...) stay NULL.</remarks>
+/// list whatever the target version is, and columns a newer schema added (CALC_BODY, DOMAIN_NAME, ...) stay NULL.
+/// An ALIGNMENT of -2 (TableTools: not set) becomes NULL; every other value is copied.</remarks>
 function ImportSourceDataSet(pSource: TDataSet; pTarget: TFDConnection; const pTargetName: string): Integer;  // dl:ok unused-public-symbol@9e0e -- REVIEWED 2026-11-23: public API of the importer: tests/fieldrepo/FbImportTests.dpr calls it directly (error paths); outside this project index
 /// <summary>Imports the FIB$ registry tables of a Firebird database into a repository.</summary>
 /// <param name="pConnectionString">FireDAC-style 'Database=..;User=..;Password=..' list separated by ';'.</param>
@@ -138,6 +139,8 @@ uses
 
 const
   FIB_VERSION_COLUMN = 'FIB$VERSION';
+  ALIGNMENT_COLUMN = 'ALIGNMENT';
+  ALIGNMENT_UNSET = -2; // TableTools' "not set"; the repository says NULL
   DATA_TABLES: array[0..3] of string = ('DL_FIELDS_INFO', 'DL_DATASETS_INFO', 'DL_ENUMVALUES', 'DL_ERROR_MESSAGES');
 
 function JoinNames(const pNames: TArray<string>): string;
@@ -218,7 +221,7 @@ begin
   begin
     Field := pFields[I];
     Param := pQuery.Params[I];
-    if Field.IsNull then
+    if Field.IsNull or (SameText(pTable.Columns[I].Name, ALIGNMENT_COLUMN) and (Field.AsInteger = ALIGNMENT_UNSET)) then
       Param.Clear
     else
       case pTable.Columns[I].Kind of

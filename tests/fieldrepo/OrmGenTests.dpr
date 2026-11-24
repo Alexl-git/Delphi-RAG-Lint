@@ -285,6 +285,28 @@ var
   vGen: TOrmGenerator;
   vText, vOut: string;
   vCount: Integer;
+
+  function Updated(const pText: string): string;
+  begin
+    try
+      Result := vGen.UpdateRegions(pText, 'ORDERS', False, vCount);
+    except
+      on E: Exception do
+        Result := E.ClassName + ': ' + E.Message;
+    end;
+  end;
+
+  procedure Refused(const pName, pText, pReason: string);
+  begin
+    vOut := Updated(pText);
+    Check(pName, vOut.StartsWith('EOrmRegionError: ') and vOut.Contains(pReason), vOut);
+  end;
+
+  procedure CheckText(const pName, pGot, pWant: string);
+  begin
+    Check(pName, pGot = pWant, pGot);
+  end;
+
 begin
   vGen := TOrmGenerator.Create(pRepo);
   try
@@ -303,12 +325,46 @@ begin
     vText := 'a'#13'b'#10'c'#13#10'd';
     Check('B2 text without regions unchanged', vGen.UpdateRegions(vText, 'ORDERS', False, vCount) = vText);
     Check('B3 no region counted', vCount = 0);
-    { unknown id empties the region (TableTools) }
-    vOut := vGen.UpdateRegions(Region('99', 'keep?'#13#10), 'ORDERS', False, vCount);
-    Check('B4 unknown region id empties it', vOut = Region('99', ''), vOut);
-    { start without end: generated lines, then the rest of the file stays }
-    vOut := vGen.UpdateRegions('{$REGION ''DB-RAD 15''}'#13#10'tail'#13#10, 'ORDERS', False, vCount);
-    Check('B5 start without end keeps the tail', vOut = '{$REGION ''DB-RAD 15''}'#13#10'tail'#13#10, vOut);
+    { the regions TableTools emptied or ran past: the unit is refused }
+    Refused('B4 unknown region id', Region('99', 'keep?'#13#10), 'unknown region id: DB-RAD 99');
+    Refused('B4b a hand region named DB-RAD', Region('notes', 'keep'#13#10), 'unknown region id: DB-RAD notes');
+    Refused('B4c an id with text behind it', Region('2 mine', 'keep'#13#10), 'unknown region id: DB-RAD 2 mine');
+    Refused('B4d DLFR with an unknown number', Region('99', 'keep'#13#10).Replace('DB-RAD', 'DLFR'), 'unknown region id: DLFR 99');
+    Refused('B5 start without end', '{$REGION ''DB-RAD 15''}'#13#10'tail'#13#10, 'without an end marker: DB-RAD 15');
+    Refused('B7 an unnamed end', '{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'{$ENDREGION}'#13#10'hand'#13#10 + Region('3', ''), 'the end marker of "DB-RAD 1" is "');
+    Refused('B8 the end of another id', '{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 2''}'#13#10, 'the end marker of "DB-RAD 1" is "DB-RAD 2"');
+    Refused('B9 no end, then another region', '{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'hand'#13#10 + Region('3', ''), 'without an end marker');
+    Refused('B10 a region inside a region', '{$REGION ''DB-RAD 1''}'#13#10 + Region('3', 'x'#13#10) + '{$ENDREGION ''DB-RAD 1''}'#13#10, 'holds the region');
+    Refused('B10b a DLFR handler region inside a region', '{$REGION ''DB-RAD 1''}'#13#10'{$REGION ''DLFR t.OnX hash=0123456789abcdef''}'#13#10'{$ENDREGION ''DLFR t.OnX''}'#13#10'{$ENDREGION ''DB-RAD 1''}'#13#10, 'holds the region');
+    Refused('B11 the end in a comment', '{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'// {$ENDREGION ''DB-RAD 1''}'#13#10'hand'#13#10, 'without an end marker');
+    Refused('B12 the end of a hand region names an id', '{$REGION ''mine''}'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 1''}'#13#10, 'the end marker of "mine" is "DB-RAD 1"');
+    Refused('B13 code before the end marker', '{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'hand; {$ENDREGION ''DB-RAD 1''}'#13#10, 'alone on its line');
+    Refused('B13b code before the start marker', 'hand; {$REGION ''DB-RAD 1''}'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 1''}'#13#10, 'alone on its line');
+    Refused('B13c code behind the start marker', '{$REGION ''DB-RAD 1''} hand;'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 1''}'#13#10, 'alone on its line');
+    Refused('B14 a conditional ends inside', '{$IFDEF X}'#13#10'{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'{$ENDIF}'#13#10'{$ENDREGION ''DB-RAD 1''}'#13#10, 'conditional');
+    Refused('B14b an $ELSE inside', '{$IFDEF X}'#13#10'{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'{$ELSE}'#13#10'{$ENDREGION ''DB-RAD 1''}'#13#10'{$ENDIF}'#13#10, 'conditional');
+    Refused('B15 a comment left open', Region('1', '') + '{ x', 'has no end');
+    vText := '{$IFDEF X}'#13#10 + Region('15', '{$IFDEF Y}a{$ELSE}b{$ENDIF}'#13#10) + '{$ENDIF}'#13#10;
+    CheckText('B14c a whole conditional inside, and around (control)', Updated(vText), '{$IFDEF X}'#13#10 + Region('15', '') + '{$ENDIF}'#13#10);
+    { copies that are not regions }
+    vText := '(*'#13#10 + Region('1', 'old'#13#10) + '*)'#13#10;
+    CheckText('B16 a region in a block comment is text', Updated(vText), vText);
+    vText := 's := '''''''#13#10 + Region('1', 'old'#13#10) + '  '''''';'#13#10;
+    CheckText('B17 a region in a multi-line string is text', Updated(vText), vText);
+    vText := '{$REGION ''DB-RAD 15''}'#13#10'(*'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10'*)'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10'hand'#13#10;
+    CheckText('B18 the end in a comment is not the end', Updated(vText), '{$REGION ''DB-RAD 15''}'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10'hand'#13#10);
+    vText := '{$REGION ''DB-RAD''}'#13#10'hand'#13#10'{$ENDREGION}'#13#10'{$REGION ''DB-RADIUS''}'#13#10'hand'#13#10'{$ENDREGION ''DB-RADIUS''}'#13#10;
+    CheckText('B19 DB-RAD without an id, another word: hand regions', Updated(vText), vText);
+    { DLFR n is DB-RAD n, never by prefix }
+    CheckText('B20 DLFR n', Updated(Region('4', 'old'#13#10).Replace('DB-RAD', 'DLFR')), Updated(Region('4', '')).Replace('DB-RAD', 'DLFR'));
+    Check('B20b counted', vCount = 1, IntToStr(vCount));
+    Check('B20c control: region 4 is not empty', Updated(Region('4', '')) <> Region('4', ''));
+    vText := '{$REGION ''DLFR 2a hash=0123456789abcdef''}'#13#10'keep'#13#10'{$ENDREGION ''DLFR 2a''}'#13#10'{$REGION ''DLFR 2a''}'#13#10'keep'#13#10'{$ENDREGION ''DLFR 2a''}'#13#10 +
+      '{$REGION ''DLFR tblA.OnCalcFields hash=0123456789abcdef''}'#13#10'keep'#13#10'{$ENDREGION ''DLFR tblA.OnCalcFields''}'#13#10'{$REGION ''DLFR notes''}'#13#10'keep'#13#10'{$ENDREGION}'#13#10;
+    CheckText('B21 the other DLFR regions are untouched', Updated(vText), vText);
+    Check('B21b line by line too', not IsOrmRegionStart('{$REGION ''DLFR 2a hash=0123456789abcdef''}', vOut) and not IsOrmRegionStart('{$REGION ''DLFR 2a''}', vOut) and
+      IsOrmRegionStart('{$REGION ''DLFR 2''}', vOut) and (vOut = '2') and IsOrmRegionEnd('{$ENDREGION ''DLFR CL-KEY''}') and not IsOrmRegionEnd('{$ENDREGION ''DLFR 2a''}'));
+    CheckText('B22 mixed spellings of the ends are fine', Updated('{$REGION ''DB-RADa 15''}'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10), '{$REGION ''DB-RADa 15''}'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10);
     vText := '{$REGION ''MicStream prototype -- hand-written, not DB-RAD''}'#13#10'hand code'#13#10 +
       '{$ENDREGION ''MicStream prototype -- hand-written, not DB-RAD''}'#13#10;
     Check('B6 hand-written region mentioning DB-RAD is kept', vGen.UpdateRegions(vText, 'ORDERS', False, vCount) = vText);
@@ -391,6 +447,22 @@ begin
     vSkipped.Clear;
     vPlan := PlanUpdateOrm(pRepo, vCode, vSrv, vCli, ['ORDERS'], vSkipped);
     Check('P16 missing client file is skipped and named', (vSkipped.Count = 1) and vSkipped[0].Contains('uORDERS_CLIENT.PAS'), vSkipped.Text);
+    { a unit with a hand region DB-RAD notes: refused, named, not planned; the other units of the table are }
+    vText := TFile.ReadAllText(TPath.Combine(vCode, 'uORDERS.PAS'));
+    TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText.Replace('end.', Region('notes', 'hand'#13#10) + 'end.'));
+    vSkipped.Clear;
+    vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped);
+    Check('P18 a refused unit is named and not planned, the other one is', (Length(vPlan) = 1) and vPlan[0].FileName.EndsWith('iORDERS.PAS') and (vSkipped.Count = 1) and
+      vSkipped[0].Contains('uORDERS.PAS: REFUSED') and vSkipped[0].Contains('DB-RAD notes'), KindsOf(vPlan) + vSkipped.Text);
+    TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText.Replace('DB-RAD', 'DLFR'));
+    AddRow(pRepo, 'ORDERS', 'ZADDED', 'Double', 'AsFloat', False, '');
+    vSkipped.Clear;
+    vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped);
+    Check('P19 a renumbered unit is regenerated', (Length(vPlan) = 2) and (vSkipped.Count = 0) and (vPlan[1].Kind = ockChanged) and vPlan[1].NewText.Contains('fZADDED'), KindsOf(vPlan) + vSkipped.Text);
+    vDiff := if Length(vPlan) = 2 then OrmChangeDiff(vPlan[1]) else '';
+    Check('P20 its diff ends at the DLFR end markers', vDiff.Contains('+    fZADDED') and not vDiff.Contains('DLFR'), vDiff);
+    pRepo.ExecSQL('DELETE FROM DL_FIELDS_INFO WHERE FIELD_NAME = ''ZADDED''');
+    TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText);
     Check('P17 unknown table in a plan raises', (function: Boolean
       begin
         Result := False;
@@ -501,6 +573,13 @@ begin
       vNotes.Clear;
       Check('W1 column SOURCE under the old header: unit skipped and named', (Length(PlanUpdateOrm(pRepo, vDir, '', '', ['TRAP'], vNotes)) = 1) and
         (vNotes.Count = 1) and vNotes[0].Contains('upgrade-orm-headers'), vNotes.Text);
+      TFile.WriteAllText(vFile, vBefore.Replace('DB-RAD', 'DLFR'), TEncoding.ASCII);
+      vNotes.Clear;
+      Check('W1b ... with renumbered regions too', (Length(PlanUpdateOrm(pRepo, vDir, '', '', ['TRAP'], vNotes)) = 1) and
+        (vNotes.Count = 1) and vNotes[0].Contains('upgrade-orm-headers'), vNotes.Text);
+      vNotes.Clear;
+      Check('W1c upgrade-orm-headers reads renumbered regions', (UpgradeOrmHeaderText(vBefore.Replace('DB-RAD', 'DLFR'), 'TRAP', vNotes) =
+        UpgradeOrmHeaderText(vBefore, 'TRAP', vNotes).Replace('DB-RAD', 'DLFR')) and (UpgradeOrmHeaderText(vBefore, 'TRAP', vNotes) <> vBefore), vNotes.Text);
       TFile.WriteAllText(vFile, vBefore.Replace('if not (Source is TmcTRAP) then inherited', 'if Source is not TmcTRAP then inherited').Replace('with Source as TmcTRAP do', ''), TEncoding.ASCII);
       vNotes.Clear;
       Check('W2 under the new header it is regenerated', (Length(PlanUpdateOrm(pRepo, vDir, '', '', ['TRAP'], vNotes)) = 2) and (vNotes.Count = 0), vNotes.Text);

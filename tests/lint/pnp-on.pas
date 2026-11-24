@@ -1,8 +1,8 @@
 unit pnp_on;
 interface
-procedure Go(Value: Integer; pName: string);
+procedure Go(Amount: Integer; pName: string);
 implementation
-procedure Go(Value: Integer; pName: string);
+procedure Go(Amount: Integer; pName: string);
 begin
 end;
 end.

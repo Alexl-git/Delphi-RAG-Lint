@@ -14,6 +14,24 @@ Merged lanes:
 - TT-GENFIX: the ORM generator (`repo gen-orm` / `update-orm` / `gen-dataservice`). Generated `Assign` and `AssignTo` copied nothing (each copied the other object onto itself); regions 4 / 6 now copy, inside an old `with` header as well as without one, and new units have no `with`. New `repo upgrade-orm-headers` (dry run unless `--apply`) replaces the old headers of existing units, exact generated shape only. Uses lists of new units hold exactly what their text needs; placeholder summaries become summaries built from the row; `is not`, no unused Reader locals, `GetNAME` / `SetNAME`. New units need Delphi 13. Lists and streams the generator creates and frees itself are copied by content (own instance; nil source empties, nil destination and self-assign are skipped), other class columns by reference. `AssignI` too (owner ruling 2026-11-23: it no longer takes over the interface object's list; an aliased list is skipped; a nil `Value` raises as before). A stream source keeps its Position, the copy ends at Position 0. No extraction, resolver or lint change. TT-GENFIX-3: `AssignI` is gone from generated code (owner ruling 2026-11-23): `i<T>` declares `Assign(const IValue: Imc<T>)`, `u<T>` an overloaded `Assign` (class and interface; the class version never goes through `Supports`, which would free an object held only by an object reference on the reference-counted ORM3 base). `repo upgrade-orm-headers` converts the generated shape of an i/u pair (both or neither), lists every remaining `AssignI` call as file(line) and never edits it; a second run changes nothing.
 - SEARCHFAST: the `search` index stage no longer slows down with the size of the index. The one ANALYZE runs on an empty database and recorded every FTS5 data table as two rows, so SQLite scanned the whole table for each segment FTS5 dropped; the writer now corrects that statistic (existing indexes heal on their next write), and a run that has to fill a large share of the table rebuilds `symbol_search_fts` in one pass inside the stage's transaction. library-Win64 in place: 7,135 s -> 49 s for 1.45 M rows. No re-parse.
 
+Lane HANDLERS / HANDFIX (in lane/v154-evcols):
+
+- NEW `repo gen-handlers` / `gen-maxlen` / `renumber-regions`: stored event code and MAXLEN constants go into hash-checked DLFR regions of existing units; a region edited by hand is refused and kept, everything outside the regions stays byte for byte, dry run unless `--apply`. Wiki page field-repository-handlers.
+- `repo update-orm` pairs region markers by id with a Pascal scan and refuses a unit it cannot trust (shipped defect: hand code could be discarded); `DLFR n` is read as `DB-RAD n`.
+
+Lane EVCOLS (lane/v154-evcols):
+
+- Field repository schema 3: event bodies are columns of DL_FIELDS_INFO, new table DL_GRID_COLUMNS, ALIGNMENT -2 becomes NULL, `{{FIELD}}` is the persistent field component; `repo migrate` takes schema 1 or 2 to 3, `#DLREPO 3` text backup. `read-dfm` reads OnSetText / OnValidate / OnChange and grid column events and the column order.
+
+Lane ALTERBK (lane/v154-alterbk):
+
+- NEW `repo backup --connection` (verified database backup through the Firebird service API), `repo backup list`, `repo backup purge`; `repo alter-table --apply` makes one itself before its first DDL. Project key `backupDir`; `--backup-dir`, `--verify full|quick`. Wiki page repo-db-backup. `repo backup` without `--connection` stays the text backup of the repository; any other flag on it (`--json` included) is now an error.
+- Fixed (shipped): `repo backup` over an existing text backup failed with `Path is empty`.
+
+Lane SQL (lane/v154-sql):
+
+- NEW rule `sql-param-mismatch` (ON): ParamByName of a parameter the SQL does not have, or a SQL parameter that is never set. NEW rule `query-in-loop` (OFF): a query run once per loop iteration. `field-by-name-in-loop` gets the option `param_by_name` (OFF). Rule count 437 -> 439, 358 -> 359 on by default. Wiki page v154-sql-rules.
+
 Lane TT-ALTER (lane/v154-tt-alter):
 
 - NEW `drag-lint repo alter-table` (Table Tools): plans and, with `--apply`, runs the ALTER TABLE that brings a Firebird table in line with a field-repository column; see wiki page repo-alter-table.

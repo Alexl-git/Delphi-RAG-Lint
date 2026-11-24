@@ -1,17 +1,22 @@
 unit DRagLint.FieldRepo.Migrate;
 
-{ drag-lint 1.53 -- lane FR-MODEL: `repo migrate`, schema 1 -> 2 of a repository file (design
-  2026-11-22-field-repository-v2-design.md section 4.6). Nothing is dropped or renamed. }
+{ drag-lint 1.53 -- lane FR-MODEL, 1.54 -- lane EVCOLS: `repo migrate`, a repository file of schema 1 or 2 to the
+  current schema 3 (design 2026-11-22-field-repository-v2-design.md section 4.7, rulings 2026-11-23 R2 / R5 / R6).
+  No table, column or value is dropped or renamed; event code of layout type Field moves into the event columns. }
 
 interface
 
 type
   /// <summary>What a migration did (or, for a dry run, would do).</summary>
   TFrMigrateResult = record
-    /// <summary>True when the file was at schema 2 already; nothing else is set then.</summary>
+    /// <summary>True when the file was at the current schema already; nothing else is set then.</summary>
     AlreadyCurrent: Boolean;
-    /// <summary>ISCALCULATED rows whose FIELD_KIND is NULL or 1; they get FIELD_KIND 2.</summary>
+    /// <summary>ISCALCULATED rows whose FIELD_KIND is NULL or 1; they get FIELD_KIND 2. Schema 1 only, else 0.</summary>
     CalcRows: Integer;
+    /// <summary>Rows with ALIGNMENT -2 (TableTools: not set); they get NULL.</summary>
+    AlignmentRows: Integer;
+    /// <summary>DL_LAYOUT_EVENTS rows of layout type Field that move into the event columns.</summary>
+    EventRows: Integer;
     /// <summary>True when the change was written (apply), False for a dry run.</summary>
     Applied: Boolean;
     /// <summary>The before-migrate backup file written by an apply; '' otherwise.</summary>
@@ -20,16 +25,18 @@ type
     Plan: string;
   end;
 
-/// <summary>Plans or applies the schema 1 -> 2 migration of a repository file.</summary>
+/// <summary>Plans or applies the migration of a repository file to REPO_SCHEMA_VERSION.</summary>
 /// <param name="pFileName">Repository file.</param>
 /// <param name="pApply">False = dry run (the file is opened read-only and not a byte changes); True = write.</param>
-/// <returns>The result; Plan reads `v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, create DL_LAYOUT_EVENTS,
-/// create DL_EXCEPTIONS, FIELD_KIND 2 for N ISCALCULATED rows, user_version 2`.</returns>
+/// <returns>The result; Plan reads `v2 -> v3: add DL_FIELDS_INFO.ONGETTEXT_BODY, ..., create DL_GRID_COLUMNS, 
+/// ALIGNMENT -2 to NULL in N rows, move N Field events into columns, user_version 3` (from schema 1 also the schema-2
+/// tables and columns and FIELD_KIND 2).</returns>
 /// <exception cref="ERepoError">The file is missing.</exception>
-/// <exception cref="ERepoSchemaError">The file is not a schema-1 or schema-2 repository.</exception>
-/// <remarks>An apply first writes `&lt;repo&gt;.before-migrate-&lt;yyyymmdd-hhnnss&gt;.txt` (the schema-1 text
-/// backup), then runs ONE transaction: ALTER TABLE ADD COLUMN CALC_BODY, the two CREATE TABLEs, the FIELD_KIND
-/// update, user_version 2 and DL_META schema_version 2; a failure rolls everything back.</remarks>
+/// <exception cref="ERepoSchemaError">The file is not a repository of a known schema.</exception>
+/// <remarks>An apply first writes `&lt;repo&gt;.before-migrate-&lt;yyyymmdd-hhnnss&gt;.txt` (the text backup in the file's old
+/// schema), then runs ONE transaction: every ALTER TABLE ADD COLUMN and CREATE TABLE, the row updates, user_version and
+/// DL_META schema_version; a failure rolls everything back. A Field event whose field row does not exist, or whose event
+/// has no column, stays in DL_LAYOUT_EVENTS (`repo check` reports it).</remarks>
 function MigrateRepository(const pFileName: string; pApply: Boolean): TFrMigrateResult;
 
 implementation
@@ -41,13 +48,12 @@ uses
   DRagLint.FieldRepo.TextBackup;
 
 const
-  PLAN_FMT = 'v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, create DL_LAYOUT_EVENTS, ' +
-    'DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, ' +
-    'FIELD_KIND 2 for %d ISCALCULATED rows, user_version 2';
-  CALC_ROWS_SQL = 'SELECT COUNT(*) FROM "DL_FIELDS_INFO" WHERE "ISCALCULATED" = 1 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1)';
+  FIELDS_TABLE = 'DL_FIELDS_INFO';
+  KIND_VERSION = 2; // the schema that introduced FIELD_KIND 2 for ISCALCULATED rows
+  FIELDS_SQL = '"DL_FIELDS_INFO"';
 
-{ The v2-only columns of DL_FIELDS_INFO and the v2-only tables are derived from the two table sets, so a column
-  or table a lane adds to v2 (FR-SCHEMA: DOMAIN_NAME, CHAR_LENGTH, the four schema tables) migrates with no edit here. }
+{ New columns and tables are derived from the two table sets, so one that a lane adds to a schema migrates with no edit
+  here. }
 function FindTable(const pTables: TArray<TRepoTable>; const pName: string; out pTable: TRepoTable): Boolean;
 var
   VTable: TRepoTable;
@@ -62,31 +68,43 @@ begin
   Result := False;
 end;
 
-procedure AddV2Columns(pConn: TFDConnection);
+{ Columns of DL_FIELDS_INFO the current schema has and schema pFrom has not. }
+function NewColumns(pFrom: Integer): TArray<TRepoColumn>;
 var
   VCol, VOldCol: TRepoColumn;
   VNew, VOld: TRepoTable;
 begin
-  FindTable(RepoTablesFor(2), 'DL_FIELDS_INFO', VNew);
-  FindTable(RepoTablesFor(1), 'DL_FIELDS_INFO', VOld);
+  Result := nil;
+  FindTable(RepoTablesFor(REPO_SCHEMA_VERSION), FIELDS_TABLE, VNew);
+  FindTable(RepoTablesFor(pFrom), FIELDS_TABLE, VOld);
   for VCol in VNew.Columns do
     if not VOld.FindColumn(VCol.Name, VOldCol) then
-      pConn.ExecSQL('ALTER TABLE "DL_FIELDS_INFO" ADD COLUMN ' + ColumnDdl(VCol, False));
+      Result := Result + [VCol];
 end;
 
-procedure ApplyMigration(pConn: TFDConnection);
+function NewTables(pFrom: Integer): TArray<TRepoTable>;
 var
   VTable, VOld: TRepoTable;
 begin
+  Result := nil;
+  for VTable in RepoTablesFor(REPO_SCHEMA_VERSION) do
+    if not FindTable(RepoTablesFor(pFrom), VTable.Name, VOld) then
+      Result := Result + [VTable];
+end;
+
+procedure ApplyMigration(pConn: TFDConnection; pFrom: Integer);
+var
+  VTable: TRepoTable;
+  VCol: TRepoColumn;
+begin
   pConn.StartTransaction;
   try
-    AddV2Columns(pConn);
-    for VTable in RepoTablesFor(2) do
-      if not FindTable(RepoTablesFor(1), VTable.Name, VOld) then
-        pConn.ExecSQL(RepoTableDdl(VTable));
-    pConn.ExecSQL('UPDATE "DL_FIELDS_INFO" SET "FIELD_KIND" = 2 WHERE "ISCALCULATED" = 1 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1)');
-    SetRepoMeta(pConn, 'schema_version', '2');
-    pConn.ExecSQL('PRAGMA user_version = 2');
+    for VCol in NewColumns(pFrom) do
+      pConn.ExecSQL('ALTER TABLE ' + FIELDS_SQL + ' ADD COLUMN ' + ColumnDdl(VCol, False));
+    for VTable in NewTables(pFrom) do
+      pConn.ExecSQL(RepoTableDdl(VTable));
+    MigrateRepoRows(pConn, pFrom);
+    pConn.ExecSQL('PRAGMA user_version = ' + IntToStr(REPO_SCHEMA_VERSION));
     pConn.Commit;
   except
     pConn.Rollback;
@@ -94,25 +112,53 @@ begin
   end;
 end;
 
+function PlanText(pFrom: Integer; const pResult: TFrMigrateResult): string;
+var
+  VCol: TRepoColumn;
+  VTable: TRepoTable;
+  VColumns, VTables: TArray<string>;
+begin
+  VColumns := nil;
+  for VCol in NewColumns(pFrom) do
+    VColumns := VColumns + [VCol.Name];
+  VTables := nil;
+  for VTable in NewTables(pFrom) do
+    VTables := VTables + [VTable.Name];
+  Result := Format('v%d -> v%d: add %s.%s, create %s, ', [pFrom, REPO_SCHEMA_VERSION, FIELDS_TABLE, string.Join(', ', VColumns),
+    string.Join(', ', VTables)]);
+  if pFrom < KIND_VERSION then
+    Result := Result + Format('FIELD_KIND 2 for %d ISCALCULATED rows, ', [pResult.CalcRows]);
+  Result := Result + Format('ALIGNMENT -2 to NULL in %d rows, ', [pResult.AlignmentRows]);
+  if pFrom >= KIND_VERSION then
+    Result := Result + Format('move %d Field events into columns, ', [pResult.EventRows]);
+  Result := Result + Format('user_version %d', [REPO_SCHEMA_VERSION]);
+end;
+
 function MigrateRepository(const pFileName: string; pApply: Boolean): TFrMigrateResult;
 var
   VConn: TFDConnection;
+  VFrom: Integer;
+  VRows: TRepoRowChanges;
 begin
   Result := Default(TFrMigrateResult);
   VConn := OpenRepository(pFileName, not pApply);
   try
-    if RepoSchemaVersion(VConn) >= 2 then
+    VFrom := RepoSchemaVersion(VConn);
+    if VFrom >= REPO_SCHEMA_VERSION then
     begin
       Result.AlreadyCurrent := True;
       Exit;
     end;
-    Result.CalcRows := Integer(VConn.ExecSQLScalar(CALC_ROWS_SQL));
-    Result.Plan := Format(PLAN_FMT, [Result.CalcRows]);
+    VRows := CountRepoRowChanges(VConn, VFrom);
+    Result.CalcRows := VRows.CalcRows;
+    Result.AlignmentRows := VRows.AlignmentRows;
+    Result.EventRows := VRows.EventRows;
+    Result.Plan := PlanText(VFrom, Result);
     if not pApply then
       Exit;
     Result.BackupFile := pFileName + '.before-migrate-' + FormatDateTime('yyyymmdd-hhnnss', Now) + '.txt';
     BackupRepository(VConn, Result.BackupFile);
-    ApplyMigration(VConn);
+    ApplyMigration(VConn, VFrom);
     Result.Applied := True;
   finally
     VConn.Free;
