@@ -203,8 +203,9 @@ end.
 Write-Ascii (Join-Path $drag 'drag-lint-project.json') '{ "ownRoots": [".."] }'
 $cfgOn  = Join-Path $repo 'drag-lint-lint.json'
 $cfgOff = Join-Path $repo 'drag-lint-lint-noexclude.json'
-Write-Ascii $cfgOn  '{ "exclude_paths": ["*\\third_party\\*"], "enabled": ["global-only-uses-edge", "uses-global-census"] }'
-Write-Ascii $cfgOff '{ "exclude_paths": [], "enabled": ["global-only-uses-edge", "uses-global-census"] }'
+# own_paths (1.54 OWNFILTER): the folder NAME third_party would be skipped on its own, so admit it -- exclude_paths must still win
+Write-Ascii $cfgOn  '{ "own_paths": ["*\\third_party\\*"], "exclude_paths": ["*\\third_party\\*"], "enabled": ["global-only-uses-edge", "uses-global-census"] }'
+Write-Ascii $cfgOff '{ "own_paths": ["*\\third_party\\*"], "exclude_paths": [], "enabled": ["global-only-uses-edge", "uses-global-census"] }'
 
 $db    = Join-Path $drag 'app.sqlite'
 $proj  = Join-Path $app 'App.dpr'

@@ -93,7 +93,9 @@ try {
 #    folder OUTSIDE the resolved project folder must be skipped in the bare
 #    run and restored under --lint-third-party -- that only happens if the
 #    manifest fallback actually ran, since with no anchor at all (LintAnchorDir
-#    returning '') TOwnRoots.Load('') is inactive and skips nothing.
+#    returning '') TOwnRoots.Load('') is inactive and skips nothing. Since 1.54
+#    OWNFILTER an UNDECLARED default skips nothing that is not marked as
+#    third-party, so the fixture declares its own root.
 $work5 = Join-Path $env:TEMP ('draglint_ownroots_manifest_' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $work5 | Out-Null
 try {
@@ -102,6 +104,8 @@ try {
     $outM  = Join-Path $work5 'out'; New-Item -ItemType Directory $outM | Out-Null
     Set-Content -LiteralPath (Join-Path $projM 'AppM.dproj') -Value '<Project/>' -NoNewline
     Set-Content -LiteralPath (Join-Path $projM 'AppM.pas')   -Value "unit AppM;`r`ninterface`r`nimplementation`r`nend."
+    New-Item -ItemType Directory (Join-Path $projM '_D-RAG') | Out-Null
+    Set-Content -LiteralPath (Join-Path $projM '_D-RAG\drag-lint-project.json') -Value '{ "ownRoots": ["."] }' -NoNewline
     Set-Content -LiteralPath (Join-Path $venM  'VendorM.pas') -Value "unit VendorM;`r`ninterface`r`nimplementation`r`nend."
 
     # Explicit db, deliberately OUTSIDE any _D-RAG folder.

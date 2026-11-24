@@ -138,6 +138,7 @@ uses
   DRagLint.Lint.InitSections in '..\lint\DRagLint.Lint.InitSections.pas',
   DRagLint.Lint.RefTypeRules in '..\lint\DRagLint.Lint.RefTypeRules.pas',
   DRagLint.Lint.SharedScope in '..\lint\DRagLint.Lint.SharedScope.pas',
+  DRagLint.Lint.OwnFilter in '..\lint\DRagLint.Lint.OwnFilter.pas',
   DRagLint.Lint.MarkerUnion in '..\lint\DRagLint.Lint.MarkerUnion.pas',
   DRagLint.Lint.ReadNeverAssigned in '..\lint\DRagLint.Lint.ReadNeverAssigned.pas',
   DRagLint.Lint.OpaqueToAnalysis in '..\lint\DRagLint.Lint.OpaqueToAnalysis.pas',

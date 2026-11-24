@@ -2,7 +2,12 @@
   run_ownroots_default_note.ps1 -- when <project>\_D-RAG\drag-lint-project.json
   is ABSENT, lint-all must say which ownRoots it defaulted to (L2).
 
-  THE DEFECT. The declaration file is usually untracked, so a fresh clone or a git
+  1.54 OWNFILTER (owner ruling): an undeclared default no longer hides the files outside the
+  project folder -- a shared folder beside the project is the owner's own code. Only what something
+  marks as third-party is skipped (run_v154_OWNFILTER.ps1), so the NOTE now says the unmarked files
+  outside ARE linted, and A0/A4/A5 assert that.
+
+  THE DEFECT (before 1.54). The declaration file is usually untracked, so a fresh clone or a git
   worktree does not have it. TOwnRoots then defaults -- correctly, per the
   house rule -- to the project file's own folder. For a project whose .dproj
   sits in a SUBFOLDER (this repo's src\cli) that default classifies almost the
@@ -15,7 +20,7 @@
   FIXTURE: the worktree shape. app\App.dpr is the project; shared\U2.pas is a
   real member of its closure OUTSIDE the project folder.
     A. no declaration -> the loud NOTE names the missing file, the defaulted
-       root and the skipped count; U2 is not scanned.
+       root and the count outside it; U2 IS scanned.
     B. declaration ["..\\"] -> no note; U2 IS scanned (positive control: the
        declaration is what widens the run, so the note was about the right thing).
     C. no declaration, nothing outside -> the one-line "ownRoots = ... (DEFAULT"
@@ -109,14 +114,14 @@ function LintAll {
 
 Write-Host 'A. no declaration, a member outside the project folder' -ForegroundColor Cyan
 $a = LintAll
-Check 'A0 CONTROL: the outside member was skipped' ($a -match '1 file\(s\) outside the project''s own roots skipped') 'if not, the fixture does not have the worktree shape'
+Check 'A0 the outside member is NOT skipped' ($a -notmatch 'outside the project''s own roots skipped') ''
 Check 'A1 the NOTE names the missing declaration' ($a -match 'NOTE: .*drag-lint-project\.json does not exist') 'RED = the default was applied in silence'
 # 1.26.4 (47ac0b86) corrected the note: the repo does not gitignore the file, it
 # is usually UNTRACKED. The assertion follows the corrected wording.
 Check 'A2 and says it is untracked / absent in a worktree' ($a -match 'usually untracked, so a fresh clone or a git worktree lacks it') ''
 Check 'A3 and names the DEFAULTED root' ($a -match ('ownRoots DEFAULTED to the project folder ' + [regex]::Escape($app))) ''
-Check 'A4 and the skipped count' ($a -match 'the 1 file\(s\) outside it were treated as third-party') ''
-Check 'A5 U2 was not linted' (-not ($a -match 'U2\.pas:\d+:\d+')) ''
+Check 'A4 and the count outside it' ($a -match 'the 1 file\(s\) outside it that nothing marks as third-party ARE linted') ''
+Check 'A5 U2 is linted' ($a -match 'U2\.pas:\d+:\d+\s+\[\w+\]\s+unused-local') ''
 
 Write-Host ''
 Write-Host 'B. declaration present -> no note, and the outside member IS linted' -ForegroundColor Cyan

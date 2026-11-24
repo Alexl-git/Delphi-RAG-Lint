@@ -178,6 +178,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.InitSections.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.RefTypeRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.SharedScope.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.OwnFilter.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.MarkerUnion.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ReadNeverAssigned.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.OpaqueToAnalysis.pas"/>

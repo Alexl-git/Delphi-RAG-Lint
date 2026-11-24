@@ -152,8 +152,10 @@ function LintAll {
   finally { Pop-Location }
 }
 $u2 = 'U2\.pas:\d+:\d+\s+\[\w+\]\s+unused-local'
+# 1.54 OWNFILTER: an undeclared default no longer hides U2, so the control is a NARROW declaration
+[IO.File]::WriteAllText((Join-Path $cli '_D-RAG\drag-lint-project.json'), '{ "ownRoots": ["."] }', [Text.Encoding]::ASCII)
 $c0 = LintAll
-Check 'C0 CONTROL: without a declaration the U2 finding is dropped' (-not ($c0 -match $u2)) 'if it shows, the fixture lost the worktree shape'
+Check 'C0 CONTROL: with ownRoots ["."] the U2 finding is dropped' (-not ($c0 -match $u2)) 'if it shows, the fixture lost the worktree shape'
 if ($decl) { [IO.File]::WriteAllText((Join-Path $cli '_D-RAG\drag-lint-project.json'), $decl, [Text.Encoding]::ASCII) }
 $c1 = LintAll
 Check 'C1 with the TRACKED declaration the U2 finding is reported' ($c1 -match $u2) 'RED = the repo declaration does not widen lint-all'
