@@ -430,14 +430,53 @@ begin
     if (N.Child(I).NodeType <> 'defProc') and SqlDeclaresLocal(N.Child(I), AName, ASrc) then Exit(True);
 end;
 
+{ True when an identifier named AName occurs anywhere under N (an argument expression). }
+function SqlMentions(const N: TTSNode; const AName: string; const ASrc: TBytes): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if N.IsNull then Exit;
+  if (N.NodeType = 'identifier') and SameText(SqlNodeText(N, ASrc), AName) then Exit(True);
+  for I:= 0 to N.ChildCount - 1 do
+    if SqlMentions(N.Child(I), AName, ASrc) then Exit(True);
+end;
+
+{ True for the few callees that only READ their arguments (never var / out). }
+function SqlCalleeOnlyReads(const ACallee: string): Boolean;
+const
+  READERS: array[0..5] of string = ('IntToStr', 'IntToHex', 'Length', 'Trim', 'Write', 'Writeln');
+var
+  S: string;
+begin
+  Result:= False;
+  for S in READERS do
+    if SameText(ACallee, S) then Exit(True);
+end;
 procedure SqlScanAssigns(const N: TTSNode; const AName: string; const ASrc: TBytes; var ASafe, AUnsafe: Integer);
 var
   I     : Integer;
   Lhs   : TTSNode;
   Rhs   : TTSNode;
+  Ent   : TTSNode;
   Callee: string;
 begin
   if N.IsNull then Exit;
+  { A call that takes the identifier as an argument may bind it to a var / out parameter and
+    rewrite it with anything, so it counts as an unknown assignment. Calls that only read it
+    (IntToStr, Length, Trim, Write, Writeln) do not. }
+  if N.NodeType = 'exprCall' then
+  begin
+    Ent:= N.ChildByField('entity');
+    Callee:= SqlNodeText(Ent, ASrc);
+    if not SqlCalleeOnlyReads(Callee) then
+      for I:= 0 to N.ChildCount - 1 do
+        if (N.Child(I) = Ent) = False and SqlMentions(N.Child(I), AName, ASrc) then
+        begin
+          Inc(AUnsafe);
+          Break;
+        end;
+  end;
   if N.NodeType = 'assignment' then
   begin
     Lhs:= N.ChildByField('lhs');
@@ -468,6 +507,12 @@ begin
   Result:= (Safe > 0) and (Unsafe = 0) and SqlDeclaresLocal(ARoutine, Name, ASrc);
 end;
 
+{ True when N is a real node of the given type. }
+function SqlNodeIs(const N: TTSNode; const AType: string): Boolean;
+begin
+  Result:= (not N.IsNull) and (N.NodeType = AType);
+end;
+
 procedure SqlWalkConcats(const N, ARoutine: TTSNode; const ASrc: TBytes; ALine: Integer; var AFound, ABad: Integer);
 var
   I      : Integer;
@@ -484,8 +529,7 @@ begin
     Op := N.ChildByField('operator');
     Lhs:= N.ChildByField('lhs');
     Rhs:= N.ChildByField('rhs');
-    if (not Op.IsNull) and (Op.NodeType = 'kAdd') and (not Lhs.IsNull) and (Lhs.NodeType = 'literalString')
-       and (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
+    if SqlNodeIs(Op, 'kAdd') and SqlNodeIs(Lhs, 'literalString') and SqlNodeIs(Rhs, 'identifier') then
     begin
       Inc(AFound);
       if not SqlRhsIsDigitsOnly(Routine, Rhs, ASrc) then Inc(ABad);

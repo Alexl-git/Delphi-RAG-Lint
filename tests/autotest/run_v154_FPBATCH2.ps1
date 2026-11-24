@@ -10,9 +10,10 @@
     3 read-never-assigned           global + field written only in a SIBLING project   | never written anywhere fires
     4 used-before-assignment        array filled in `for .. to High(x)`               | no store / store outside a loop fires
     6 duplicate-global-decl         message must not say "identical" when the signature names other declarations
-    8 try-except-swallowed          E.Message stored in a field / global               | local, unrelated field, other code fire
 
-  Class 4 covers the ARRAY part only (case-without-else is UNSURE in the triage and is not touched).
+  Class 8 (try-except-swallowed credits a field/global receiving E.Message) was BACKED OUT: it reversed owner ruling R22 (1.20.6);
+  the patch is kept in C:\TEMP\claude\lanes\v154\FPBATCH2\class8.patch for the owner.
+  Class 4 covers the ARRAY part only (a dynamic array is never reported at all, so a SetLength between loop and read has no control) (case-without-else is UNSURE in the triage and is not touched).
   Usage: pwsh -File tests\autotest\run_v154_FPBATCH2.ps1 [-Exe <engine>] [-Rules <rules dir>]
 #>
 [CmdletBinding()]
@@ -124,115 +125,31 @@ begin
   S:= 'DELETE FROM T WHERE ID=' + F; // TP
 end;
 
+procedure TpReassignedFromParamInBranch(Id: Integer; Flag: Boolean; AParam: string);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  if Flag then F:= AParam;
+  S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
+
+procedure Mutate(var AText: string);
+begin
+  AText:= AText + 'x';
+end;
+
+procedure TpPassedAsVar(Id: Integer);
+var
+  F, S: string;
+begin
+  F:= IntToStr(Id);
+  Mutate(F);
+  S:= 'DELETE FROM T WHERE ID=' + F; // TP
+end;
 end.
 '@
 Check-Exact 'sql-injection-concat' (Run-Lint $f1 'sql-injection-concat') 'sql-injection-concat' $f1
-
-# ---------------------------------------------------------------- 8 try-except-swallowed
-# INT-W2: class 8 is HELD BACK until the owner rules on R22 (a field / global that gets E.Message). The three Fp* routines
-# below therefore carry a TPNEXT mark; revert the INT-W2 hold commit to bring class 8 back.
-Write-Host 'class 8: try-except-swallowed (held back: the Fp* routines still fire)' -ForegroundColor Cyan
-$f8 = Join-Path $WorkDir 'uSwallow8.pas'
-Write-Ascii $f8 @'
-unit uSwallow8;
-
-interface
-
-type
-  THolder = class
-  private
-    FDescription: string;
-    FCount: Integer;
-  public
-    procedure FpFieldGetsMessage;
-    procedure TpFieldGetsUnrelatedValue;
-    procedure TpRunsOtherCodeOnly;
-    procedure FpFieldGetsConcatenatedMessage;
-  end;
-
-implementation
-
-uses System.SysUtils, System.Classes;
-
-var
-  GLast: string;
-
-procedure THolder.FpFieldGetsMessage;
-begin
-  try
-    Writeln('x'); // TPNEXT
-  except
-    on E: Exception do
-      FDescription:= E.Message;
-  end;
-end;
-
-procedure THolder.FpFieldGetsConcatenatedMessage;
-begin
-  try
-    Writeln('x'); // TPNEXT
-  except
-    on e: Exception do
-    begin
-      FDescription:= 'DB is possibly corrupted. ' + e.Message;
-    end;
-  end;
-end;
-
-procedure FpGlobalGetsMessage;
-begin
-  try
-    Writeln('x'); // TPNEXT
-  except
-    on E: Exception do
-      GLast:= E.Message;
-  end;
-end;
-
-procedure THolder.TpFieldGetsUnrelatedValue;
-begin
-  try
-    Writeln('x'); // TPNEXT
-  except
-    on E: Exception do
-      FCount:= 1;
-  end;
-end;
-
-procedure THolder.TpRunsOtherCodeOnly;
-begin
-  try
-    Writeln('x'); // TPNEXT
-  except
-    on E: Exception do
-      Sleep(10);
-  end;
-end;
-
-procedure TpLocalNeverRead;
-var
-  Dummy: string;
-begin
-  try
-    Writeln('x'); // TPNEXT
-  except
-    on E: Exception do
-      Dummy:= E.Message;
-  end;
-end;
-
-procedure TpEmpty;
-begin
-  try
-    Writeln('x'); // TPNEXT
-  except
-
-  end;
-end;
-
-end.
-'@
-Check-Exact 'try-except-swallowed' (Run-Lint $f8 'try-except-swallowed') 'try-except-swallowed' $f8
 
 # ---------------------------------------------------------------- 4 used-before-assignment (arrays)
 Write-Host 'class 4: used-before-assignment (array filled in a High() loop)' -ForegroundColor Cyan
@@ -289,6 +206,65 @@ begin
   Writeln(Integer(Fields[0])); // TP
   for I:= 0 to High(PlanCols) do
     Fields[I]:= nil;
+end;
+
+procedure TpLoopOverOtherArrayStoresThirdArray(const PlanCols: TArray<Integer>);
+var
+  Fields, Others: array[0..3] of TObject;
+  I: Integer;
+begin
+  for I:= 0 to High(PlanCols) do
+    Others[I]:= nil;
+  Writeln(Integer(Fields[0])); // TP
+end;
+
+procedure TpSkipBeforeStore(const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  for I:= 0 to High(PlanCols) do
+  begin
+    if PlanCols[I] = 0 then Continue;
+    Fields[I]:= nil;
+  end;
+  Writeln(Integer(Fields[0])); // TP
+end;
+
+procedure TpBreakBeforeStore(const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  for I:= 0 to High(PlanCols) do
+  begin
+    if PlanCols[I] = 0 then Break;
+    Fields[I]:= nil;
+  end;
+  Writeln(Integer(Fields[0])); // TP
+end;
+
+procedure TpStoreOnlyInsideIf(const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  for I:= 0 to High(PlanCols) do
+    if PlanCols[I] <> 0 then
+      Fields[I]:= nil;
+  Writeln(Integer(Fields[0])); // TP
+end;
+
+procedure TpReadInsideLoopBeforeStore(const PlanCols: TArray<Integer>);
+var
+  Fields: array[0..3] of TObject;
+  I: Integer;
+begin
+  for I:= 0 to High(PlanCols) do
+  begin
+    Writeln(Integer(Fields[I])); // TP
+    Fields[I]:= nil;
+  end;
 end;
 
 end.

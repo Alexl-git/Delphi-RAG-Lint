@@ -2265,8 +2265,9 @@ end;
   the compiler-style definite assignment cannot know the loop ran, so a later
   Fields[J] read is flagged. Recognised only when ALL of: the read sits AFTER a
   complete for statement (its end precedes the read), whose bound mentions
-  High( or Length(, and whose body holds an assignment whose target is an element
-  of AName (AName[..]). A read with no such store anywhere before it, a store
+  High( or Length(, and whose body holds, as one of its own top-level statements
+  and before any Break / Continue / Exit, an assignment whose target is an element of AName (AName[..]);
+  a store under an if / case or behind a jump may be skipped and stays reported. A read with no such store anywhere before it, a store
   outside a loop, and a loop whose bound is neither High nor Length all stay
   reported. Weaker than a proof on purpose (the loop may not run), the same trade
   ReadIsCountBoundedElement makes; the array part of the triage only. }
@@ -2275,6 +2276,26 @@ function ReadIsLoopFilledElement(const AItem, ARoutine: TTSNode; const AName: st
 var
   Prefix: string;
 
+  function HasJump(const N: TTSNode): Boolean;
+  var
+    I: Integer;
+    K: string;
+  begin
+    Result := False;
+    if N.IsNull then Exit;
+    if N.NodeType = 'identifier' then
+    begin
+      K := LowerCase(Trim(NodeStr(N, ASrc)));
+      Exit((K = 'break') or (K = 'continue') or (K = 'exit'));
+    end;
+    for I := 0 to N.NamedChildCount - 1 do
+      if HasJump(N.NamedChild(I)) then Exit(True);
+  end;
+
+  { True when the body stores an element of AName as one of ITS OWN top-level statements (nested
+    begin..end blocks are looked through) and no statement before that store can Break / Continue /
+    Exit. A store under an if / case / inner loop, or behind a jump, may be skipped on some
+    iteration: the element is then not assigned and the read stays reported. }
   function StoresElement(const N: TTSNode): Boolean;
   var
     I: Integer;
@@ -2285,11 +2306,15 @@ var
     if N.NodeType = 'assignment' then
     begin
       L := N.ChildByField('lhs');
-      if (not L.IsNull)
-         and TRegEx.Replace(LowerCase(NodeStr(L, ASrc)), '\s+', '').StartsWith(Prefix) then Exit(True);
+      Exit((not L.IsNull)
+           and TRegEx.Replace(LowerCase(NodeStr(L, ASrc)), '\s+', '').StartsWith(Prefix));
     end;
+    if (N.NodeType <> 'block') and (N.NodeType <> 'statements') then Exit;
     for I := 0 to N.NamedChildCount - 1 do
+    begin
       if StoresElement(N.NamedChild(I)) then Exit(True);
+      if HasJump(N.NamedChild(I)) then Exit;
+    end;
   end;
 
   function Walk(const N: TTSNode): Boolean;
