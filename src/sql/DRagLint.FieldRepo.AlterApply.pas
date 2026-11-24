@@ -79,11 +79,16 @@ function SelectAlterIds(const pPlan: TFrAlterPlan; const pLines: TArray<string>)
 /// <param name="pPlan">The pre-checked plan.</param>
 /// <param name="pTicket">The ticket of RunPrechecks.</param>
 /// <param name="pIds">Ids to apply.</param>
+/// <param name="pBeforeWrite">Runs once, after every refusal check and before the first write, when there is something to
+/// apply (the backup of ruling R9). An exception of it goes to the caller and nothing is executed.</param>
 /// <returns>The state of every group; a failure inside a group is reported there, not raised.</returns>
 /// <exception cref="EFrAlterRefused">Nothing was executed: no ticket, a ticket of another connection or plan, the
-/// table changed since the plan was made, an unknown or blocked id, or a missing prerequisite.</exception>
+/// table changed since the plan was made (asked again after pBeforeWrite), an unknown or blocked id, or a missing
+/// prerequisite.</exception>
+/// <remarks>A backup takes time: what changed in the DATA meanwhile is not scanned again. Firebird itself refuses a NOT
+/// NULL that has NULLs by then, and the safe path compares every row in its swap transaction.</remarks>
 function ApplyAlterPlan(const pProvider: IFrDbProvider; const pPlan: TFrAlterPlan; const pTicket: TFrPrecheckTicket;
-  const pIds: TArray<Integer>): TFrAlterOutcome;
+  const pIds: TArray<Integer>; const pBeforeWrite: TProc = nil): TFrAlterOutcome;
 
 implementation
 
@@ -407,7 +412,7 @@ begin
 end;
 
 function ApplyAlterPlan(const pProvider: IFrDbProvider; const pPlan: TFrAlterPlan; const pTicket: TFrPrecheckTicket;
-  const pIds: TArray<Integer>): TFrAlterOutcome;
+  const pIds: TArray<Integer>; const pBeforeWrite: TProc): TFrAlterOutcome;
 var
   VGroups: TArray<TGroup>;
   VFailed: Boolean;
@@ -418,6 +423,11 @@ begin
   CheckSelection(pPlan, pIds);
   if Length(pIds) = 0 then
     Exit;
+  if Assigned(pBeforeWrite) then
+  begin
+    pBeforeWrite();
+    CheckTicket(pProvider, pPlan, pTicket);
+  end;
   VGroups := BuildGroups(pPlan, pIds);
   VFailed := False;
   for i := 0 to High(VGroups) do

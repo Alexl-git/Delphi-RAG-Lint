@@ -12,7 +12,9 @@ interface
 /// <param name="pJson">--json: one JSON object on stdout.</param>
 /// <returns>0 = ok (a dry run included, and an apply with nothing to do); 1 = bad arguments, no such table, a refused or
 /// failed apply (the report is still printed when groups ran).</returns>
-/// <remarks>DRY RUN unless --apply is on the command line; --select &lt;file&gt; only chooses, it does not write (with --apply
+/// <remarks>An apply first makes a verified backup of the database (DRagLint.CLI.RepoBackup: --backup-dir, --verify
+/// full|quick; --project names the project whose setting gives the folder); when that fails nothing is changed.
+/// DRY RUN unless --apply is on the command line; --select &lt;file&gt; only chooses, it does not write (with --apply
 /// it must hold the "plan &lt;hash&gt;" line of the dry run its ids come from; another plan is refused);
 /// --dry-run wins over --apply. The --connection keys are checked before anything is opened. The pre-checks run in the same call, on the same connection, before any write. A
 /// password of the connection string is masked in every message. Other flags: --safe-path, --rename OLD=NEW[,..],
@@ -24,7 +26,6 @@ implementation
 uses
   System.SysUtils,
   System.IOUtils,
-  System.StrUtils,
   FireDAC.Comp.Client,
   DRagLint.Sql.FbConnString,
   DRagLint.FieldRepo.Schema,
@@ -35,14 +36,14 @@ uses
   DRagLint.FieldRepo.AlterFacts,
   DRagLint.FieldRepo.AlterApply,
   DRagLint.FieldRepo.AlterReport,
+  DRagLint.FieldRepo.FbBackup,
   DRagLint.FieldRepo.SchemaHook,
+  DRagLint.CLI.RepoBackup,
   DRagLint.FieldRepo.SchemaHookMicronite; // registers --hook micronite
 
 const
   EXIT_OK = 0;
   EXIT_FAIL = 1;
-  MASK = '***';
-  SECRET_KEYS: array[0..3] of string = ('Password', 'Pwd', 'Pass', 'Passwd');
 
 type
   { What the command line asks for. }
@@ -75,22 +76,6 @@ begin
       Exit(ParamStr(VI + 1));
 end;
 
-{ Every password value of the connection string, replaced by MASK in pText. }
-function ScrubSecrets(const pText, pConnection: string): string;
-var
-  VPair, VValue: string;
-  VEq: Integer;
-begin
-  Result := pText;
-  for VPair in pConnection.Split([';'], TStringSplitOptions.ExcludeEmpty) do
-  begin
-    VEq := Pos('=', VPair);
-    VValue := Trim(Copy(VPair, VEq + 1, MaxInt));
-    if (VEq > 1) and (VValue <> '') and MatchText(Trim(Copy(VPair, 1, VEq - 1)), SECRET_KEYS) then
-      Result := StringReplace(Result, VValue, MASK, [rfReplaceAll, rfIgnoreCase]);
-  end;
-end;
-
 function ReadArgs: TAlterArgs;
 var
   VName: string;
@@ -120,7 +105,9 @@ begin
   else if not TFile.Exists(pPath) then
     Result := 'the repository does not exist: ' + pPath
   else if (pArgs.SelectFile <> '') and not TFile.Exists(pArgs.SelectFile) then
-    Result := 'the --select file does not exist: ' + pArgs.SelectFile;
+    Result := 'the --select file does not exist: ' + pArgs.SelectFile
+  else
+    Result := BackupArgsProblem;
 end;
 
 function ReadRepository(const pPath, pTable: string): TFrRepoTable;
@@ -216,7 +203,11 @@ begin
   VIds := ChosenIds(VReport.Plan, pArgs.SelectFile, pArgs.Apply);
   if pArgs.Apply then
   begin
-    VReport.Outcome := ApplyAlterPlan(VProvider, VReport.Plan, VTicket, VIds);
+    VReport.Outcome := ApplyAlterPlan(VProvider, VReport.Plan, VTicket, VIds,
+      procedure
+      begin
+        VReport.Backup := BackupBeforeApply(pConnection, pArgs.Table);
+      end);
     ScrubOutcome(VReport.Outcome, pConnection);
     VReport.HasOutcome := True;
     Result := if VReport.Outcome.Success then EXIT_OK else EXIT_FAIL;
@@ -238,6 +229,8 @@ begin
     else
     begin
       RequireFbConnectionSafe(pConnection);
+      if VArgs.Apply then
+        RequireLocalFbServer(pConnection); // a backup is not possible: found before anything is opened
       Result := AlterTable(VArgs, pPath, pConnection, pJson);
     end;
   except

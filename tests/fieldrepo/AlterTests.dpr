@@ -1094,6 +1094,64 @@ begin
   Check('B28 a change without its prerequisite is refused', Refused(vProvider, vPlan, RunPrechecks(vProvider, vPlan), [2], 'needs change 1') and not Wrote(vFake));
 end;
 
+{ R9: the backup runs once, after every refusal and before the first write; its failure stops everything. }
+procedure TestBackupGate;
+var
+  vLive: TFrTableFacts;
+  vPlan: TFrAlterPlan;
+  vFake: TFakeProvider;
+  vProvider: IFrDbProvider;
+  vTicket: TFrPrecheckTicket;
+  vOutcome: TFrAlterOutcome;
+  vReport: TFrAlterReport;
+  vRuns: Integer;
+  vWroteBefore: Boolean;
+  vBackup: TProc;
+
+  procedure Start;
+  begin
+    vRuns := 0;
+    vFake := TFakeProvider.Create(vLive);
+    vProvider := vFake;
+    vFake.FAfter := Live([LCol('A', Ty(T_VARCHAR, 20)), LCol('B', Ty(T_INT))]);
+    vTicket := RunPrechecks(vProvider, vPlan);
+  end;
+
+begin
+  vLive := Live([LCol('A', Ty(T_VARCHAR, 10)), LCol('B', Ty(T_INT))]);
+  vPlan := Plan(Repo([RCol('A', Ty(T_VARCHAR, 20))]), vLive, Opt);
+  vBackup := procedure
+    begin
+      Inc(vRuns);
+      vWroteBefore := Wrote(vFake);
+    end;
+  Start;
+  vOutcome := ApplyAlterPlan(vProvider, vPlan, vTicket, [1], vBackup);
+  Check('B40 the backup runs once, before the first write', vOutcome.Success and (vRuns = 1) and not vWroteBefore and Wrote(vFake), IntToStr(vRuns));
+  Start;
+  Check('B41 a failing backup: the error goes out, nothing executed', Raises(procedure begin
+    ApplyAlterPlan(vProvider, vPlan, vTicket, [1], procedure begin raise EInOutError.Create('backup failed') end) end, 'backup failed') and not Wrote(vFake));
+  Start;
+  ApplyAlterPlan(vProvider, vPlan, vTicket, [], vBackup);
+  Check('B42 nothing to apply: no backup', vRuns = 0);
+  Start;
+  Check('B43 a refused id: no backup', Raises(procedure begin ApplyAlterPlan(vProvider, vPlan, vTicket, [9], vBackup) end, 'unknown change id') and (vRuns = 0));
+  Start;
+  Check('B44 the table changed while the backup ran: refused, nothing executed', Raises(procedure begin
+    ApplyAlterPlan(vProvider, vPlan, vTicket, [1], procedure begin vFake.FLive.Columns[1].DataType := Ty(T_BIG) end) end, 'changed since') and not Wrote(vFake));
+  vReport := ReportOf(vPlan);
+  Check('B45 no backup, no backup line', not string.Join('|', RenderAlterText(vReport)).Contains('backup') and not RenderAlterJson(vReport).Contains('"backup"'));
+  vReport.Backup.FileName := 'C:\b\x.fbk';
+  vReport.Backup.Size := 5;
+  vReport.Backup.Verified := 'full';
+  vReport.Backup.Tables := 3;
+  vReport.Backup.Rows := 7;
+  vReport.Backup.TotalFiles := 2;
+  vReport.Backup.TotalSize := 11;
+  Check('B46 the report names the backup and the total', string.Join('|', RenderAlterText(vReport)).Contains('backup: C:\b\x.fbk (5 bytes, verified full: 3 table(s) and view(s) compared, 7 row(s))') and
+    string.Join('|', RenderAlterText(vReport)).Contains('2 file(s), 11 bytes in total') and RenderAlterJson(vReport).Contains('"total_size":11'));
+end;
+
 type
   TTestHook = class(TFrSchemaHook)
   public
@@ -1854,6 +1912,7 @@ begin
       TestReviewPlan;
       TestApplyGate;
       TestApplySequence;
+      TestBackupGate;
       TestHooks;
       TestReport;
       TestRepoFacts;

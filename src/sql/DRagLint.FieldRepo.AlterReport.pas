@@ -6,6 +6,7 @@ unit DRagLint.FieldRepo.AlterReport;
 interface
 
 uses
+  System.JSON,
   DRagLint.FieldRepo.Alter,
   DRagLint.FieldRepo.AlterApply;
 
@@ -14,6 +15,23 @@ const
   PLAN_PREFIX = 'plan ';
 
 type
+  /// <summary>The backup an apply made before its first write.</summary>
+  TFrAlterBackup = record
+    /// <summary>'' = no backup was made.</summary>
+    FileName: string;
+    Size: Int64;
+    /// <summary>'full' or 'quick'.</summary>
+    Verified: string;
+    /// <summary>Tables and views compared, rows of the altered table compared (-1 = not compared).</summary>
+    Tables: Integer;
+    Rows: Int64;
+    /// <summary>All recorded backups that are still on disk.</summary>
+    TotalFiles: Integer;
+    TotalSize: Int64;
+    /// <summary>A temporary database that could not be removed; '' = none.</summary>
+    Leftover: string;
+  end;
+
   /// <summary>What the report says beside the plan.</summary>
   TFrAlterReport = record
     Plan: TFrAlterPlan;
@@ -26,7 +44,18 @@ type
     /// <summary>Set when an apply ran.</summary>
     HasOutcome: Boolean;
     Outcome: TFrAlterOutcome;
+    Backup: TFrAlterBackup;
   end;
+
+/// <summary>Renders a backup as text lines.</summary>
+/// <param name="pBackup">The backup.</param>
+/// <returns>The file with size and verification, then the total of all recorded backups.</returns>
+function RenderBackupText(const pBackup: TFrAlterBackup): TArray<string>;
+
+/// <summary>Renders a backup as a JSON object.</summary>
+/// <param name="pBackup">The backup.</param>
+/// <returns>file, size, verified, tables, rows, leftover, total_files, total_size; the caller frees it.</returns>
+function BackupToJson(const pBackup: TFrAlterBackup): TJSONObject;
 
 /// <summary>Renders a report as text lines.</summary>
 /// <param name="pReport">The report.</param>
@@ -37,7 +66,7 @@ function RenderAlterText(const pReport: TFrAlterReport): TArray<string>;
 /// <param name="pReport">The report.</param>
 /// <returns>direction, table, database, dialect, hook, repository, dry_run, count, blocked, changes[id, op, kind,
 /// target, prop, old, new, checked, blocked, depends_on[], ddl[], safe{}, prechecks[], notes[], dependents[]], hook_before[],
-/// hook_after[], notes[], plan_hash, outcome{success, groups[], problems[], not_applied[]}. plan_hash is what a --select
+/// hook_after[], notes[], plan_hash, backup{file, size, verified, tables, rows, leftover, total_files, total_size}, outcome{success, groups[], problems[], not_applied[]}. plan_hash is what a --select
 /// file names in its "plan" line.</returns>
 function RenderAlterJson(const pReport: TFrAlterReport): string;
 
@@ -45,13 +74,38 @@ implementation
 
 uses
   System.SysUtils,
-  System.JSON,
   System.Generics.Collections,
   DRagLint.FieldRepo.ChangeSet;
 
 const
   KIND_NAMES: array[TFrAlterKind] of string = ('create-domain', 'rename', 'type', 'nullability', 'add', 'drop', 'safe-type', 'order');
   INDENT = '    ';
+
+function RenderBackupText(const pBackup: TFrAlterBackup): TArray<string>;
+var
+  VCompared: string;
+begin
+  VCompared := if pBackup.Tables > 0 then Format(': %d table(s) and view(s) compared', [pBackup.Tables]) else '';
+  if pBackup.Rows >= 0 then
+    VCompared := VCompared + Format(', %d row(s)', [pBackup.Rows]);
+  Result := [Format('backup: %s (%d bytes, verified %s%s)', [pBackup.FileName, pBackup.Size, pBackup.Verified, VCompared]),
+    Format('backups on disk: %d file(s), %d bytes in total (repo backup purge --keep N)', [pBackup.TotalFiles, pBackup.TotalSize])];
+  if pBackup.Leftover <> '' then
+    Result := Result + ['the temporary database of the verification could not be removed: ' + pBackup.Leftover];
+end;
+
+function BackupToJson(const pBackup: TFrAlterBackup): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.AddPair('file', pBackup.FileName);
+  Result.AddPair('size', TJSONNumber.Create(pBackup.Size));
+  Result.AddPair('verified', pBackup.Verified);
+  Result.AddPair('tables', TJSONNumber.Create(pBackup.Tables));
+  Result.AddPair('rows', TJSONNumber.Create(pBackup.Rows));
+  Result.AddPair('leftover', pBackup.Leftover);
+  Result.AddPair('total_files', TJSONNumber.Create(pBackup.TotalFiles));
+  Result.AddPair('total_size', TJSONNumber.Create(pBackup.TotalSize));
+end;
 
 function JsonStrings(const pItems: TArray<string>): TJSONArray;
 var
@@ -195,6 +249,8 @@ begin
     VRoot.AddPair('hook_after', JsonStrings(pReport.Plan.HookAfter));
     VRoot.AddPair('notes', JsonStrings(pReport.Plan.Notes));
     VRoot.AddPair('plan_hash', pReport.Plan.Hash);
+    if pReport.Backup.FileName <> '' then
+      VRoot.AddPair('backup', BackupToJson(pReport.Backup));
     if pReport.HasOutcome then
     begin
       VOutcome := JsonOutcome(pReport.Outcome);
@@ -266,6 +322,8 @@ begin
     end;
   Result := Result + Prefixed('hook before: ', pReport.Plan.HookBefore) + Prefixed('hook after: ', pReport.Plan.HookAfter) +
     Prefixed('note: ', pReport.Plan.Notes) + [PLAN_PREFIX + pReport.Plan.Hash];
+  if pReport.Backup.FileName <> '' then
+    Result := Result + RenderBackupText(pReport.Backup);
   if pReport.HasOutcome then
   begin
     Result := Result + OutcomeLines(pReport.Outcome);
