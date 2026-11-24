@@ -189,6 +189,12 @@ $g4 = LintAll @('--fix', '--apply', '--no-compile-gate', '--rule', 'unused-local
 Check 'G4 own_paths does not widen the write scope: the file outside the own roots is unchanged' ([IO.File]::ReadAllText("$repo\COMMON\UCommon.pas") -eq $before) $g4
 Check 'G5 CONTROL without --fix own_paths still reports the file' ((Hits (LintAll) 'UCommon') -eq 2)
 W $cfg '{}'
+# --lint-third-party widens the REPORT only: the write scope stays the own roots
+$g6 = LintAll @('--lint-third-party', '--fix', '--apply', '--no-compile-gate', '--rule', 'unused-local')
+Check 'G6 --lint-third-party --fix never writes outside the own roots' ([IO.File]::ReadAllText("$repo\COMMON\UCommon.pas") -eq $before) $g6
+Check 'G7 and says so' ($g6 -match 'outside the own roots \(a --fix run') $g6
+Check 'G8 CONTROL the third_party unit is unchanged too' ([IO.File]::ReadAllText("$repo\third_party\UTp.pas").Contains('Idle: Integer')) $g6
+Check 'G9 CONTROL --lint-third-party without --fix still reports the file' ((Hits (LintAll @('--lint-third-party')) 'UCommon') -eq 2)
 
 Write-Host 'H. registry library path' -ForegroundColor Cyan
 # a project of its own: UReg comes in over the .dproj search path (unlisted), URegListed is listed

@@ -108,12 +108,31 @@ Check 'C1 budget-exceeded state' ((Has $hc 'set_by') -and ($hc.set_by.state -ceq
 Check 'C2 md says budget exceeded' ($mdc -match 'budget exceeded') ''
 Check 'C3 writers still equal check-init' ((Has $hc 'set_by') -and ((WritersText $hc.set_by.writers) -ceq (WritersText $ci.writers))) ''
 Check 'C4 control: no override is not budget-exceeded' ((Has $h 'set_by') -and ($h.set_by.state -cne 'budget-exceeded')) ''
+# C5 needs a solve that is CLEARLY longer than the engine's 0.05 s floor (HOVER_SETBY_MIN_SECONDS): the three-line
+# solve-callchain fixture solves in ~50 ms, the same as the floor, so it timed out only by luck. This fixture is a
+# generated chain of 120 routines (solve ~1 s) ending in a read of scData.GData; the default 5 s cap is the control.
+$bigSrc = Join-Path $WorkDir 'solve-bigchain'
+New-Item -ItemType Directory -Force -Path $bigSrc | Out-Null
+Copy-Item -Force (Join-Path $FixRoot 'solve-callchain\scData.pas') $bigSrc
+$bigN = 120
+$bigText = New-Object System.Text.StringBuilder
+[void]$bigText.Append("unit scBig;`r`n`r`ninterface`r`n`r`nprocedure RunBig;`r`n`r`nimplementation`r`n`r`nuses`r`n  scData;`r`n`r`n")
+for ($i = $bigN - 1; $i -ge 0; $i--) {
+  [void]$bigText.Append("procedure P$i;`r`nbegin`r`n")
+  if ($i -lt $bigN - 1) { [void]$bigText.Append("  P$($i + 1);`r`n") } else { [void]$bigText.Append("  if GData > 0 then Writeln('x');`r`n") }
+  [void]$bigText.Append("end;`r`n`r`n")
+}
+[void]$bigText.Append("procedure RunBig;`r`nbegin`r`n  P0;`r`nend;`r`n`r`nend.`r`n")
+[IO.File]::WriteAllText((Join-Path $bigSrc 'scBig.pas'), $bigText.ToString(), [Text.Encoding]::ASCII)
+[IO.File]::WriteAllText((Join-Path $bigSrc 'Big.dpr'), "program Big;`r`n`r`nuses`r`n  scData in 'scData.pas',`r`n  scBig in 'scBig.pas';`r`n`r`nbegin`r`n  SetData;`r`n  RunBig;`r`nend.`r`n", [Text.Encoding]::ASCII)
+$bigDb = Join-Path $WorkDir 'solve-bigchain.sqlite'
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $bigSrc --db $bigDb 2>&1 | ForEach-Object { "$_" } }
+$hbig = HoverJson 'scData.GData' $bigDb
 $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = '0.000001'
-try { $hs = HoverJson 'scData.GData' $cc } finally { $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = $null }
+try { $hs = HoverJson 'scData.GData' $bigDb } finally { $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = $null }
 Check 'C5 max-seconds cap: budget-exceeded' ((Has $hs 'set_by') -and ($hs.set_by.state -ceq 'budget-exceeded')) $(if (Has $hs 'set_by') { $hs.set_by.state })
 Check 'C5 max-seconds cap: budget.timed_out' ((Has $hs 'set_by') -and ($hs.set_by.budget.timed_out -eq $true)) $(if (Has $hs 'set_by') { $hs.set_by.budget | ConvertTo-Json -Compress })
-Check 'C5 control: no override is not timed out' ((Has $h 'set_by') -and ($h.set_by.budget.timed_out -ne $true)) ''
-
+Check 'C5 control: no override is not timed out' ((Has $hbig 'set_by') -and ($hbig.set_by.budget.timed_out -ne $true) -and ($hbig.set_by.state -cne 'budget-exceeded')) $(if (Has $hbig 'set_by') { $hbig.set_by.state })
 # ---- D: UNKNOWN-CALLEE
 $hd = HoverJson 'suData.GUnk' $su
 $mdd = HoverText 'suData.GUnk' $su 'md'

@@ -90,7 +90,7 @@ type
     Own: TOwnRoots;
     /// <summary>The run's lint config (own_paths, vendored_folders).</summary>
     Cfg: TLintConfig;
-    /// <summary>True = --lint-third-party: nothing is third-party.</summary>
+    /// <summary>True = --lint-third-party: nothing is third-party (reported); a FixRun still judges the write scope.</summary>
     ShowAll: Boolean;
     /// <summary>True = a --fix run: an undeclared file outside the project folder is left out, because
     /// keeping it in a report is harmless and rewriting it is not.</summary>
@@ -383,10 +383,17 @@ end;
 function TOwnFilter.Judge(const AFilePath: string): TSkipReason;
 begin
   Result:= srOwn;
-  if (AFilePath = '') or FSetup.ShowAll or not FSetup.Own.Active then Exit;
+  if (AFilePath = '') or not FSetup.Own.Active then Exit;
+  { --lint-third-party widens the REPORT only: a --fix run still never writes outside the own roots }
+  if FSetup.ShowAll and not FSetup.FixRun then Exit;
   if FMemo.TryGetValue(AFilePath, Result) then Exit;
   var Where: string;
-  Result:= Classify(FullPath(AFilePath), Where);
+  if FSetup.ShowAll then
+  begin
+    Result:= srOwn;
+    if HoldingDir(FullPath(AFilePath), FSetup.Own.Roots) = '' then Result:= OutsideFixScope(Where);
+  end
+  else Result:= Classify(FullPath(AFilePath), Where);
   FMemo.Add(AFilePath, Result);
   if Where <> '' then FWhere.AddOrSetValue(AFilePath, Where);
 end;
