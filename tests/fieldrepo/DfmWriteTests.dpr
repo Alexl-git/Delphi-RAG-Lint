@@ -8,6 +8,7 @@ program DfmWriteTests;
 {$APPTYPE CONSOLE}
 
 uses
+  Winapi.Windows,
   System.SysUtils,
   System.Classes,
   System.IOUtils,
@@ -432,6 +433,7 @@ const
   NEW_FORM = '    object TB: TIntegerField' + NL + '      FieldName = ''B''' + NL + '    end' + NL;
   NEW_DECL = '    TB: TIntegerField;' + NL;
   BACKUP_MARK = '.before-write-dfm-';
+  LOST_REPLACEMENT = 1176; // ERROR_UNABLE_TO_MOVE_REPLACEMENT
   FILES_OF_TWO = 4; // two forms with their units
   STAMP_SECONDS = 20; // the names a backup could get while the test runs
   SECONDS_PER_DAY = 86400;
@@ -581,6 +583,87 @@ begin
   Check('F3 only the backups are left', Length(OtherFiles) = FILES_OF_TWO, string.Join(' ', OtherFiles));
 end;
 
+{ What a failing ReplaceFile leaves behind. }
+type
+  TFault = (ftAsideOnly,   // 1177: the old file has the backup name
+            ftGone,        // 1176 as without a backup name: the old file is gone
+            ftTaken);      // the same, and nothing can take its name
+
+{ pGood calls succeed; then one fails, with ftGone and ftTaken every later one too. }
+function Failing(pGood: Integer; pFault: TFault): TDfmwReplaceFile;
+var
+  VCalls: Integer;
+begin
+  VCalls := 0;
+  Result := function(const pFile, pNew, pBackup: string): Boolean
+    begin
+      Inc(VCalls);
+      Result := (VCalls <= pGood) or ((pFault = ftAsideOnly) and (VCalls > pGood + 1));
+      if pBackup = '' then
+        System.SysUtils.DeleteFile(pFile)
+      else if Result or (pFault = ftAsideOnly) then
+        RenameFile(pFile, pBackup)
+      else
+        System.SysUtils.DeleteFile(pFile);
+      if Result then
+        RenameFile(pNew, pFile)
+      else if pFault = ftTaken then
+        TDirectory.CreateDirectory(pFile);
+      SetLastError(LOST_REPLACEMENT);
+    end;
+end;
+
+function AppliedWith(const pPlan: TDfmwPlan; const pHook: TDfmwReplaceFile): string;
+begin
+  DfmwReplaceFileHook := pHook;
+  try
+    Result := Applied(pPlan);
+  finally
+    DfmwReplaceFileHook := nil;
+  end;
+end;
+
+{ A form and a unit exist and have the old bytes, whatever a failing replacement did. }
+procedure CheckKept(const pName: string; pGood: Integer; pFault: TFault);
+var
+  VMessage: string;
+  VPlan: TDfmwPlan;
+begin
+  NewWork;
+  VPlan := AddPlan([WRITE_UNIT, WRITE_UNIT]);
+  VMessage := AppliedWith(VPlan, Failing(pGood, pFault));
+  Check(pName + ' fails and is undone', VMessage.Contains('undone'), VMessage);
+  Check(pName + ' every file exists', Length(TDirectory.GetFiles(GWork, '?.*')) >= FILES_OF_TWO + FILES_OF_TWO, string.Join(' ', TDirectory.GetFiles(GWork)));
+  if Length(TDirectory.GetFiles(GWork, '?.dfm')) + Length(TDirectory.GetFiles(GWork, '?.pas')) < FILES_OF_TWO then
+    Exit;
+  CheckForm(pName, 'a', False);
+  CheckForm(pName, 'b', False);
+  Check(pName + ' only the backups are left', Length(OtherFiles) = FILES_OF_TWO, string.Join(' ', OtherFiles));
+end;
+
+procedure TestLostFile;
+const
+  NEW_MARK = '.write-dfm-new';
+var
+  VMessage: string;
+  VPlan: TDfmwPlan;
+begin
+  CheckKept('L1 the old file was put aside', 0, ftAsideOnly);
+  CheckKept('L2 the old file is gone', 0, ftGone);
+  CheckKept('L3 put aside, after a written file', 1, ftAsideOnly);
+  CheckKept('L4 gone, after written files', FILES_OF_TWO - 1, ftGone);
+  NewWork;
+  VPlan := AddPlan([WRITE_UNIT]);
+  VMessage := AppliedWith(VPlan, Failing(0, ftTaken));
+  Check('L5 a file that cannot come back is reported', VMessage.Contains('NOT restored') and VMessage.Contains('a.dfm' + BACKUP_MARK), VMessage);
+  Check('L5 the new text is kept when it is the only copy', TFile.Exists(TPath.Combine(GWork, 'a.dfm' + NEW_MARK)), string.Join(' ', OtherFiles));
+  NewWork;
+  VPlan := AddPlan([WRITE_UNIT]);
+  CheckText('L6 control: the seam alone changes nothing', AppliedWith(VPlan, Failing(FILES_OF_TWO, ftGone)), '');
+  CheckForm('L6', 'a', True);
+  Check('L6 no other file than the backups', Length(OtherFiles) = FILES_OF_TWO div 2, string.Join(' ', OtherFiles));
+end;
+
 procedure TestBackupNames;
 const
   TAKEN = 'an older backup';
@@ -634,6 +717,7 @@ begin
     TestTwoForms;
     TestChangedFile;
     TestRollback;
+    TestLostFile;
     TestBackupNames;
     TestUnitBytes;
   finally

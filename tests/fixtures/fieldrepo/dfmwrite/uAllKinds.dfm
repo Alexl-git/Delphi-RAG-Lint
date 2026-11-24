@@ -99,8 +99,10 @@ object frmAllKinds: TfrmAllKinds
       FieldName = 'USEDCOL'
     end
   end
-  object memTools: TFDMemTable
+  object memTools: TFDQuery
     UpdateOptions.UpdateTableName = 'TOOLS'
+    SQL.Strings = (
+      'SELECT ID, NAME FROM TOOLS')
     Left = 120
     Top = 240
     object memToolsID: TIntegerField

@@ -162,7 +162,6 @@ const
   UNIT_DB = 'Data.DB';
   UNIT_OLD_DB = 'DB';
   PROP_LABEL = 'DisplayLabel';
-  REFUSED_FRAME = 'is inside a frame'; // no new target; an existing lookup into it stays
   PLAN_ID_LENGTH = 16; // hex digits
   PROP_FIELD_NAME = 'FieldName';
   { strings that are read by people or declare columns, not by-name bindings }
@@ -273,7 +272,9 @@ type
   { A lookup's dataset. }
   TLookupTarget = record
     RefName: string; // as the DFM names it: `tblTools`, `dmMain.tblTools`, `Frame1.tblTools`
-    Refusal: string; // why it cannot become the target of a lookup; '' = it can
+    Refusal: string; // it holds only some rows of its table: no target at all; '' = no reason
+    Doubt: string; // why it is no new target and why changes of a lookup that has it are unchecked; '' = none
+    InFrame: Boolean; // no new target; an existing lookup into it stays
     Dataset: TDfmrDataset;
     Source: TSource;
   end;
@@ -321,6 +322,7 @@ type
     procedure PlanLookup(const pField: TDfmrField; const pRow: TRepoField);
     procedure PlanWiring(const pField: TDfmrField; const pRow: TRepoField);
     procedure JoinWiring(pFirst: Integer);
+    procedure UncheckDoubted(pFirst: Integer; const pField: TDfmrField; const pRow: TRepoField);
     procedure PlanSelection(const pFields: TArray<string>);
     procedure PlanInsert(const pRow: TRepoField);
     procedure UncheckFirstFields(pFirst: Integer);
@@ -964,13 +966,39 @@ end;
 
 { ---- lookups ---- }
 
-{ True when a SELECT has a `:parameter`; strings, quoted names and comments do not count. }
-function HasParameters(const pSql: string): Boolean;
+{ A SQL text without strings, quoted names and comments. }
+function BareSql(const pSql: string): string;
 begin
-  Result := TRegEx.IsMatch(TRegEx.Replace(pSql, '''[^'']*''|"[^"]*"|/\*.*?\*/|--[^\r\n]*', ' ', [roSingleLine]), ':\s*[A-Za-z_]');
+  Result := TRegEx.Replace(pSql, '''[^'']*''|"[^"]*"|/\*.*?\*/|--[^\r\n]*', ' ', [roSingleLine]);
 end;
 
-{ Why a dataset cannot become a lookup's target: it holds only some rows of its table, or the form cannot name it. }
+{ Why the DFM does not show that a dataset holds every row of its table; '' = it does. }
+function TargetDoubt(const pDataset: TDfmrDataset; const pSource: TSource; pDoc: TDfmDocument; pObject: Integer): string;
+var
+  VText: string;
+  VMatch: TMatch;
+begin
+  Result := '';
+  if pDataset.ObjKind <> OBJECT_KIND then
+    Exit('is inherited: the ancestor may limit its rows');
+  if pDoc.TryProp(pObject, 'Filtered', VText) and SameText(VText, 'True') then
+    Exit('is filtered (Filtered = True)');
+  if pDataset.TableName <> '' then
+    Exit;
+  if not pSource.HasSql then
+    Exit('has no SELECT in the DFM: its rows are set in code');
+  if TRegEx.IsMatch(BareSql(pDataset.Sql), '[&!]\s*[A-Za-z_]') then
+    Exit('has SQL macros');
+  if pSource.Sql.Reason <> '' then
+    Exit('has a SELECT that is not understood: ' + pSource.Sql.Reason);
+  if (Length(pSource.Sql.Tables) <> 1) or not SameText(pSource.Sql.Tables[0].Name, pSource.TableName) then
+    Exit('has a SELECT that does not read ' + pSource.TableName + ' alone');
+  VMatch := TRegEx.Match(BareSql(pDataset.Sql), '\b(WHERE|HAVING|FIRST|SKIP|ROWS|FETCH|OFFSET)\b', [roIgnoreCase]);
+  if VMatch.Success then
+    Result := 'has a SELECT that may not return all rows (' + UpperCase(VMatch.Value) + ')';
+end;
+
+{ Why a dataset is no lookup target at all: it holds the rows of a parameter or of a master record. }
 function TargetRefusal(const pDataset: TDfmrDataset; pDoc: TDfmDocument; pObject: Integer): string;
 const
   MASTER_PROPS: array[0..3] of string = ('MasterSource', 'MasterFields', 'DataSource', 'DataSetField');
@@ -978,9 +1006,7 @@ var
   VProp, VText: string;
 begin
   Result := '';
-  if pDoc.Objects[pObject].Parent > 0 then
-    Exit(REFUSED_FRAME);
-  if HasParameters(pDataset.Sql) then
+  if TRegEx.IsMatch(BareSql(pDataset.Sql), ':\s*[A-Za-z_]') then
     Exit('has SQL parameters');
   for VProp in MASTER_PROPS do
     if pDoc.TryProp(pObject, VProp, VText) then
@@ -1005,9 +1031,11 @@ begin
       raise EDfmWriteError.Create(ExtractFileName(pForm.FileName) + ': the two DFM readers disagree about ' + VDataset.Name);
     VParent := pDoc.Objects[VNext].Parent;
     VTarget.RefName := pPrefix + (if VParent > 0 then pDoc.Objects[VParent].Name + '.' else '') + VDataset.Name;
-    VTarget.Refusal := TargetRefusal(VDataset, pDoc, VNext);
+    VTarget.InFrame := VParent > 0;
     VTarget.Dataset := VDataset;
     VTarget.Source := SourceOf(VDataset);
+    VTarget.Refusal := TargetRefusal(VDataset, pDoc, VNext);
+    VTarget.Doubt := TargetDoubt(VDataset, VTarget.Source, pDoc, VNext);
     Result := Result + [VTarget];
     Inc(VNext);
   end;
@@ -1097,6 +1125,12 @@ begin
     VNames := VNames + [VTarget.RefName];
   Result := string.Join(' ', VNames);
 end;
+{ Why a dataset cannot become the target of a lookup; '' = it can. }
+function NewTargetReason(const pTarget: TLookupTarget): string;
+begin
+  Result := if pTarget.Refusal <> '' then pTarget.Refusal else if pTarget.InFrame then 'is inside a frame' else pTarget.Doubt;
+end;
+
 { '' when the table has exactly one dataset to look up in. }
 function TargetReason(const pTargets: TArray<TLookupTarget>; const pTable: string): string;
 begin
@@ -1105,8 +1139,8 @@ begin
     Result := 'no dataset of the form (or of a module its unit names) reads ' + pTable
   else if Length(pTargets) > 1 then
     Result := Format('%d datasets read %s: %s', [Length(pTargets), pTable, TargetNames(pTargets)])
-  else if pTargets[0].Refusal <> '' then
-    Result := Format('the only dataset that reads %s, %s, %s', [pTable, pTargets[0].RefName, pTargets[0].Refusal]);
+  else if NewTargetReason(pTargets[0]) <> '' then
+    Result := Format('the only dataset that reads %s, %s, %s', [pTable, pTargets[0].RefName, NewTargetReason(pTargets[0])]);
 end;
 
 { The key column of the lookup table: DESTKEY, or its one-column primary key. }
@@ -1133,7 +1167,7 @@ begin
   VFound := TryCurrentTarget(pField.LookupDataSet, pTarget);
   if VFound and SameText(pTarget.Source.TableName, pRow.DestTable) then
   begin
-    if (pTarget.Refusal <> '') and (pTarget.Refusal <> REFUSED_FRAME) then
+    if pTarget.Refusal <> '' then
       Result := Format('the current lookup dataset %s %s', [pTarget.RefName, pTarget.Refusal]);
     Exit;
   end;
@@ -1152,6 +1186,7 @@ procedure TDfmWritePlanner.PlanWiring(const pField: TDfmrField; const pRow: TRep
 var
   VTarget: TLookupTarget;
   VReason: string;
+  VMoves: Boolean;
 
   { An inherited field states only what it overrides. }
   function IsHere(const pProp: string): Boolean;
@@ -1161,12 +1196,18 @@ var
     Result := IsOwn(pField) or Stated(pField, pProp, VText);
   end;
 
-  { Compares in column space: the DFM names dataset fields, the repository columns. }
-  procedure PlanColumnName(const pProp, pCurrent, pColumn: string; const pDataset: TDfmrDataset; const pSource: TSource);
+  { Compares in column space: the DFM names dataset fields, the repository columns. With pAll (another dataset) a part
+    that is not settled counts too: what an ancestor states is made for the old dataset. }
+  procedure PlanColumnName(const pProp, pCurrent, pColumn: string; const pDataset: TDfmrDataset; const pSource: TSource; pAll: Boolean);
   var
     VName, VBlocked: string;
   begin
-    if (pColumn = '') or SameText(ColumnOf(pDataset, pSource, pCurrent), pColumn) or not IsHere(pProp) then
+    if pAll and (pColumn = '') then
+    begin
+      SetItem(pField, pProp, pCurrent, '', DfmStringLiteral(''), 'the repository does not hold it');
+      Exit;
+    end;
+    if (pColumn = '') or (IsHere(pProp) and SameText(ColumnOf(pDataset, pSource, pCurrent), pColumn)) or not (pAll or IsHere(pProp)) then
       Exit;
     VName := NameOf(pDataset, pSource, pColumn, VBlocked);
     if pCurrent.Contains(MULTI_FIELD) then
@@ -1181,8 +1222,9 @@ begin
   VTarget := Default(TLookupTarget);
   if (pRow.DestTable <> '') and IsHere(PROP_LOOKUP_DATASET) then
     VReason := TargetOfLookup(pField, pRow, VTarget);
+  VMoves := (pRow.DestTable <> '') and SameText(VTarget.Source.TableName, pRow.DestTable) and not SameText(VTarget.RefName, pField.LookupDataSet);
   { with an unsettled dataset no part of the wiring changes }
-  PlanColumnName('KeyFields', pField.KeyFields, pRow.SourceKey, FDataset, FSource);
+  PlanColumnName('KeyFields', pField.KeyFields, pRow.SourceKey, FDataset, FSource, VMoves);
   if (pRow.DestTable = '') or not IsHere(PROP_LOOKUP_DATASET) then
     Exit;
   if not SameText(VTarget.Source.TableName, pRow.DestTable) then
@@ -1190,10 +1232,24 @@ begin
     SetItem(pField, PROP_LOOKUP_DATASET, pField.LookupDataSet, pRow.DestTable, pRow.DestTable, VReason);
     Exit;
   end;
-  if not SameText(VTarget.RefName, pField.LookupDataSet) then
+  if VMoves then
     SetItem(pField, PROP_LOOKUP_DATASET, pField.LookupDataSet, VTarget.RefName, VTarget.RefName, '');
-  PlanColumnName('LookupKeyFields', pField.LookupKeyFields, LookupKeyColumn(FRepo, pRow), VTarget.Dataset, VTarget.Source);
-  PlanColumnName('LookupResultField', pField.LookupResult, pRow.DestValue, VTarget.Dataset, VTarget.Source);
+  PlanColumnName('LookupKeyFields', pField.LookupKeyFields, LookupKeyColumn(FRepo, pRow), VTarget.Dataset, VTarget.Source, VMoves);
+  PlanColumnName('LookupResultField', pField.LookupResult, pRow.DestValue, VTarget.Dataset, VTarget.Source, VMoves);
+end;
+
+{ The changes from pFirst on are of a lookup whose dataset may hold only some rows: none is checked. }
+procedure TDfmWritePlanner.UncheckDoubted(pFirst: Integer; const pField: TDfmrField; const pRow: TRepoField);
+var
+  VI: Integer;
+  VTarget: TLookupTarget;
+begin
+  if (pFirst = FChanges.Count) or not TryCurrentTarget(pField.LookupDataSet, VTarget) or (VTarget.Doubt = '')
+    or not SameText(VTarget.Source.TableName, pRow.DestTable) then
+    Exit;
+  FWarnings.Add(Format('%s: the lookup changes are unchecked: the current lookup dataset %s %s', [Where(pField), VTarget.RefName, VTarget.Doubt]));
+  for VI := pFirst to FChanges.Count - 1 do
+    FChanges.List[VI].Checked := False;
 end;
 
 { The changes from pFirst on are one wiring: each needs all others, and one blocked part blocks them all. }
@@ -1222,6 +1278,7 @@ var
 begin
   VFirst := FChanges.Count;
   PlanWiring(pField, pRow);
+  UncheckDoubted(VFirst, pField, pRow);
   JoinWiring(VFirst);
 end;
 { ---- existing fields ---- }

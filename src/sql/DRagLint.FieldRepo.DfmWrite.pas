@@ -237,7 +237,8 @@ type
     /// <param name="pText">An identifier or a string literal with its quotes (case-insensitive).</param>
     /// <returns>The number of tokens.</returns>
     function Mentions(const pText: string): Integer;
-    /// <summary>True when a string literal of the code is the name, or has it as one entry of a list `A;B`.</summary>
+    /// <summary>True when a string literal of the code has the name as a word: the name alone, an entry of a list `A;B`
+    /// or `A:D`, a part of a filter or of any other text.</summary>
     /// <param name="pName">A field name (case-insensitive).</param>
     /// <returns>True when found.</returns>
     function NamesInString(const pName: string): Boolean;
@@ -267,6 +268,17 @@ type
     /// <summary>The bytes to write.</summary>
     NewBytes: TBytes;
   end;
+
+  /// <summary>Puts pNew in the place of pFile, which keeps its old content as pBackup (the Windows ReplaceFile).</summary>
+  /// <param name="pFile">The file to replace.</param>
+  /// <param name="pNew">The complete new file.</param>
+  /// <param name="pBackup">Name the old file gets.</param>
+  /// <returns>False = failed; the reason is in GetLastError and any of the files may be missing or renamed.</returns>
+  TDfmwReplaceFile = reference to function(const pFile, pNew, pBackup: string): Boolean;
+
+var
+  /// <summary>Test seam: fault injection for WriteOutputs. nil (always, outside the unit tests) = Windows.</summary>
+  DfmwReplaceFileHook: TDfmwReplaceFile;
 
 /// <summary>The bytes of a text DFM as a binary DFM, converted by the RTL: proof that Delphi can read the text.</summary>
 /// <param name="pText">Text DFM bytes.</param>
@@ -310,6 +322,7 @@ uses
   Winapi.Windows,
   System.Classes,
   System.IOUtils,
+  System.RegularExpressions,
   System.StrUtils;
 
 const
@@ -339,6 +352,7 @@ const
   REFERENCE_BREAKS: array[0..11] of Char = (' ', '.', '=', '(', ')', '[', ']', '<', '>', ',', #13, #10);
   BACKUP_STAMP = '.before-write-dfm-';
   NEW_FILE_STAMP = '.write-dfm-new';
+  OLD_FILE_STAMP = '.write-dfm-old'; // the file being replaced, for the moment of the replacement
   DIRECTIVE_MARK = '$';
   PAREN_COMMENT_LENGTH = 2; // (* and //
   CONDITIONAL_OPENS: array[0..3] of string = ('IF', 'IFDEF', 'IFNDEF', 'IFOPT');
@@ -1353,14 +1367,13 @@ end;
 function TDfmUnitDocument.NamesInString(const pName: string): Boolean;
 var
   VToken: TDfmwToken;
-  VEntry: string;
+  VWord: string;
 begin
   Result := False;
+  VWord := '(?<!\w)' + TRegEx.Escape(pName) + '(?!\w)';
   for VToken in FTokens do
-    if VToken.Text.StartsWith('''') then
-      for VEntry in VToken.Text.DeQuotedString.Split([';']) do
-        if SameText(Trim(VEntry), pName) then
-          Exit(True);
+    if VToken.Text.StartsWith('''') and TRegEx.IsMatch(VToken.Text, VWord, [roIgnoreCase]) then
+      Exit(True);
 end;
 
 function TDfmUnitDocument.Mentions(const pText: string): Integer;
@@ -1453,20 +1466,59 @@ begin
   Result := FreeName(pFile + BACKUP_STAMP + FormatDateTime('yyyymmdd-hhnnss', Now));
 end;
 
-{ Writes a new file beside the old one and puts it in its place: a stopped process never leaves half a file. }
-procedure ReplaceBytes(const pFile: string; const pBytes: TBytes);
+function SwapFile(const pFile, pNew, pBackup: string): Boolean;
+begin
+  Result := if Assigned(DfmwReplaceFileHook) then DfmwReplaceFileHook(pFile, pNew, pBackup)
+    else ReplaceFile(PChar(pFile), PChar(pNew), PChar(pBackup), 0, nil, nil);
+end;
+
+{ Removes the files a replacement made, but not while the file itself is missing: they are its only copies then. }
+procedure DropTemporary(const pFile, pNew, pOld: string);
+begin
+  if not TFile.Exists(pFile) then
+    Exit;
+  System.SysUtils.DeleteFile(pNew); // False when it took the place of pFile
+  System.SysUtils.DeleteFile(pOld);
+end;
+
+{ Makes a file that does not exist (any more), whole or not at all. }
+procedure CreateBytes(const pFile: string; const pBytes: TBytes);
 var
   VNew: string;
+  VError: Cardinal;
 begin
   VNew := FreeName(pFile + NEW_FILE_STAMP);
+  TFile.WriteAllBytes(VNew, pBytes);
+  if RenameFile(VNew, pFile) then
+    Exit;
+  VError := GetLastError;
+  System.SysUtils.DeleteFile(VNew); // the backup has the same bytes
+  RaiseLastOSError(VError);
+end;
+{ Writes a new file beside the old one and puts it in its place: a stopped process never leaves half a file. With a name
+  for the old file ReplaceFile never removes it; when it fails half way (ERROR_UNABLE_TO_MOVE_REPLACEMENT_2) the old file
+  gets its own name back, or is made again from pOldBytes. }
+procedure ReplaceBytes(const pFile: string; const pBytes, pOldBytes: TBytes);
+var
+  VNew, VOld: string;
+  VError: Cardinal;
+begin
+  VNew := FreeName(pFile + NEW_FILE_STAMP);
+  VOld := FreeName(pFile + OLD_FILE_STAMP);
   try
     TFile.WriteAllBytes(VNew, pBytes);
-    if not ReplaceFile(PChar(pFile), PChar(VNew), nil, 0, nil, nil) then
-      RaiseLastOSError;
+    if SwapFile(pFile, VNew, VOld) then
+      Exit;
+    VError := GetLastError;
+    if not (TFile.Exists(pFile) or RenameFile(VOld, pFile)) then
+      CreateBytes(pFile, pOldBytes);
+    RaiseLastOSError(VError);
   finally
-    System.SysUtils.DeleteFile(VNew); // False when ReplaceFile took it
+    DropTemporary(pFile, VNew, VOld);
   end;
 end;
+
+
 { Raises when a file cannot be opened for writing, before anything is written. }
 procedure CheckWritable(const pOutput: TDfmwOutput);
 var
@@ -1483,18 +1535,34 @@ begin
   end;
 end;
 
-{ Puts the old bytes back; '' or what went wrong. }
+{ True when the file can be read and has the old bytes. }
+function HasOldBytes(const pOutput: TDfmwOutput): Boolean;
+begin
+  try
+    Result := SameBytes(TFile.ReadAllBytes(pOutput.FileName), pOutput.OldBytes);
+  except
+    on EInOutError do
+      Result := False;
+    on EStreamError do
+      Result := False;
+  end;
+end;
+
+{ Puts the old bytes back, whether the file exists or not; '' or what went wrong. }
 function Restore(const pOutput: TDfmwOutput): string;
 begin
   Result := '';
   try
-    if not SameBytes(TFile.ReadAllBytes(pOutput.FileName), pOutput.OldBytes) then
-      ReplaceBytes(pOutput.FileName, pOutput.OldBytes);
+    if not TFile.Exists(pOutput.FileName) then
+      CreateBytes(pOutput.FileName, pOutput.OldBytes)
+    else if not HasOldBytes(pOutput) then
+      ReplaceBytes(pOutput.FileName, pOutput.OldBytes, pOutput.OldBytes);
   except
     on E: Exception do
-      Result := '; NOT restored (use its backup): ' + pOutput.FileName;
+      Result := if HasOldBytes(pOutput) then '' else '; NOT restored (use its backup): ' + pOutput.FileName + ' (' + E.Message + ')';
   end;
 end;
+
 
 { Restores pOutputs[0..pLast]; says so when every file has its old bytes. }
 function RestoreAll(const pOutputs: TArray<TDfmwOutput>; pLast: Integer): string;
@@ -1517,7 +1585,7 @@ var
 begin
   for VI := 0 to High(pOutputs) do
     try
-      ReplaceBytes(pOutputs[VI].FileName, pOutputs[VI].NewBytes);
+      ReplaceBytes(pOutputs[VI].FileName, pOutputs[VI].NewBytes, pOutputs[VI].OldBytes);
     except
       on E: Exception do
         raise EDfmWriteError.Create('the write of ' + pOutputs[VI].FileName + ' failed: ' + E.Message + RestoreAll(pOutputs, VI)

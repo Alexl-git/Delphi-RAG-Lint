@@ -45,8 +45,14 @@ conditional) that does not hold the whole published section, and never inside a 
 the class is declared twice, the change is blocked.
 
 **Lookups.** A lookup keeps its dataset while the table of that dataset is not known (a join, an inherited table, a
-data module of another folder): the whole wiring is blocked with the reason. A dataset inside a frame, one whose SQL has parameters and one that is bound to a master are no
-targets. `LookupDataSet`, `KeyFields`, `LookupKeyFields` and `LookupResultField` of one field are one wiring: one blocked
+data module of another folder): the whole wiring is blocked with the reason. A dataset inside a frame, one whose SQL has
+parameters and one that is bound to a master are no targets. Neither is one whose DFM does not show that it holds every
+row of its table: no SELECT in the DFM (SQL set in code, a memory table), a SELECT over more than that table, one that
+is not understood, one with macros or with `WHERE`, `HAVING`, `FIRST`, `SKIP`, `ROWS`, `FETCH` or `OFFSET`,
+`Filtered = True`, an inherited dataset. A lookup that already uses such a dataset keeps it; its other wiring changes are
+unchecked and a warning gives the reason. Code that replaces the SQL of the DFM is not searched. A lookup that gets
+another dataset gets all four properties; an inherited one too, where its form states only `LookupDataSet`. A part that
+the repository does not hold blocks the wiring. `LookupDataSet`, `KeyFields`, `LookupKeyFields` and `LookupResultField` of one field are one wiring: one blocked
 part blocks all, and `--select` refuses a part without the others and names the missing ids.
 
 **What is never written:** calc and event code, graphical columns (they are grid columns), fields that are only
@@ -57,7 +63,8 @@ the form does not settle; a column the SELECT does not return; a new column fiel
 dataset; a unit that is missing, does not declare the form class or does not use Data.DB; a removed field that the
 form or its unit still needs. "Needs" is wide: the component, or the field name as a word of any string of the DFM
 (`DataField`, `DataBinding.FieldName`, `KeyFields`, `LookupResultField`, `MasterFields`, `IndexFieldNames`, an
-expression or filter, a SQL parameter; captions and hints do not count), or in a string of the unit. A control of
+expression or filter, a SQL parameter; captions and hints do not count), or as a word of any string in the unit (`Locate`, `Filter`, `IndexFieldNames`, a SQL
+text, also a message that happens to have the word). A control of
 another dataset that binds the same name counts too. A selection that deletes a field and also makes the form name it is
 refused (exit 2). Other forms and units are not searched.
 
@@ -65,6 +72,14 @@ refused (exit 2). Other forms and units are not searched.
 binary DFM is refused, and so is one that Delphi cannot convert. The result is converted to binary and read back before
 anything is written; a file that changed since it was read, or cannot be opened for writing, stops the whole run. Each
 file is replaced by a complete new one; when that fails for one file, those before it get their old bytes back and the
-message names the backups. A form that is open in the IDE is not detected: save and close it first.
+message names the backups. A replacement that loses the file makes it again from the old bytes. A form that is open in the IDE is not detected: save and close it first.
+
+**When the process or the machine stops in the middle.** The backups of all files exist before the first file is
+replaced; then each form is replaced before its unit. A stop between the two leaves a new DFM with the old unit: a new
+field has no declaration yet (the form compiles and fails to load), a removed field is still declared (harmless). No file
+is ever half written. `write-dfm` does not repair this: copy the two backups of the run (same time stamp) over the form
+and its unit, and run it again. The form comes first because the plan is made from it: after a stop the form never lacks
+a field that the unit has got. A `*.write-dfm-new` or `*.write-dfm-old` file beside a missing form or unit is its new or
+its old text; beside an existing one it can be deleted.
 
 Exit code: 0 ok (also a dry run), 1 a failure (also a plan id that no longer fits), 2 a usage error (also a selected change without the one it needs).

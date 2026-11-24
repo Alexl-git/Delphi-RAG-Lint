@@ -7,7 +7,7 @@ program AllKindsLoad;
 
 uses
   System.SysUtils, System.Classes, System.TypInfo, Vcl.Forms, Data.DB, FireDAC.Comp.Client, FireDAC.UI.Intf,
-  FireDAC.Stan.ExprFuncs, FireDAC.VCLUI.Wait,
+  FireDAC.Stan.ExprFuncs, FireDAC.Stan.Def, FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Phys.SQLite, FireDAC.VCLUI.Wait,
   uAllKinds in 'uAllKinds.pas';
 
 procedure PrintField(pForm: TfrmAllKinds; pField: TField);
@@ -17,10 +17,24 @@ begin
     '|published=', (pForm.FieldAddress(pField.Name) <> nil) and (PPointer(pForm.FieldAddress(pField.Name))^ = Pointer(pField)));
 end;
 
+{ The query reads a table of a database in memory, owned by the form. }
+procedure FillTools(pTools: TFDQuery);
+var
+  VConnection: TFDConnection;
+begin
+  VConnection := TFDConnection.Create(pTools.Owner);
+  VConnection.DriverName := 'SQLite';
+  VConnection.Params.Database := ':memory:';
+  VConnection.LoginPrompt := False;
+  VConnection.ExecSQL('CREATE TABLE TOOLS (ID INTEGER, NAME VARCHAR(30))');
+  VConnection.ExecSQL('INSERT INTO TOOLS VALUES (1, ''Drill'')');
+  pTools.Connection := VConnection;
+  pTools.Open;
+end;
+
 procedure Fill(pForm: TfrmAllKinds);
 begin
-  pForm.memTools.CreateDataSet;
-  pForm.memTools.AppendRecord([1, 'Drill']);
+  FillTools(pForm.memTools);
   pForm.memOrders.CreateDataSet;
   pForm.memOrders.Append;
   pForm.memOrders.FieldByName('ID').AsInteger := 1;

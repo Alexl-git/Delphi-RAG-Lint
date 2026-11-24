@@ -24,6 +24,7 @@
     W17 two forms, one form given twice
     W18 the parts of one lookup wiring are written together
     W19 no selected change names a field that the same selection deletes
+    W20 an inherited lookup gets its whole wiring or none
   Run: pwsh -File tests\autotest\run_fieldrepo_dfmwrite.ps1 [-Exe <drag-lint.exe>] [-SkipUnit] [-SkipForm]
        -SkipForm leaves out W6 and the load half of W7 (a machine without DevExpress).
 #>
@@ -45,7 +46,7 @@ $Exe = (Resolve-Path -LiteralPath $Exe).Path
 $work = Join-Path ([IO.Path]::GetTempPath()) ('dl-repo-dfmw-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($work) | Out-Null
 function Run([string[]]$a) {
-  $o = & $Exe @a 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = (($o | ForEach-Object { "$_" }) -join "`n") }
 }
 function Write-Dfm([string[]]$more, $dfm = $script:dfm, $r = $script:y) { Run (@('repo', 'write-dfm', '--repo', $r, '--dfm', $dfm, '--direction', 'repo-to-dfm') + $more) }
@@ -84,7 +85,7 @@ function BuildForm($dir) {
   Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + (Join-Path $Repo 'build\_build_fieldrepo_dfmwrite_form_local.bat') + '" "' + $dir + '" > "' + $log + '" 2>&1"') -Wait -NoNewWindow
   $l = Get-Content -LiteralPath $log -Raw
   if ($l -notmatch 'BUILD_EXITCODE=0') { return 'BUILD FAILED ' + (($l -split "`n" | Select-String 'Error|Fatal' | Select-Object -First 3) -join ' / ') }
-  (& (Join-Path $dir 'AllKindsLoad.exe') 2>&1 | ForEach-Object { "$_" }) -join "`n"
+  (& { $ErrorActionPreference = 'Continue'; & (Join-Path $dir 'AllKindsLoad.exe') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 }
 try {
   # ---- part 1 ----
@@ -94,11 +95,11 @@ try {
     Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + $bat + '" "' + $work + '" > "' + $blog + '" 2>&1"') -Wait -NoNewWindow
     $bl = Get-Content -LiteralPath $blog -Raw
     Check 'U0 the unit tests build' (($bl -match 'BUILD_EXITCODE=0') -and ($bl -notmatch 'Error: E\d+')) $blog
-    $u = (& (Join-Path $work 'DfmWriteTests.exe') 2>&1 | ForEach-Object { "$_" })
+    $u = (& { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'DfmWriteTests.exe') 2>&1 | ForEach-Object { "$_" } })
     $uc = $LASTEXITCODE
     $u | Where-Object { $_ -match '^FAIL' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     $sum = ($u | Where-Object { $_ -match '^Summary: ' } | Select-Object -Last 1)
-    Check "U1 unit tests ($sum), none skipped" (($uc -eq 0) -and ($sum -eq 'Summary: pass=130 fail=0')) $sum
+    Check "U1 unit tests ($sum), none skipped" (($uc -eq 0) -and ($sum -eq 'Summary: pass=164 fail=0')) $sum
   }
   # ---- part 2 ----
   $src = Join-Path $Repo 'tests\fixtures\fieldrepo\dfmwrite'
@@ -158,9 +159,9 @@ try {
   $conv = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\convert.exe'
   $cd = Join-Path $work 'conv'; [IO.Directory]::CreateDirectory($cd) | Out-Null
   [IO.File]::Copy($dfm, (Join-Path $cd 'a.dfm'))
-  $null = & $conv -i -b (Join-Path $cd 'a.dfm') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $conv -i -b (Join-Path $cd 'a.dfm') 2>&1 | ForEach-Object { "$_" } }
   $first = [IO.File]::ReadAllBytes((Join-Path $cd 'a.dfm'))[0]
-  $null = & $conv -i -t (Join-Path $cd 'a.dfm') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $conv -i -t (Join-Path $cd 'a.dfm') 2>&1 | ForEach-Object { "$_" } }
   Check 'W5 convert.exe: to binary and back gives the same text' (($first -in 0xFF, 0x54) -and ((Text (Join-Path $cd 'a.dfm')) -ceq $newDfm)) "first byte $first"
   # ---- compiled ----
   if (-not $SkipForm) {
@@ -193,7 +194,7 @@ try {
   # ---- refusals ----
   $bd = NewForms 'bin'
   $bdfm = Join-Path $bd 'uAllKinds.dfm'
-  $null = & $conv -i -b $bdfm 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $conv -i -b $bdfm 2>&1 | ForEach-Object { "$_" } }
   $hb = Hash $bdfm
   $r = Write-Dfm @('--apply') $bdfm
   Check 'W8a a binary DFM is refused and stays the same' (($hb -ne $hd) -and ($r.Code -eq 1) -and (Has $r 'a binary DFM is not written') -and ($hb -eq (Hash $bdfm)) -and ((Backups $bd).Count -eq 0)) $r.Out
@@ -302,8 +303,8 @@ end
   $r = Write-Dfm @('--apply') $kdfm
   $lfWant = $want.Replace("`r`n", "`n").Replace("Caption = 'All field kinds'", "Caption = 'Caf" + [char]0xE9 + "'")
   Check 'W10n LF line ends and an ANSI byte stay' (($r.Code -eq 0) -and ((Text $kdfm) -ceq $lfWant)) $r.Out
-  $o = & $Exe repo write-dfm --repo $y --dfm $ndfm --direction repo-to-dfm --dataset memOrders --names all --json 2>$null
-  $j = ($o -join "`n") | ConvertFrom-Json
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe repo write-dfm --repo $y --dfm $ndfm --direction repo-to-dfm --dataset memOrders --names all --json 2>$null }
+  $j = ($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'W11 --json: one object, the same change set, the plan id' (($j.plan -match '^[0-9a-f]{16}$') -and($j.changeSet.direction -eq 'repo-to-dfm') -and ($j.changeSet.count -eq 16) -and ($j.applied -eq 0) -and ($j.datasets.Count -eq 1)) ($o -join "`n")
   # ---- H1: lookups ----
   $ld = Join-Path $work 'look'; [IO.Directory]::CreateDirectory($ld) | Out-Null
@@ -314,7 +315,7 @@ end
   }
   $oneTool = "  object qryOneTool: TFDQuery`n    SQL.Strings = (`n      'SELECT ID, NAME FROM TOOLS WHERE ID = :ID')`n  end"
   Put (Join-Path $ld 'uLook.pas') "unit uLook;`ninterface`nuses Data.DB;`ntype`n  TfrmLook = class(TForm)`n    qryMain: TFDQuery;`n  end;`nimplementation`nend.`n"
-  $plainTool = "  object qryTools: TFDQuery`n    SQL.Strings = (`n      'SELECT ID, NAME FROM TOOLS WHERE NAME <> '':x'' /* :y */')`n  end"
+  $plainTool = "  object qryTools: TFDQuery`n    SQL.Strings = (`n      'SELECT ID, NAME, '':x &z'' AS X FROM TOOLS /* :y !z */')`n  end"
   $other = "  object qryOther: TFDQuery`n    SQL.Strings = (`n      'SELECT ID FROM ORDERS')`n  end`n"
   LookForm 'qryToolsJoin' "  object qryToolsJoin: TFDQuery`n    SQL.Strings = (`n      'SELECT T.ID, T.NAME FROM TOOLS T JOIN ORDERS O ON O.TOOLID = T.ID')`n  end`n$oneTool"
   $r = Write-Dfm @() $ldfm
@@ -374,6 +375,57 @@ end
   $r = Write-Dfm @() $ldfm
   Check 'W12q control: a plain dataset of a module' ($r.Out -match 'LookupDataSet: qryOther -> dmMod\.qryTools\n(?!  )') $r.Out
   Put (Join-Path $ld 'uLook.pas') $lpas
+  # ---- N2: a target whose rows the DFM does not settle ----
+  function Query($name, $sql, $props = '') { "  object $name`: TFDQuery`n$props    UpdateOptions.UpdateTableName = 'TOOLS'`n" + $(if ($sql) { "    SQL.Strings = (`n      '$sql')`n" } else { '' }) + '  end' }
+  $sets = @(
+    @('W12r SQL set in code', (Query 'qryCode' ''), 'has no SELECT in the DFM'),
+    @('W12s a SELECT over two tables', (Query 'qryCode' 'SELECT T.ID, T.NAME FROM TOOLS T JOIN ORDERS O ON O.TOOLID = T.ID'), 'has a SELECT that does not read TOOLS alone'),
+    @('W12t an unreadable SELECT', (Query 'qryCode' 'SELECT ID, NAME FROM TOOLS UNION SELECT ID, NAME FROM TOOLS'), 'has a SELECT that is not understood'),
+    @('W12u Filtered', (Query 'qryCode' 'SELECT ID, NAME FROM TOOLS' "    Filter = 'ID > 1'`n    Filtered = True`n"), 'is filtered'),
+    @('W12v macros', (Query 'qryCode' 'SELECT ID, NAME FROM TOOLS &COND'), 'has SQL macros'),
+    @('W12w a WHERE', (Query 'qryCode' 'SELECT ID, NAME FROM TOOLS WHERE ID > 1'), 'has a SELECT that may not return all rows \(WHERE\)'),
+    @('W12x a memory table', "  object qryCode: TFDMemTable`n    UpdateOptions.UpdateTableName = 'TOOLS'`n  end", 'has no SELECT in the DFM'),
+    @('W12y an inherited dataset', "  inherited qryCode: TFDTable`n    TableName = 'TOOLS'`n  end", 'is inherited'))
+  function Unwired($dataset) { $t = Text $ldfm; $t.Contains("LookupDataSet = $dataset`r`n") -and $t.Contains(" KeyFields = 'QTY'`r`n") -and $t.Contains("LookupResultField = 'NAME'`r`n") }
+  foreach ($s in $sets) {
+    LookForm 'qryOther' ($other + $s[1])
+    $r = Write-Dfm @('--apply') $ldfm
+    Check "$($s[0]): no new target" (($r.Out -match "LookupDataSet: qryOther -> TOOLS\n  BLOCKED: the only dataset that reads TOOLS, qryCode, $($s[2])") -and (Has $r 'applied: ') -and (Unwired 'qryOther')) $r.Out
+    LookForm 'qryCode' $s[1]
+    $r = Write-Dfm @('--apply') $ldfm
+    Check "$($s[0]): already wired there: unchecked with the reason" (($r.Out -match "qryMainTOOL KeyFields: QTY -> TOOLID\n  \(unchecked\)") -and ($r.Out -match "warning: uLook\.dfm qryMainTOOL: the lookup changes are unchecked: the current lookup dataset qryCode $($s[2])") -and (Has $r 'applied: ') -and (Unwired 'qryCode')) $r.Out
+    Put $ldfm ($noTool + $s[1] + "`nend`n")
+    $r = Write-Dfm @('--dataset', 'qryMain', '--names', 'TOOL') $ldfm
+    Check "$($s[0]): a new lookup into it is blocked" ($r.Out -match "insert uLook\.dfm qryMainTOOL: [^\n]*\n  BLOCKED: the only dataset that reads TOOLS, qryCode, $($s[2])") $r.Out
+  }
+  LookForm 'qryOther' ($other + (Query 'qryCode' 'SELECT ID, NAME FROM TOOLS ORDER BY NAME' "    Filter = 'ID > 1'`n"))
+  $r = Write-Dfm @() $ldfm
+  Check 'W12z control: a whole SELECT, a filter that is off' (($r.Out -match 'LookupDataSet: qryOther -> qryCode\n(?!  )') -and ($r.Out -notmatch 'unchecked:')) $r.Out
+  LookForm 'qryOther' ($other + "  object tblTools: TFDTable`n    TableName = 'TOOLS'`n  end")
+  $r = Write-Dfm @() $ldfm
+  Check 'W12z control: a table' ($r.Out -match 'LookupDataSet: qryOther -> tblTools\n(?!  )') $r.Out
+  # ---- N3: an inherited lookup that states only its dataset ----
+  function InheritedLook($tools) {
+    Put $ldfm ("inherited frmLook: TfrmLook`n  inherited qryMain: TFDQuery`n    UpdateOptions.UpdateTableName = 'ORDERS'`n$tools    inherited qryMainTOOL: TStringField`n      FieldKind = fkLookup`n      FieldName = 'TOOL'`n      LookupDataSet = qryOther`n    end`n  end`n$other$plainTool`nend`n")
+  }
+  $toolId = "    inherited qryMainTOOLID: TIntegerField`n      FieldName = 'TOOLID'`n    end`n"
+  InheritedLook $toolId
+  $r = Write-Dfm @('--apply') $ldfm
+  $t = Text $ldfm
+  Check 'W20a the key and result field are written with the new dataset' (($r.Code -eq 0) -and (Has $r 'applied: 4 changes') -and ($t -match 'LookupDataSet = qryTools\r\n') -and ($t -match "LookupKeyFields = 'ID'\r\n") -and ($t -match "LookupResultField = 'NAME'\r\n") -and ($t -match " KeyFields = 'TOOLID'\r\n")) ($r.Out + $t)
+  InheritedLook ''
+  $h = Hash $ldfm
+  $r = Write-Dfm @('--apply') $ldfm
+  Check 'W20b a part that has no name blocks the wiring' (($r.Out -match 'LookupDataSet: qryOther -> qryTools\n  BLOCKED: part of a lookup wiring that is blocked') -and (Has $r 'qryMain has no field for ORDERS.TOOLID') -and ($h -eq (Hash $ldfm))) $r.Out
+  $nv = Join-Path $work 'nv.dlrepo'
+  EditRepo $y $nv { param($t) SetCol $t 'ORDERS|TOOL' 'DESTVALUE' '' }
+  InheritedLook $toolId
+  $h = Hash $ldfm
+  $r = Write-Dfm @('--apply') $ldfm $nv
+  Check 'W20c the repository does not hold the result column: blocked' (($r.Out -match 'LookupDataSet: qryOther -> qryTools\n  BLOCKED: part of') -and ($r.Out -match 'LookupResultField: [^\n]*\n  BLOCKED: the repository does not hold it') -and ($h -eq (Hash $ldfm))) $r.Out
+  LookForm 'qryOther' ($other + $plainTool)
+  $r = Write-Dfm @('--apply') $ldfm $nv
+  Check 'W20d the same for a field of the form itself' (($r.Out -match 'LookupResultField: NAME -> \n  BLOCKED: the repository does not hold it') -and (Unwired 'qryOther')) $r.Out
   # ---- one wiring, one change ----
   LookForm 'qryOther' ($other + $plainTool)
   Put $ldfm ((Text $ldfm).Replace("LookupResultField = 'NAME'", "LookupResultField = 'ID'"))
@@ -433,16 +485,16 @@ end
   Check 'W13b the result field of a lookup' ($r.Out -match "delete uAllKinds\.dfm memToolsNAME: [^\n]*\n  BLOCKED: the DFM names 'NAME': memOrdersTOOL\.LookupResultField") $r.Out
   $bd2 = Join-Path $work 'bind'; [IO.Directory]::CreateDirectory($bd2) | Out-Null
   $bdf = Join-Path $bd2 'uBind.dfm'
-  $fields = (1..12 | ForEach-Object { "    object qryMainF$($_): TIntegerField`n      FieldName = 'F$($_)'`n    end`n" }) -join ''
+  $fields = (1..16 | ForEach-Object { "    object qryMainF$($_): TIntegerField`n      FieldName = 'F$($_)'`n    end`n" }) -join ''
   Put $bdf ("object frmBind: TfrmBind`n  object dsMain: TDataSource`n    DataSet = qryMain`n  end`n  object Edit: TDBEdit`n    DataField = 'F1'`n    DataSource = dsMain`n  end`n  object Lbl: TLabel`n    Caption = 'F7'`n  end`n" +
     "  object Grid: TDBGrid`n    Columns = <`n      item`n        Expanded = False`n        FieldName = 'F9'`n        Title.Caption = 'F8'`n      end>`n  end`n" +
     "  object qryMain: TFDQuery`n    IndexFieldNames = 'F2:D;ID'`n    UpdateOptions.UpdateTableName = 'ORDERS'`n    object qryMainID: TIntegerField`n      FieldName = 'ID'`n    end`n$fields" +
     "    object qryMainSUM: TAggregateField`n      FieldName = 'SUM'`n      Expression = 'SUM(F3)'`n    end`n    object qryMainLK: TStringField`n      FieldKind = fkLookup`n      FieldName = 'LK'`n      LookupDataSet = qryDet`n      LookupKeyFields = 'A;B'`n      LookupResultField = 'C'`n      KeyFields = 'ID;F4'`n    end`n  end`n" +
     "  object qryDet: TFDQuery`n    MasterSource = dsMain`n    MasterFields = 'ID;F5'`n    SQL.Strings = (`n      'SELECT F8, X FROM DET'`n      'WHERE Y = :F6')`n    object qryDetF7: TIntegerField`n      FieldName = 'F7'`n      Origin = 'F12'`n    end`n  end`nend`n")
-  Put (Join-Path $bd2 'uBind.pas') "unit uBind;`ninterface`nuses Data.DB;`ntype`n  TfrmBind = class(TForm)`n  end;`nimplementation`nprocedure P;`nbegin`n  Q.Locate('ID;F10', V, []);`n  ShowMessage('F11 is a word of a text');`nend;`nend.`n"
+  Put (Join-Path $bd2 'uBind.pas') "unit uBind;`ninterface`nuses Data.DB;`ntype`n  TfrmBind = class(TForm)`n  end;`nimplementation`nprocedure P;`nbegin`n  Q.Locate('ID;F10', V, []);`n  ShowMessage('F11 is a word of a text');`n  Q.Filter := 'F13 > 1';`n  Q.IndexFieldNames := 'F14:D';`n  Q.MasterFields := 'A;F15';`n  S := 'F16X, XF16';`nend;`nend.`n"
   $r = Write-Dfm @('--dataset', 'qryMain', '--names', 'ID') $bdf
-  $state = (1..12 | ForEach-Object { $m = [regex]::Match($r.Out, "delete uBind\.dfm qryMainF$($_): [^\n]*\n  (BLOCKED: [^\n]*|\(unchecked\))"); if (-not $m.Success) { '?' } elseif ($m.Value -match 'BLOCKED') { 'B' } else { '-' } }) -join ''
-  Check 'W13c DataField, IndexFieldNames, Expression, KeyFields, MasterFields, a SQL parameter, a grid column, Locate; not a caption, a selected column, the field of another dataset' ($state -eq 'BBBBBB--BB--') ($state + "`n" + $r.Out)
+  $state = (1..16 | ForEach-Object { $m = [regex]::Match($r.Out, "delete uBind\.dfm qryMainF$($_): [^\n]*\n  (BLOCKED: [^\n]*|\(unchecked\))"); if (-not $m.Success) { '?' } elseif ($m.Value -match 'BLOCKED') { 'B' } else { '-' } }) -join ''
+  Check 'W13c DataField, IndexFieldNames, Expression, KeyFields, MasterFields, a SQL parameter, a grid column; Locate, Filter, IndexFieldNames, MasterFields and any word of a string in the code; not a caption, a selected column, the field of another dataset, a longer word' ($state -eq 'BBBBBB--BBB-BBB-') ($state + "`n" + $r.Out)
   # ---- M2: the plan id ----
   $pd = NewForms 'plan'
   $pdfm = Join-Path $pd 'uAllKinds.dfm'; $ppas = Join-Path $pd 'uAllKinds.pas'
@@ -510,7 +562,7 @@ end
   $r = Write-Dfm @('--apply') "$f1;$f2"
   Check 'W17b two forms are both written' (($r.Code -eq 0) -and (Has $r 'applied: 12 changes') -and ((Text $f1) -ceq $want) -and ((Text $f2) -ceq $want)) $r.Out
   Put $f1 $oldDfm
-  $null = & $conv -i -b $f2 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $conv -i -b $f2 2>&1 | ForEach-Object { "$_" } }
   $n1 = (Backups $t1).Count
   $r = Write-Dfm @('--apply') "$f1;$f2"
   Check 'W17c the second form cannot be written: the first one stays' (($r.Code -eq 1) -and ((Text $f1) -ceq $oldDfm) -and ((Backups $t1).Count -eq $n1)) $r.Out

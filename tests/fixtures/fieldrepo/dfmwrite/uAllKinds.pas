@@ -27,7 +27,7 @@ type
     memOrdersNOTE: TStringField;
     memOrdersOLDCOL: TIntegerField;
     memOrdersUSEDCOL: TIntegerField;
-    memTools: TFDMemTable;
+    memTools: TFDQuery;
     memToolsID: TIntegerField;
     memToolsNAME: TStringField;
     Image: TImage;

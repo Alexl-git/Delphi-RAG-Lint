@@ -36,7 +36,7 @@ type
     memOrdersTOTAL: TFloatField;
     memOrdersWHENAT: TSQLTimeStampField;
     memOrdersTOOL: TStringField;
-    memTools: TFDMemTable;
+    memTools: TFDQuery;
     memToolsID: TIntegerField;
     memToolsNAME: TStringField;
     Image: TImage;
