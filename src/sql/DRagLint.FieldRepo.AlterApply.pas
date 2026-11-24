@@ -65,6 +65,15 @@ const
 /// <remarks>Scans the table once per pre-check. A blocked change keeps its earlier reason and is not scanned.</remarks>
 function RunPrechecks(const pProvider: IFrDbProvider; var pPlan: TFrAlterPlan): TFrPrecheckTicket;
 
+/// <summary>Resolves the lines of a --select file against a plan.</summary>
+/// <param name="pPlan">The plan (after the pre-checks).</param>
+/// <param name="pLines">One id per line, or 'all'; blank lines and lines starting with # are ignored.</param>
+/// <returns>The ids in plan order. 'all' takes every change that is not blocked EXCEPT a DROP COLUMN: a drop needs its
+/// own id (beside 'all' or alone).</returns>
+/// <exception cref="EFrChangeSetError">An unknown id, a blocked change named by id, or a line that is neither an id nor
+/// 'all'.</exception>
+function SelectAlterIds(const pPlan: TFrAlterPlan; const pLines: TArray<string>): TArray<Integer>;
+
 /// <summary>Executes the chosen changes of a plan.</summary>
 /// <param name="pProvider">The connection the pre-checks ran on.</param>
 /// <param name="pPlan">The pre-checked plan.</param>
@@ -79,7 +88,8 @@ function ApplyAlterPlan(const pProvider: IFrDbProvider; const pPlan: TFrAlterPla
 implementation
 
 uses
-  System.Generics.Collections;
+  System.Generics.Collections,
+  DRagLint.FieldRepo.ChangeSet;
 
 const
   GROUP_BEFORE = 'hook-before';
@@ -129,6 +139,34 @@ begin
   end;
   Result.SessionId := pProvider.SessionId;
   Result.PlanHash := pPlan.Hash;
+end;
+
+function SelectAlterIds(const pPlan: TFrAlterPlan; const pLines: TArray<string>): TArray<Integer>;
+const
+  SELECT_ALL = 'all';
+var
+  VLine: string;
+  VNamed: TArray<string>;
+  VPicked: TArray<Integer>;
+  VAll: Boolean;
+  VChange: TFrChange;
+  VPlanned: TFrAlterChange;
+begin
+  VNamed := nil;
+  VAll := False;
+  for VLine in pLines do
+    if SameText(Trim(VLine), SELECT_ALL) then
+      VAll := True
+    else
+      VNamed := VNamed + [VLine];
+  VPicked := nil;
+  for VChange in SelectChanges(pPlan.ChangeSet, VNamed) do
+    VPicked := VPicked + [VChange.Id];
+  Result := nil;
+  for VPlanned in pPlan.Changes do
+    if TArray.Contains<Integer>(VPicked, VPlanned.Change.Id) or
+      (VAll and (VPlanned.Kind <> fakDrop) and (VPlanned.Change.Blocked = '')) then
+      Result := Result + [VPlanned.Change.Id];
 end;
 
 function FindPlanned(const pPlan: TFrAlterPlan; pId: Integer; out pChange: TFrAlterChange): Boolean;

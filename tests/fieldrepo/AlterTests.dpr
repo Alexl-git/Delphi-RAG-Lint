@@ -14,6 +14,7 @@ uses
   System.Classes,
   System.StrUtils,
   System.JSON,
+  System.Variants,
   Data.DB,
   FireDAC.Stan.Intf,
   FireDAC.Stan.Option,
@@ -425,9 +426,12 @@ begin
 end;
 
 { every object that can hang on a column: blocked for a widening, a safe-path change and a drop; free without it }
+function ReportOf(const pPlan: TFrAlterPlan): TFrAlterReport; forward;
+
 procedure TestObjectBlocks;
 
-  procedure ObjectCase(const pName, pCode: string; const pDeps: TArray<TFrDependency>; const pKeys: TArray<TFrKeyFacts>);
+  { pSoft = R8: a direct widening is offered UNCHECKED and names the object; everything else about it stays blocked }
+  procedure ObjectCase(const pName, pCode: string; const pDeps: TArray<TFrDependency>; const pKeys: TArray<TFrKeyFacts>; pSoft: Boolean);
   var
     vLive: TFrTableFacts;
     vPlan: TFrAlterPlan;
@@ -436,14 +440,21 @@ procedure TestObjectBlocks;
     vLive.Dependencies := pDeps;
     vLive.Keys := pKeys;
     vPlan := Plan(Repo([RCol('A', Ty(T_VARCHAR, 20)), RCol('B', Ty(T_INT))]), vLive, Opt);
-    Check(pName + ' widening BLOCKED ' + pCode, Blocked(vPlan, pCode), Text(vPlan));
+    if pSoft then
+      Check(pName + ' widening free, unchecked, the dependent named', Free1(vPlan) and not One(vPlan).Change.Checked and (Length(One(vPlan).Dependents) = 1)
+        and string.Join('|', RenderAlterText(ReportOf(vPlan))).Contains('dependent: ' + One(vPlan).Dependents[0])
+        and RenderAlterJson(ReportOf(vPlan)).Contains('"dependents":["' + One(vPlan).Dependents[0] + '"]'), Text(vPlan))
+    else
+      Check(pName + ' widening BLOCKED ' + pCode, Blocked(vPlan, pCode), Text(vPlan));
+    vPlan := Plan(Repo([RCol('A', Ty(T_INT)), RCol('B', Ty(T_INT))]), vLive, Opt);
+    Check(pName + ' type change still BLOCKED ' + pCode, Blocked(vPlan, pCode) and (Length(One(vPlan).Dependents) = 0), Text(vPlan));
     vPlan := Plan(Repo([RCol('A', Ty(T_VARCHAR, 5)), RCol('B', Ty(T_INT))]), vLive, Opt(True));
     Check(pName + ' safe path BLOCKED ' + pCode, Blocked(vPlan, pCode), Text(vPlan));
     vPlan := Plan(Repo([RCol('B', Ty(T_INT))]), vLive, Opt);
     Check(pName + ' drop BLOCKED ' + pCode, Blocked(vPlan, pCode), Text(vPlan));
     { control: the same object on the OTHER column blocks nothing }
     vPlan := Plan(Repo([RCol('A', Ty(T_VARCHAR, 10)), RCol('B', Ty(T_BIG))]), vLive, Opt);
-    Check(pName + ' control: the other column is free', Free1(vPlan), Text(vPlan));
+    Check(pName + ' control: the other column is free and checked', Free1(vPlan) and One(vPlan).Change.Checked and (Length(One(vPlan).Dependents) = 0), Text(vPlan));
     vLive.Dependencies := nil;
     vLive.Keys := nil;
     Check(pName + ' control: widening, safe path and drop without the object', Free1(Plan(Repo([RCol('A', Ty(T_VARCHAR, 20)), RCol('B', Ty(T_INT))]), vLive, Opt))
@@ -452,15 +463,97 @@ procedure TestObjectBlocks;
   end;
 
 begin
-  ObjectCase('A30 procedure', BLOCK_DEPENDENCY, [Dep('A', 'P1', 'procedure', fdkObject)], nil);
-  ObjectCase('A31 view', BLOCK_DEPENDENCY, [Dep('A', 'V1', 'view', fdkObject)], nil);
-  ObjectCase('A32 computed column', BLOCK_COMPUTED, [Dep('A', 'RDB$1', 'computed column', fdkComputed)], nil);
-  ObjectCase('A33 check', BLOCK_CONSTRAINT, [Dep('A', 'CK', 'check', fdkCheck)], nil);
-  ObjectCase('A34 expression index', BLOCK_INDEX, [Dep('A', 'IX', 'expression index', fdkExpressionIndex)], nil);
-  ObjectCase('A35 index', BLOCK_INDEX, nil, [Key('IX', 'INDEX', ['A'])]);
-  ObjectCase('A36 primary key', BLOCK_CONSTRAINT, nil, [Key('PK_T', 'PK', ['A'])]);
-  ObjectCase('A37 unique', BLOCK_CONSTRAINT, nil, [Key('UQ', 'UNIQUE', ['A'])]);
-  ObjectCase('A38 foreign key', BLOCK_CONSTRAINT, nil, [Key('FK1', 'FK', ['A'])]);
+  ObjectCase('A30 procedure', BLOCK_DEPENDENCY, [Dep('A', 'P1', 'procedure', fdkObject)], nil, True);
+  ObjectCase('A31 view', BLOCK_DEPENDENCY, [Dep('A', 'V1', 'view', fdkObject)], nil, True);
+  ObjectCase('A32 computed column', BLOCK_COMPUTED, [Dep('A', 'RDB$1', 'computed column', fdkComputed)], nil, False);
+  ObjectCase('A33 check', BLOCK_CONSTRAINT, [Dep('A', 'CK', 'check', fdkCheck)], nil, False);
+  ObjectCase('A34 expression index on text', BLOCK_INDEX, [Dep('A', 'IX', 'expression index', fdkExpressionIndex)], nil, False);
+  ObjectCase('A35 index', BLOCK_INDEX, nil, [Key('IX', 'INDEX', ['A'])], True);
+  ObjectCase('A36 primary key', BLOCK_CONSTRAINT, nil, [Key('PK_T', 'PK', ['A'])], False);
+  ObjectCase('A37 unique', BLOCK_CONSTRAINT, nil, [Key('UQ', 'UNIQUE', ['A'])], False);
+  ObjectCase('A38 foreign key', BLOCK_CONSTRAINT, nil, [Key('FK1', 'FK', ['A'])], False);
+end;
+
+{ R8 beyond one object: several dependents, a hard one among them, the index key limit, a rename, a domain change. }
+procedure TestWidenWithDependents;
+var
+  vLive: TFrTableFacts;
+  vPlan: TFrAlterPlan;
+  vOpt: TFrAlterOptions;
+
+  function Wide(pChars: Integer): TFrAlterPlan;
+  begin
+    Result := Plan(Repo([RCol('A', Ty(T_VARCHAR, pChars)), RCol('B', Ty(T_INT))]), vLive, Opt);
+  end;
+
+begin
+  vLive := Live([LCol('A', Ty(T_VARCHAR, 10)), LCol('B', Ty(T_INT))]);
+  vLive.Dependencies := [Dep('A', 'V1', 'view', fdkObject), Dep('A', 'TR1', 'trigger', fdkObject), Dep('A', 'F1', 'function', fdkObject),
+    Dep('A', 'K1', 'package', fdkObject), Dep('B', 'IXE', 'expression index', fdkExpressionIndex)];
+  vLive.Keys := [Key('IX', 'INDEX', ['B', 'A'])];
+  Check('A390 every dependent is listed', string.Join(',', One(Wide(20)).Dependents) = 'view V1,trigger TR1,function F1,package K1,index IX', string.Join(',', One(Wide(20)).Dependents));
+  vPlan := Plan(Repo([RCol('A', Ty(T_VARCHAR, 10)), RCol('B', Ty(T_BIG))]), vLive, Opt);
+  Check('A391 an expression index on a number is a dependent, not a block', Free1(vPlan) and not One(vPlan).Change.Checked and
+    (string.Join(',', One(vPlan).Dependents) = 'expression index IXE,index IX'), Text(vPlan));
+  vLive.Keys := vLive.Keys + [Key('FK1', 'FK', ['A'])];
+  vPlan := Wide(20);
+  Check('A392 one hard reason blocks it; the block names only that', (One(vPlan).Change.Blocked = BLOCK_CONSTRAINT + ': FK FK1') and (Length(One(vPlan).Dependents) = 0), Text(vPlan));
+  { the key limit of a plain index: 100 bytes here }
+  vLive := Live([LCol('A', Ty(T_VARCHAR, 10)), LCol('B', Ty(T_INT))]);
+  vLive.Keys := [Key('IX', 'INDEX', ['A'])];
+  vLive.MaxIndexKey := 100;
+  Check('A393 a key over the limit: BLOCKED index', Blocked(Wide(101), BLOCK_INDEX), Text(Wide(101)));
+  Check('A393c control: at the limit it is free', Free1(Wide(100)), Text(Wide(100)));
+  vLive.Columns[0].DataType.ByteLength := 40;
+  Check('A394 four bytes per character count: 26 characters are 104 bytes', Blocked(Wide(26), BLOCK_INDEX), Text(Wide(26)));
+  Check('A394c control: 25 are 100', Free1(Wide(25)), Text(Wide(25)));
+  vLive.Columns[0].DataType.ByteLength := 10;
+  vLive.Keys := [Key('IX', 'INDEX', ['B', 'A'])];
+  Check('A395 a segment of a longer key takes five bytes per four, a number eight: 73 -> 95 + 8', Blocked(Wide(73), BLOCK_INDEX), Text(Wide(73)));
+  Check('A395c control: 72 -> 90 + 8', Free1(Wide(72)), Text(Wide(72)));
+  vLive.MaxIndexKey := 0;
+  Check('A396 an unknown limit blocks nothing', Free1(Wide(900)), Text(Wide(900)));
+  { a rename that is blocked takes the widening with it }
+  vLive := Live([LCol('A', Ty(T_VARCHAR, 10)), LCol('B', Ty(T_INT))]);
+  vLive.Dependencies := [Dep('A', 'V1', 'view', fdkObject)];
+  vOpt := Opt;
+  vOpt.Renames := ParseRenames('A=C');
+  vPlan := Plan(Repo([RCol('C', Ty(T_VARCHAR, 20)), RCol('B', Ty(T_INT))]), vLive, vOpt);
+  Check('A397 the widening of a column whose rename is blocked is blocked too', (Length(vPlan.Changes) = 2) and (vPlan.Changes[1].Change.Blocked.StartsWith(BLOCK_DEPENDENCY)), Text(vPlan));
+  { only the domain changes, the type stays: not a widening }
+  vLive := Live([LCol('A', Ty(T_VARCHAR, 10), 'D1'), LCol('B', Ty(T_INT))]);
+  vLive.Domains := [Dom('D1', Ty(T_VARCHAR, 10)), Dom('D2', Ty(T_VARCHAR, 10))];
+  vLive.Dependencies := [Dep('A', 'V1', 'view', fdkObject)];
+  Check('A398 a domain change of the same type stays BLOCKED dependency', Blocked(Plan(Repo([RCol('A', Ty(T_VARCHAR, 10), 'D2'), RCol('B', Ty(T_INT))]), vLive, Opt), BLOCK_DEPENDENCY));
+end;
+
+{ R7: "all" never takes a DROP COLUMN. }
+procedure TestSelect;
+var
+  vPlan: TFrAlterPlan;
+
+  function Ids(const pLines: TArray<string>): string;
+  var
+    vId: Integer;
+  begin
+    Result := '';
+    for vId in SelectAlterIds(vPlan, pLines) do
+      Result := Result + IntToStr(vId) + ' ';
+    Result := Trim(Result);
+  end;
+
+begin
+  vPlan := Plan(Repo([RCol('A', Ty(T_VARCHAR, 20)), RCol('S', Ty(T_VARCHAR, 5)), RCol('B', Ty(T_INT)), RCol('C', Ty(T_INT))]),
+    Live([LCol('A', Ty(T_VARCHAR, 10)), LCol('S', Ty(T_VARCHAR, 10)), LCol('B', Ty(T_INT), '', True), LCol('X', Ty(T_INT))]), Opt);
+  Check('A500 the plan: widen, blocked shrink, DROP NOT NULL, add, drop', (Length(vPlan.Changes) = 5) and (vPlan.Changes[1].Change.Blocked <> '') and
+    (vPlan.Changes[4].Kind = fakDrop) and (vPlan.Changes[4].Change.Blocked = ''), Text(vPlan));
+  Check('A501 all = everything that is not blocked, except the drop', Ids(['all']) = '1 3 4', Ids(['all']));
+  Check('A502 the drop by its own id', Ids(['5']) = '5', Ids(['5']));
+  Check('A503 all plus the id of the drop', Ids(['all', '5']) = '1 3 4 5', Ids(['all', '5']));
+  Check('A504 comments, blank lines and case', Ids(['# x', '', ' ALL ']) = '1 3 4', Ids(['# x', '', ' ALL ']));
+  Check('A505 a blocked id is refused beside all too', Raises(procedure begin SelectAlterIds(vPlan, ['all', '2']) end, 'is blocked'));
+  Check('A506 an unknown id and a word that is not an id are refused', Raises(procedure begin SelectAlterIds(vPlan, ['9']) end, 'unknown change id') and
+    Raises(procedure begin SelectAlterIds(vPlan, ['drop']) end, 'not a change id'));
 end;
 
 procedure TestColumnBlocks;
@@ -1327,12 +1420,13 @@ begin
   Check('F4 default, description, identity, grants', vLive.FindColumn('DEF', vCol) and (vCol.DefaultSource = 'DEFAULT 5') and (vCol.Description = 'about')
     and vLive.FindColumn('IDT', vCol) and vCol.IsIdentity and vLive.FindColumn('GR', vCol) and vCol.HasColumnGrants);
   Check('F5 UPDATE triggers: the insert trigger and the inactive one do not count', string.Join(',', vLive.UpdateTriggers) = 'F_BIU', string.Join(',', vLive.UpdateTriggers));
-  Check('F6 view dependency', Why('VW', Ty(T_BIG)).Contains(BLOCK_DEPENDENCY + ': view V1'), Text(vPlan));
-  Check('F7 procedure dependency', Why('PR', Ty(T_BIG)).Contains(BLOCK_DEPENDENCY + ': procedure P1'), Text(vPlan));
-  Check('F8 trigger dependency', Why('TR', Ty(T_BIG)).Contains(BLOCK_DEPENDENCY + ': trigger F_BIU'), Text(vPlan));
+  Check('F6 view dependency', Why('VW', Ty(T_BIG)).Contains('1 unchecked') and (string.Join(',', One(vPlan).Dependents) = 'view V1'), Text(vPlan));
+  Check('F7 procedure dependency', Why('PR', Ty(T_BIG)).Contains('1 unchecked') and (string.Join(',', One(vPlan).Dependents) = 'procedure P1'), Text(vPlan));
+  Check('F8 trigger dependency', Why('TR', Ty(T_BIG)).Contains('1 unchecked') and One(vPlan).Dependents[0].StartsWith('trigger F_'), Text(vPlan) + string.Join(',', One(vPlan).Dependents));
   Check('F9 computed-by', Why('CB', Ty(T_BIG)).Contains(BLOCK_COMPUTED + ':'), Text(vPlan));
   Check('F10 check constraint', Why('CK', Ty(T_BIG)).Contains(BLOCK_CONSTRAINT + ': check CK_F'), Text(vPlan));
-  Check('F11 index', Why('IX', Ty(T_BIG)).Contains(BLOCK_INDEX + ': index F_IX'), Text(vPlan));
+  Check('F11 index', Why('IX', Ty(T_BIG)).Contains('1 unchecked') and (string.Join(',', One(vPlan).Dependents) = 'index F_IX'), Text(vPlan));
+  Check('F11b the key limit is page size / 4 - 9', vLive.MaxIndexKey = 2039, IntToStr(vLive.MaxIndexKey));
   Check('F12 expression index', Why('EX', Ty(T_VARCHAR, 50)).Contains(BLOCK_INDEX + ': expression index F_EX'), Text(vPlan));
   Check('F13 primary key', Why('ID', Ty(T_BIG)).Contains(BLOCK_CONSTRAINT + ': PK'), Text(vPlan));
   Check('F14 foreign key', Why('FK', Ty(T_BIG)).Contains(BLOCK_CONSTRAINT + ': FK'), Text(vPlan));
@@ -1588,6 +1682,85 @@ begin
   Check('F77b a changed OCTETS column: BLOCKED unsupported-type', Blocked(vPlan, BLOCK_UNSUPPORTED), Text(vPlan));
 end;
 
+{ R8 measured: a widening with dependents goes through, the indices answer right afterwards, and only what has a fixed
+  length of its own keeps it. F8x = what Firebird does; the wiki table rests on these. }
+procedure TestWidenLive(const pProvider: IFrDbProvider; const pConnText: string);
+const
+  LONG_TEXT = '123456789012345';
+var
+  vLive: TFrTableFacts;
+  vRepo: TFrRepoTable;
+  vPlan: TFrAlterPlan;
+  vOutcome: TFrAlterOutcome;
+  vTicket: TFrPrecheckTicket;
+  vConn: TFDConnection;
+  vChange: TFrAlterChange;
+  vText: string;
+
+  function Sql(const pSql: string): string;
+  begin
+    try
+      Result := VarToStr(vConn.ExecSQLScalar(pSql));
+    except
+      on E: Exception do
+        Result := 'ERROR ' + E.Message;
+    end;
+  end;
+
+  function Truncates(const pSql: string): Boolean;
+  begin
+    Result := Sql(pSql).Contains('right truncation');
+  end;
+
+begin
+  vLive := pProvider.ReadTable('WD');
+  vRepo := RepoOf(vLive);
+  SetCol(vRepo, 'A', Ty(T_VARCHAR, 20));
+  SetCol(vRepo, 'S', Ty(T_BIG));
+  SetCol(vRepo, 'PS', Ty(T_VARCHAR, 20));
+  SetCol(vRepo, 'DM', Ty(T_VARCHAR, 20));
+  vRepo.Columns[4].DomainName := 'D20';
+  SetCol(vRepo, 'KX', Ty(T_VARCHAR, 600));
+  SetCol(vRepo, 'E', Ty(T_VARCHAR, 20));
+  SetCol(vRepo, 'EN', Ty(T_BIG));
+  vPlan := PlanAlter(vRepo, vLive, Opt, pProvider.Dialect);
+  Check('F80 five widenings unchecked, the long key and the text expression index blocked', Text(vPlan).Contains('7 changes, 2 blocked, 5 unchecked'), Text(vPlan));
+  Check('F80b the dependents of A', string.Join(',', One(vPlan).Dependents) = 'function WF,package WK,procedure WP,procedure WPT,view WU,view WV,index WD_A',
+    string.Join(',', One(vPlan).Dependents));
+  vText := '';
+  for vChange in vPlan.Changes do
+    if vChange.Column = 'KX' then
+      vText := string.Join(';', vChange.Ddl);
+  Check('F81 a blocked change has no statement to run', vText = '');
+  vTicket := RunPrechecks(pProvider, vPlan);
+  vOutcome := ApplyAlterPlan(pProvider, vPlan, vTicket, SelectAlterIds(vPlan, ['all']));
+  Check('F82 all five apply', vOutcome.Success and (Cols(pProvider, 'WD') =
+    'ID:INTEGER! A:VARCHAR(20) S:BIGINT PS:VARCHAR(20) DM:VARCHAR(20) KX:VARCHAR(100) E:VARCHAR(10) EN:BIGINT'), States(vOutcome) + Cols(pProvider, 'WD'));
+  vConn := TFDConnection.Create(nil);
+  try
+    vConn.LoginPrompt := False;
+    vConn.Params.Text := StringReplace(pConnText, ';', sLineBreak, [rfReplaceAll]);
+    vConn.Open;
+    Check('F83 the indices answer as a scan does', (Sql('SELECT COUNT(*) FROM WD WHERE S = -5') = '1') and (Sql('SELECT COUNT(*) FROM WD WHERE S BETWEEN -3 AND 3') =
+      Sql('SELECT COUNT(*) FROM WD WHERE S + 0 BETWEEN -3 AND 3')) and (Sql('SELECT COUNT(*) FROM WD WHERE A = ''a7''') = '1') and (Sql('SELECT COUNT(*) FROM WD WHERE EN + 1 = 8') = '1'));
+    vConn.ExecSQL('UPDATE WD SET A = ''' + LONG_TEXT + ''', S = 9000000000000, DM = ''' + LONG_TEXT + ''', EN = 9000000000000 WHERE ID = 1');
+    Check('F84 and find the new long values', (Sql('SELECT COUNT(*) FROM WD WHERE A = ''' + LONG_TEXT + '''') = '1') and (Sql('SELECT COUNT(*) FROM WD WHERE S = 9000000000000') = '1')
+      and (Sql('SELECT COUNT(*) FROM WD WHERE EN + 1 = 9000000000001') = '1'));
+    Check('F85 a plain view column follows, over a domain too', (Sql('SELECT A FROM WV WHERE S = 9000000000000') = LONG_TEXT) and (Sql('SELECT DM FROM WV WHERE S = 9000000000000') = LONG_TEXT));
+    Check('F86 a view expression and a UNION view column keep the old length', Truncates('SELECT AX FROM WV WHERE S = 9000000000000') and Truncates('SELECT A FROM WU WHERE A STARTING WITH ''12'''));
+    Check('F87 PSQL: a fixed VARCHAR(10) truncates in procedure, function and package', Truncates('SELECT COUNT(*) FROM WP') and Truncates('SELECT WF() FROM RDB$DATABASE')
+      and Truncates('SELECT WK.G() FROM RDB$DATABASE'));
+    Check('F87c control: TYPE OF COLUMN follows', Sql('SELECT R FROM WPT(''' + LONG_TEXT + ''')') = LONG_TEXT, Sql('SELECT R FROM WPT(''' + LONG_TEXT + ''')'));
+    Check('F88 a trigger variable truncates: the write fails, nothing is cut silently', Sql('UPDATE WD SET PS = ''' + LONG_TEXT + ''' WHERE ID = 2 RETURNING PS').Contains('right truncation'));
+    Check('F89 Firebird itself refuses the key that is too long', Raises(procedure begin
+      vConn.ExecSQL('ALTER TABLE WD ALTER COLUMN KX TYPE VARCHAR(510)') end, 'key size exceeds'));
+    vConn.ExecSQL('ALTER TABLE WD ALTER COLUMN KX TYPE VARCHAR(509)');
+    Check('F89c control: at the limit it accepts', Cols(pProvider, 'WD').Contains('KX:VARCHAR(509)'), Cols(pProvider, 'WD'));
+  finally
+    vConn.Free;
+  end;
+end;
+
 procedure TestLive;
 var
   vEmbed, vConnText: string;
@@ -1631,7 +1804,19 @@ begin
       'INSERT INTO Z VALUES (3, ''007'')', 'INSERT INTO Z VALUES (4, ''5'')', 'INSERT INTO Z VALUES (5, ''2024-01-02'')', 'INSERT INTO Z VALUES (6, ''-05'')',
       'CREATE TABLE P (X INTEGER, A VARCHAR(10), B INTEGER)', 'INSERT INTO P VALUES (1, ''12'', 3)',
       'CREATE DOMAIN DFREE AS INTEGER', 'CREATE TABLE N (ID INTEGER, A DNN)', 'INSERT INTO N VALUES (1, 2)',
-      'CREATE TABLE O (ID INTEGER, U CHAR(16) CHARACTER SET OCTETS)']);
+      'CREATE TABLE O (ID INTEGER, U CHAR(16) CHARACTER SET OCTETS)',
+      'CREATE DOMAIN D20 AS VARCHAR(20)',
+      'CREATE TABLE WD (ID INTEGER NOT NULL PRIMARY KEY, A VARCHAR(10), S SMALLINT, PS VARCHAR(10), DM VARCHAR(10), KX VARCHAR(100), E VARCHAR(10), EN INTEGER)',
+      'CREATE INDEX WD_A ON WD (A)', 'CREATE INDEX WD_S ON WD (S)', 'CREATE INDEX WD_KX ON WD (KX)',
+      'CREATE INDEX WD_E ON WD COMPUTED BY (UPPER(E))', 'CREATE INDEX WD_EN ON WD COMPUTED BY (EN + 1)',
+      'CREATE VIEW WV (A, AX, S, DM) AS SELECT A, A || ''!'', S, DM FROM WD', 'CREATE VIEW WU (A) AS SELECT A FROM WD UNION ALL SELECT A FROM WD',
+      'CREATE PROCEDURE WP RETURNS (R VARCHAR(10)) AS BEGIN FOR SELECT A FROM WD INTO R DO SUSPEND; END',
+      'CREATE PROCEDURE WPT (X TYPE OF COLUMN WD.A) RETURNS (R TYPE OF COLUMN WD.A) AS BEGIN R = X; SUSPEND; END',
+      'CREATE FUNCTION WF RETURNS VARCHAR(10) AS BEGIN RETURN (SELECT MIN(A) FROM WD); END',
+      'CREATE PACKAGE WK AS BEGIN FUNCTION G RETURNS VARCHAR(10); END',
+      'CREATE PACKAGE BODY WK AS BEGIN FUNCTION G RETURNS VARCHAR(10) AS BEGIN RETURN (SELECT MIN(A) FROM WD); END END',
+      'CREATE TRIGGER WT FOR WD BEFORE INSERT OR UPDATE AS DECLARE L VARCHAR(10); BEGIN L = NEW.PS; END',
+      'INSERT INTO WD (ID, A, S, EN) SELECT RDB$RELATION_ID + 1, ''a'' || RDB$RELATION_ID, RDB$RELATION_ID - 10, RDB$RELATION_ID FROM RDB$RELATIONS WHERE RDB$RELATION_ID < 30']);
     vConn.ExecSQL('COMMENT ON COLUMN S.GOODTXT IS ''it''''s''');
     vConn.Close;
   finally
@@ -1648,6 +1833,7 @@ begin
   TestLiveApply(vProvider, vConnText);
   TestReadOnly(vProvider);
   TestReviewLive(vProvider);
+  TestWidenLive(vProvider, vConnText);
   Check('F60 the report of a live plan names the database, never the password', vProvider.DatabaseName.EndsWith('scratch.fdb') and not vProvider.DatabaseName.Contains('unused'));
 end;
 
@@ -1660,6 +1846,8 @@ begin
       TestDomains;
       TestTypeBlocks;
       TestObjectBlocks;
+      TestWidenWithDependents;
+      TestSelect;
       TestColumnBlocks;
       TestRequests;
       TestSafeSteps;

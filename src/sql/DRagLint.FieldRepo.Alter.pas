@@ -124,6 +124,8 @@ type
     /// <summary>Ids that must be applied with (before) this one.</summary>
     DependsOn: TArray<Integer>;
     Notes: TArray<string>;
+    /// <summary>Objects that use a column which is widened all the same ('view V'); they are not recompiled.</summary>
+    Dependents: TArray<string>;
     /// <summary>Type the column must have afterwards (verification); FieldType 0 = not checked.</summary>
     ExpectType: TFrTypeFacts;
   end;
@@ -156,7 +158,8 @@ type
 /// <exception cref="EFrAlterError">The table is missing on either side or is not a plain table; a rename or the order
 /// names a column that is not there.</exception>
 /// <remarks>Pure and deterministic. A change Firebird would refuse, or accept and lose data, is BLOCKED with a reason.
-/// Drops, DROP NOT NULL and safe-path changes are never checked.</remarks>
+/// Drops, DROP NOT NULL, safe-path changes and the widening of a column other objects use (Dependents) are never
+/// checked.</remarks>
 function PlanAlter(const pRepo: TFrRepoTable; const pLive: TFrTableFacts; const pOptions: TFrAlterOptions;
   const pDialect: IFrDbDialect): TFrAlterPlan;
 
@@ -212,6 +215,12 @@ const
   SAFE_HINT = ' (a safe path exists: --safe-path)';
   COUNT_NOT_RUN = -1;
   NO_HARD_REASON = '';
+  { the key of an index with several columns: five bytes for four of text, a number at least eight (measured) }
+  KEY_STUFF_FROM = 4;
+  KEY_STUFF_TO = 5;
+  KEY_NUMBER_BYTES = 8;
+  DEPENDENTS_NOTE = 'nothing is recompiled: a view expression, a UNION view column, and a PSQL variable or parameter of ' +
+    'a fixed type keep the old length; a longer value raises "string right truncation" there';
 
 type
   TFrTypeVerdict = (tvSame, tvWiden, tvShrink, tvLossy, tvConvert, tvUnsupported);
@@ -235,13 +244,16 @@ type
     function IdOf(pKind: TFrAlterKind; const pColumn: string): Integer;
     function DomainOf(const pCol: TFrRepoColumn; out pDomain: TFrDomainFacts; out pInLive: Boolean; out pReason: string): Boolean;
     function ObjectReasons(const pColumn: string): TArray<string>;
+    function WideningReasons(const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts; const pNewName: string;
+      out pDependents: TArray<string>): TArray<string>;
+    function KeyTooLong(const pKey: TFrKeyFacts; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts): Boolean;
     procedure CheckRequest;
     procedure PlanDomains;
     procedure PlanRenames;
     procedure PlanTypes;
     procedure PlanType(const pCol: TFrRepoColumn; const pLive: TFrColumnFacts);
     procedure PlanDirectType(const pCol: TFrRepoColumn; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts;
-      const pDomain: TFrDomainFacts; pVerdict: TFrTypeVerdict);
+      const pDomain: TFrDomainFacts; const pDependents: TArray<string>);
     procedure PlanSafeType(const pCol: TFrRepoColumn; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts;
       const pDomain: TFrDomainFacts; const pHard: TArray<string>);
     function SafeReasons(const pColumn: string; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts;
@@ -677,6 +689,76 @@ begin
         else Reason(BLOCK_CONSTRAINT, VKey.Kind + ' ' + VKey.Name)];
 end;
 
+{ A lower bound of the key of a plain index after the widening, against the limit of the database. Firebird refuses a
+  longer one at COMMIT ("key size exceeds implementation restriction"); a collation that needs more bytes per character
+  is not counted here and then left to Firebird. }
+function TAlterPlanner.KeyTooLong(const pKey: TFrKeyFacts; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts): Boolean;
+
+  function TextBytes(const pType: TFrTypeFacts; pChars: Integer): Integer;
+  begin
+    Result := if pType.CharLength > 0 then pChars * (pType.ByteLength div pType.CharLength) else pChars;
+  end;
+
+  function SegmentBytes(const pName: string): Integer;
+  var
+    VCol: TFrColumnFacts;
+    VText: Integer;
+  begin
+    if not FLive.FindColumn(pName, VCol) or not IsChar(VCol.DataType) then
+      Exit(KEY_NUMBER_BYTES);
+    VText := if SameText(pName, pLive.Name) then TextBytes(pLive.DataType, CharsOf(pTarget)) else VCol.DataType.ByteLength;
+    Result := if Length(pKey.Columns) = 1 then VText else (VText + KEY_STUFF_FROM - 1) div KEY_STUFF_FROM * KEY_STUFF_TO;
+  end;
+
+var
+  VColumn: string;
+  VBytes: Integer;
+begin
+  VBytes := 0;
+  for VColumn in pKey.Columns do
+    Inc(VBytes, SegmentBytes(VColumn));
+  Result := (FLive.MaxIndexKey > 0) and (VBytes > FLive.MaxIndexKey);
+end;
+
+{ R8, measured on Firebird 4.0.6 (docs\wiki\repo-alter-table.md): what still blocks a WIDENING. Views, PSQL objects,
+  plain indices and expression indices on numbers only become dependents. An expression index on text blocks: the length
+  of its key cannot be known, and a value over the limit breaks the savepoint of the statement that stores it. }
+function TAlterPlanner.WideningReasons(const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts; const pNewName: string;
+  out pDependents: TArray<string>): TArray<string>;
+var
+  VDep: TFrDependency;
+  VKey: TFrKeyFacts;
+  VRename: Integer;
+begin
+  Result := nil;
+  pDependents := nil;
+  VRename := IdOf(fakRename, pNewName);
+  if (VRename > 0) and (FPlan.Changes[VRename - 1].Change.Blocked <> '') then
+    Result := Result + [Reason(BLOCK_DEPENDENCY, 'its rename is blocked')];
+  for VDep in FLive.Dependencies do
+    if SameText(VDep.ColumnName, pLive.Name) then
+      case VDep.Kind of
+        fdkComputed: Result := Result + [Reason(BLOCK_COMPUTED, 'a computed column uses it')];
+        fdkCheck: Result := Result + [Reason(BLOCK_CONSTRAINT, 'check ' + VDep.DependentName + ' uses it')];
+      else
+        if (VDep.Kind = fdkExpressionIndex) and IsChar(pLive.DataType) then
+          Result := Result + [Reason(BLOCK_INDEX, Format('expression index %s uses it: the length of its key is not known',
+            [VDep.DependentName]))]
+        else
+          pDependents := pDependents + [VDep.KindText + ' ' + VDep.DependentName];
+      end;
+  for VKey in FLive.Keys do
+    if HasText(VKey.Columns, pLive.Name) then
+      if VKey.Kind <> KIND_INDEX then
+        Result := Result + [Reason(BLOCK_CONSTRAINT, VKey.Kind + ' ' + VKey.Name)]
+      else if KeyTooLong(VKey, pLive, pTarget) then
+        Result := Result + [Reason(BLOCK_INDEX, Format('the key of index %s would be longer than %d bytes', [VKey.Name, FLive.MaxIndexKey]))]
+      else
+        pDependents := pDependents + ['index ' + VKey.Name];
+  if Length(Result) > 0 then
+    pDependents := nil;
+end;
+
 procedure TAlterPlanner.PlanDomains;
 var
   VCol: TFrRepoColumn;
@@ -758,9 +840,10 @@ var
   VInLive: Boolean;
   VDomainReason: string;
   VVerdict: TFrTypeVerdict;
-  VHard: TArray<string>;
+  VHard, VDependents: TArray<string>;
   VChange: TFrAlterChange;
 begin
+  VDependents := nil;
   VTarget := pCol.DataType;
   VDomain := Default(TFrDomainFacts);
   VDomainReason := '';
@@ -770,7 +853,7 @@ begin
   if (VVerdict = tvSame) and (pCol.Inconsistent = '') and
     ((pCol.DomainName = '') or SameText(pCol.DomainName, pLive.DomainName)) and (VDomainReason = '') then
     Exit;
-  VHard := ObjectReasons(pLive.Name);
+  VHard := if VVerdict = tvWiden then WideningReasons(pLive, VTarget, pCol.Name, VDependents) else ObjectReasons(pLive.Name);
   if pCol.Inconsistent <> '' then
     VHard := VHard + [Reason(BLOCK_INCONSISTENT, pCol.Inconsistent)];
   if VDomainReason <> '' then
@@ -795,7 +878,7 @@ begin
   if VVerdict = tvUnsupported then
     VHard := VHard + [VerdictReason(VVerdict, TypeText(pLive.DataType, ''), TypeText(VTarget, ''))];
   if (VVerdict in [tvSame, tvWiden]) and (Length(VHard) = 0) then
-    PlanDirectType(pCol, pLive, VTarget, VDomain, VVerdict)
+    PlanDirectType(pCol, pLive, VTarget, VDomain, VDependents)
   else if FOptions.SafePath and (VVerdict in [tvShrink, tvLossy, tvConvert]) then
     PlanSafeType(pCol, pLive, VTarget, VDomain, VHard)
   else
@@ -814,7 +897,7 @@ begin
 end;
 
 procedure TAlterPlanner.PlanDirectType(const pCol: TFrRepoColumn; const pLive: TFrColumnFacts; const pTarget: TFrTypeFacts;
-  const pDomain: TFrDomainFacts; pVerdict: TFrTypeVerdict);
+  const pDomain: TFrDomainFacts; const pDependents: TArray<string>);
 var
   VChange: TFrAlterChange;
   VText: string;
@@ -836,8 +919,14 @@ begin
   if pDomain.NotNull and not pLive.NotNull then
     VChange.Prechecks := [Precheck(FDialect.CountNulls(FRepo.TableName, pLive.Name), BLOCK_NULLS,
       '%d row(s) are NULL and the domain is NOT NULL')];
-  if pVerdict = tvSame then
+  if SameType(pLive.DataType, pTarget) then
     VChange.Notes := ['only the domain changes; the type stays'];
+  VChange.Dependents := pDependents;
+  if Length(pDependents) > 0 then
+  begin
+    VChange.Change.Checked := False;
+    VChange.Notes := VChange.Notes + [DEPENDENTS_NOTE];
+  end;
   for VDependency in [IdOf(fakCreateDomain, pCol.DomainName), IdOf(fakRename, pCol.Name)] do
     if VDependency > 0 then
       VChange.DependsOn := VChange.DependsOn + [VDependency];

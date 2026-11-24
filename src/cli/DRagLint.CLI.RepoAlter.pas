@@ -157,17 +157,13 @@ end;
 function ChosenIds(const pPlan: TFrAlterPlan; const pSelectFile: string; pApply: Boolean): TArray<Integer>;
 var
   VChange: TFrChange;
-  VSet: TFrChangeSet;
 begin
-  Result := nil;
-  VSet := pPlan.ChangeSet;
   if pSelectFile <> '' then
-    for VChange in SelectChanges(VSet, SelectLines(pPlan, pSelectFile, pApply)) do
-      Result := Result + [VChange.Id]
-  else
-    for VChange in VSet.Changes do
-      if VChange.Checked and (VChange.Blocked = '') then
-        Result := Result + [VChange.Id];
+    Exit(SelectAlterIds(pPlan, SelectLines(pPlan, pSelectFile, pApply)));
+  Result := nil;
+  for VChange in pPlan.ChangeSet.Changes do
+    if VChange.Checked and (VChange.Blocked = '') then
+      Result := Result + [VChange.Id];
 end;
 
 procedure PrintReport(const pReport: TFrAlterReport; pJson: Boolean);

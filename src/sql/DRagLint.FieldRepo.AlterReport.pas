@@ -36,7 +36,7 @@ function RenderAlterText(const pReport: TFrAlterReport): TArray<string>;
 /// <summary>Renders a report as one JSON object.</summary>
 /// <param name="pReport">The report.</param>
 /// <returns>direction, table, database, dialect, hook, repository, dry_run, count, blocked, changes[id, op, kind,
-/// target, prop, old, new, checked, blocked, depends_on[], ddl[], safe{}, prechecks[], notes[]], hook_before[],
+/// target, prop, old, new, checked, blocked, depends_on[], ddl[], safe{}, prechecks[], notes[], dependents[]], hook_before[],
 /// hook_after[], notes[], plan_hash, outcome{success, groups[], problems[], not_applied[]}. plan_hash is what a --select
 /// file names in its "plan" line.</returns>
 function RenderAlterJson(const pReport: TFrAlterReport): string;
@@ -118,6 +118,7 @@ begin
     Result.AddPair('safe', JsonSafe(pChange.Safe));
   Result.AddPair('prechecks', JsonPrechecks(pChange.Prechecks));
   Result.AddPair('notes', JsonStrings(pChange.Notes));
+  Result.AddPair('dependents', JsonStrings(pChange.Dependents));
 end;
 
 { Ids of the plan that no committed group holds: not chosen, blocked, or in a group that failed or did not run. }
@@ -261,7 +262,7 @@ begin
       Result := Result + [Format('[%d] statements', [VChange.Change.Id])] + Prefixed(INDENT, VChange.Ddl);
       if VChange.Safe.AddSql <> '' then
         Result := Result + Prefixed(INDENT, [VChange.Safe.AddSql, VChange.Safe.CopySql, VChange.Safe.MismatchSql] + VChange.Safe.SwapSql);
-      Result := Result + PrecheckLines(VChange) + Prefixed(INDENT + 'note: ', VChange.Notes);
+      Result := Result + PrecheckLines(VChange) + Prefixed(INDENT + 'dependent: ', VChange.Dependents) + Prefixed(INDENT + 'note: ', VChange.Notes);
     end;
   Result := Result + Prefixed('hook before: ', pReport.Plan.HookBefore) + Prefixed('hook after: ', pReport.Plan.HookAfter) +
     Prefixed('note: ', pReport.Plan.Notes) + [PLAN_PREFIX + pReport.Plan.Hash];
