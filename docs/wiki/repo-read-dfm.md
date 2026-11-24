@@ -62,3 +62,5 @@ data field is unchecked. An apply is one transaction.
 with `--select`. A calc field that shadows a real column, a data field the schema facts do not have, and a value longer
 than its column are BLOCKED. A read never deletes a field: the persistent fields of a DFM are only that dataset's selection.
 An Alignment the DFM does not state is the default of the field type: NULL in a new row (0 left, 1 right, 2 center).
+
+With `--dataset`, `--json` also lists the persistent fields and the repository fields of the table: the [field selection in the IDE](field-repository-forms) reads them.

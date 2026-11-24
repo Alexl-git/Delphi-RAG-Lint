@@ -14,7 +14,9 @@ function IsRepoDfmSub(const pSub: string): Boolean;
 
 /// <summary>Runs `repo read-dfm --dfm FILE[;...] [--dataset NAME] --direction dfm-to-repo [--apply | --select FILE]`.</summary>
 /// <param name="pPath">The repository file (already resolved from --repo / --project).</param>
-/// <param name="pJson">--json: one JSON object (datasets, totals, changeSet, warnings, applied) instead of text.</param>
+/// <param name="pJson">--json: one JSON object (datasets, totals, changeSet, warnings, applied) instead of text. With
+/// --dataset a dataset also has its persistent fields and the repository's fields of its table (the IDE's field
+/// selection reads them).</param>
 /// <returns>0 = ok (a dry run included); 1 = a missing repository, a failed read or apply; 2 = a usage error: no --dfm,
 /// --direction missing or not dfm-to-repo, a bad --select file (nothing is applied).</returns>
 /// <remarks>The default is a DRY RUN: no byte of the repository changes. --apply writes the checked changes, --select
@@ -31,6 +33,7 @@ uses
   DRagLint.FieldRepo.Kinds,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.ChangeSet,
+  DRagLint.FieldRepo.DfmReadSelection,
   DRagLint.FieldRepo.DfmReadPlan;
 
 const
@@ -159,7 +162,44 @@ begin
     Result.Add(VLine);
 end;
 
-function DatasetsJson(const pPlan: TDfmrPlan): TJSONArray;
+function PersistentJson(const pReport: TDfmrDatasetReport): TJSONArray;
+var
+  VRef: TDfmrFieldRef;
+  VItem: TJSONObject;
+begin
+  Result := TJSONArray.Create;
+  for VRef in pReport.Fields do
+  begin
+    VItem := TJSONObject.Create;
+    Result.AddElement(VItem);
+    VItem.AddPair('field', VRef.FieldName);
+    VItem.AddPair('component', VRef.CompName);
+    VItem.AddPair('class', VRef.FieldClass);
+    VItem.AddPair('kind', FrKindName(VRef.Kind));
+    VItem.AddPair('table', VRef.TableName);
+    VItem.AddPair('column', VRef.Column);
+  end;
+end;
+
+function TableFieldsJson(const pFields: TArray<TFrSelectionField>): TJSONArray;
+var
+  VField: TFrSelectionField;
+  VItem: TJSONObject;
+begin
+  Result := TJSONArray.Create;
+  for VField in pFields do
+  begin
+    VItem := TJSONObject.Create;
+    Result.AddElement(VItem);
+    VItem.AddPair('field', VField.Name);
+    VItem.AddPair('kind', FrKindName(VField.Kind));
+    VItem.AddPair('sourceKey', VField.SourceKey);
+    VItem.AddPair('body', VField.Body);
+  end;
+end;
+
+{ pRepo = nil: without the field lists. }
+function DatasetsJson(const pPlan: TDfmrPlan; pRepo: TFDConnection): TJSONArray;
 var
   VReport: TDfmrDatasetReport;
   VItem: TJSONObject;
@@ -176,6 +216,10 @@ begin
     VItem.AddPair('unresolved', VReport.Unresolved);
     VItem.AddPair('fields', CountsJson(VReport.Counts));
     VItem.AddPair('noColumn', StringsJson(VReport.Unattributed));
+    if pRepo = nil then
+      Continue;
+    VItem.AddPair('persistent', PersistentJson(VReport));
+    VItem.AddPair('tableFields', TableFieldsJson(TableFieldsOf(pRepo, VReport.TableName)));
   end;
 end;
 
@@ -194,13 +238,13 @@ begin
   Result.AddPair('bodiesNone', TJSONNumber.Create(VTotals.BodyNone));
 end;
 
-procedure PrintJson(const pPlan: TDfmrPlan; pApplied: Integer);
+procedure PrintJson(const pPlan: TDfmrPlan; pRepo: TFDConnection; pApplied: Integer);
 var
   VRoot: TJSONObject;
 begin
   VRoot := TJSONObject.Create;
   try
-    VRoot.AddPair('datasets', DatasetsJson(pPlan));
+    VRoot.AddPair('datasets', DatasetsJson(pPlan, pRepo));
     VRoot.AddPair('totals', TotalsJson(pPlan));
     VRoot.AddPair('changeSet', TJSONObject.ParseJSONValue(RenderChangeSetJson(pPlan.ChangeSet)));
     VRoot.AddPair('warnings', StringsJson(pPlan.Warnings));
@@ -238,14 +282,13 @@ begin
       PrintText(VPlan);
     if pOptions.Write then
       VLog := ApplyDfmRead(VRepo, VPlan, ChosenChanges(VPlan.ChangeSet, pOptions.SelectFile));
+    if pOptions.Json then
+      PrintJson(VPlan, if pOptions.Dataset = '' then nil else VRepo, Length(VLog));
   finally
     VRepo.Free;
   end;
   if pOptions.Json then
-  begin
-    PrintJson(VPlan, Length(VLog));
     Exit;
-  end;
   for VLine in VLog do
     Writeln(VLine);
   Writeln(if pOptions.Write then 'applied: ' + IntToStr(Length(VLog)) + ' changes' else DRY_RUN_LINE);

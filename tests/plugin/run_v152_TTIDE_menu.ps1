@@ -73,7 +73,7 @@ begin
     SetLength(lMine, 0);
     for lCmd in lTable do
       if lCmd.OwnerLane = 'TTIDE' then lMine:= lMine + [lCmd];
-    Check(Length(lMine) = 6, 'six TTIDE rows, got ' + IntToStr(Length(lMine)));
+    Check(Length(lMine) = 9, 'nine rows (six TTIDE, three TT-DIALOG), got ' + IntToStr(Length(lMine)));
     for lCmd in lMine do Check(lCmd.ParentPath = 'Field Repository', lCmd.Id + ' parent path');
     lRoot:= Fixture;
     try

@@ -1,0 +1,42 @@
+{
+  "id": "field-repository-forms",
+  "title": "Field repository: fields of a form in the IDE",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.54.0-alpha",
+  "summary": "Reads the form in the editor into the field repository, or selects the persistent fields of a dataset from it; every change is checked before it is written",
+  "intro": "Read this when the fields of the form you have open should go to the field repository, or should come from it. Each command is a dry run first; a list shows every change old and new, blocked changes cannot be checked, and only the checked changes are written.",
+  "wikiPage": "field-repository-forms",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Field Repository > Read Fields from Dataset...",
+      "steps": ["Open the form (and the project that has the field repository); select the dataset in the designer, or pick it from the list", "Choose drag-lint > Field Repository > Read Fields from Dataset...", "Check the changes you want and press Apply (repo read-dfm --dataset --select)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Field Repository > Read Fields of All Datasets of Form...",
+      "steps": ["Open the form", "Choose drag-lint > Field Repository > Read Fields of All Datasets of Form...", "Check the changes you want and press Apply (repo read-dfm --select)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Field Repository > Select Fields of Dataset...",
+      "steps": ["Open the form; select the dataset in the designer, or pick it from the list", "Choose drag-lint > Field Repository > Select Fields of Dataset...", "Check the fields the dataset should have and press Preview...", "Check the changes you want and press Apply (repo write-dfm --names --select); the form is reloaded"]
+    }
+  ],
+  "audience": "both",
+  "related": ["field-repository", "repo-read-dfm"],
+  "questions": [
+    {
+      "ask": "Which fields does the repository have for a dataset of a form, and which does the form have?",
+      "command": "drag-lint repo read-dfm --dfm <form.dfm> --dataset <name> --direction dfm-to-repo --repo <file> --json"
+    }
+  ],
+  "verified": {
+    "date": "2026-11-24",
+    "by": "ENGINE",
+    "build": "1.54.0-alpha",
+    "surfaceHash": "925ae87ff550a36d345998b1a308a4d7a669c3debf3114c9c582424690724325"
+  }
+}

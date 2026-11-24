@@ -11,6 +11,11 @@ unit DragLint.Plugin.Cmd.FieldRepo;
   run a dry run first, show its summary and write only after the user confirms
   (B33 / BK-TTFINISH unhid them once the ORM golden passed).
 
+  1.54 (TT-DIALOG) adds three rows for the form in the editor: Read Fields from
+  Dataset, Read Fields of All Datasets of Form (repo read-dfm) and Select Fields
+  of Dataset (repo write-dfm). Each is a dry run, a list of the changes to check
+  (DragLint.Plugin.FieldSelectDialog) and one run with the --select file of it.
+
   The IDE parts (active project, engine exe, async runner) sit behind
   a not-CONSOLE conditional so that the headless console runners
   (run_v152_PLUGFRAME_cmdtable.ps1, run_v152_TTIDE_menu.ps1) compile this unit
@@ -79,7 +84,7 @@ function FieldRepoRunSummary(const pOutput: string; pMaxLines: Integer): string;
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function MaskedPrompt(const pText: string): string;  // dl:ok unused-public-symbol@9ebf -- test seam: run_v152_TTIDE_menu.ps1 checks it in a console build outside the plugin index
+function MaskedPrompt(const pText: string): string;  // dl:ok unused-public-symbol@2bdb -- test seam: run_v152_TTIDE_menu.ps1 checks it in a console build outside the plugin index
 
 implementation
 
@@ -94,8 +99,13 @@ uses
   DragLint.Plugin.CliAsync,
   DragLint.Plugin.ExeResolver,
   System.UITypes,
+  System.IOUtils,
   Vcl.FileCtrl,
   ToolsAPI,
+  DragLint.Plugin.Telemetry,
+  DragLint.Plugin.Theme,
+  DragLint.Plugin.FieldSelectModel,
+  DragLint.Plugin.FieldSelectDialog,
   {$ENDIF}
   DragLint.Plugin.Cmd152;
 
@@ -108,6 +118,9 @@ const
   SUMMARY_LINES = 40;
   WRITE_FILES_ASK = 'Write these files now?';
   REFRESH_ASK = 'Write the checked changes to the repository now? Deletes of vanished columns are not checked and stay out.';
+  SUB_READ_DFM = 'read-dfm';
+  SUB_WRITE_DFM = 'write-dfm';
+  JSON_FLAG = '--json';
   NO_PROJECT_MSG = 'drag-lint: open a project first; the field repository belongs to the active project.';
 
 function MaskedPrompt(const pText: string): string;
@@ -406,7 +419,301 @@ begin
   RunDryThenApply('repo gen-param-array', Base, '--plan', '--apply --project "' + Project + '"');
 end;
 
+{ ---- 1.54 TT-DIALOG: the form in the editor ---- }
+
+type
+  { The form a field command works on, read at the click. }
+  TFormContext = record
+    Title: string;
+    Exe: string;
+    Project: string;
+    Dfm: string;
+    Selected: TArray<string>; // components selected in the designer
+    procedure Show(const pText: string);
+  end;
+
+  TFormStep = reference to procedure(const pOutput: string);
+  TDatasetStep = reference to procedure(const pForm: TFormContext; const pDataset: string);
+
+procedure TFormContext.Show(const pText: string);
+begin
+  ShowMessage(Title + sLineBreak + sLineBreak + pText);
+end;
+
+{ The open module of a form's unit, or nil. }
+function OpenModuleOf(const pDfm: string): IOTAModule;
+var
+  Services: IOTAModuleServices;
+begin
+  Result:= nil;
+  if Supports(BorlandIDEServices, IOTAModuleServices, Services) then Result:= Services.FindModule(ChangeFileExt(pDfm, '.pas'));
+end;
+
+function ModuleIsDirty(const pModule: IOTAModule): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if pModule = nil then Exit;
+  for I:= 0 to pModule.ModuleFileCount - 1 do
+    if pModule.ModuleFileEditors[I].Modified then Exit(True);
+end;
+
+{ The engine reads the form from disk. }
+function SavedOrClean(const pModule: IOTAModule): Boolean;
+begin
+  Result:= not ModuleIsDirty(pModule);
+  if Result then Exit;
+  if MessageDlg(ExtractFileName(pModule.FileName) + ' has unsaved changes. Save it and continue?',
+    mtConfirmation, [mbYes, mbCancel], 0) = mrYes then Result:= pModule.Save(False, True);
+end;
+
+{ The designer holds real components in this process, so the handle is the component. }
+function SelectedComponents(const pModule: IOTAModule): TArray<string>;
+var
+  Designer: IOTAFormEditor;
+  Obj: TObject;
+  I, J: Integer;
+begin
+  Result:= nil;
+  for I:= 0 to pModule.ModuleFileCount - 1 do
+  begin
+    if not Supports(pModule.ModuleFileEditors[I], IOTAFormEditor, Designer) then Continue;
+    for J:= 0 to Designer.GetSelCount - 1 do
+    begin
+      Obj:= TObject(Designer.GetSelComponent(J).GetComponentHandle);
+      if Obj is TComponent then Result:= Result + [TComponent(Obj).Name];
+    end;
+  end;
+end;
+
+{ Engine, project and the saved form in the editor, or False after telling the user why not. }
+function ResolveForm(const pTitle: string; out pForm: TFormContext): Boolean;
+var
+  Services: IOTAModuleServices;
+  Module: IOTAModule;
+begin
+  pForm:= Default(TFormContext);
+  pForm.Title:= 'drag-lint: ' + pTitle;
+  Result:= ResolveContext(pForm.Exe, pForm.Project);
+  if not Result then Exit;
+  Module:= nil;
+  if Supports(BorlandIDEServices, IOTAModuleServices, Services) then Module:= Services.CurrentModule;
+  if Module <> nil then
+  begin
+    pForm.Dfm:= ChangeFileExt(Module.FileName, '.dfm');
+    pForm.Selected:= SelectedComponents(Module);
+    if FileExists(pForm.Dfm) then Exit(SavedOrClean(Module));
+  end;
+  Result:= False;
+  pForm.Show('open the form first; its fields are read from the .dfm on disk.');
+end;
+
+{ One `repo` run off the main thread; pNext gets the output of a run that succeeded. }
+procedure RunFormStep(const pForm: TFormContext; const pSub, pArgs: string; const pNext: TFormStep);
+var
+  Title: string;
+  Next: TFormStep;
+begin
+  Title:= pForm.Title;
+  Next:= pNext;
+  RunCliAsync(FieldRepoCommandLine(pForm.Exe, pSub, pForm.Project, pArgs),
+    procedure(pExitCode: Integer; const pOutput: string)
+    begin
+      if pExitCode = 0 then Next(pOutput) else ShowRunResult(Title, pExitCode, ApplyLog(pOutput, SUMMARY_LINES));
+    end, REPO_STALL_MS);
+end;
+
+{ Reloads the form after its files were written; a form edited meanwhile is left alone. }
+procedure ReloadForm(const pDfm: string);
+var
+  Module: IOTAModule;
+begin
+  try
+    Module:= OpenModuleOf(pDfm);
+    if (Module <> nil) and not ModuleIsDirty(Module) then Module.Refresh(True);
+  except
+    on E: Exception do DLT('field-repository', 'reload ' + pDfm + ': ' + E.ClassName + ': ' + E.Message);
+  end;
+end;
+
+{ The run that writes exactly the checked changes. }
+procedure ApplySelection(const pForm: TFormContext; const pSub, pArgs: string; const pPlan: TFsPlan);
+var
+  SelectFile, SubVerb: string;
+  Form: TFormContext;
+begin
+  Form:= pForm;
+  SubVerb:= pSub;
+  SelectFile:= TPath.Combine(TPath.GetTempPath, 'drag-lint-select-' + TGUID.NewGuid.ToString + '.txt');
+  TFile.WriteAllText(SelectFile, pPlan.SelectFileText);
+  RunCliAsync(FieldRepoCommandLine(Form.Exe, SubVerb, Form.Project, pArgs + SelectArg(SelectFile)),
+    procedure(pExitCode: Integer; const pOutput: string)
+    begin
+      System.SysUtils.DeleteFile(SelectFile);
+      if (pExitCode = 0) and (SubVerb = SUB_WRITE_DFM) then ReloadForm(Form.Dfm);
+      ShowRunResult(Form.Title, pExitCode, ApplyLog(pOutput, SUMMARY_LINES));
+    end, REPO_STALL_MS);
+end;
+
+{ The plan of a dry run, or False after showing why there is none. }
+function PlanOf(const pForm: TFormContext; const pOutput: string; out pPlan: TFsPlan): Boolean;
+var
+  Error: string;
+begin
+  Result:= ParsePlan(pOutput, pPlan, Error);
+  if not Result then pForm.Show(Error);
+end;
+
+{ Asks for the changes of a dry run; False = nothing to write. }
+function Confirmed(const pForm: TFormContext; var pPlan: TFsPlan): Boolean;
+begin
+  Result:= Length(pPlan.Changes) > 0;
+  if Result then Result:= ConfirmChanges(pForm.Title, pPlan, ApplyIdeTheme) and (pPlan.CheckedCount > 0)
+  else pForm.Show('no difference' + sLineBreak + string.Join(sLineBreak, pPlan.Warnings));
+end;
+
+{ repo read-dfm: dry run, confirm, dry run again (its ids have no plan id), apply. }
+procedure ReadFields(const pForm: TFormContext; const pDataset: string);
+var
+  Form: TFormContext;
+  Args: string;
+begin
+  Form:= pForm;
+  Args:= ReadDfmArgs(Form.Dfm, pDataset, '');
+  RunFormStep(Form, SUB_READ_DFM, Args + JSON_FLAG,
+    procedure(const pOutput: string)
+    var
+      Plan: TFsPlan;
+    begin
+      if not PlanOf(Form, pOutput, Plan) or not Confirmed(Form, Plan) then Exit;
+      RunFormStep(Form, SUB_READ_DFM, Args + JSON_FLAG,
+        procedure(const pAgain: string)
+        var
+          Newer: TFsPlan;
+        begin
+          if not PlanOf(Form, pAgain, Newer) then Exit;
+          if Newer.Fingerprint = Plan.Fingerprint then ApplySelection(Form, SUB_READ_DFM, Args, Plan)
+          else Form.Show('the form or the repository changed meanwhile: nothing written');
+        end);
+    end);
+end;
+
+{ repo write-dfm for the fields the user selected: dry run, confirm, apply with the plan id. }
+procedure WriteSelection(const pForm: TFormContext; const pDataset: string; pSelection: TFieldSelection);
+var
+  Form: TFormContext;
+  Args: string;
+  Removed: TArray<string>;
+begin
+  Form:= pForm;
+  Args:= WriteDfmArgs(Form.Dfm, pDataset, pSelection.Names, '');
+  Removed:= pSelection.RemovedComponents;
+  RunFormStep(Form, SUB_WRITE_DFM, Args + JSON_FLAG,
+    procedure(const pOutput: string)
+    var
+      Plan: TFsPlan;
+    begin
+      if not PlanOf(Form, pOutput, Plan) then Exit;
+      Plan.KeepAllBut(Removed);
+      if not Confirmed(Form, Plan) then Exit;
+      if ModuleIsDirty(OpenModuleOf(Form.Dfm)) then Form.Show('the form has unsaved changes now: nothing written')
+      else ApplySelection(Form, SUB_WRITE_DFM, Args, Plan);
+    end);
+end;
+
+{ The field-selection dialog of one dataset (FR-2). }
+procedure SelectDatasetFields(const pForm: TFormContext; const pDataset: string);
+var
+  Form: TFormContext;
+begin
+  Form:= pForm;
+  RunFormStep(Form, SUB_READ_DFM, ReadDfmArgs(Form.Dfm, pDataset, JSON_FLAG),
+    procedure(const pOutput: string)
+    var
+      Datasets: TArray<TFsDataset>;
+      Selection: TFieldSelection;
+      Error, Title: string;
+    begin
+      if not ParseDatasets(pOutput, Datasets, Error) or (Length(Datasets) = 0) then
+      begin
+        Form.Show(Error);
+        Exit;
+      end;
+      Title:= Form.Title + ' -- ' + Datasets[0].Caption + ', table ' + Datasets[0].TableName;
+      Selection:= TFieldSelection.Create(Datasets[0]);
+      try
+        if not Selection.HasTable then Form.Show(Selection.Refusal)
+        else if SelectFields(Title, Selection, ApplyIdeTheme) then WriteSelection(Form, Datasets[0].Name, Selection);
+      finally
+        Selection.Free;
+      end;
+    end);
+end;
+
+{ The dataset selected in the designer, the only one, or the one the user picks. }
+procedure ForDataset(const pForm: TFormContext; const pNext: TDatasetStep);
+var
+  Form: TFormContext;
+  Next: TDatasetStep;
+begin
+  Form:= pForm;
+  Next:= pNext;
+  RunFormStep(Form, SUB_READ_DFM, ReadDfmArgs(Form.Dfm, '', JSON_FLAG),
+    procedure(const pOutput: string)
+    var
+      Datasets: TArray<TFsDataset>;
+      Error: string;
+      Index: Integer;
+    begin
+      if ParseDatasets(pOutput, Datasets, Error) and (Length(Datasets) = 0) then Error:= 'the form has no dataset';
+      if Error <> '' then
+      begin
+        Form.Show(Error);
+        Exit;
+      end;
+      Index:= DatasetToUse(Datasets, Form.Selected);
+      if (Index >= 0) or PickDataset(Form.Title, Datasets, ApplyIdeTheme, Index) then Next(Form, Datasets[Index].Name);
+    end);
+end;
+
+procedure InvokeReadDataset(Sender: TObject);
+var
+  Form: TFormContext;
+begin
+  if ResolveForm('Read Fields from Dataset', Form) then ForDataset(Form, ReadFields);
+end;
+
+procedure InvokeReadForm(Sender: TObject);
+var
+  Form: TFormContext;
+begin
+  if ResolveForm('Read Fields of All Datasets of Form', Form) then ReadFields(Form, '');
+end;
+
+procedure InvokeSelectFields(Sender: TObject);
+var
+  Form: TFormContext;
+begin
+  if ResolveForm('Select Fields of Dataset', Form) then ForDataset(Form, SelectDatasetFields);
+end;
+
 {$ELSE}
+
+procedure InvokeReadDataset(Sender: TObject);
+begin
+  Cmd152NotYetAvailable('field-repository-07-read-dataset');
+end;
+
+procedure InvokeReadForm(Sender: TObject);
+begin
+  Cmd152NotYetAvailable('field-repository-08-read-form');
+end;
+
+procedure InvokeSelectFields(Sender: TObject);
+begin
+  Cmd152NotYetAvailable('field-repository-09-select-fields');
+end;
 
 procedure InvokeOpenEditor(Sender: TObject);
 begin
@@ -464,6 +771,9 @@ begin
   RegisterRow('field-repository-04-dataservice', 'Generate DataService Units...', True, InvokeDataService);
   RegisterRow('field-repository-05-memtable', 'FDMemTable from CSV...', True, InvokeMemTableFromCsv);
   RegisterRow('field-repository-06-paramarray', 'Param Array Assistant...', True, InvokeParamArray);
+  RegisterRow('field-repository-07-read-dataset', 'Read Fields from Dataset...', True, InvokeReadDataset);
+  RegisterRow('field-repository-08-read-form', 'Read Fields of All Datasets of Form...', True, InvokeReadForm);
+  RegisterRow('field-repository-09-select-fields', 'Select Fields of Dataset...', True, InvokeSelectFields);
 end;
 
 initialization

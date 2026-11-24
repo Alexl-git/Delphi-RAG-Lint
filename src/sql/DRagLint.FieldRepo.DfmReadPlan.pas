@@ -18,11 +18,25 @@ uses
   FireDAC.Comp.Client,
   DRagLint.FieldRepo.Kinds,
   DRagLint.FieldRepo.ChangeSet,
+  DRagLint.FieldRepo.DfmReadSelection,
   DRagLint.FieldRepo.DfmRead;
 
 type
   /// <summary>Number of persistent fields per kind.</summary>
   TDfmrKindCounts = array[TFrFieldKind] of Integer;
+
+  /// <summary>One persistent field and the column it belongs to.</summary>
+  TDfmrFieldRef = record
+    /// <summary>FieldName property, component name and class.</summary>
+    FieldName: string;
+    CompName: string;
+    FieldClass: string;
+    /// <summary>Field kind.</summary>
+    Kind: TFrFieldKind;
+    /// <summary>Table and column; '' = the DFM does not state them.</summary>
+    TableName: string;
+    Column: string;
+  end;
 
   /// <summary>What was read from one dataset.</summary>
   TDfmrDatasetReport = record
@@ -39,6 +53,8 @@ type
     Counts: TDfmrKindCounts;
     /// <summary>Persistent fields that belong to no table the DFM states.</summary>
     Unattributed: TArray<string>;
+    /// <summary>The persistent fields in DFM order, attributed or not.</summary>
+    Fields: TArray<TDfmrFieldRef>;
     /// <summary>Calc / internal-calc fields with a storable body, with a blocked body, without a body.</summary>
     BodyOk: Integer;
     BodyBlocked: Integer;
@@ -81,6 +97,13 @@ type
 /// <exception cref="ERepoError">The repository is schema 1 or 2 (run repo migrate first).</exception>
 /// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids.</remarks>
 function PlanDfmRead(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string): TDfmrPlan;
+
+/// <summary>The fields the repository has for a table, as the field selection of a dataset sees them.</summary>
+/// <param name="pRepo">Open repository connection, schema 3; only a SELECT runs.</param>
+/// <param name="pTable">Table name (case-insensitive).</param>
+/// <returns>One record per DL_FIELDS_INFO row, in FIELD_NAME order, graphical columns included; a row with an unknown
+/// FIELD_KIND counts as data.</returns>
+function TableFieldsOf(pRepo: TFDConnection; const pTable: string): TArray<TFrSelectionField>;
 
 /// <summary>Applies chosen changes of a plan in one transaction.</summary>
 /// <param name="pRepo">Open read-write repository connection, the one the plan was made from.</param>
@@ -128,6 +151,8 @@ const
   COL_INDEX = 'COLUMN_INDEX';
   OBJECT_KIND = 'object';
   SQL_FIELD_ROW = 'SELECT * FROM "DL_FIELDS_INFO" WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F';
+  SQL_TABLE_FIELDS = 'SELECT "FIELD_NAME", "FIELD_KIND", "SOURCEKEY", "CALC_BODY" FROM "DL_FIELDS_INFO" ' +
+    'WHERE UPPER("TABLE_NAME") = UPPER(:T) ORDER BY "FIELD_NAME"';
   SQL_GRID_ROW = 'SELECT * FROM "DL_GRID_COLUMNS" WHERE "FORM_NAME" = :F AND "VIEW_NAME" = :V AND "COLUMN_NAME" = :C';
   SQL_GRID_FORM = 'SELECT * FROM "DL_GRID_COLUMNS" WHERE UPPER("FORM_NAME") = UPPER(:F) ORDER BY "VIEW_NAME", "COLUMN_INDEX", "COLUMN_NAME"';
   MULTI_FIELD = ';';
@@ -751,6 +776,7 @@ var
   VSource: TDatasetSource;
   VContext: TDfmrCodeContext;
   VField: TDfmrField;
+  VRef: TDfmrFieldRef;
   VTable, VColumn, VReason: string;
 begin
   VSource := SourceOf(pDataset);
@@ -766,7 +792,18 @@ begin
   for VField in pDataset.Fields do
   begin
     Inc(VReport.Counts[VField.Kind]);
-    if not FieldSource(VSource, VField, VTable, VColumn, VReason) then
+    VRef := Default(TDfmrFieldRef);
+    VRef.FieldName := VField.FieldName;
+    VRef.CompName := VField.CompName;
+    VRef.FieldClass := VField.FieldClass;
+    VRef.Kind := VField.Kind;
+    if FieldSource(VSource, VField, VTable, VColumn, VReason) then
+    begin
+      VRef.TableName := VTable;
+      VRef.Column := VColumn;
+    end;
+    VReport.Fields := VReport.Fields + [VRef];
+    if VRef.TableName = '' then
     begin
       VReport.Unattributed := VReport.Unattributed + [VField.FieldName];
       Continue;
@@ -1240,6 +1277,35 @@ begin
     Result := VRead.Execute(pFiles, pDataset);
   finally
     VRead.Free;
+  end;
+end;
+
+function TableFieldsOf(pRepo: TFDConnection; const pTable: string): TArray<TFrSelectionField>;
+var
+  VQuery: TFDQuery;
+  VName, VKind, VKey, VBody: TField;
+  VItem: TFrSelectionField;
+begin
+  Result := nil;
+  VQuery := TFDQuery.Create(nil);
+  try
+    VQuery.Connection := pRepo;
+    VQuery.Open(SQL_TABLE_FIELDS, [pTable]);
+    VName := VQuery.FieldByName(COL_FIELD);
+    VKind := VQuery.FieldByName(COL_KIND);
+    VKey := VQuery.FieldByName(COL_SOURCE_KEY);
+    VBody := VQuery.FieldByName(COL_BODY);
+    while not VQuery.Eof do
+    begin
+      VItem.Name := VName.AsString;
+      VItem.Kind := if FrKindCodeKnown(VKind.Value) then FrKindFromCode(VKind.Value) else frkData;
+      VItem.SourceKey := VKey.AsString;
+      VItem.Body := VBody.AsString;
+      Result := Result + [VItem];
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
   end;
 end;
 
