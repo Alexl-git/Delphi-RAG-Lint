@@ -784,8 +784,8 @@
     "version": "1.52.2-alpha"
   },
   "features/ref-type-rules.md": {
-    "hash": "7715befc803fa6036602bc4c1649cd1d40e5021d787180781b62b8dc6ccc6f83",
-    "version": "1.52.0-alpha"
+    "hash": "cfc2398f8bbca8e2cffe6692390628a1770273a3362f7384875bf71dd7990601",
+    "version": "1.54.0-alpha"
   },
   "features/register-project.md": {
     "hash": "43814e345905e4474980090c98269da5bedd7ef0d34253cba0dabde3eafb1860",
@@ -880,8 +880,8 @@
     "version": "1.48.0-alpha"
   },
   "features/show-resolved-dbs-debug.md": {
-    "hash": "e929082209101bb22c6ca65f1f735212b7490f358996d9c527fbb9f0d06dda1d",
-    "version": "1.53.0-alpha"
+    "hash": "fc7b23ffb493b9b3d566e479cef9a7b001854e5a8dae64f61204118d52576d92",
+    "version": "1.54.0-alpha"
   },
   "features/show-signature-help.md": {
     "hash": "86e52e2f011c52ef63cc755932b6939e351b3f9f211a88fc7520508d37d8412b",

@@ -55,7 +55,7 @@ Same thread code as `ui-access-in-thread-typed` (`Execute` of a `TThread` descen
 | Silent | `Self.Terminate` / `Terminate` of the thread itself; the same calls outside thread code; a project that declares its own `TThread` |
 | Never constructed | As above: a hint with ` (class never constructed)` appended |
 
-Real finding it was written for: `TExit.Execute` in ORM3 CLIENT `uMain.pas` calls `PostQuitMessage(0)` from a worker.
+Real finding it was written for: a thread's `Execute` in a real client application calls `PostQuitMessage(0)` from a worker.
 It needs the library index for the ancestry.
 ## What keeps a rule silent
 
