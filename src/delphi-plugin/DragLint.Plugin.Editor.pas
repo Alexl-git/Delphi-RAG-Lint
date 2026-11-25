@@ -132,26 +132,6 @@ function StripFirstHeaderLine(const AMarkdown: string): string;
 /// </remarks>
 function IdentifierAtCursor: string;
 
-/// <summary>Writes the "drag-lint is looking this up" note for the symbol
-/// under the caret onto the status strip.</summary>
-/// <remarks>
-/// ONE formatter for BOTH hover paths -- the menu-invoked hover and
-/// the dwell tracker. They used to build the string separately, which is how
-/// the same caret comes to read two different ways depending on how the popup
-/// was triggered. Call it immediately BEFORE the request goes out; since
-/// 2026-10-29 the request is asynchronous and the note says the answer is coming.
-/// <para>Three states, deliberately distinguishable: a named identifier, a
-/// dwell that resolved no identifier, and (once the caller clears the note) an
-/// answered hover.</para>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
-/// <para>Calls: DragLint.Plugin.Editor.IdentifierAtCursor, DragLint.Plugin.StatusBar.SetDragLintNote</para>
-/// <seealso cref="DragLint.Plugin.Editor.IdentifierAtCursor"/>
-/// <seealso cref="DragLint.Plugin.StatusBar.SetDragLintNote"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-procedure AnnounceHoverStart;
-
 type
   /// <summary>How an asynchronous hover lookup ended.</summary>
   /// <remarks>
@@ -793,6 +773,7 @@ uses
   , DragLint.Plugin.Keyboard
   , DragLint.Plugin.CallerFilter   { v(hover-callers scope): pure caret-selection policy }
   , DragLint.Plugin.StatusBar      { SetDragLintNote -- the ONE drag-lint status strip }
+  , DragLint.Plugin.HoverNote      { DLCaretTokenInText / DLEmptyAnswerNote -- the hover note's text }
   , DragLint.Plugin.HoverSignature { v(property type): pure header-signature composer }
   , DRagLint.Core.GhostText        { v1.7 B3: the completion endpoint KAI calls }
   , DRagLint.Core.EngineHold       { the sentinel that lets a build reclaim the engine }
@@ -2452,6 +2433,17 @@ begin
     end) = 0 then SetDragLintNote('drag-lint: hover not sent -- engine not ready');
 end; // procedure
 
+{ The token at the position the menu hover asks about: the SAME row and column
+  as the request, so the note never names another place (lane 1.54.1 HOVERNOTE). }
+function MenuHoverToken(ALine0, ACol0: Integer): TDLToken;
+var
+  ESS: IOTAEditorServices;
+begin
+  Result:= Default(TDLToken);
+  if Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
+    Result:= DLCaretTokenInText(EditViewText(ESS.TopView), ALine0, ACol0);
+end;
+
 procedure InvokeHover(Sender: TObject);
 { 2026-10-29: ASYNC. The request goes out and this returns; the popup appears
   when the answer arrives, at the mouse position of that moment (the user asked
@@ -2460,6 +2452,7 @@ var
   Uri : string ;
   Line: Integer;
   Col : Integer;
+  Tok : TDLToken;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -2473,7 +2466,9 @@ begin
   end;
 
   { Tell the user we started BEFORE the request goes out. }
-  AnnounceHoverStart;
+  Tok:= MenuHoverToken(Line, Col);
+  SetDragLintNote(DLHoverAnnounceNote(Tok));
+  DLT('hover', Format('menu hover src=caret %s|%d|%d tok=%s "%s"', [Uri, Line, Col, DLTokenKindName(Tok.Kind), Tok.Text]));
 
   if RequestHoverBundleAsync(Uri, Line, Col,
     procedure(AId: Integer; AStatus: TDLHoverStatus; const AMarkdown, AQName: string;
@@ -2494,7 +2489,7 @@ begin
           end;
         hvsEmpty:
           begin
-            SetDragLintNote('drag-lint: hover -- nothing indexed at the cursor');
+            SetDragLintNote(DLEmptyAnswerNote(Tok));
             Exit;
           end;
       end;
@@ -4235,15 +4230,6 @@ begin
       ShowMessage(Format('drag-lint AST Checks:'#13#10'%s', [Trim(Output)]));
     end, AST_CHECK_STALL_MS);
 end; // procedure
-
-procedure AnnounceHoverStart;
-var
-  N: string;
-begin
-  N:= IdentifierAtCursor;
-  if N <> '' then SetDragLintNote('drag-lint: hover ' + N + '...')
-  else             SetDragLintNote('drag-lint: hover ...');
-end;
 
 { v0.33: Find Usages }
 function IdentifierAtCursor: string;
