@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.51.0-alpha",
   "summary": "Whole-program lint rules: TLS checks off, UI calls in console/service apps, DUnitX tests without asserts, weak ciphers, asm without Win64, GUI WriteLn",
-  "intro": "Read this to see what each application-level rule reports, which ship ON or OFF, and how the checks avoid the common false positives.",
+  "intro": "Read this to see what each application-level rule reports, which ship ON or OFF, and how the checks avoid the common false positives (writeln-in-gui-app asks the program: a console .dpr / .dproj reports nothing).",
   "wikiPage": "application-level-rules",
   "surfaces": [
     {
@@ -22,9 +22,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-14",
+    "date": "2026-11-25",
     "by": "ENGINE",
-    "build": "1.51.0-alpha",
-    "surfaceHash": "274839f13d00cd88a96a34c1f16b90d87bc39c6d2c163b291492016dc2ed6a12"
+    "build": "1.54.0-alpha",
+    "surfaceHash": "a3027b1dc8125fc3bec7948f05c72a3efc669f5c9a44bf1eed5b46e36b477322"
   }
 }

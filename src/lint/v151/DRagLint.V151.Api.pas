@@ -28,6 +28,10 @@ type
   /// </remarks>
   TV151DeclKind = (vdkNewRule, vdkHostExpansion);
 
+  /// <summary>Answers whether the linted file's program is a console program.</summary>
+  /// <returns>True = console program; False = GUI program, library, package, or not decidable.</returns>
+  TProgramConsoleProbe = reference to function: Boolean;
+
   /// <summary>One rule id a v151 lane unit may emit.</summary>
   /// <remarks>
   /// Build it with <see cref="V151Rule"/> or <see cref="V151Host"/>,
@@ -68,6 +72,10 @@ type
     FileId    : Int64;          // Path's id in Store, or 0
     LibStore  : ISymbolStore;   // platform library index, or nil
     NarrowRule: string;         // --rule of this run, '' = every rule
+    /// <summary>Answers whether the program the file belongs to has a console; nil when the program is unknown.</summary>
+    /// <remarks>1.54.1 CONSOLE: set by the verb after Make (a loose file leaves it nil). The first call reads the
+    /// program source and its .dproj, later calls of the same run answer from memory.</remarks>
+    ProgramHasConsole: TProgramConsoleProbe;
     /// <summary>True when this run reports ARuleId (no --rule, or --rule ARuleId).</summary>
     /// <param name="ARuleId">A rule id the lane is about to compute.</param>
     /// <returns>False when --rule names another rule, or when ARuleId already overran the

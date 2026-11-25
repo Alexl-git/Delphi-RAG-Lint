@@ -15,6 +15,7 @@ uses
   , System.Generics.Collections
   , System.RegularExpressions
   , DRagLint.Core.Model
+  , DRagLint.V151.Api  // TProgramConsoleProbe
   ;
 
 const
@@ -511,6 +512,8 @@ type
     /// <summary>Write / WriteLn to the console from a program or unit that has no console.</summary>
     /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AProgramHasConsole">Is the file's program a console program; nil = the program is unknown, and the
+    /// file's own text decides alone. Asked only when there is a write to report.</param>
     /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -525,7 +528,8 @@ type
     /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.ContractUnitDeclaresClass"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class procedure WritelnInGuiApp(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
+    class procedure WritelnInGuiApp(const ASrc: TAppSrc; const APath: string; const AProgramHasConsole: TProgramConsoleProbe;
+      AOut: TList<TLintFinding>); static;
   end;
 
 /// <summary>Reads a source file for the lane's rules.</summary>
@@ -541,10 +545,24 @@ type
 /// </remarks>
 function ReadAppSource(const APath: string): string;
 
+/// <summary>Does the program a project builds have a console?</summary>
+/// <param name="AProjectFile">The project's .dproj, or its .dpr when there is no .dproj.</param>
+/// <param name="APlatform">Platform group suffix for the .dproj, e.g. 'Win64'.</param>
+/// <param name="AConfig">Config name for the .dproj; '' = Release.</param>
+/// <returns>True for a console program; False for a GUI program, a library, a package or an unreadable project.</returns>
+/// <remarks>
+/// The compiler's own order: DCC_ConsoleTarget (dcc -CC) is the default, {$APPTYPE} in the program source
+/// overrides it, the last one wins. AppType in the .dproj is IDE metadata and never reaches the compiler, so it
+/// does not count. A conditional {$APPTYPE CONSOLE} counts, a conditional {$APPTYPE GUI} does not (some build
+/// has a console), and AllocConsole / AttachConsole in the program source always counts.
+/// </remarks>
+function ProjectHasConsole(const AProjectFile, APlatform, AConfig: string): Boolean;
+
 implementation
 
 uses
   System.IOUtils
+  , DRagLint.Preprocess.Profile  // DprojGroupChain
   ;
 
 const
@@ -559,6 +577,51 @@ begin
     Result:= TFile.ReadAllText(APath);
   except
     on Exception do Result:= '';  { unreadable file: nothing to lint }
+  end;
+end;
+
+{ DCC_ConsoleTarget of the .dproj text: the last group of the Base -> config chain that sets it. }
+function DprojConsoleTarget(const ADproj, APlatform, AConfig: string): Boolean;
+var
+  Group: string;
+  M    : TMatch;
+begin
+  Result:= False;
+  for Group in DprojGroupChain(ADproj, APlatform, AConfig) do
+    for M in TRegEx.Matches(ADproj, '<PropertyGroup\s[^>]*\$\(' + Group + '\)(?:(?!</?PropertyGroup\b).)*' +
+      '<DCC_ConsoleTarget>\s*(\w*)\s*</DCC_ConsoleTarget>', [roIgnoreCase, roSingleLine]) do
+      Result:= SameText(M.Groups[1].Value, 'true');
+end;
+
+function ProjectHasConsole(const AProjectFile, APlatform, AConfig: string): Boolean;
+var
+  Dproj, Dpr: string;
+  M   : TMatch;
+  Src : TAppSrc;
+  D   : TAppDirective;
+begin
+  Dproj:= '';
+  Dpr  := AProjectFile;
+  if SameText(ExtractFileExt(AProjectFile), '.dproj') then
+  begin
+    Dproj:= ReadAppSource(AProjectFile);
+    M    := TRegEx.Match(Dproj, '<MainSource>\s*([^<]+?)\s*</MainSource>', [roIgnoreCase]);
+    Dpr  := if M.Success then TPath.Combine(ExtractFilePath(AProjectFile), M.Groups[1].Value) else ChangeFileExt(AProjectFile, '.dpr');
+  end;
+  if not SameText(ExtractFileExt(Dpr), '.dpr') then Exit(False);
+  Src:= TAppSrc.Create(ReadAppSource(Dpr));
+  try
+    { no source, or a library: the host program decides, so nothing is known }
+    if (Src.Toks.Count = 0) or (Src.Toks[0].Low = 'library') then Exit(False);
+    if TRegEx.IsMatch(Src.Masked, '\b(?:AllocConsole|AttachConsole)\b', [roIgnoreCase]) then Exit(True);
+    Result:= DprojConsoleTarget(Dproj, APlatform, AConfig);
+    for D in Src.Dirs do
+      if TRegEx.IsMatch(D.Text, '^\$APPTYPE\s+CONSOLE\b') then
+        Result:= True
+      else if TRegEx.IsMatch(D.Text, '^\$APPTYPE\s+GUI\b') and (Length(Src.Enclosing(D.Pos)) = 0) then
+        Result:= False;
+  finally
+    Src.Free;
   end;
 end;
 
@@ -1286,7 +1349,8 @@ begin
   end;
 end;
 
-class procedure TAppChecks.WritelnInGuiApp(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>);
+class procedure TAppChecks.WritelnInGuiApp(const ASrc: TAppSrc; const APath: string; const AProgramHasConsole: TProgramConsoleProbe;
+  AOut: TList<TLintFinding>);
 var
   Uses_, FirstArg: string;  // dl:ok local-var-casing@9fb2 -- REVIEWED 2026-11-14 v151 INT: inline var spelled like the surrounding unit
   UM, M: TMatch;
@@ -1318,6 +1382,7 @@ begin
     for R in ASrc.Routines do
       if (R.BodyPos <= M.Index + 1) and (M.Index + 1 < R.BodyEnd) and TRegEx.IsMatch(ASrc.BodyOf(R), '\bIsConsole\b', [roIgnoreCase]) then Skip:= True;
     if Skip then Continue;
+    if Assigned(AProgramHasConsole) and AProgramHasConsole() then Exit;
     AOut.Add(MakeFinding(ASrc, APath, RULE_WRITELN_GUI, 'warning',
       M.Groups[1].Value + ' writes to the console, but this program has no console (a GUI application) -- the call raises I/O error 105 or goes nowhere. Log to a file or the debugger instead.',
       M.Groups[1].Index + 1, M.Groups[1].Index + 1 + Length(M.Groups[1].Value)));
