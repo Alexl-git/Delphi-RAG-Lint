@@ -21676,6 +21676,7 @@ begin
         PCtx.SiblingStore:= MakeSiblingStoreResolver(AArgs, V151SibKeep, V151SibOwned);
         PCtx.SiblingNames:= MakeSiblingProjectLister(AArgs);
         PCtx.LibraryRoots:= DprLibRoots;
+        PCtx.ProgramHasConsole:= HasConsole;  { 1.54.1 INT: the cross-unit ui-call pass asks the program too }
         for var PF: TLintFinding in TV151Dispatch.CheckProject(PCtx) do
           if (Length(V151Runs) = 1) or SameText(PF.RuleId, V151Nr) then Findings:= Findings + [PF];
       end;

@@ -141,7 +141,7 @@ end;
 class function TV152APP2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
-  if ACtx.Wants(APP2_RULE_UI_CALL) then Result:= TApp2CrossUnit.Run(ACtx.FilePaths, ACtx.ProjectPath);
+  if ACtx.Wants(APP2_RULE_UI_CALL) then Result:= TApp2CrossUnit.Run(ACtx.FilePaths, ACtx.ProjectPath, ACtx.ProgramHasConsole);
 end;
 
 end.

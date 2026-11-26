@@ -12,6 +12,7 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , DRagLint.Core.Model
+  , DRagLint.V151.Api  // TProgramConsoleProbe
   ;
 
 const
@@ -35,6 +36,8 @@ type
     /// <summary>Reports, in every console program of the project, each call of a dialog-showing routine declared in another unit.</summary>
     /// <param name="AFilePaths">Every file of the run; programs are the .dpr files, units the .pas files.</param>
     /// <param name="AProjectPath">The --project file, or '' for a database-wide run; when set, only the program with that base name is checked.</param>
+    /// <param name="AProgramHasConsole">The run's program probe (lint-all's, as writeln-in-gui-app gets it); nil = unknown.
+    /// A program is a console program when its own directives say so (ProgramSrcHasConsole) or the probe does.</param>
     /// <returns>One warning per call, located in the program file; nil when there is none.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -48,7 +51,8 @@ type
     /// <seealso cref="DRagLint.V152.APP2.Support.UnitOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function Run(const AFilePaths: TArray<string>; const AProjectPath: string): TArray<TLintFinding>; static;
+    class function Run(const AFilePaths: TArray<string>; const AProjectPath: string;
+      const AProgramHasConsole: TProgramConsoleProbe): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -65,7 +69,6 @@ const
     '(?<![\w\.])(?:(?:(?:Vcl|FMX)\.)?Dialogs\.)?' +
     '(?:ShowMessage|ShowMessageFmt|ShowMessagePos|MessageDlg|MessageDlgPos|TaskMessageDlg|InputBox|InputQuery)\s*\(' +
     '|\bApplication\s*\.\s*MessageBox\s*\(|\bTDialogService\s*\.\s*\w+\s*\(';
-  CONSOLE_RE = '\{\$APPTYPE\s+CONSOLE\s*\}';
   USES_RE    = '\buses\b([^;]*);';
   IDENT_RE   = '[A-Za-z_][\w\.]*';
   DECL_LOOKBACK = 24;  { chars before a name that cover procedure / function plus blanks }
@@ -209,7 +212,8 @@ begin
   end;
 end;
 
-class function TApp2CrossUnit.Run(const AFilePaths: TArray<string>; const AProjectPath: string): TArray<TLintFinding>;
+class function TApp2CrossUnit.Run(const AFilePaths: TArray<string>; const AProjectPath: string;
+  const AProgramHasConsole: TProgramConsoleProbe): TArray<TLintFinding>;
 var
   Units: TDictionary<string, TApp2File>;
   Programs: TList<TApp2File>;
@@ -233,7 +237,9 @@ begin
         Item.Src := TAppSrc.Create(Text);
         if not SameText(ExtractFileExt(P), '.dpr') then
           Units.AddOrSetValue(UnitOf(P), Item)
-        else if TRegEx.IsMatch(Item.Src.Raw, CONSOLE_RE, [roIgnoreCase]) and ((ProjBase = '') or (UnitOf(P) = ProjBase)) then
+        // 1.54.1 INT: the writeln-in-gui-app decision (directives, not raw text; DCC_ConsoleTarget via the probe)
+        else if ((ProjBase = '') or (UnitOf(P) = ProjBase)) and (ProgramSrcHasConsole(Item.Src, '', '', '') or
+          (Assigned(AProgramHasConsole) and AProgramHasConsole())) then
           Programs.Add(Item)
         else
           Item.Src.Free;

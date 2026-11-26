@@ -153,7 +153,7 @@ begin
   Acc:= TList<TLintFinding>.Create;
   try
     if ACtx.Wants(RULE_TLS_VERIFY_OFF)   then TAppChecks.TlsVerificationDisabled(Src, ACtx.Path, Acc);
-    if ACtx.Wants(RULE_UI_CALL)          then TAppChecks.UiCallInConsoleOrService(Src, ACtx.Path, Acc);
+    if ACtx.Wants(RULE_UI_CALL)          then TAppChecks.UiCallInConsoleOrService(Src, ACtx.Path, ACtx.ProgramHasConsole, Acc);
     if ACtx.Wants(RULE_DUNITX_NO_ASSERT) then TAppChecks.DunitxTestWithoutAssert(Src, ACtx.Path, Acc);
     if ACtx.Wants(RULE_CONTRACT_CLASS)   then TAppChecks.ContractUnitDeclaresClass(Src, ACtx.Path, Acc);
     if ACtx.Wants(RULE_WEAK_CIPHER)      then TAppChecks.WeakCipher(Src, ACtx.Path, Acc);

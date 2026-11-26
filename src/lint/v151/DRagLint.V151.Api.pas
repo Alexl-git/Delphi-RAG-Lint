@@ -138,6 +138,10 @@ type
     /// <summary>Lists the sibling project names the run can ask; nil when the caller has none.</summary>
     /// <remarks>1.52 BK-XPROJ: set together with SiblingStore. Make leaves it nil.</remarks>
     SiblingNames: TSiblingProjectLister;
+    /// <summary>Answers whether the run's program has a console; nil when the program is unknown.</summary>
+    /// <remarks>1.54.1 INT: set by lint-all after Make (the same probe writeln-in-gui-app gets); nil = each
+    /// program's own .dpr text decides. Read by the cross-unit ui-call-in-console-or-service pass.</remarks>
+    ProgramHasConsole: TProgramConsoleProbe;
     /// <summary>1.52.2 Q5: the library / third-party folders of the run's project (registry library
     /// paths plus the manifest Library "include" folders); nil when the caller has none.</summary>
     /// <remarks>Set by lint-all after Make; unit-not-in-dpr drops closure units under them. Make leaves it nil.</remarks>

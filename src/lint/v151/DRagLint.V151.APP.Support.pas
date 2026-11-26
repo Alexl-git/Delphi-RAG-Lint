@@ -424,6 +424,8 @@ type
     /// <summary>A dialog call in a console program or in a method of a Windows service class.</summary>
     /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AProgramHasConsole">Is the run's program a console program; nil = unknown. Asked only for a
+    /// .dpr: a program is a console program when its own text says so (ProgramSrcHasConsole) or the probe does.</param>
     /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -438,7 +440,8 @@ type
     /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class procedure UiCallInConsoleOrService(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
+    class procedure UiCallInConsoleOrService(const ASrc: TAppSrc; const APath: string;
+      const AProgramHasConsole: TProgramConsoleProbe; AOut: TList<TLintFinding>); static;
     /// <summary>A [Test] / [TestCase] method that checks nothing, directly or through the routines of the same file.</summary>
     /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
@@ -558,6 +561,17 @@ function ReadAppSource(const APath: string): string;
 /// </remarks>
 function ProjectHasConsole(const AProjectFile, APlatform, AConfig: string): Boolean;
 
+/// <summary>Does this program source, with its .dproj text, build a console program?</summary>
+/// <param name="ASrc">The scanned .dpr text; must not be nil.</param>
+/// <param name="ADproj">The .dproj text, or '' when there is none (DCC_ConsoleTarget is then False).</param>
+/// <param name="APlatform">Platform group suffix for the .dproj, e.g. 'Win64'.</param>
+/// <param name="AConfig">Config name for the .dproj; '' = Release.</param>
+/// <returns>False for no source or a library; else the ProjectHasConsole order (AllocConsole / AttachConsole,
+/// DCC_ConsoleTarget, then the last {$APPTYPE}).</returns>
+/// <remarks>1.54.1 INT: the one decision ProjectHasConsole and ui-call-in-console-or-service share. Reads
+/// directives, never comments or strings.</remarks>
+function ProgramSrcHasConsole(const ASrc: TAppSrc; const ADproj, APlatform, AConfig: string): Boolean;
+
 implementation
 
 uses
@@ -598,7 +612,6 @@ var
   Dproj, Dpr: string;
   M   : TMatch;
   Src : TAppSrc;
-  D   : TAppDirective;
 begin
   Dproj:= '';
   Dpr  := AProjectFile;
@@ -611,18 +624,25 @@ begin
   if not SameText(ExtractFileExt(Dpr), '.dpr') then Exit(False);
   Src:= TAppSrc.Create(ReadAppSource(Dpr));
   try
-    { no source, or a library: the host program decides, so nothing is known }
-    if (Src.Toks.Count = 0) or (Src.Toks[0].Low = 'library') then Exit(False);
-    if TRegEx.IsMatch(Src.Masked, '\b(?:AllocConsole|AttachConsole)\b', [roIgnoreCase]) then Exit(True);
-    Result:= DprojConsoleTarget(Dproj, APlatform, AConfig);
-    for D in Src.Dirs do
-      if TRegEx.IsMatch(D.Text, '^\$APPTYPE\s+CONSOLE\b') then
-        Result:= True
-      else if TRegEx.IsMatch(D.Text, '^\$APPTYPE\s+GUI\b') and (Length(Src.Enclosing(D.Pos)) = 0) then
-        Result:= False;
+    Result:= ProgramSrcHasConsole(Src, Dproj, APlatform, AConfig);
   finally
     Src.Free;
   end;
+end;
+
+function ProgramSrcHasConsole(const ASrc: TAppSrc; const ADproj, APlatform, AConfig: string): Boolean;
+var
+  D: TAppDirective;
+begin
+  { no source, or a library: the host program decides, so nothing is known }
+  if (ASrc.Toks.Count = 0) or (ASrc.Toks[0].Low = 'library') then Exit(False);
+  if TRegEx.IsMatch(ASrc.Masked, '\b(?:AllocConsole|AttachConsole)\b', [roIgnoreCase]) then Exit(True);
+  Result:= DprojConsoleTarget(ADproj, APlatform, AConfig);
+  for D in ASrc.Dirs do
+    if TRegEx.IsMatch(D.Text, '^\$APPTYPE\s+CONSOLE\b') then
+      Result:= True
+    else if TRegEx.IsMatch(D.Text, '^\$APPTYPE\s+GUI\b') and (Length(ASrc.Enclosing(D.Pos)) = 0) then
+      Result:= False;
 end;
 
 function IsIdentStart(C: Char): Boolean;
@@ -1128,7 +1148,8 @@ begin
           R.HeaderPos + 1, R.HeaderPos + 10));  // dl:ok magic-literal@1581 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
     end;
 end;
-class procedure TAppChecks.UiCallInConsoleOrService(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>);
+class procedure TAppChecks.UiCallInConsoleOrService(const ASrc: TAppSrc; const APath: string;
+  const AProgramHasConsole: TProgramConsoleProbe; AOut: TList<TLintFinding>);
 const
   CALL_RE =
     '(\b(?:procedure|function)\s+)?(?:(?<![\w\.])|\b(?:(?:Vcl|FMX)\.)?Dialogs\.)' +
@@ -1155,7 +1176,10 @@ var
   end;
 
 begin
-  IsConsoleApp:= TRegEx.IsMatch(ASrc.Raw, '\{\$APPTYPE\s+CONSOLE\s*\}', [roIgnoreCase]);
+  // 1.54.1 INT: a program asks the writeln-in-gui-app decision (directives, DCC_ConsoleTarget via the probe);
+  // a unit's own $APPTYPE never made a console, the cross-unit APP2 pass reports calls into units
+  IsConsoleApp:= SameText(ExtractFileExt(APath), '.dpr') and
+    (ProgramSrcHasConsole(ASrc, '', '', '') or (Assigned(AProgramHasConsole) and AProgramHasConsole()));
   Services:= TList<string>.Create;
   Reported:= TList<Integer>.Create;
   try
