@@ -194,6 +194,7 @@ type
     FSaveForm: TOrmSaveForm;
     FOverwriteEdited: TArray<string>;
     FKeptEdited: TArray<string>;
+    FChangedRegions: TArray<string>;
     /// <returns><!-- drag-lint:auto -->TGUID -- Observed: FGuidProvider().</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -793,6 +794,9 @@ type
     /// <summary>Ids of the regions the last UpdateRegions call kept because they were hand-edited (their body no longer
     /// matches the hash of the start marker); empty when it kept none.</summary>
     property KeptEdited: TArray<string> read FKeptEdited;
+    /// <summary>Per region the last UpdateRegions call regenerated with another body: `&lt;id&gt;: &lt;n&gt;`, n = the
+    /// lines removed plus the lines added (a longest-common-subsequence line diff of the two bodies).</summary>
+    property ChangedRegions: TArray<string> read FChangedRegions;
     /// <summary>Number of generator fields of the loaded table (0 when every row of the table
     /// has a FIELD_KIND other than 1).</summary>
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: FFieldList.Count.</returns>
@@ -851,6 +855,9 @@ type
     OldText: string;
     /// <summary>Text the verb writes.</summary>
     NewText: string;
+    /// <summary>update-orm: one `&lt;id&gt;: &lt;n&gt;` per regenerated region whose body differs from the
+    /// generated one (n = lines removed + lines added); a region whose marker only gets its hash is not listed.</summary>
+    Regions: TArray<string>;
   end;
 
 /// <summary>True when a line opens a numbered region: a '{$REGION' named DB-RAD or DLFR and an ORM id, nothing else
@@ -3553,6 +3560,26 @@ begin
     Result:= Result + [Region.Id];
 end;
 
+{ Lines removed plus lines added between two texts: a longest-common-subsequence line diff. }
+function DifferingLines(const pOld, pNew: string): Integer;
+var
+  OldL, NewL: TArray<string>;
+  Prev, Cur: TArray<Integer>;
+  I, J: Integer;
+begin
+  OldL:= OrmSplitLines(pOld);
+  NewL:= OrmSplitLines(pNew);
+  SetLength(Prev, Length(NewL) + 1);
+  SetLength(Cur, Length(NewL) + 1);
+  for I:= 1 to Length(OldL) do
+  begin
+    for J:= 1 to Length(NewL) do
+      Cur[J]:= if OldL[I - 1] = NewL[J - 1] then Prev[J - 1] + 1 else (if Prev[J] > Cur[J - 1] then Prev[J] else Cur[J - 1]);
+    Prev:= Copy(Cur);
+  end;
+  Result:= Length(OldL) + Length(NewL) - 2 * Prev[Length(NewL)];
+end;
+
 function TOrmGenerator.UpdateRegions(const pText, pTableName: string; pIsInterface: Boolean;
   out pRegionCount: Integer): string;
 var
@@ -3561,12 +3588,13 @@ var
   SB: TStringBuilder;
   Code: TStringList;
   Kept: Integer;
-  Body: string;
+  Body, OldBody: string;
 begin
   pRegionCount:= 0;
   if FLoadedTable <> pTableName then
     LoadTable(pTableName);
   FKeptEdited:= nil;
+  FChangedRegions:= nil;
   Regions:= TrustedRegions(pText);
   SB:= TStringBuilder.Create;
   Code:= TStringList.Create;
@@ -3584,6 +3612,9 @@ begin
       Code.Clear;
       GenerateRegion(Region.Id, pIsInterface, Code);
       Body:= OrmJoinLines(Code);
+      OldBody:= Copy(pText, Region.Body.First, Region.Body.Last - Region.Body.First);
+      if OldBody <> Body then
+        FChangedRegions:= FChangedRegions + [Format('%s: %d', [Region.Id, DifferingLines(OldBody, Body)])];
       SB.Append(Copy(pText, Kept, Region.Start.Start - Kept)).Append(OrmStartMarker(Region.Start.RegionName, Body))
         .Append(Copy(pText, Region.Start.Finish, Region.Body.First - Region.Start.Finish)).Append(Body);
       Kept:= Region.Body.Last;
@@ -3651,6 +3682,7 @@ var
     OldL, NewL, Id: string;
     N: Integer;
     Yes: TArray<string>;
+    Change: TOrmFileChange;
   begin
     if not TFile.Exists(pFile) then
     begin
@@ -3682,7 +3714,9 @@ var
       for Id in Gen.KeptEdited do
         pSkipped.Add(Format('%s: REFUSED region %s, hand-edited (its body does not match the hash of its start marker); ' +
           'kept -- --overwrite-edited %s overwrites it', [pFile, Id, Id]));
-      L.Add(ChangeOf(pFile, OldL, NewL, True));
+      Change:= ChangeOf(pFile, OldL, NewL, True);
+      Change.Regions:= Gen.ChangedRegions;
+      L.Add(Change);
     except
       on E: EOrmRegionError do
         pSkipped.Add(pFile + ': REFUSED, the unit is left unchanged: ' + E.Message);

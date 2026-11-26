@@ -116,6 +116,12 @@ try {
   [IO.File]::Delete($uu)
   $r = Update @()
   Check 'U5 control: no refused unit, dry run exits 0' (($r.Code -eq 0) -and ($r.Out -notmatch 'REFUSED') -and ($r.Out -match '1 changed')) $r.Out
+  # INT (owner Q4): the dry run names each region whose BODY differs from what would be generated, with a line count
+  $m = [regex]::Match($r.Out, '(?m)^  region 2: (\d+) line\(s\) of the body differ\r?$')
+  Check 'U10 dry run: the legacy region whose body differs is listed with its line count' ($m.Success -and ([int]$m.Groups[1].Value -ge 2)) $r.Out
+  WriteText $iu ($inew -replace ' hash=[0-9a-f]{16}', '')
+  $r = Update @()
+  Check 'U11 dry run: a region whose body is current (only the hash is new) is not listed' (($r.Code -eq 0) -and ($r.Out -match '1 changed') -and ($r.Out -notmatch '(?m)^  region ')) $r.Out
 }
 catch { $script:fail++; Write-Host "[FAIL] exception: $_ $($_.ScriptStackTrace)" -ForegroundColor Red }
 finally { if ($script:fail -eq 0) { [IO.Directory]::Delete($work, $true) } else { Write-Host "kept: $work" } }

@@ -80,7 +80,8 @@ type
   end;
 
 /// <summary>Runs one generator verb: plans, then prints the dry-run diff (default) or writes
-/// the files (Apply). Output lines: one 'new|changed|unchanged &lt;file&gt;' per planned file,
+/// the files (Apply). Output lines: one 'new|changed|unchanged &lt;file&gt;' per planned file (update-orm dry run:
+/// followed by '  region &lt;id&gt;: &lt;n&gt; line(s) of the body differ' per region whose body it would replace),
 /// 'skipped &lt;reason&gt;' per skipped file or table, the diffs (dry run), then a summary
 /// 'repo &lt;sub&gt;: &lt;n&gt; new, &lt;c&gt; changed, &lt;u&gt; unchanged, &lt;s&gt; skipped; dry run'
 /// or '...; &lt;w&gt; written'. gen-orm and gen-dataservice also print the units a project must
@@ -341,6 +342,9 @@ begin
   begin
     Inc(Counts[C.Kind]);
     pOut.Add(KIND_WORD[C.Kind] + ' ' + C.FileName);
+    if not pOptions.Apply then
+      for S in C.Regions do
+        pOut.Add('  region ' + S + ' line(s) of the body differ');
   end;
   for S in pSkipped do
     pOut.Add('skipped ' + S);
