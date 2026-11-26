@@ -37,9 +37,9 @@ Silent when:
   `MasterSource` / `DataSource` fills the parameters; the form stores a value in `ParamData`; the statement is a stored
   procedure call or has `RETURNING .. INTO :x`; a component whose parameters no code of the unit sets.
 
-## query-in-loop (hint, firedac, OFF by default)
+## query-in-loop (hint, firedac, ON by default since 1.55)
 
-Turn it on with `--enable query-in-loop` or `"enabled": ["query-in-loop"]`.
+It runs with no option (owner ruling 2026-11-26: a query per iteration is very slow, BDE most of all). Turn it off with `"disabled": ["query-in-loop"]`, or approve a line with a `dl:ok` marker.
 
 A dataset is opened or executed once per loop iteration:
 
@@ -90,4 +90,4 @@ of drag-lint (over 900 KB), the Micronite and ORM3 projects (the Micronite copy 
 
 `sql-param-mismatch` had 325 queries with one known SQL text to judge, 146 of them with `ParamByName`, and found no
 mistake: it ships ON, not measured in the field. `query-in-loop` is above the 10 % limit on drag-lint's own graph code
-and ships OFF; on the two database applications every finding left was right. The ParamByName option stays OFF.
+and shipped OFF in 1.54 (ON since 1.55 by owner ruling); on the two database applications every finding left was right. The ParamByName option stays OFF.

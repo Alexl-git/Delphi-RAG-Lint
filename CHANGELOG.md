@@ -3,6 +3,10 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## Unreleased -- 1.55
+
+- LINT (QIL, owner Q8): `query-in-loop` is now ON by default (was OFF in 1.54): a query run once per loop iteration is very slow, BDE most of all. Rules: 463 total, 375 on by default. Turn it off with `"disabled": ["query-in-loop"]` or a `dl:ok` marker.
+
 ## v1.54.1-alpha -- 2026-11-26
 
 - AUTODOC (REGTAG, Q21): `Registered as:` on a unit two projects compile is tagged per project -- `[CliApp]IFoo (singleton), [SrvApp]IFoo (transient)` -- and a run adds and removes only its own tag, so `document` and doc-drift reach a fixpoint; before, each project replaced the other's line on every run. Old untagged lines are tagged once; a unit of one project is unchanged. `doc-forget` sees these tags. No re-parse. 1.54.1 review R1: a project tag on ANY entry of a stored line is evidence, also when an untagged leftover sorts first (before, that run wrote its own untagged line and deleted the other project's tagged entries).

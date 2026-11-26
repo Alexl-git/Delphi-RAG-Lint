@@ -1070,7 +1070,7 @@ Win64 build.
 
 #### Lint
 
-**463 rules across 18 categories -- 350 built-in + 113 external `.scm`, 374
+**463 rules across 18 categories -- 350 built-in + 113 external `.scm`, 375
 enabled by default, 131 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -1348,7 +1348,7 @@ CLI-only verbs).
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
 external `.scm`). As of v1.54.0-alpha: **463 rules across 18 categories -- 350
-built-in and 113 external `.scm`, 374 enabled by default, and 131 with an
+built-in and 113 external `.scm`, 375 enabled by default, and 131 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |
