@@ -302,9 +302,9 @@ A field belongs to its own table, also when its code reads other tables (owner r
 ```
 
 with `IPCHART | FTRNAME | '' | MSC | FK_IPCHART_INSP>FK_INSP_MSC | MSCLIST`. Selecting the field brings its inputs,
-transitively: a parent's calc field brings its own inputs with the paths joined. 1.55 stores and checks these rows;
-reading them from forms, finding paths and composing the SQL follow (design
-`docs/superpowers/specs/2026-11-26-cross-table-fields-design.md`, slices X2-X4).
+transitively: a parent's calc field brings its own inputs with the paths joined. 1.55 stores and checks these rows
+and finds the paths (`repo paths`, below); reading them from forms and composing the SQL follow (design
+`docs/superpowers/specs/2026-11-26-cross-table-fields-design.md`, slices X3-X4).
 
 `repo check` on schema 4: `input-alias-undeclared`, `input-unknown-field` (the target table has no such field),
 `input-no-field-row`, `input-path-broken` (an unknown relation, or a step that does not start where the last ended),
@@ -312,6 +312,41 @@ reading them from forms, finding paths and composing the SQL follow (design
 `relation-two-defaults`, `relation-key-not-unique`, `relation-fk-missing`, `relation-fk-mismatch`, and as warnings
 `relation-key-unknown` / `relation-fk-gone` (the schema facts do not hold the constraint: run `repo refresh-schema`).
 A calc cycle through aliases is named with full names: `calc dependency cycle across tables: IPCHART.FTRNAME -> MSCLIST.CX -> IPCHART.FTRNAME`.
+
+#### `repo paths` (1.55)
+
+```
+drag-lint repo paths (--from <table> --to <table> | --stats) [--depth <n>] (--repo <file> | --project <project file>) [--json]
+```
+
+Read-only. The relation graph has one edge child -> parent per relation whose parent side is a key: every FK of the
+schema facts whose referenced constraint is a PK / UNIQUE, plus the `DL_RELATIONS` rows of SOURCE `FORM` / `HAND` whose
+`PARENT_KEY` is a PK / UNIQUE of the parent on exactly the parent columns. A `DL_RELATIONS` row of SOURCE `FK` gives
+its FK edge the role name and the `IS_DEFAULT` flag. A relation onto a parent with no key is never an edge (the rows
+would multiply). `repo paths` lists every simple path up from `--from` to `--to` of at most `--depth` steps (default
+3), shortest first, each with its default input alias (`MSCLIST`, then `MSCLIST_2`, ...), and the rule that chooses:
+
+| choice | when |
+|---|---|
+| `default` | the only path whose steps are all `IS_DEFAULT` (or whose steps no default role overrides) |
+| `single` | exactly one path |
+| `ambiguous` | several paths: the dialog asks once and stores the answer as `IS_DEFAULT` of each step; never chosen by data |
+| `none` | no path within the depth (exit 1) |
+
+(The stored binding of a field and the form's own joins come first; the read-dfm slice applies those.)
+
+```
+repo paths IPCHART -> MSCLIST (depth 3): 2 path(s)
+  1 MSCLIST: IPCHART -(FK_IPCHART_1 FK RSLTID=ID)-> INSPRSLT -(FK_INSPRSLT_1 FK FTRID=ID)-> MSCLIST
+  2 MSCLIST_2: IPCHART -(FK_IPCHART_1 FK RSLTID=ID)-> INSPRSLT -(FK_INSPRSLT_3 FK INSPID=ID)-> IINSP -(FK_IINSP_2 FK CHARID=ID)-> MSCLIST
+choice: ambiguous (several paths: asked once in the dialog, the answer is stored as IS_DEFAULT of each step)
+```
+
+`--stats` counts, over every table, the ordered pairs with at least one path and with more than one, at depth 1..n.
+On the MICRONITEV6A schema (297 FKs): 274 / 1,089 / 1,653 pairs at 1 / 2 / 3 steps, 10 / 332 / 1,165 of them with
+more than one path (a two-column key is one edge). `--json` prints one object: `paths[]` with `alias`, `path`,
+`steps[]` (`relation`, `child`, `parent`, `source`, `parent_key`, `columns`, `default`), `choice` and `chosen`
+(1-based, 0 = none); with `--stats`, `tables`, `relations`, `not_edges` and `depths[]`.
 
 ### Text backup versions
 

@@ -11,7 +11,7 @@ interface
 
 /// <summary>Runs `drag-lint repo &lt;sub-verb&gt; ...`: init, info, import-fb, seed-fb,
 /// refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice,
-/// migrate, check (the last two: DRagLint.CLI.RepoModel, 1.53), gen-const, check-const (DRagLint.CLI.RepoConstGen), alter-table (DRagLint.CLI.RepoAlter, 1.54) (PLAN D11;
+/// migrate, check (the last two: DRagLint.CLI.RepoModel, 1.53), paths (DRagLint.CLI.RepoPaths, 1.55), gen-const, check-const (DRagLint.CLI.RepoConstGen), alter-table (DRagLint.CLI.RepoAlter, 1.54) (PLAN D11;
 /// gen-param-array is DRagLint.CLI.RepoParamArray and needs no repository; the generator verbs take
 /// --code-dir / --server-dir / --client-dir / --table, print a dry-run diff and write only with --apply,
 /// --no-backup skips the .BCKn copy).</summary>
@@ -66,6 +66,7 @@ uses
   DRagLint.FieldRepo.DataServiceGen,
   DRagLint.CLI.RepoParamArray,
   DRagLint.CLI.RepoModel,
+  DRagLint.CLI.RepoPaths,
   DRagLint.CLI.RepoConstGen,
   DRagLint.CLI.RepoSchema,
   DRagLint.CLI.RepoDfm,
@@ -90,7 +91,7 @@ const
   { positions in the --save-form value list of RepoOrmVerb }
   SAVE_FORM_LEGACY  = 0;
   SAVE_FORM_CURRENT = 1;
-  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, upgrade-orm-headers, migrate, check, gen-const, check-const, read-dfm, alter-table'
+  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, upgrade-orm-headers, migrate, check, paths, gen-const, check-const, read-dfm, alter-table'
     + REPO_DFMWRITE_SUBS + REPO_HANDLERS_SUBS + REPO_FIB_SUBS; // 1.54 scaffolds: '' until their lane names a sub-verb
 
 function CommandLineFlag(const pFlag: string): Boolean;
@@ -429,6 +430,7 @@ begin
   if not ResolveRepoPath(pRepo, pProject, Path) then Exit(if SameText(pSub, 'check-const') then EXIT_FORMAT else EXIT_FAIL);
   if MatchText(pSub, ['gen-orm', 'update-orm', 'gen-dataservice', 'upgrade-orm-headers']) then Exit(RepoOrmVerb(pSub, Path));
   if IsRepoModelSub(pSub) then Exit(RunRepoModelVerb(pSub, Path, pJson)); // 1.53 FR-MODEL: migrate, check
+  if IsRepoPathsSub(pSub) then Exit(RunRepoPathsVerb(Path, pJson)); // 1.55 XTABLE X2: paths
   if MatchText(pSub, ['gen-const', 'check-const']) then // 1.53 FR-CONSTGEN / FR-PRELOAD
     Exit(if SameText(pSub, 'gen-const') then RunRepoGenConst(Path, pOutFile) else RunRepoCheckConst(Path));
   if IsRepoSchemaSub(pSub) then Exit(RunRepoSchemaVerb(pSub, Path, pConnection, pJson)); // 1.53 FR-SCHEMA: seed-fb, refresh-schema
@@ -456,7 +458,7 @@ function IsImplementedSub(const pSub: string): Boolean;
 begin
   Result:= MatchText(pSub, ['init', 'info', 'import-fb', 'seed-fb', 'refresh-schema', 'backup',
     'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'upgrade-orm-headers',
-    'gen-const', 'check-const', 'alter-table']) or IsRepoModelSub(pSub) or IsLaneSub(pSub);
+    'gen-const', 'check-const', 'alter-table']) or IsRepoModelSub(pSub) or IsRepoPathsSub(pSub) or IsLaneSub(pSub);
 end;
 
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de -- REVIEWED 2026-11-17 v152 TTE: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape)
