@@ -222,6 +222,11 @@ begin
     Result := if VReport.Outcome.Success then EXIT_OK else EXIT_FAIL;
   end;
   PrintReport(VReport, pJson);
+  { owner Q-ALTER-3 = B: the ORM units that the alter outdated, as a dry run; never changes the result }
+  if pArgs.Apply and VReport.HasOutcome then
+    for VLine in MicroniteOrmFollowUp(pArgs.Hook, VReport.Outcome.Success, pPath, pArgs.Table, CommandLineValue('--code-dir'),
+      CommandLineValue('--server-dir'), CommandLineValue('--client-dir')) do
+      if pJson then Writeln(ErrOutput, VLine) else Writeln(VLine);
 end;
 
 function RunRepoAlterTable(const pPath, pConnection: string; pJson: Boolean): Integer;
@@ -238,8 +243,8 @@ begin
     else
     begin
       RequireFbConnectionSafe(pConnection);
-      if VArgs.Apply then
-        RequireLocalFbServer(pConnection); // a backup is not possible: found before anything is opened
+      if VArgs.Apply and (RemoteBackupProblem(pConnection) <> '') then
+        raise Exception.Create(RemoteBackupProblem(pConnection)); // found before anything is opened
       Result := AlterTable(VArgs, pPath, pConnection, pJson);
     end;
   except

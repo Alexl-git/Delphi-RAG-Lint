@@ -10,6 +10,7 @@
     B2  default name on disk; --backup-name mine -> mine.fbk, recorded; again -> exit 1 "exists already", file untouched
     B3  purge --apply: an old-form entry, a default-named one and the chosen-name one are all deleted, the newest stays
     B4  alter-table --apply --backup-name <name> makes <name>.fbk
+    B5  Q10 = B: a remote server is allowed with --verify quick (a restore test needs the server on this machine)
   Run: pwsh -File tests\autotest\run_v155_BKNAME.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
@@ -59,7 +60,16 @@ try {
   $r = Run @('repo', 'backup', 'list', '--backup-name', 'x')
   $r2 = Run @('repo', 'backup', 'purge', '--keep', '1', '--backup-name', 'x')
   Check 'B1x list and purge do not take --backup-name' (($r.Code -eq 1) -and ($r2.Code -eq 1) -and -not (Test-Path -LiteralPath $manifest)) "$($r.Out)`n$($r2.Out)"
-  $embed = New-FirebirdEmbed (Join-Path $work 'fb')
+  # B5 (Q10 = B): a server on another machine is no longer refused as such; the restore test is, so --verify quick is explicit
+  $far = "Server=srv.invalid;Database=C:\x.fdb;User_Name=SYSDBA;Password=$pw"
+  $r = Run @('repo', 'backup', '--connection', $far)
+  Check 'B5a remote + default verify -> exit 1, names --verify quick, no password, nothing recorded' (($r.Code -eq 1) -and ($r.Out -match 'srv\.invalid') -and ($r.Out -match '--verify quick') -and ($r.Out -notmatch $pw) -and -not (Test-Path -LiteralPath $manifest)) $r.Out
+  $r = Run @('repo', 'backup', '--connection', $far, '--verify', 'quick')
+  Check 'B5b remote + --verify quick is attempted (the host is unreachable: a connection error, not a refusal for the host), no password' (($r.Code -eq 1) -and ($r.Out -notmatch 'add --verify quick') -and ($r.Out -notmatch $pw) -and -not (Test-Path -LiteralPath $manifest)) $r.Out
+  $r = Run @('repo', 'alter-table', '--repo', $repo, '--table', 'T', '--direction', 'repo-to-db', '--connection', $far, '--apply')
+  Check 'B5c alter-table --apply on a remote server without --verify quick -> exit 1 before anything is opened' (($r.Code -eq 1) -and ($r.Out -match '--verify quick') -and ($r.Out -notmatch $pw)) $r.Out
+  $r = Run @('repo', 'backup', 'list')
+  Check 'B5d list works with no remote entries' ($r.Code -eq 0) $r.Out  $embed = New-FirebirdEmbed (Join-Path $work 'fb')
   if (-not $embed) { Write-Host 'SKIP B2-B4 no Firebird 4 on this machine'; if ($script:Failed) { exit 1 } else { exit 0 } }
   $env:FIREBIRD = $embed
   Get-ChildItem -LiteralPath (Split-Path $Exe) -File | Where-Object { $_.Extension -eq '.dll' -or $_.Name -eq 'drag-lint.exe' } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $embed }

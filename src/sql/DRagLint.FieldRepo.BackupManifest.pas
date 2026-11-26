@@ -30,10 +30,13 @@ type
     /// <summary>True when the user chose the file name (--backup-name): a purge then accepts any plain full path ending in
     /// .fbk, not only the names drag-lint gives by itself. Written to the list as "named"; absent = False.</summary>
     Named: Boolean;
+    /// <summary>The server host when the backup was written on the disk of ANOTHER machine (the file name is then a path on that
+    /// server, and Size / ModifiedUtc are 0); '' = this machine. Written to the list as "host"; absent = ''.</summary>
+    Host: string;
   end;
 
   /// <summary>The file behind an entry: as recorded, different, or gone.</summary>
-  TFrBackupFileState = (ffsMatch, ffsChanged, ffsMissing);
+  TFrBackupFileState = (ffsMatch, ffsChanged, ffsMissing, ffsRemote);
 
   /// <summary>What a purge does with an entry. fpaSkip = the file is not as recorded and is left alone; fpaForget = the
   /// file is gone, only the entry goes.</summary>
@@ -52,7 +55,7 @@ const
   /// <summary>Names of TFrBackupVerified in reports and in the manifest.</summary>
   VERIFIED_NAMES: array[TFrBackupVerified] of string = ('failed', 'quick', 'full');
   /// <summary>Names of TFrBackupFileState in reports.</summary>
-  FILE_STATE_NAMES: array[TFrBackupFileState] of string = ('ok', 'changed', 'missing');
+  FILE_STATE_NAMES: array[TFrBackupFileState] of string = ('ok', 'changed', 'missing', 'remote');
   /// <summary>Names of TFrPurgeAction in reports.</summary>
   PURGE_ACTION_NAMES: array[TFrPurgeAction] of string = ('keep', 'delete', 'skip', 'forget');
 
@@ -75,7 +78,8 @@ function BackupManifestLockName(const pManifest: string): string;  // dl:ok unus
 
 /// <summary>Compares the file of an entry with what was recorded.</summary>
 /// <param name="pEntry">The entry.</param>
-/// <returns>ffsMatch only when size and last write time are unchanged.</returns>
+/// <returns>ffsRemote for an entry with a Host (the file is on another machine and is never looked at); else ffsMatch only when size
+/// and last write time are unchanged.</returns>
 function BackupFileState(const pEntry: TFrBackupEntry): TFrBackupFileState;
 
 /// <summary>Bytes of the recorded backups whose file is still as recorded.</summary>
@@ -105,7 +109,7 @@ function PlanBackupPurge(const pEntries: TArray<TFrBackupEntry>; pKeep: Integer)
 /// <returns>The plan for that database; Error is set where a deletion failed (that entry stays).</returns>
 /// <exception cref="EFrBackupError">The manifest is malformed or locked, pKeep is below 1, pApply without a database, or the
 /// manifest could not be written afterwards (the message names the deleted files).</exception>
-/// <remarks>Attributes, size and date are checked again on the handle the file is deleted through, so a file that
+/// <remarks>An entry with a Host (a backup on another machine) is always skipped: it is shown, never deleted. Attributes, size and date are checked again on the handle the file is deleted through, so a file that
 /// was swapped after the plan is not deleted.</remarks>
 function PurgeBackups(const pManifest, pDatabase: string; pKeep: Integer; pApply: Boolean;
   const pBeforeDelete: TProc<string> = nil): TArray<TFrPurgeItem>;
@@ -149,6 +153,7 @@ const
   KEY_CREATED = 'created_utc';
   KEY_VERIFIED = 'verified';
   KEY_NAMED = 'named';
+  KEY_HOST = 'host';
   MANIFEST_VERSION = 1;
   LOCK_WAIT_MS = 5000;
   { a file time keeps 100 ns, a TDateTime in ISO text one millisecond }
@@ -195,6 +200,7 @@ begin
     Result.CreatedUtc := ISO8601ToDate(pNode.GetValue<string>(KEY_CREATED), True);
     VVerified := pNode.GetValue<string>(KEY_VERIFIED);
     pNode.TryGetValue<Boolean>(KEY_NAMED, Result.Named);
+    pNode.TryGetValue<string>(KEY_HOST, Result.Host);
   except
     on E: Exception do
       raise Malformed(pManifest);
@@ -256,6 +262,8 @@ begin
       VItem.AddPair(KEY_VERIFIED, VERIFIED_NAMES[VEntry.Verified]);
       if VEntry.Named then
         VItem.AddPair(KEY_NAMED, TJSONBool.Create(True));
+      if VEntry.Host <> '' then
+        VItem.AddPair(KEY_HOST, VEntry.Host);
       VList.AddElement(VItem);
     end;
     WriteJsonFileAtomic(pManifest, VRoot);
@@ -296,6 +304,8 @@ end;
 
 function BackupFileState(const pEntry: TFrBackupEntry): TFrBackupFileState;
 begin
+  if pEntry.Host <> '' then
+    Exit(ffsRemote);
   if not TFile.Exists(pEntry.FileName) then
     Exit(ffsMissing);
   Result := if (TFile.GetSize(pEntry.FileName) = pEntry.Size) and
@@ -398,6 +408,11 @@ end;
 function PurgeExclusion(const pEntry: TFrBackupEntry; pTimesListed: Integer; out pReason: string): TFrPurgeAction;
 begin
   Result := fpaSkip;
+  if pEntry.Host <> '' then
+  begin
+    pReason := 'the backup is on the server ' + pEntry.Host + ', not on this machine: drag-lint never deletes it';
+    Exit;
+  end;
   pReason := NameProblem(pEntry);
   if pReason <> '' then
     Exit;

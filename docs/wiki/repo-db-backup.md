@@ -47,15 +47,26 @@ with a name drag-lint gives (either form above) or a name chosen with `--backup-
 file is deleted through. Anything else is skipped and counts for nothing. An entry whose file is gone is dropped from the
 list; when its folder is gone too (an unplugged drive) it stays. A list that cannot be read, or was written by a newer
 drag-lint, stops the verb and is left as it is.
-## The server must be on this machine
+## A server on another machine (1.55)
 
-The SERVER writes the backup file and the temporary database. When `--connection` names another host (or NetBEUI / WNET) the
-verb refuses before anything is opened: neither free space nor the file could be checked. What the open connection says is
-checked too: a remote attachment is refused (over TCP use `localhost` or the name of this machine), and `repo alter-table --apply` refuses a backup of
-another database than the one it is connected to. Run it on the server with
-`localhost:`. A connection string without a host uses the engine of the client library, as the connection itself does.
+A backup of a server on another machine is allowed (owner Q10 = B). The SERVER writes the file on ITS disk: the path in the report,
+in `--json` (`file`, `host`) and in the list is a path on the server, and the list shows the entry as `remote`. What differs:
+
+- `--verify quick` must be given explicitly. The restore test would create a temporary database on the server's disk, where
+  drag-lint can neither compare it with what it needs nor reliably remove it; without `--verify quick` the verb stops before
+  anything is opened (exit 1, the message names the option). This is a judgment call, not a limit of Firebird.
+- Free space is not checked (a note says so); `--backup-dir` is a path on the server and is not created or looked at here.
+- An existing file of the same name on the server cannot be seen from here, and the Firebird service replaces it: with
+  `--backup-name` on a remote server, choose a name that is new. The default name carries the second.
+- `purge` never deletes an entry that has a host (it is skipped, with the reason); `list` shows it, size 0 (unknown).
+- A server whose name is the name of this computer, or `localhost`, stays a local server with every check above.
+
+## What a local server must do
+
+The SERVER writes the backup file and the temporary database. What the open connection says is
+checked: a remote attachment of a connection that names this machine is refused (over TCP use `localhost` or the name of this machine), and `repo alter-table --apply` refuses a backup of
+another database than the one it is connected to. A connection string without a host uses the engine of the client library, as the connection itself does.
 The Firebird service needs the right to write into the folder, and the user the right to back the database up.
-
 Measured on Firebird 4.0.6 (embedded): a damaged backup file can end a restore WITHOUT an error. The new database then is
 not online (`MON$SHUTDOWN_MODE` <> 0), because only the last step of a restore puts it online; that is what the verification checks.
 

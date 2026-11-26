@@ -32,6 +32,11 @@ function RunRepoDbBackup(const pRepo, pConnection: string; pJson: Boolean): Inte
 /// <returns>'' = usable.</returns>
 function BackupArgsProblem: string;
 
+/// <summary>What stops a backup of the server of --connection with the --verify of this command line.</summary>
+/// <param name="pConnection">--connection.</param>
+/// <returns>'' = nothing; a server on another machine needs --verify quick given explicitly (see RemoteVerifyProblem).</returns>
+function RemoteBackupProblem(const pConnection: string): string;
+
 /// <summary>Makes the verified, recorded backup of `alter-table --apply`.</summary>
 /// <param name="pConnection">--connection.</param>
 /// <param name="pTable">The altered table; its row count is compared.</param>
@@ -250,6 +255,11 @@ begin
     Result := SettingBackupDir;
 end;
 
+function RemoteBackupProblem(const pConnection: string): string;
+begin
+  Result := RemoteVerifyProblem(pConnection, if SameText(CommandLineValue('--verify'), VERIFY_QUICK) then fvmQuick else fvmFull);
+end;
+
 function MakeBackup(const pConnection, pTable: string; pIdentity: Int64): TFrAlterBackup;
 var
   VRequest: TFrBackupRequest;
@@ -271,6 +281,7 @@ begin
   Result.Tables := VMade.Tables;
   Result.Rows := VMade.Rows;
   Result.Leftover := VMade.Leftover;
+  Result.Host := VMade.Entry.Host;
   Result.TotalSize := TotalBackupSize(ReadBackupManifest(ManifestFile), Result.TotalFiles);
 end;
 
@@ -316,12 +327,13 @@ begin
   Result.AddPair('size', TJSONNumber.Create(pEntry.Size));
   Result.AddPair('created_utc', DateToISO8601(pEntry.CreatedUtc, True));
   Result.AddPair('verified', VERIFIED_NAMES[pEntry.Verified]);
+  Result.AddPair('host', pEntry.Host);
 end;
 
 function EntryText(const pEntry: TFrBackupEntry): string;
 begin
-  Result := Format('%s  %d bytes  %s UTC  verified %s  (%s)', [pEntry.FileName, pEntry.Size, FormatDateTime(DATE_FORMAT, pEntry.CreatedUtc),
-    VERIFIED_NAMES[pEntry.Verified], pEntry.Database]);
+  Result := Format('%s%s  %d bytes  %s UTC  verified %s  (%s)', [if pEntry.Host = '' then '' else pEntry.Host + ': ', pEntry.FileName, pEntry.Size,
+    FormatDateTime(DATE_FORMAT, pEntry.CreatedUtc), VERIFIED_NAMES[pEntry.Verified], pEntry.Database]);
 end;
 
 { The recorded backups of one database; '' = of every one. }

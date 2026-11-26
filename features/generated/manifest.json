@@ -16461,7 +16461,7 @@
           "type": "cli",
           "verb": "repo",
           "sub": "alter-table",
-          "usage": "drag-lint repo alter-table --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--backup-dir <folder>] [--backup-name <name>] [--verify <full|quick>] [--json]",
+          "usage": "drag-lint repo alter-table --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--code-dir <folder>] [--server-dir <folder>] [--client-dir <folder>] [--select <id file>] [--apply] [--dry-run] [--backup-dir <folder>] [--backup-name <name>] [--verify <full|quick>] [--json]",
           "flags": [
             {
               "name": "--table",
@@ -16499,6 +16499,18 @@
               "arg": "<name>"
             },
             {
+              "name": "--code-dir",
+              "arg": "<folder>"
+            },
+            {
+              "name": "--server-dir",
+              "arg": "<folder>"
+            },
+            {
+              "name": "--client-dir",
+              "arg": "<folder>"
+            },
+            {
               "name": "--select",
               "arg": "<id file>"
             },
@@ -16525,7 +16537,7 @@
             }
           ],
           "helpOrder": 111,
-          "help": ["  drag-lint repo alter-table    --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--backup-dir <folder>] [--backup-name <name>] [--verify <full|quick>] [--json]   (make ONE Firebird table match the repository; prints the change set with the exact DDL and writes NOTHING without --apply; a change Firebird refuses, or accepts and loses data on, is BLOCKED; drops, DROP NOT NULL, safe-path changes and the widening of a column other objects use are unchecked: name their ids, after the plan line of the dry run, in --select; all in that file never takes a drop; --apply first makes a backup, restored and compared unless --verify quick, see repo backup --connection; --safe-path offers add-copy-compare-swap for refused type changes; --hook micronite = the Micronite rules; exit 0 ok, 1 bad arguments or a refused or failed apply)"]
+          "help": ["  drag-lint repo alter-table    --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--code-dir <folder>] [--server-dir <folder>] [--client-dir <folder>] [--select <id file>] [--apply] [--dry-run] [--backup-dir <folder>] [--backup-name <name>] [--verify <full|quick>] [--json]   (make ONE Firebird table match the repository; prints the change set with the exact DDL and writes NOTHING without --apply; a change Firebird refuses, or accepts and loses data on, is BLOCKED; drops, DROP NOT NULL, safe-path changes and the widening of a column other objects use are unchecked: name their ids, after the plan line of the dry run, in --select; all in that file never takes a drop; with --hook micronite a successful --apply is followed by a DRY RUN of repo update-orm for the table (it uses --code-dir / --server-dir / --client-dir) that lists the ORM units that would change, a failure of it only warns; --apply first makes a backup (a server on another machine needs --verify quick), restored and compared unless --verify quick, see repo backup --connection; --safe-path offers add-copy-compare-swap for refused type changes; --hook micronite = the Micronite rules; exit 0 ok, 1 bad arguments or a refused or failed apply)"]
         }
       ],
       "audience": "both",
@@ -16547,7 +16559,7 @@
         "date": "2026-11-26",
         "by": "ENGINE",
         "build": "1.54.1-alpha",
-        "surfaceHash": "ac80dbea94a41e4eadeb69d18899b6f680fcf750debb9ae3b6656699495ca646"
+        "surfaceHash": "b3c68c0e777b0e4c018d9429d0a8d43b308cddceea25b1c75066096f994808da"
       }
     },
     {
@@ -16980,7 +16992,7 @@
             }
           ],
           "helpOrder": 112,
-          "help": ["  drag-lint repo backup         --connection \"<Firebird connection string>\" [--verify <full|quick>] [--table <T>] [--backup-dir <folder>] [--backup-name <name>] [--project <project file>] [--json]   (a backup of the DATABASE through the Firebird service API, as DLFR_BACKUP_<database>_<yyyymmdd>_<hhnnss>.fbk unless --backup-name gives the name (a name not a path, .fbk added, an existing file is never overwritten); restored into a temporary database and compared unless --verify quick; free space checked first; the server must be on this machine; recorded in %LOCALAPPDATA%\\drag-lint\\db-backups.json)", "  drag-lint repo backup         list [--connection <..>] [--json] | purge --keep <N> [--connection <..> [--apply]] [--dry-run] [--json]   (the recorded backups; purge is a dry run without --apply and deletes only backups of the database --connection opens, only recorded files whose size and date did not change, and never the newest or the newest verified one)"]
+          "help": ["  drag-lint repo backup         --connection \"<Firebird connection string>\" [--verify <full|quick>] [--table <T>] [--backup-dir <folder>] [--backup-name <name>] [--project <project file>] [--json]   (a backup of the DATABASE through the Firebird service API, as DLFR_BACKUP_<database>_<yyyymmdd>_<hhnnss>.fbk unless --backup-name gives the name (a name not a path, .fbk added, an existing file is never overwritten); restored into a temporary database and compared unless --verify quick; free space checked first; a server on ANOTHER machine is allowed with --verify quick given explicitly: it writes the file on its own disk, the host and that path are printed and recorded, the free space is not checked, and purge never deletes it; recorded in %LOCALAPPDATA%\\drag-lint\\db-backups.json)", "  drag-lint repo backup         list [--connection <..>] [--json] | purge --keep <N> [--connection <..> [--apply]] [--dry-run] [--json]   (the recorded backups; purge is a dry run without --apply and deletes only backups of the database --connection opens, only recorded files whose size and date did not change, and never the newest or the newest verified one)"]
         }
       ],
       "audience": "both",
@@ -17002,7 +17014,7 @@
         "date": "2026-11-26",
         "by": "ENGINE",
         "build": "1.54.1-alpha",
-        "surfaceHash": "02f2ef44b1276cda02a010ab629df6ccb6921fc18835e152b75436e623ff4f03"
+        "surfaceHash": "60c7a1223fa72d6378377773d93616c9db07b90e398e713550daa9cac15f4293"
       }
     },
     {

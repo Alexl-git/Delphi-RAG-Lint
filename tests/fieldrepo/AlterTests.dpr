@@ -49,6 +49,7 @@ uses
   DRagLint.FieldRepo.AlterApply in '..\..\src\sql\DRagLint.FieldRepo.AlterApply.pas',
   DRagLint.FieldRepo.AlterReport in '..\..\src\sql\DRagLint.FieldRepo.AlterReport.pas',
   DRagLint.FieldRepo.SchemaHook in '..\..\src\sql\DRagLint.FieldRepo.SchemaHook.pas',
+  DRagLint.FieldRepo.DataServiceGen in '..\..\src\sql\DRagLint.FieldRepo.DataServiceGen.pas',
   DRagLint.FieldRepo.SchemaHookMicronite in '..\..\src\sql\DRagLint.FieldRepo.SchemaHookMicronite.pas';
 
 const
@@ -1215,6 +1216,51 @@ begin
   Check('B45 an unknown hook is refused and the names are listed', Raises(procedure begin SchemaHook('nope') end, 'generic, micronite'));
 end;
 
+{ Q-ALTER-3 = B (1.55): --hook micronite, after a successful apply, a DRY RUN of update-orm for the altered table }
+procedure TestOrmFollowUp;
+var
+  vSeen: TOrmVerbOptions;
+  vCalls: Integer;
+  vOk, vFail, vRaise: TOrmDryRun;
+  vText: string;
+begin
+  vCalls := 0;
+  vOk := function(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer
+    begin
+      Inc(vCalls);
+      vSeen := pOptions;
+      pOut.Add('changed C:\orm\iT.pas');
+      pOut.Add('unchanged C:\orm\uT.pas');
+      pOut.Add('new C:\orm\sT.pas');
+      pOut.Add('repo update-orm: 1 new, 1 changed, 1 unchanged, 0 skipped; dry run');
+      Result := 0;
+    end;
+  vFail := function(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer
+    begin
+      Inc(vCalls);
+      pOut.Add('repo update-orm: give --code-dir <folder>');
+      Result := 1;
+    end;
+  vRaise := function(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer
+    begin
+      Inc(vCalls);
+      raise Exception.Create('boom');
+    end;
+  vText := string.Join('|', MicroniteOrmFollowUp('micronite', True, 'C:\r.dlrepo', 'T', 'C:\orm', '', '', vOk));
+  Check('O1 micronite + success: update-orm, a dry run, for that table and repository, same folders', (vCalls = 1) and (vSeen.Sub = 'update-orm') and not vSeen.Apply and
+    (vSeen.Tables = 'T') and (vSeen.RepoPath = 'C:\r.dlrepo') and (vSeen.CodeDir = 'C:\orm'), vText);
+  Check('O1b the summary counts the new and the changed units, not the unchanged one, and names them', vText.StartsWith('orm follow-up') and vText.Contains('2 unit(s) would change') and
+    vText.Contains('changed C:\orm\iT.pas') and vText.Contains('new C:\orm\sT.pas') and not vText.Contains('uT.pas') and vText.Contains('nothing written'), vText);
+  vCalls := 0;
+  Check('O2 another hook, or no hook: nothing runs', (Length(MicroniteOrmFollowUp('', True, 'r', 'T', 'c', '', '', vOk)) = 0) and (Length(MicroniteOrmFollowUp('other', True, 'r', 'T', 'c', '', '', vOk)) = 0) and (vCalls = 0));
+  Check('O3 a failed apply: nothing runs', (Length(MicroniteOrmFollowUp('micronite', False, 'r', 'T', 'c', '', '', vOk)) = 0) and (vCalls = 0));
+  vText := string.Join('|', MicroniteOrmFollowUp('micronite', True, 'r', 'T', '', '', '', vFail));
+  Check('O4 a failed dry run only warns, and says what to do', vText.StartsWith('warning:') and vText.Contains('give --code-dir') and vText.Contains('nothing was written'), vText);
+  vText := string.Join('|', MicroniteOrmFollowUp('micronite', True, 'r', 'T', 'c', '', '', vRaise));
+  Check('O4b an exception of the generator only warns too', vText.StartsWith('warning:') and vText.Contains('boom'), vText);
+  vText := string.Join('|', MicroniteOrmFollowUp('MICRONITE', True, 'r', 'T', 'c', '', '', function(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer begin Result := 0 end));
+  Check('O5 no unit would change: a count of 0 and no apply advice', vText.Contains('0 unit(s) would change') and not vText.Contains('apply them'), vText);
+end;
 procedure TestReport;
 var
   vReport: TFrAlterReport;
@@ -1914,6 +1960,7 @@ begin
       TestApplySequence;
       TestBackupGate;
       TestHooks;
+      TestOrmFollowUp;
       TestReport;
       TestRepoFacts;
       TestLive;

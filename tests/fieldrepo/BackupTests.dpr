@@ -340,6 +340,48 @@ begin
   RemoveDir(ExtractFileDir(vOld.FileName));
 end;
 
+{ Q10 = B (1.55): a backup of a server on another machine is allowed, written on its disk, never restore-tested, never purged }
+procedure TestRemote;
+const
+  REMOTE = 'Server=srv.invalid;Database=C:\x.fdb;User_Name=SYSDBA;Password=pw';
+  LOCAL = 'Database=C:\x.fdb;User_Name=SYSDBA;Password=pw';
+var
+  vKeep, vRemote: TFrBackupEntry;
+  vManifest, vText: string;
+  vItem: TFrPurgeItem;
+  vRead: TArray<TFrBackupEntry>;
+  vFiles: Integer;
+begin
+  Check('Q1 a remote server with the restore test is refused before anything is opened, naming --verify quick',
+    RemoteVerifyProblem(REMOTE, fvmFull).Contains('--verify quick') and RemoteVerifyProblem(REMOTE, fvmFull).Contains('srv.invalid'), RemoteVerifyProblem(REMOTE, fvmFull));
+  Check('Q1b a remote server with --verify quick, and a local one either way, are not', (RemoteVerifyProblem(REMOTE, fvmQuick) = '') and
+    (RemoteVerifyProblem(LOCAL, fvmFull) = '') and (RemoteVerifyProblem(LOCAL, fvmQuick) = '') and
+    (RemoteVerifyProblem('Server=' + GetEnvironmentVariable('COMPUTERNAME') + ';Database=C:\x.fdb;User_Name=SYSDBA', fvmFull) = ''));
+  Check('Q2 server paths: Windows, Unix, with a folder', (ServerBackupFile('C:\db\A.FDB', '', 'x.fbk') = 'C:\db\x.fbk') and (ServerBackupFile('/srv/db/a.fdb', '', 'x.fbk') = '/srv/db/x.fbk') and
+    (ServerBackupFile('C:\db\A.FDB', 'D:\bk\', 'x.fbk') = 'D:\bk\x.fbk') and (ServerBackupFile('/srv/db/a.fdb', '/bk', 'x.fbk') = '/bk/x.fbk'),
+    ServerBackupFile('C:\db\A.FDB', '', 'x.fbk') + ' ' + ServerBackupFile('/srv/db/a.fdb', '', 'x.fbk'));
+  vKeep := MakeEntry('q-keep', 'C:\db\A.FDB', 1, fbvFull);
+  vRemote := Default(TFrBackupEntry);
+  vRemote.FileName := '/srv/db/DLFR_BACKUP_A_20261126_090807.fbk';
+  vRemote.Database := 'C:\db\A.FDB';
+  vRemote.Host := 'srv.invalid';
+  vRemote.CreatedUtc := IncHour(EncodeDate(2026, 11, 23), -5);
+  vRemote.Verified := fbvQuick;
+  Check('Q3 a remote entry reads as remote, though no such file is here', BackupFileState(vRemote) = ffsRemote);
+  vText := '(none)';
+  for vItem in PlanBackupPurge([vKeep, vRemote], 1) do
+    if vItem.Entry.FileName = vRemote.FileName then
+      vText := PURGE_ACTION_NAMES[vItem.Action] + ' ' + vItem.Reason;
+  Check('Q3b purge never deletes it, and says why', vText.StartsWith('skip ') and vText.Contains('srv.invalid') and vText.Contains('never deletes'), vText);
+  vManifest := TPath.Combine(GDir, 'q.json');
+  AddToBackupManifest(vManifest, vRemote);
+  AddToBackupManifest(vManifest, vKeep);
+  vRead := ReadBackupManifest(vManifest);
+  Check('Q4 the host survives the list; a local entry has none', (Length(vRead) = 2) and (vRead[0].Host = 'srv.invalid') and (vRead[1].Host = '') and
+    TFile.ReadAllText(vManifest).Contains('"host"'));
+  TotalBackupSize(vRead, vFiles);
+  Check('Q4b a remote entry is not counted among the files on disk', vFiles = 1, IntToStr(vFiles));
+end;
 { BKNAME (1.55): the new default name, --backup-name, and what a purge recognises }
 procedure TestNames;
 var
@@ -800,6 +842,7 @@ begin
       TestPurgeLast;
       TestPurgePaths;
       TestNames;
+      TestRemote;
       TestPurgeSwap;
       TestHosts;
       TestLive;

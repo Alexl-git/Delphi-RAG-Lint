@@ -5,10 +5,34 @@ unit DRagLint.FieldRepo.SchemaHookMicronite;
 
 interface
 
+uses
+  System.Classes,
+  DRagLint.FieldRepo.DataServiceGen;
+
 const
   /// <summary>What --hook takes.</summary>
   HOOK_MICRONITE = 'micronite';
 
+type
+  /// <summary>Runs one ORM generator verb the way RunOrmGenVerb does; a test seam of MicroniteOrmFollowUp.</summary>
+  TOrmDryRun = reference to function(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer;
+
+/// <summary>The follow-up of a successful 'repo alter-table --apply --hook micronite' (owner Q-ALTER-3 = B): 'repo update-orm'
+/// as a DRY RUN for the altered table, reported as the ORM units that would change.</summary>
+/// <param name="pHook">The --hook value; anything but micronite gives no follow-up.</param>
+/// <param name="pApplied">True only when the apply succeeded; a failed or refused apply gives no follow-up.</param>
+/// <param name="pRepo">The repository file (the same one the alter used).</param>
+/// <param name="pTable">The altered table.</param>
+/// <param name="pCodeDir">--code-dir, folder of the i/u units.</param>
+/// <param name="pServerDir">--server-dir ('' = not given).</param>
+/// <param name="pClientDir">--client-dir ('' = not given).</param>
+/// <param name="pRun">The generator; nil = RunOrmGenVerb.</param>
+/// <returns>The lines to print: a summary with the count and one line per unit that is new or would change; or a "warning:"
+/// line when the dry run failed (a missing --code-dir included). nil when there is no follow-up.</returns>
+/// <remarks>Never writes: Apply is forced to False. A failure only warns; the caller's result and exit code stay as the apply
+/// left them. Never raises.</remarks>
+function MicroniteOrmFollowUp(const pHook: string; pApplied: Boolean; const pRepo, pTable, pCodeDir, pServerDir, pClientDir: string;
+  const pRun: TOrmDryRun = nil): TArray<string>;
 implementation
 
 uses
@@ -46,6 +70,59 @@ begin
   if Length(pPlan.Changes) > 0 then
     Result := [Format('Micronite: regenerate the ORM unit afterwards (drag-lint repo update-orm --table %s)', [pPlan.TableName]),
       'Micronite: the FIB$ registry rows of these columns are not changed'];
+end;
+
+function MicroniteOrmFollowUp(const pHook: string; pApplied: Boolean; const pRepo, pTable, pCodeDir, pServerDir, pClientDir: string;
+  const pRun: TOrmDryRun): TArray<string>;
+var
+  VOptions: TOrmVerbOptions;
+  VLines: TStringList;
+  VLine, VUnits: string;
+  VCount: Integer;
+begin
+  Result := nil;
+  if not SameText(pHook, HOOK_MICRONITE) or not pApplied then
+    Exit;
+  VOptions := Default(TOrmVerbOptions);
+  VOptions.Sub := 'update-orm';
+  VOptions.RepoPath := pRepo;
+  VOptions.CodeDir := pCodeDir;
+  VOptions.ServerDir := pServerDir;
+  VOptions.ClientDir := pClientDir;
+  VOptions.Tables := pTable;
+  VOptions.Apply := False;
+  VLines := TStringList.Create;
+  try
+    try
+      if (if Assigned(pRun) then pRun(VOptions, VLines) else RunOrmGenVerb(VOptions, VLines)) <> 0 then
+      begin
+        Result := ['warning: the update-orm dry run after the alter failed, nothing was written: ' + Trim(VLines.Text) +
+          ' (run: drag-lint repo update-orm --table ' + pTable + ' --code-dir <folder>)'];
+        Exit;
+      end;
+    except
+      on E: Exception do
+      begin
+        Result := ['warning: the update-orm dry run after the alter failed, nothing was written: ' + E.Message];
+        Exit;
+      end;
+    end;
+    VCount := 0;
+    VUnits := '';
+    for VLine in VLines do
+      if VLine.StartsWith('changed ') or VLine.StartsWith('new ') then
+      begin
+        Inc(VCount);
+        VUnits := VUnits + 'orm unit: ' + VLine + sLineBreak;
+      end;
+    Result := [Format('orm follow-up (repo update-orm --table %s, dry run, nothing written): %d unit(s) would change', [pTable, VCount])];
+    for VLine in VUnits.Split([sLineBreak], TStringSplitOptions.ExcludeEmpty) do
+      Result := Result + [VLine];
+    if VCount > 0 then
+      Result := Result + ['apply them with: drag-lint repo update-orm --table ' + pTable + ' --apply (same --code-dir)'];
+  finally
+    VLines.Free;
+  end;
 end;
 
 initialization

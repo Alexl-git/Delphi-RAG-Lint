@@ -15,12 +15,13 @@ drag-lint repo alter-table --table <T> --direction repo-to-db --connection "<Fir
 |---|---|
 | `--direction repo-to-db` | Required; there is no default direction. |
 | `--apply` | Makes a verified backup of the database, then writes the checked changes. `--dry-run` wins over it. |
+| `--code-dir`, `--server-dir`, `--client-dir` | Only with `--hook micronite`: the folders of the ORM units the follow-up dry run of `repo update-orm` reads (without `--code-dir` it warns and says what to run). |
 | `--backup-dir`, `--backup-name`, `--verify` | Where the backup goes, what it is called (default `DLFR_BACKUP_<database>_<yyyymmdd>_<hhnnss>.fbk`) and whether it is restored for a test (`full`, the default) or not (`quick`): [[repo-db-backup]]. |
 | `--select <file>` | Ids to apply, one per line, or `all` (never a blocked one, and never a DROP COLUMN: a drop needs its own id, alone or beside `all`). Alone it writes nothing. With `--apply` the file must also hold the line `plan <hash>` that the dry run printed (`plan_hash` in JSON): ids are positions in ONE plan, and when the table or the repository changed since, the apply is refused. |
 | `--safe-path` | Offers add-copy-compare-swap for type changes Firebird refuses. Unchecked: they need `--select`. |
 | `--rename OLD=NEW` | A rename must be named: the repository knows columns by name only. Without it a rename reads as an add and an unchecked drop. |
 | `--order A,B` | Moves the listed columns to the front, in this order. The repository holds no column positions. |
-| `--hook <name>` | `generic` (default, does nothing) or `micronite` (vetoes `FIB$` tables, reminds of `repo update-orm`). |
+| `--hook <name>` | `generic` (default, does nothing) or `micronite` (vetoes `FIB$` tables, reminds of `repo update-orm`; after a SUCCESSFUL `--apply` it runs `repo update-orm` as a DRY RUN for the table and lists the ORM units that would change, with their count - it never writes, and a failure of it only warns: the apply result and the exit code stay). |
 | `--json` | One JSON object: `changes[]` with `ddl`, `safe`, `prechecks`, `blocked`, `depends_on`; `outcome` after an apply. |
 
 Exit: 0 = ok (a dry run included); 1 = bad arguments, a refused or a failed apply. The report is printed also when a
@@ -90,7 +91,7 @@ connection is gone): look at the table. After an apply `not applied:` lists ever
 
 Before the first write the apply makes a backup of the database, restores it into a temporary database and compares the list of
 tables and the row count of the altered table ([[repo-db-backup]]). When the backup or its verification fails, when there is not
-enough space, or when the server is another machine, nothing is applied (exit 1). Nothing to apply = no backup. The table
+enough space, nothing is applied (exit 1). A server on another machine is allowed (the backup is then on ITS disk, without the restore test; `--verify quick` is required: [[repo-db-backup]]). Nothing to apply = no backup. The table
 is compared with the plan again after the backup.
 
 Firebird allows DDL only while nobody else uses the table: run it in a maintenance window.

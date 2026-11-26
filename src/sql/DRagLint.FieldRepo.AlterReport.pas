@@ -30,6 +30,8 @@ type
     TotalSize: Int64;
     /// <summary>A temporary database that could not be removed; '' = none.</summary>
     Leftover: string;
+    /// <summary>The server host when the backup is on another machine's disk (FileName is then a path there); '' = this machine.</summary>
+    Host: string;
   end;
 
   /// <summary>What the report says beside the plan.</summary>
@@ -54,7 +56,7 @@ function RenderBackupText(const pBackup: TFrAlterBackup): TArray<string>;
 
 /// <summary>Renders a backup as a JSON object.</summary>
 /// <param name="pBackup">The backup.</param>
-/// <returns>file, size, verified, tables, rows, leftover, total_files, total_size; the caller frees it.</returns>
+/// <returns>file, size, verified, tables, rows, leftover, host ('' = this machine), total_files, total_size; the caller frees it.</returns>
 function BackupToJson(const pBackup: TFrAlterBackup): TJSONObject;
 
 /// <summary>Renders a report as text lines.</summary>
@@ -66,7 +68,7 @@ function RenderAlterText(const pReport: TFrAlterReport): TArray<string>;
 /// <param name="pReport">The report.</param>
 /// <returns>direction, table, database, dialect, hook, repository, dry_run, count, blocked, changes[id, op, kind,
 /// target, prop, old, new, checked, blocked, depends_on[], ddl[], safe{}, prechecks[], notes[], dependents[]], hook_before[],
-/// hook_after[], notes[], plan_hash, backup{file, size, verified, tables, rows, leftover, total_files, total_size}, outcome{success, groups[], problems[], not_applied[]}. plan_hash is what a --select
+/// hook_after[], notes[], plan_hash, backup{file, host, size, verified, tables, rows, leftover, total_files, total_size}, outcome{success, groups[], problems[], not_applied[]}. plan_hash is what a --select
 /// file names in its "plan" line.</returns>
 function RenderAlterJson(const pReport: TFrAlterReport): string;
 
@@ -90,6 +92,8 @@ begin
     VCompared := VCompared + Format(', %d row(s)', [pBackup.Rows]);
   Result := [Format('backup: %s (%d bytes, verified %s%s)', [pBackup.FileName, pBackup.Size, pBackup.Verified, VCompared]),
     Format('backups on disk: %d file(s), %d bytes in total (repo backup purge --keep N)', [pBackup.TotalFiles, pBackup.TotalSize])];
+  if pBackup.Host <> '' then
+    Result := Result + [Format('server: %s -- the backup file is on the server''s disk (path above), not on this machine; its space was not checked, it was not restore-tested, and purge never deletes it', [pBackup.Host])];
   if pBackup.Leftover <> '' then
     Result := Result + ['the temporary database of the verification could not be removed: ' + pBackup.Leftover];
 end;
@@ -103,6 +107,7 @@ begin
   Result.AddPair('tables', TJSONNumber.Create(pBackup.Tables));
   Result.AddPair('rows', TJSONNumber.Create(pBackup.Rows));
   Result.AddPair('leftover', pBackup.Leftover);
+  Result.AddPair('host', pBackup.Host);
   Result.AddPair('total_files', TJSONNumber.Create(pBackup.TotalFiles));
   Result.AddPair('total_size', TJSONNumber.Create(pBackup.TotalSize));
 end;
