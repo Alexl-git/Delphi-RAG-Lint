@@ -937,8 +937,8 @@ begin
     pConnection.StartTransaction;
     try
       InsertRows(pConnection, VParser);
-      if (VParser.Version < REPO_SCHEMA_VERSION) and (RepoSchemaVersion(pConnection) = REPO_SCHEMA_VERSION) then
-        MigrateRepoRows(pConnection, VParser.Version);
+      if VParser.Version < RepoSchemaVersion(pConnection) then
+        MigrateRepoRows(pConnection, VParser.Version, RepoSchemaVersion(pConnection));
       pConnection.Commit;
     except
       on Exception do

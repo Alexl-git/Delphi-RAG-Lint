@@ -113,8 +113,8 @@ As built (X1, 2026-11-26):
   input-target-mismatch, binding-no-default, binding-alias-set, relation-source-invalid, relation-no-columns,
   relation-two-defaults, relation-key-not-unique, relation-fk-missing, relation-fk-mismatch; WARN relation-key-unknown and
   relation-fk-gone (the schema facts lack the constraint). A cycle through aliases: `calc dependency cycle across tables`.
-* Restore: an older backup is migrated row-wise only into a file of the CURRENT schema (as before); `#DLREPO 2` into a
-  schema-3 file now goes in as it is (1.54 migrated it because 3 was current then).
+* Restore: an older backup is migrated row-wise up to the TARGET file's schema (`MigrateRepoRows(pFrom, pTo)`), also into a
+  non-current file; no row is dropped (TextBackupTests 21b, 25d, 25i).
 
 ## 3. Where origins come from
 

@@ -286,7 +286,7 @@ A calc cycle through aliases is named with full names: `calc dependency cycle ac
 
 A schema-4 repository writes `#DLREPO 4` (`DL_FIELD_INPUTS` last); a schema-3 file writes `#DLREPO 3`, a schema-2 file `#DLREPO 2` and a schema-1 file
 `#DLREPO 1`, byte for byte as before. Restoring an older backup into a newer repository is accepted (new tables empty, new
-columns NULL); into a file of the current schema (4) its rows get the row changes of `repo migrate` (FIELD_KIND 2, `ALIGNMENT` -2 to NULL,
+columns NULL); its rows get the row changes up to the TARGET file's schema of `repo migrate` (FIELD_KIND 2, `ALIGNMENT` -2 to NULL,
 `Field` events into the event columns) in the same transaction, so the result is the migrated file; restoring a newer backup into an older file is refused with exit 2 ("migrate first"); restoring into a missing file creates
 the file at the backup's own version.
 

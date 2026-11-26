@@ -376,13 +376,15 @@ function GetRepoMeta(pConnection: TFDConnection; const pKey: string): string;
 /// <returns>The counts; a step that schema does not need counts 0.</returns>
 function CountRepoRowChanges(pConnection: TFDConnection; pFrom: Integer): TRepoRowChanges;
 
-/// <summary>Brings rows of an older schema to REPO_SCHEMA_VERSION: FIELD_KIND 2 for ISCALCULATED rows (from schema 1),
-/// Field events into the event columns (from schema 2), ALIGNMENT -2 to NULL, DL_META schema_version. Schema 4 adds
-/// tables only: no row step of its own.</summary>
-/// <param name="pConnection">Open read-write connection whose tables have the columns of REPO_SCHEMA_VERSION.</param>
-/// <param name="pFrom">Schema version the rows were written with, below REPO_SCHEMA_VERSION.</param>
+/// <summary>Brings rows of an older schema to schema pTo: FIELD_KIND 2 for ISCALCULATED rows (from schema 1),
+/// Field events into the event columns (from schema 2 or older, when pTo is 3 or later), ALIGNMENT -2 to NULL (pTo 3 or
+/// later), DL_META schema_version = pTo. Schema 4 adds tables only: no row step of its own.</summary>
+/// <param name="pConnection">Open read-write connection whose tables have the columns of schema pTo.</param>
+/// <param name="pFrom">Schema version the rows were written with, below pTo.</param>
+/// <param name="pTo">The file's schema: REPO_SCHEMA_VERSION for a migration, the target file's own schema for a restore
+/// (an old backup restored into an older, non-current file is still migrated up to that file's schema).</param>
 /// <remarks>Runs in the caller's transaction, for a migrated file and for an older text backup that is restored.</remarks>
-procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer);
+procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer; pTo: Integer = REPO_SCHEMA_VERSION);
 
 implementation
 
@@ -995,14 +997,15 @@ begin
     Result.EventRows := CountEvents(pConnection);
 end;
 
-procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer);
+procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer; pTo: Integer);
 begin
   if pFrom < VERSION_MODEL then
     pConnection.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "FIELD_KIND" = 2' + WHERE_CALC)
-  else if pFrom < VERSION_EVENT_COLUMNS then
+  else if (pFrom < VERSION_EVENT_COLUMNS) and (pTo >= VERSION_EVENT_COLUMNS) then
     MoveEvents(pConnection);
-  pConnection.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "ALIGNMENT" = NULL' + WHERE_ALIGNMENT);
-  SetRepoMeta(pConnection, META_SCHEMA_VERSION, IntToStr(REPO_SCHEMA_VERSION));
+  if pTo >= VERSION_EVENT_COLUMNS then
+    pConnection.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "ALIGNMENT" = NULL' + WHERE_ALIGNMENT);
+  SetRepoMeta(pConnection, META_SCHEMA_VERSION, IntToStr(pTo));
 end;
 
 end.
