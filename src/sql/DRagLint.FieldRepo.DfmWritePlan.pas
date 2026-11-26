@@ -1769,10 +1769,8 @@ end;
 { The parameters of a TcxGridColumn event: TcxGridGetDisplayTextEvent, else TcxGridTableDataCellCustomDrawEvent. }
 function GridEventSignature(const pEvent: string): string;
 begin
-  if SameText(pEvent, EVENT_GET_DISPLAY_TEXT) then
-    Result := 'Sender: TcxCustomGridTableItem; ARecord: TcxCustomGridRecord; var AText: string'
-  else
-    Result := 'Sender: TcxCustomGridTableView; ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean';
+  Result := if SameText(pEvent, EVENT_GET_DISPLAY_TEXT) then 'Sender: TcxCustomGridTableItem; ARecord: TcxCustomGridRecord; var AText: string'
+    else 'Sender: TcxCustomGridTableView; ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean';
 end;
 
 { Why the unit cannot compile a declaration that needs pUnits; '' = it uses them all. }
@@ -1807,7 +1805,7 @@ var
 begin
   Result := '';
   for VView in pViews do
-    Result := Result + IfThen(Result <> '', ', ') + VView.Name;
+    Result := Result + (if Result = '' then '' else ', ') + VView.Name;
 end;
 
 { Where a graphical row's columns go: the DL_GRID_COLUMNS rows of this form, else the only view of the dataset. }
