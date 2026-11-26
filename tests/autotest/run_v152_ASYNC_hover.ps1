@@ -295,9 +295,9 @@ end.
     Check "W1 $c is the same text in the plugin and the server" ($a.Success -and $b.Success -and $a.Groups[1].Value -eq $b.Groups[1].Value) ("plugin=" + $a.Groups[1].Value + " server=" + $b.Groups[1].Value)
   }
   Check 'W2 the dwell announces before it asks (AnnounceDeferredHover precedes RequestHoverBundleAsync in OnTick)' `
-    ($ht -match '(?s)if FInflightAnnounced then AnnounceDeferredHover\(Client, Uri, CaretRow, CaretCol\);\s*FInflightId:= if HoverBundleUnsupported then RequestHoverTextAsync\(.*?else RequestHoverBundleAsync\(') ''
+    ($ht -match '(?s)if FInflightAnnounced then AnnounceDeferredHover\(Client, Uri, Cell\.Row0, Cell\.Col0\);\s*FInflightId:= if HoverBundleUnsupported then RequestHoverTextAsync\(.*?else RequestHoverBundleAsync\(') ''
   Check 'W3 a partial first answer is shown, NOT cached, and the same position asked again' `
-    ($ht -match '(?s)if WasFirst and \(AStatus = hvsOk\) and IsDeferredFirstAnswer\(AModel\) then\s*begin\s*if not GateAndShowInflight\(AMarkdown, AModel, ACallers\) then.*?FInflightId:= RequestHoverBundleAsync\(FInflightUri, FInflightRow, FInflightCol, OnHoverBundleAnswer\);.*?Exit;\s*end;\s*FInflightClient\s*:= nil;\s*FLastLspKey') ''
+    ($ht -match '(?s)if WasFirst and \(AStatus = hvsOk\) and IsDeferredFirstAnswer\(AModel\) then\s*begin\s*if not GateAndShowInflight\(AMarkdown, AModel, ACallers\) then.*?FInflightId:= RequestHoverBundleAsync\(FInflightUri, FInflightRow, FInflightCol, OnHoverBundleAnswer\);.*?Exit;\s*end;\s*FInflightClient\s*:= nil;\s*CacheAnswer\(') ''
   Check 'W4 every tick drops a second step the user moved on from (DropAbandonedSecondStep -> CancelInflight)' `
     (($ht -match '(?s)GetCursorPos\(Pos\);\s*\{[^}]*\}\s*DropAbandonedSecondStep;') -and ($ht -match '(?s)procedure TDragLintHoverHelper\.DropAbandonedSecondStep;.*?CancelInflight;\s*end;')) ''
 }
