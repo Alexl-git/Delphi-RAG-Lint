@@ -15,6 +15,7 @@
     O9  event code that reads a field of another table is BLOCKED; same table stored with macros
     O10 the JOIN dataset line, the joins summary line, --json
     O11 the old uOrders.dfm qryJoin is a join now, not unresolved
+    O8g (1.55 X3) with schema keys, the two-table calc Mixed is placed through an offered FORM relation, unchecked
   Run: pwsh -File tests\autotest\run_v1541_ORIGIN.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
@@ -98,7 +99,9 @@ try {
   [IO.File]::WriteAllText($ddl, "CREATE TABLE ORDERS (ID INTEGER NOT NULL, QTY INTEGER, NOTE VARCHAR(80), PART VARCHAR(10), TOOLID INTEGER, CONSTRAINT PK_O PRIMARY KEY (ID));`nCREATE TABLE TOOLS (ID INTEGER NOT NULL, NAME VARCHAR(20), CODE VARCHAR(10), PRICE DOUBLE PRECISION, TITLE VARCHAR(20), CONSTRAINT PK_T PRIMARY KEY (ID));`n")
   $null = Run @('repo', 'seed-fb', '--ddl', $ddl, '--repo', $z, '--apply')
   $s = Dfm $dfm $z
-  Check 'O8d unqualified column: the one FROM table that has it' ((-not (Has $s 'no table: Part:')) -and (Has $s "qryJ (TFDQuery) -> JOIN ORDERS TOOLS: 8 data, 13 calc, 2 lookup, 0 internal-calc, 0 aggregate`n  no table column: Dbl, TNo, Mixed,")) $s.Out
+  Check 'O8d unqualified column: the one FROM table that has it' ((-not (Has $s 'no table: Part:')) -and (Has $s "qryJ (TFDQuery) -> JOIN ORDERS TOOLS: 8 data, 13 calc, 2 lookup, 0 internal-calc, 0 aggregate`n  no table column: Dbl, TNo, Comp,")) $s.Out
+  # 1.55 X3: with keys, T.ID = O.ToolID ends on the PK of TOOLS: an offered FORM relation (XQ6) lets Mixed be placed in ORDERS, unchecked
+  Check 'O8g with schema keys the two-table calc Mixed is placed through an offered FORM relation, all unchecked' (($s.Out -match '(?m)^\[\d+\] insert DL_RELATIONS ORDERS_TOOLS:  -> ORDERS > TOOLS; SOURCE=FORM; PARENT_KEY=PK_T; IS_DEFAULT=False; COLUMNS=TOOLID=ID\r?\n  \(unchecked\)') -and ($s.Out -match '(?m)^\[\d+\] insert DL_FIELDS_INFO ORDERS\|MIXED: [^\n]*\{\{TOOLS\.NAME\}\}[^\n]*\r?\n  \(unchecked\)') -and ($s.Out -match '(?m)^\[\d+\] insert DL_FIELD_INPUTS ORDERS\|MIXED\|\|TOOLS:  -> PATH=ORDERS_TOOLS; TARGET_TABLE=TOOLS \(rule form\)\r?\n  \(unchecked\)')) $s.Out
   Check 'O8e bare Origin and a star column: the one table that has it' ((-not (Has $s 'no table: Code:')) -and ($s.Out -match 'qryStar \(TQuery\) -> [^\n]*\n  no table column: ID\n')) $s.Out
   Check 'O8f a star column in two tables without Origin: ambiguous, not picked' (Has $s 'no table: ID: ID is in 2 tables of the FROM: ORDERS TOOLS') $s.Out
   # O11 the old fixture

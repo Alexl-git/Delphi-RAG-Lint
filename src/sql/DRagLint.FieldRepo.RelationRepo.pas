@@ -20,6 +20,29 @@ uses
 /// <remarks>A relation whose parent side has no key is never an edge (rows would multiply). Read-only.</remarks>
 function LoadRelationGraph(pRepo: TFDConnection; out pSkipped: TArray<string>): TFrRelationGraph;
 
+type
+  /// <summary>A PK / UNIQUE constraint of the schema facts: the proof that a parent row is ONE row (design 3.2).</summary>
+  TFrTableKey = record
+    /// <summary>Table the key belongs to, as stored.</summary>
+    TableName: string;
+    /// <summary>Constraint name, as stored.</summary>
+    ConstraintName: string;
+    /// <summary>Key columns in position order.</summary>
+    Columns: TArray<string>;
+  end;
+
+/// <summary>Every PK / UNIQUE constraint of the repository's schema facts (DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS);
+/// read-dfm uses them to offer a FORM relation for a join that ends on a parent key without an FK (ruling XQ6).</summary>
+/// <param name="pRepo">An open repository connection, schema 2 or later.</param>
+/// <returns>The keys ordered by constraint name; empty without schema facts.</returns>
+function LoadTableKeys(pRepo: TFDConnection): TArray<TFrTableKey>;
+
+/// <summary>The names of the stored DL_RELATIONS rows (design 2.3: an FK step gets its row when a binding first uses
+/// it).</summary>
+/// <param name="pRepo">An open repository connection.</param>
+/// <returns>Upper-case relation names; empty below schema 4.</returns>
+function LoadStoredRelationNames(pRepo: TFDConnection): TArray<string>;
+
 implementation
 
 uses
@@ -251,6 +274,44 @@ begin
     VRelChild.Free;
     VColumns.Free;
   end;
+end;
+
+function LoadTableKeys(pRepo: TFDConnection): TArray<TFrTableKey>;
+var
+  VColumns: TDictionary<string, TArray<string>>;
+  VQuery: TFDQuery;
+  VKey: TFrTableKey;
+begin
+  Result := nil;
+  VColumns := TDictionary<string, TArray<string>>.Create;
+  VQuery := TFDQuery.Create(nil);
+  try
+    ReadColumns(pRepo, VColumns);
+    VQuery.Connection := pRepo;
+    VQuery.Open(SQL_KEYS + ' ORDER BY C."CONSTRAINT_NAME"');
+    while not VQuery.Eof do
+    begin
+      VKey.ConstraintName := VQuery.Fields[0].AsString;
+      VKey.TableName := VQuery.Fields[1].AsString;
+      VKey.Columns := ColumnsOf(VColumns, VKey.ConstraintName);
+      Result := Result + [VKey];
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
+    VColumns.Free;
+  end;
+end;
+
+function LoadStoredRelationNames(pRepo: TFDConnection): TArray<string>;
+var
+  VRow: TFrRelationRow;
+begin
+  Result := nil;
+  if RepoSchemaVersion(pRepo) < SCHEMA_WITH_RELATIONS then
+    Exit;
+  for VRow in ReadRelations(pRepo) do
+    Result := Result + [UpperCase(VRow.Name)];
 end;
 
 end.

@@ -245,6 +245,7 @@ uses
   DRagLint.FieldRepo.DfmReadSql in '..\sql\DRagLint.FieldRepo.DfmReadSql.pas',
   DRagLint.FieldRepo.DfmReadCalc in '..\sql\DRagLint.FieldRepo.DfmReadCalc.pas',
   DRagLint.FieldRepo.DfmReadPlan in '..\sql\DRagLint.FieldRepo.DfmReadPlan.pas',
+  DRagLint.FieldRepo.DfmReadLinks in '..\sql\DRagLint.FieldRepo.DfmReadLinks.pas',
   DRagLint.FieldRepo.DfmReadSelection in '..\sql\DRagLint.FieldRepo.DfmReadSelection.pas',
   DRagLint.FieldRepo.SchemaFactsEx in '..\sql\DRagLint.FieldRepo.SchemaFactsEx.pas',
   DRagLint.FieldRepo.DfmWrite in '..\sql\DRagLint.FieldRepo.DfmWrite.pas',

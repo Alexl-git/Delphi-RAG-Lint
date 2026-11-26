@@ -122,6 +122,14 @@ function CalcDependencies(const pBody, pSelf: string): TArray<string>;
 /// <exception cref="EFrKindError">As ParseMacros, and for a second dot or an empty alias / field part.</exception>
 function ParseMacrosWithAliases(const pBody: string; const pAliases: array of string): TArray<TFrMacro>;  // dl:ok unused-public-symbol@4edc -- REVIEWED 2026-11-26 XTABLE: public API of the X1 rule unit, called by tests\fieldrepo\CrossTableTests.dpr (outside this index) and by later slices (X3 read-dfm, the 1.56 dialog)
 
+/// <summary>The `{{ALIAS.FIELD}}` macros of a body, as written (design 2026-11-26-cross-table-fields 2.1): code that
+/// reads a row of another table. gen-handlers and write-dfm refuse such a body, with this list as the reason, until
+/// a delivery brings those inputs (repo compose-sql).</summary>
+/// <param name="pBody">A CALC_BODY or event-column body.</param>
+/// <returns>The `{{A.F}}` texts in order, distinct (case-insensitive); empty when there is none. One in a string or a
+/// comment is text.</returns>
+function ForeignMacros(const pBody: string): TArray<string>;
+
 /// <summary>The inputs of a body: own fields as CalcDependencies finds them, plus every `{{ALIAS.FIELD}}`.</summary>
 /// <param name="pBody">The body text.</param>
 /// <param name="pSelf">The field that owns the body (same rule as CalcDependencies; an aliased macro is never it).</param>
@@ -318,6 +326,26 @@ end;
 function ParseMacros(const pBody: string): TArray<TFrMacro>;
 begin
   Result := ScanMacros(pBody, False, []);
+end;
+
+function ForeignMacros(const pBody: string): TArray<string>;
+var
+  VCode, VInner: string;
+  VPos, VClose: Integer;
+begin
+  Result := nil;
+  VCode := BlankStringsAndComments(pBody);
+  VPos := Pos(MACRO_OPEN, VCode);
+  while VPos > 0 do
+  begin
+    VClose := Pos(MACRO_CLOSE, VCode, VPos + MACRO_OPEN_LEN);
+    if VClose = 0 then
+      Exit;
+    VInner := Copy(VCode, VPos + MACRO_OPEN_LEN, VClose - VPos - MACRO_OPEN_LEN);
+    if (Pos('.', VInner) > 0) and not MatchText(MACRO_OPEN + VInner + MACRO_CLOSE, Result) then
+      Result := Result + [MACRO_OPEN + VInner + MACRO_CLOSE];
+    VPos := Pos(MACRO_OPEN, VCode, VClose + MACRO_CLOSE_LEN);
+  end;
 end;
 
 function SkipBlanks(const pText: string; pPos: Integer): Integer;

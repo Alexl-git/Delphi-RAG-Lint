@@ -131,6 +131,10 @@ type
     /// <summary>The tables named by any edge, sorted.</summary>
     /// <returns>Names as first added.</returns>
     function Tables: TArray<string>;
+    /// <summary>Every edge added (design 3.2), e.g. to copy the graph and add a form's offered relations to the copy
+    /// only (X3: an offered FORM relation is no edge for other forms until it is stored, ruling XQ6).</summary>
+    /// <returns>The relations sorted by name (case-insensitive).</returns>
+    function Relations: TArray<TFrRelation>;
     /// <summary>Number of edges added.</summary>
     property RelationCount: Integer read FRelationCount;
   end;
@@ -455,6 +459,20 @@ function TFrRelationGraph.Tables: TArray<string>;
 begin
   Result := FTables.Values.ToArray;
   TArray.Sort<string>(Result, TIStringComparer.Ordinal);
+end;
+
+function TFrRelationGraph.Relations: TArray<TFrRelation>;
+var
+  VList: TList<TFrRelation>;
+begin
+  Result := nil;
+  for VList in FEdges.Values do
+    Result := Result + VList.ToArray;
+  TArray.Sort<TFrRelation>(Result, TComparer<TFrRelation>.Construct(
+    function(const pLeft, pRight: TFrRelation): Integer
+    begin
+      Result := CompareText(pLeft.Name, pRight.Name);
+    end));
 end;
 
 end.
