@@ -3,6 +3,10 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## Unreleased (1.55)
+
+- DFMWRITE2 (owner rulings 2026-11-26): `repo write-dfm` creates a missing field-event handler the repository holds code for (`ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY`): `OnGetText = <Dataset><Field>GetText` in the DFM, the declaration and the method (a DLFR region with the macros expanded, so `repo gen-handlers` finds it unchanged) in the unit -- an unchecked change; a field the selection adds brings its events, which need its insert. Removing a field takes the DevExpress grid and layout items bound to it (`DataBinding.FieldName` inside a view or tree list on a data source of the dataset) as linked unchecked deletes the field's delete needs; an item another property or the unit names blocks itself and the field. BDE datasets and aggregates the repository does not hold: unchanged. Graphical grid columns (Q3(1)): designed in `docs\superpowers\specs\2026-11-26-dfmwrite2-design.md`, not built yet. No re-parse.
+
 ## v1.54.1-alpha -- 2026-11-26
 
 - AUTODOC (REGTAG, Q21): `Registered as:` on a unit two projects compile is tagged per project -- `[CliApp]IFoo (singleton), [SrvApp]IFoo (transient)` -- and a run adds and removes only its own tag, so `document` and doc-drift reach a fixpoint; before, each project replaced the other's line on every run. Old untagged lines are tagged once; a unit of one project is unchanged. `doc-forget` sees these tags. No re-parse. 1.54.1 review R1: a project tag on ANY entry of a stored line is evidence, also when an untagged leftover sorts first (before, that run wrote its own untagged line and deleted the other project's tagged entries).

@@ -119,6 +119,20 @@ function CalcRegionContent(const pFields: TArray<TFrhField>; out pContent, pReas
 /// <returns>False as CalcRegionContent.</returns>
 function EventRegionContent(const pFields: TArray<TFrhField>; const pBody: string; out pContent, pReason: string): Boolean;  // dl:ok unused-public-symbol@2823 -- REVIEWED 2026-11-23 TT-HANDLERS: pure part of the generator, asserted directly by tests/fieldrepo/HandlersTests.dpr; outside this project index
 
+/// <summary>The DLFR region of a field-event handler that does not exist yet, as `repo handlers` would write it into an
+/// empty method at column 0.</summary>
+/// <param name="pFields">Persistent fields of the dataset (fields that will be added included).</param>
+/// <param name="pComponent">Component name of the field; the region id is `pComponent.pEvent`.</param>
+/// <param name="pEvent">Event name, e.g. OnGetText.</param>
+/// <param name="pBody">Stored code with field macros.</param>
+/// <param name="pEol">Line end of the unit.</param>
+/// <param name="pText">Receives the region lines, each ending in pEol, indented one level.</param>
+/// <param name="pReason">Receives why nothing can be generated (a macro the dataset cannot resolve).</param>
+/// <returns>False as EventRegionContent.</returns>
+/// <remarks>Used by repo write-dfm (Q1 A, 1.55): a later `repo handlers` run finds the region current.</remarks>
+function NewHandlerRegion(const pFields: TArray<TFrhField>; const pComponent, pEvent, pBody, pEol: string;
+  out pText, pReason: string): Boolean;
+
 /// <summary>The parameter names stored code of a field event uses.</summary>
 /// <param name="pEvent">Event name.</param>
 /// <returns>Comma-separated, in the order of the event type; '' for another event.</returns>
@@ -492,6 +506,17 @@ begin
   Result := ExpandBody(pFields, pBody, VCode, pReason);
   if Result then
     pContent := BlockText(VCode, '');
+end;
+
+function NewHandlerRegion(const pFields: TArray<TFrhField>; const pComponent, pEvent, pBody, pEol: string;
+  out pText, pReason: string): Boolean;
+var
+  VContent: string;
+begin
+  pText := '';
+  Result := EventRegionContent(pFields, pBody, VContent, pReason);
+  if Result then
+    pText := RenderDlfrRegion(pComponent + '.' + pEvent, IndentLines(VContent, INDENT, pEol), INDENT, pEol);
 end;
 
 { ---- stored bodies ---- }

@@ -1,4 +1,4 @@
-unit DRagLint.FieldRepo.DfmWritePlan;
+unit DRagLint.FieldRepo.DfmWritePlan;  // dl:ok unit-too-large@fa17 -- REVIEWED 2026-11-26 DFMWRITE2: planner and applier of one change set share private helpers; the split is the god-class design change already deferred (INT-W2)
 
 { drag-lint 1.54 -- lane TT-DFMWRITE: the repository -> DFM change set of a form and its applier (design
   2026-11-22-field-repository-v2-design.md sections 3, 4.4 and 9).
@@ -7,7 +7,8 @@ unit DRagLint.FieldRepo.DfmWritePlan;
   rules as DfmReadPlan (UpdateTableName, TableName, the SELECT). Property changes: the repository wins; a value the
   repository does not hold changes nothing. Fields are added and removed only for an explicit selection of one
   dataset, and then in the unit too (the published field is what lets Delphi find the class when the form loads).
-  Calc and event code is never written here. }
+  Calc code is never written here. A field event the repository holds and the form lacks gets a new handler (1.55, Q1 A),
+  and the grid and layout items bound to a removed field are removed with it (Q3(2)). }
 
 interface
 
@@ -24,7 +25,7 @@ type
   EDfmWriteSelection = class(EDfmWriteError);
 
   /// <summary>What a change does to the DFM text.</summary>
-  TDfmwAction = (dwaSet, dwaRemove, dwaKind, dwaInsert, dwaDelete);
+  TDfmwAction = (dwaSet, dwaRemove, dwaKind, dwaInsert, dwaDelete, dwaEvent);
 
   /// <summary>One change; parallel to the change set.</summary>
   TDfmwItem = record
@@ -50,6 +51,10 @@ type
     Siblings: TArray<string>;
     /// <summary>Ids of changes that must be applied with this one.</summary>
     Requires: TArray<Integer>;
+    /// <summary>dwaEvent: parameter list of the new handler (PropName = the event, Literal = the handler name).</summary>
+    MethodParams: string;
+    /// <summary>dwaEvent: the lines between begin and end of the new handler (a DLFR region), CRLF.</summary>
+    MethodBody: string;
   end;
 
   /// <summary>A form to write: the bytes the plan was made from.</summary>
@@ -87,8 +92,9 @@ type
 /// <param name="pDataset">Dataset component name (case-insensitive); '' = every dataset of every file.</param>
 /// <param name="pFields">Field selection of the one dataset: FIELD_NAMEs or `all`; nil = no field is added or
 /// removed. ExpandSelection adds what the selected fields depend on.</param>
-/// <returns>The plan. Checked: property changes and added fields. Unchecked: removed fields, hidden fields, changed kinds and
-/// the first persistent fields of a dataset. Blocked: everything that cannot be written so that the form still loads, a
+/// <returns>The plan. Checked: property changes and added fields. Unchecked: removed fields, the grid and layout items bound
+/// to a removed field (the field's removal Requires them), new field-event handlers for code the repository holds (one of an
+/// added field Requires its insert), hidden fields, changed kinds and the first persistent fields of a dataset. Blocked: everything that cannot be written so that the form still loads, a
 /// lookup whose current dataset has no known table, and a removed field that the form or its unit names.</returns>
 /// <exception cref="EDfmWriteError">A binary DFM, or one that Delphi or the readers do not understand.</exception>
 /// <exception cref="EDfmWriteSelection">pFields without exactly one dataset with a table.</exception>
@@ -150,7 +156,8 @@ uses
   DRagLint.FieldRepo.SchemaFacts,
   DRagLint.FieldRepo.DfmRead,
   DRagLint.FieldRepo.DfmReadSql,
-  DRagLint.FieldRepo.DfmReadSelection;
+  DRagLint.FieldRepo.DfmReadSelection,
+  DRagLint.FieldRepo.Handlers;
 
 const
   SCHEMA_WITH_BODIES = 2;
@@ -164,6 +171,12 @@ const
   PROP_LABEL = 'DisplayLabel';
   PLAN_ID_LENGTH = 16; // hex digits
   PROP_FIELD_NAME = 'FieldName';
+  PROP_BINDING = 'DataBinding.FieldName'; // a grid column, card row, layout item or tree-list column
+  PROP_DATASOURCE = 'DataController.DataSource';
+  CX_PREFIX = 'Tcx';
+  EVENT_PREFIX = 'On';
+  EVENT_GET_TEXT = 'OnGetText';
+  EVENT_SET_TEXT = 'OnSetText';
   { strings that are read by people or declare columns, not by-name bindings }
   UNBOUND_PROPS: array[0..4] of string = ('Caption', 'Hint', PROP_LABEL, 'Lines', 'FieldDefs');
   { tables the plan is made from }
@@ -252,6 +265,7 @@ type
     DestKey: string;
     DestValue: string;
     Body: string;
+    Events: TArray<string>; // per FR_EVENT_COLUMNS: the stored body, '' = none
   end;
 
   { Where a dataset's fields come from (the rules of DfmReadPlan). }
@@ -347,7 +361,13 @@ type
     function ClassOfRow(const pRow: TRepoField): string;
     function SizeOfRow(const pRow: TRepoField): Integer;
     function NewComponentName(const pField: string): string;
-    function DeleteBlockReason(const pField: TDfmrField): string;
+    function DeleteBlockReason(const pField: TDfmrField; const pItems: TArray<string>): string;
+    function ItemDeleteReason(const pName: string): string;
+    function BoundItems(const pFieldName: string): TArray<Integer>;
+    function HandlerFields: TArray<TFrhField>;
+    procedure PlanEvents(const pComponent, pFieldClass: string; const pHandlers: TArray<TDfmrPair>; const pRow: TRepoField;
+      const pRequires: TArray<Integer>);
+    procedure TryEvent(const pItem: TDfmwItem);
   public
     constructor Create(pRepo: TFDConnection);
     destructor Destroy; override;
@@ -531,9 +551,50 @@ begin
     dwaSet: pDoc.SetProp(VObject, pItem.PropName, pItem.Literal, StreamOrder(pItem.FieldClass));
     dwaRemove: pDoc.RemoveProp(VObject, pItem.PropName);
     dwaKind: ApplyKind(pDoc, VObject, pItem);
+    dwaEvent:
+      begin
+        pDoc.SetProp(VObject, pItem.PropName, pItem.Literal, StreamOrder(pItem.FieldClass));
+        pUnit.AddMethod(pFormClass, pItem.Literal, pItem.MethodParams, pItem.MethodBody);
+      end;
   else
     pDoc.RemoveObject(VObject);
     pUnit.RemoveField(pFormClass, pItem.Component);
+  end;
+end;
+
+{ The new bytes of a form and its unit. Events go in a second pass over the bytes of the first, so that a new field gets
+  its event and a handler is declared after every new field. Result: the unit changes. }
+function RenderBytes(const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>; out pDfm, pPas: TBytes): Boolean;
+var
+  VDoc: TDfmDocument;
+  VUnit: TDfmUnitDocument;
+  VItem: TDfmwItem;
+  VEvents: Boolean;
+begin
+  Result := False;
+  pDfm := pFile.DfmBytes;
+  pPas := pFile.PasBytes;
+  for VEvents := False to True do
+  begin
+    if VEvents and not Result then
+      Break;
+    VUnit := nil;
+    VDoc := TDfmDocument.Create(pDfm, ExtractFileName(pFile.DfmName));
+    try
+      if pFile.PasName <> '' then
+        VUnit := TDfmUnitDocument.Create(pPas, ExtractFileName(pFile.PasName));
+      for VItem in pItems do
+        if (VItem.Action = dwaEvent) = VEvents then
+          ApplyItem(VDoc, VUnit, pFile.FormClass, VItem);
+      pDfm := VDoc.Output;
+      if VUnit <> nil then
+        pPas := VUnit.Output;
+    finally
+      VUnit.Free;
+      VDoc.Free;
+    end;
+    for VItem in pItems do
+      Result := Result or (VItem.Action in [dwaInsert, dwaDelete, dwaEvent]);
   end;
 end;
 
@@ -603,6 +664,13 @@ begin
   Result.DestKey := pQuery.FieldByName('DESTKEY').AsString;
   Result.DestValue := pQuery.FieldByName('DESTVALUE').AsString;
   Result.Body := pQuery.FieldByName('CALC_BODY').AsString;
+  SetLength(Result.Events, Length(FR_EVENT_COLUMNS));
+  for var VI := 0 to High(FR_EVENT_COLUMNS) do
+  begin
+    var VBody := pQuery.FindField(FR_EVENT_COLUMNS[VI].Column);
+    if VBody <> nil then
+      Result.Events[VI] := VBody.AsString;
+  end;
 end;
 
 procedure TDfmWritePlanner.LoadRows;
@@ -785,6 +853,7 @@ begin
 end;
 
 procedure CheckUnit(const pBytes: TBytes; const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>); forward;
+procedure CheckDfm(const pBytes: TBytes; const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>); forward;
 
 { Adds a change and tries it alone: one that cannot be written is blocked with the reason. }
 function TDfmWritePlanner.AddItem(const pItem: TDfmwItem; pOp: TFrChangeOp; const pOld, pNew: string): Integer;
@@ -802,15 +871,20 @@ begin
   VChange.Checked := True;
   FChanges.Add(VChange);
   FItems.Add(pItem);
-  if (FUnit = nil) and (pItem.Action in [dwaInsert, dwaDelete]) then
+  if (FUnit = nil) and (pItem.Action in [dwaInsert, dwaDelete, dwaEvent]) then
   begin
-    Block(Result, 'no unit beside the DFM to declare the field in');
+    Block(Result, if pItem.Action = dwaEvent then 'no unit beside the DFM to write the handler in' else 'no unit beside the DFM to declare the field in');
     Exit;
   end;
   FDoc.ClearEdits;
   if FUnit <> nil then
     FUnit.ClearEdits;
   try
+    if pItem.Action = dwaEvent then
+    begin
+      TryEvent(pItem);
+      Exit;
+    end;
     ApplyItem(FDoc, FUnit, FForm.FormClass, pItem);
     FDoc.Output;
     if pItem.Action in [dwaInsert, dwaDelete] then
@@ -1548,6 +1622,102 @@ begin
     FWarnings.Add(FChanges[VIndex].Target + ': its calc code is not written (handler code is generated separately)');
 end;
 
+{ ---- new event handlers (Q1 A, 1.55) ---- }
+
+{ The parameters of a TField event: TFieldGetTextEvent, TFieldSetTextEvent, else TFieldNotifyEvent. }
+function FieldEventSignature(const pEvent: string): string;
+begin
+  if SameText(pEvent, EVENT_GET_TEXT) then
+    Result := 'Sender: TField; var Text: string; DisplayText: Boolean'
+  else if SameText(pEvent, EVENT_SET_TEXT) then
+    Result := 'Sender: TField; const Text: string'
+  else
+    Result := 'Sender: TField';
+end;
+
+{ <Dataset><Field><Event without On>: the identifier characters of the field name only. }
+function HandlerName(const pDataset, pFieldName, pEvent: string): string;
+begin
+  Result := pDataset + TRegEx.Replace(pFieldName, '[^A-Za-z0-9_]', '') + Copy(pEvent, Length(EVENT_PREFIX) + 1, MaxInt);
+end;
+
+{ The persistent fields a macro can name: those of the dataset and those the plan adds. }
+function TDfmWritePlanner.HandlerFields: TArray<TFrhField>;
+var
+  VField: TDfmrField;
+  VPlanned: TPlannedField;
+  VOne: TFrhField;
+  VTable, VColumn: string;
+begin
+  Result := nil;
+  for VField in FDataset.Fields do
+  begin
+    VOne := Default(TFrhField);
+    VOne.CompName := VField.CompName;
+    if FieldSource(FSource, VField, VTable, VColumn) and SameText(VTable, FSource.TableName) then
+      VOne.Column := VColumn;
+    Result := Result + [VOne];
+  end;
+  for VPlanned in FPlanned do
+    if VPlanned.ChangeId > 0 then
+    begin
+      VOne := Default(TFrhField);
+      VOne.Column := VPlanned.Column;
+      VOne.CompName := FItems[VPlanned.ChangeId - 1].Component;
+      Result := Result + [VOne];
+    end;
+end;
+
+{ Renders the event with the changes it needs, as the applier will; raises EDfmWriteError when it cannot be written. }
+procedure TDfmWritePlanner.TryEvent(const pItem: TDfmwItem);
+var
+  VTrial: TArray<TDfmwItem>;
+  VId: Integer;
+  VDfm, VPas: TBytes;
+begin
+  VTrial := nil;
+  for VId in pItem.Requires do
+    VTrial := VTrial + [FItems[VId - 1]];
+  VTrial := VTrial + [pItem];
+  RenderBytes(FPlan.Files[FFileIndex], VTrial, VDfm, VPas);
+  CheckDfm(VDfm, FPlan.Files[FFileIndex], VTrial);
+  CheckUnit(VPas, FPlan.Files[FFileIndex], VTrial);
+end;
+
+{ One unchecked change per TField event the repository holds code for and the field has no handler for. }
+procedure TDfmWritePlanner.PlanEvents(const pComponent, pFieldClass: string; const pHandlers: TArray<TDfmrPair>;
+  const pRow: TRepoField; const pRequires: TArray<Integer>);
+var
+  VI, VIndex: Integer;
+  VEvent, VReason: string;
+  VItem: TDfmwItem;
+  VPair: TDfmrPair;
+  VAssigned: Boolean;
+begin
+  for VI := 0 to Min(High(FR_EVENT_COLUMNS), High(pRow.Events)) do
+  begin
+    VEvent := FR_EVENT_COLUMNS[VI].Event;
+    if FR_EVENT_COLUMNS[VI].IsGrid or (Trim(pRow.Events[VI]) = '') then
+      Continue;
+    VAssigned := False;
+    for VPair in pHandlers do
+      VAssigned := VAssigned or (SameText(VPair.Name, VEvent) and (VPair.Value <> ''));
+    if VAssigned then
+      Continue;
+    VItem := NewItem(dwaEvent, pComponent, pFieldClass);
+    VItem.PropName := VEvent;
+    VItem.Literal := HandlerName(FDataset.Name, pRow.FieldName, VEvent);
+    VItem.MethodParams := FieldEventSignature(VEvent);
+    VItem.Requires := pRequires;
+    if not NewHandlerRegion(HandlerFields, pComponent, VEvent, pRow.Events[VI], sLineBreak, VItem.MethodBody, VReason) then
+      VItem.MethodBody := '';
+    VIndex := AddItem(VItem, fcoInsert, '', VItem.Literal);
+    FChanges.List[VIndex].Checked := False;
+    if VItem.MethodBody = '' then
+      Block(VIndex, VReason);
+  end;
+end;
+
 { ---- removed fields ---- }
 
 { True when a string of the DFM names a field: the name as a word (a `;` list, an expression, a filter). In a SQL text
@@ -1567,7 +1737,7 @@ begin
 end;
 
 { Every place of the form that binds the field by its name. A persistent field of another dataset only has the same name. }
-function BindingsIn(pDoc: TDfmDocument; const pComponent, pFieldName: string): string;
+function BindingsIn(pDoc: TDfmDocument; const pComponent, pFieldName: string; const pSkip: TArray<string>): string;
 var
   VString: TDfmwString;
   VObject: TDfmwObject;
@@ -1577,6 +1747,9 @@ begin
   for VString in pDoc.Strings do
   begin
     VObject := pDoc.Objects[VString.ObjectIndex];
+    { a grid item that is removed with the field }
+    if MatchText(VObject.Name, pSkip) and SameText(VString.ItemProp, PROP_BINDING) then
+      Continue;
     if SameText(VObject.Name, pComponent) or (EndsText('Field', VObject.ObjClass)
       and MatchText(VString.ItemProp, [PROP_FIELD_NAME, 'Origin'])) or not NamesField(VString, pFieldName) then
       Continue;
@@ -1586,7 +1759,7 @@ begin
 end;
 
 { Why the form or its unit still needs the component. }
-function TDfmWritePlanner.DeleteBlockReason(const pField: TDfmrField): string;
+function TDfmWritePlanner.DeleteBlockReason(const pField: TDfmrField; const pItems: TArray<string>): string;
 var
   VRefs: TArray<string>;
   VDeclared: Integer;
@@ -1597,7 +1770,7 @@ begin
   VRefs := FDoc.ReferencesTo(pField.CompName);
   if Length(VRefs) > 0 then
     Exit('used in the DFM: ' + string.Join(', ', VRefs));
-  Result := BindingsIn(FDoc, pField.CompName, pField.FieldName);
+  Result := BindingsIn(FDoc, pField.CompName, pField.FieldName, pItems);
   if Result <> '' then
     Exit('the DFM names ' + QuotedStr(pField.FieldName) + ': ' + Result);
   if FUnit = nil then
@@ -1609,16 +1782,85 @@ begin
     Result := 'the unit names ' + QuotedStr(pField.FieldName);
 end;
 
+{ Why the form or its unit still needs a grid or layout item. }
+function TDfmWritePlanner.ItemDeleteReason(const pName: string): string;
+var
+  VRefs: TArray<string>;
+  VDeclared: Integer;
+begin
+  Result := '';
+  VRefs := FDoc.ReferencesTo(pName);
+  if Length(VRefs) > 0 then
+    Exit('used in the DFM: ' + string.Join(', ', VRefs));
+  if FUnit = nil then
+    Exit;
+  VDeclared := if IndexOfDecl(FUnit.Declarations(FForm.FormClass), pName) >= 0 then 1 else 0;
+  if FUnit.Mentions(pName) > VDeclared then
+    Result := 'used in the code of the unit';
+end;
+
+{ The DevExpress grid and layout items bound to a field of the dataset: DataBinding.FieldName = the field, inside an
+  object whose DataController.DataSource is a data source of the dataset (a view, a tree list). }
+function TDfmWritePlanner.BoundItems(const pFieldName: string): TArray<Integer>;
+var
+  VSources: TArray<string>;
+  VI, VParent: Integer;
+  VText: string;
+begin
+  Result := nil;
+  VSources := nil;
+  for VI := 0 to High(FDoc.Objects) do
+    if FDoc.TryProp(VI, 'DataSet', VText) and SameText(VText, FDataset.Name) then
+      VSources := VSources + [FDoc.Objects[VI].Name];
+  for VI := 0 to High(FDoc.Objects) do
+    if StartsText(CX_PREFIX, FDoc.Objects[VI].ObjClass) and FDoc.TryProp(VI, PROP_BINDING, VText) and SameText(VText, pFieldName) then
+    begin
+      VParent := FDoc.Objects[VI].Parent;
+      while VParent >= 0 do
+        if FDoc.TryProp(VParent, PROP_DATASOURCE, VText) and MatchText(VText, VSources) then
+        begin
+          Result := Result + [VI];
+          Break;
+        end
+        else
+          VParent := FDoc.Objects[VParent].Parent;
+    end;
+end;
+
+{ A removed field takes its grid and layout items with it (Q3(2), 1.55): each is an unchecked delete of its own that the
+  field's delete needs; one that cannot go blocks the field. }
 procedure TDfmWritePlanner.PlanDelete(const pField: TDfmrField);
 var
-  VItem: TDfmwItem;
-  VIndex: Integer;
-  VReason: string;
+  VItem, VBound: TDfmwItem;
+  VIndex, VObject, VId: Integer;
+  VReason, VItemReason: string;
+  VNames: TArray<string>;
 begin
+  VNames := nil;
+  VItemReason := '';
   VItem := NewItem(dwaDelete, pField.CompName, pField.FieldClass);
   VItem.FieldName := pField.FieldName;
+  for VObject in BoundItems(pField.FieldName) do
+  begin
+    VBound := NewItem(dwaDelete, FDoc.Objects[VObject].Name, FDoc.Objects[VObject].ObjClass);
+    VBound.Dataset := FDoc.Objects[FDoc.Objects[VObject].Parent].Name;
+    VBound.Siblings := nil;
+    try
+      VReason := ItemDeleteReason(VBound.Component);
+    except
+      on E: EDfmWriteError do
+        VReason := E.Message;
+    end;
+    VId := AddItem(VBound, fcoDelete, VBound.FieldClass + '; ' + PROP_BINDING + ' = ' + QuotedStr(pField.FieldName), '');
+    FChanges.List[VId].Checked := False;
+    Block(VId, VReason);
+    if (FChanges[VId].Blocked <> '') and (VItemReason = '') then
+      VItemReason := 'its grid item ' + VBound.Component + ' cannot be removed: ' + FChanges[VId].Blocked;
+    VItem.Requires := VItem.Requires + [VId + 1];
+    VNames := VNames + [VBound.Component];
+  end;
   try
-    VReason := DeleteBlockReason(pField);
+    VReason := if VItemReason <> '' then VItemReason else DeleteBlockReason(pField, VNames);
   except
     on E: EDfmWriteError do
       VReason := E.Message;
@@ -1639,6 +1881,7 @@ var
   VTable, VColumn: string;
   VId: Integer;
   VPass: Boolean;
+  VPlanned: TPlannedField;
 begin
   VAll := nil;
   for VRow in FOrder do
@@ -1662,6 +1905,10 @@ begin
       if SameText(VRow.TableName, FSource.TableName) and MatchText(VRow.FieldName, VWanted)
         and ((VRow.Kind = frkLookup) = VPass) and (PlannedName(VRow.FieldName, VId) = '') then
         PlanInsert(VRow);
+  { a field the selection adds brings its events (Q1 A) }
+  for VPlanned in FPlanned.ToArray do
+    if (VPlanned.ChangeId > 0) and FRows.TryGetValue(KeyOf(FSource.TableName, VPlanned.Column), VRow) then
+      PlanEvents(FItems[VPlanned.ChangeId - 1].Component, FItems[VPlanned.ChangeId - 1].FieldClass, nil, VRow, [VPlanned.ChangeId]);
   for VField in FDataset.Fields do
     if FieldSource(FSource, VField, VTable, VColumn) and SameText(VTable, FSource.TableName) and (not MatchText(VColumn, VWanted)) then
       PlanDelete(VField);
@@ -1745,7 +1992,10 @@ begin
         FPlanned.Add(VPlanned);
       end;
       if FRows.TryGetValue(KeyOf(VTable, VColumn), VRow) then
+      begin
         TryPlanField(VField, VRow);
+        PlanEvents(VField.CompName, VField.FieldClass, VField.Events, VRow, nil);
+      end;
     end;
   if Length(pFields) = 0 then
     Exit;
@@ -1865,7 +2115,7 @@ procedure CheckDeleted(pDoc: TDfmDocument; const pFile: TDfmwFile; const pItem: 
 var
   VPlaces: string;
 begin
-  VPlaces := if pItem.FieldName = '' then '' else BindingsIn(pDoc, pItem.Component, pItem.FieldName);
+  VPlaces := if pItem.FieldName = '' then '' else BindingsIn(pDoc, pItem.Component, pItem.FieldName, nil);
   if VPlaces <> '' then
     raise EDfmWriteSelection.CreateFmt('%s: the selection deletes %s, but the form would still name %s: %s',
       [ExtractFileName(pFile.DfmName), pItem.Component, QuotedStr(pItem.FieldName), VPlaces]);
@@ -1886,7 +2136,7 @@ begin
     begin
       VObject := VDoc.FindObject(VItem.Component, VItem.Dataset);
       VOk := (VObject >= 0) <> (VItem.Action = dwaDelete);
-      if VOk and (VItem.Action = dwaSet) then
+      if VOk and (VItem.Action in [dwaSet, dwaEvent]) then
         VOk := VDoc.TryProp(VObject, VItem.PropName, VText) and (VText = DfmLiteralText(VItem.Literal))
       else if VOk and (VItem.Action = dwaRemove) then
         VOk := not VDoc.TryProp(VObject, VItem.PropName, VText);
@@ -1912,7 +2162,9 @@ begin
     VDecls := VUnit.Declarations(pFile.FormClass);
     for VItem in pItems do
       if (VItem.Action in [dwaInsert, dwaDelete]) and ((IndexOfDecl(VDecls, VItem.Component) >= 0) <> (VItem.Action = dwaInsert)) then
-        raise EDfmWriteError.CreateFmt('%s: the declaration of %s does not read back', [ExtractFileName(pFile.PasName), VItem.Component]);
+        raise EDfmWriteError.CreateFmt('%s: the declaration of %s does not read back', [ExtractFileName(pFile.PasName), VItem.Component])
+      else if (VItem.Action = dwaEvent) and (VUnit.Mentions(VItem.Literal) < 2) then
+        raise EDfmWriteError.CreateFmt('%s: the handler %s does not read back', [ExtractFileName(pFile.PasName), VItem.Literal]);
   finally
     VUnit.Free;
   end;
@@ -1930,35 +2182,16 @@ end;
 
 procedure RenderFile(const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>; var pOutputs: TArray<TDfmwOutput>);
 var
-  VDoc: TDfmDocument;
-  VUnit: TDfmUnitDocument;
-  VItem: TDfmwItem;
+  VDfm, VPas: TBytes;
   VUnitChanges: Boolean;
-  VBytes: TBytes;
 begin
-  VUnitChanges := False;
-  VUnit := nil;
-  VDoc := TDfmDocument.Create(pFile.DfmBytes, ExtractFileName(pFile.DfmName));
-  try
-    if pFile.PasName <> '' then
-      VUnit := TDfmUnitDocument.Create(pFile.PasBytes, ExtractFileName(pFile.PasName));
-    for VItem in pItems do
-    begin
-      ApplyItem(VDoc, VUnit, pFile.FormClass, VItem);
-      VUnitChanges := VUnitChanges or (VItem.Action in [dwaInsert, dwaDelete]);
-    end;
-    VBytes := VDoc.Output;
-    CheckDfm(VBytes, pFile, pItems);
-    AddOutput(pOutputs, pFile.DfmName, pFile.DfmBytes, VBytes);
-    if not VUnitChanges then
-      Exit;
-    VBytes := VUnit.Output;
-    CheckUnit(VBytes, pFile, pItems);
-    AddOutput(pOutputs, pFile.PasName, pFile.PasBytes, VBytes);
-  finally
-    VUnit.Free;
-    VDoc.Free;
-  end;
+  VUnitChanges := RenderBytes(pFile, pItems, VDfm, VPas);
+  CheckDfm(VDfm, pFile, pItems);
+  AddOutput(pOutputs, pFile.DfmName, pFile.DfmBytes, VDfm);
+  if not VUnitChanges then
+    Exit;
+  CheckUnit(VPas, pFile, pItems);
+  AddOutput(pOutputs, pFile.PasName, pFile.PasBytes, VPas);
 end;
 
 function RenderDfmWrite(const pPlan: TDfmwPlan; const pChosen: TArray<TFrChange>): TArray<TDfmwOutput>;

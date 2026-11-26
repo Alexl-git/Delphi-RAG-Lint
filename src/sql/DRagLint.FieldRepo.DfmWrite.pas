@@ -257,6 +257,16 @@ type
     /// <param name="pName">Component name; nothing happens when it is not declared.</param>
     /// <exception cref="EDfmWriteError">The declaration shares its line or its type with another one.</exception>
     procedure RemoveField(const pClass, pName: string);
+    /// <summary>Records: declare and implement a new event handler of the form class.</summary>
+    /// <param name="pClass">The form class.</param>
+    /// <param name="pName">Method name; no token of the unit may have it yet.</param>
+    /// <param name="pParams">Parameter list without the parentheses.</param>
+    /// <param name="pBody">Lines between `begin` and `end;`, each ending in a line end (any; they get the unit's).</param>
+    /// <remarks>The declaration goes on a line of its own before the first token after the component declarations
+    /// (fields before methods); the method before `initialization`, `finalization` or the final `end.`.</remarks>
+    /// <exception cref="EDfmWriteError">The class is missing or declared twice, the unit already has the name, or
+    /// either place is not a line of its own outside a conditional.</exception>
+    procedure AddMethod(const pClass, pName, pParams, pBody: string);
   end;
 
   /// <summary>The new content of one file.</summary>
@@ -1441,6 +1451,53 @@ begin
   CheckWholeLine(VDecls[VIdx].Start, VDecls[VIdx].Finish, 'the declaration of ' + pName);
   VStart := LineStart(VDecls[VIdx].Start);
   Edit(VStart, LineEnd(VDecls[VIdx].Finish) - VStart, '');
+end;
+
+procedure TDfmUnitDocument.AddMethod(const pClass, pName, pParams, pBody: string);
+var
+  VDecls: TArray<TDfmwDecl>;
+  VHeader, VStop, VLine, VI, VImpl, VAt: Integer;
+  VIndent, VEol, VHead: string;
+begin
+  VDecls := ReadSection(pClass, VHeader, VStop);
+  if Mentions(pName) > 0 then
+    Fail('the unit already has ' + pName);
+  if VStop >= Length(Bytes) then
+    Fail('class ' + pClass + ' is not complete');
+  VLine := LineStart(VStop);
+  if not IsBlank(VLine, VStop) then
+    Fail('no line of its own to declare ' + pName + ' in ' + pClass);
+  if not IsSafePlace(FTokens[VHeader].Pos, VStop, VLine) then
+    Fail('no place to declare ' + pName + ' that is outside a conditional ($IF..$ENDIF) or comment of ' + pClass);
+  VEol := EolAt(VStop);
+  if VEol = '' then
+    Fail('the class ' + pClass + ' ends on a line without a line end');
+  VIndent := if Length(VDecls) > 0 then IndentAt(VDecls[0].Start) else IndentAt(FTokens[VHeader - 2].Pos) + STEP;
+  for VI := 0 to High(FTokens) do
+    if (FTokens[VI].Pos = VStop) and MatchText(FTokens[VI].Text, ['procedure', 'function', 'class', 'constructor', 'destructor', 'property']) then
+      VIndent := IndentAt(VStop);
+  VHead := 'procedure ' + pName + '(' + pParams + ');';
+  Edit(VLine, 0, VIndent + VHead + VEol);
+  { the method: before initialization / finalization, else before the final end. }
+  VImpl := -1;
+  VAt := -1;
+  for VI := 0 to High(FTokens) do
+    if SameText(FTokens[VI].Text, WORD_IMPLEMENTATION) then
+      VImpl := VI
+    else if (VImpl >= 0) and MatchText(FTokens[VI].Text, ['initialization', 'finalization']) then
+    begin
+      VAt := FTokens[VI].Pos;
+      Break;
+    end
+    else if (VImpl >= 0) and SameText(FTokens[VI].Text, WORD_END) and (VI < High(FTokens)) and (FTokens[VI + 1].Text = '.') then
+      VAt := FTokens[VI].Pos;
+  if VAt < 0 then
+    Fail('the unit has no implementation section with a final end.');
+  VLine := LineStart(VAt);
+  if not IsBlank(VLine, VAt) or (ConditionsAt(VAt) <> '') then
+    Fail('no line of its own outside a conditional for the method ' + pName);
+  Edit(VLine, 0, 'procedure ' + pClass + '.' + pName + '(' + pParams + ');' + VEol + 'begin' + VEol +
+    pBody.Replace(#13#10, #10).Replace(#10, VEol) + WORD_END + ';' + VEol + VEol);
 end;
 
 { ---- files ---- }

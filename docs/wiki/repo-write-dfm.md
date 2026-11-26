@@ -32,6 +32,8 @@ change that is not blocked, removed fields included. Plain `--apply` needs no pl
 | FieldKind | `FIELD_KIND`; data, calc and internal-calc only | unchecked |
 | a new persistent field (`--names`) | class from the Firebird type, or from `FIELD_AS_TYPE` for a field that is no column | checked; unchecked for the first persistent field of a dataset |
 | a removed persistent field (`--names`) | not in the selection | unchecked |
+| a removed grid / layout item | bound to a removed field (see below) | unchecked; the field's removal needs it |
+| a new event handler | `ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY` of a field the form has or the selection adds, when the DFM assigns no handler | unchecked |
 
 **Adding and removing fields.** `--names` is the field selection of one dataset: field names, or `all`. A calculated
 field pulls in the fields it uses, a lookup its key. A new field is written as the IDE would write it, and declared in
@@ -55,7 +57,11 @@ another dataset gets all four properties; an inherited one too, where its form s
 the repository does not hold blocks the wiring. `LookupDataSet`, `KeyFields`, `LookupKeyFields` and `LookupResultField` of one field are one wiring: one blocked
 part blocks all, and `--select` refuses a part without the others and names the missing ids.
 
-**What is never written:** calc and event code, graphical columns (they are grid columns), fields that are only
+**New event handlers (1.55).** When the repository holds code for a field event and the field has no handler, one change creates it: `OnGetText = <Dataset><Field>GetText` in the DFM (the dataset component name, the field name, the event without `On`), `procedure <Name>(Sender: TField; ...);` after the component declarations of the form class, and the method before `initialization` / `finalization` / `end.`: a DLFR region with the stored code, its `{{FIELD}}` macros expanded, exactly as `repo gen-handlers` writes it, so a later `gen-handlers` run finds it unchanged. The change is unchecked: it writes code. A field the selection adds brings its events; their changes need its insert. BLOCKED: no unit, a name the unit already has, a macro the dataset cannot resolve, no line of its own outside a conditional. A handler the DFM already assigns is `gen-handlers`' job.
+
+**Removing a field takes its grid items (1.55).** A DevExpress item bound to the removed field -- a grid column, card row, layout-view item or tree-list column whose `DataBinding.FieldName` is the field, inside a view or tree list whose `DataController.DataSource` is a data source of the dataset -- is removed with it: an unchecked delete of its own (block and declaration), which the field's removal needs; `--select` refuses the field without them. An item that another property of the DFM names (a footer summary's `Column`) or that the code of the unit uses is BLOCKED, and the field with it. Every other binding still blocks the field.
+
+**What is never written:** calc code, the code of a handler the DFM already assigns, graphical columns (they are grid columns), fields that are only
 overridden in an inherited form, datasets whose table the DFM does not state.
 
 **BLOCKED**, with the reason: a property the field class does not have; a class, length or lookup dataset the repository or
