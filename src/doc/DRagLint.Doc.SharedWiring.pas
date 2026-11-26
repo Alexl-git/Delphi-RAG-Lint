@@ -49,7 +49,8 @@ uses
 /// project registers the same interface itself, which supersedes it. An entry of
 /// a project that is gone stays until `doc-forget` reaps its tag. Without a
 /// project tag (several `--db`) no tag is added or removed. Not thread-safe: one
-/// file's evidence is cached.</remarks>
+/// file's evidence is cached. A project tag on ANY entry of a stored line is
+/// evidence, also when an untagged entry sorts first (1.54.1 review R1).</remarks>
 function ReconcileWiring(const AWiring, AStoredBody: string; const AStore: ISymbolStore;
   const AUnitPath: string): string;
 
@@ -87,6 +88,22 @@ var
   FEvidenceKey: string  = '';
   FEvidence   : Boolean = False;
 
+{ The content of the stored line, unescaped, or ''. The renderer wraps every fact
+  in its own para; an unwrapped (pre-2026-08-24) line has no reliable end and is
+  left to the fresh render. }
+function StoredWiring(const AStoredBody: string): string;
+var
+  P, E: Integer;
+begin
+  Result:= '';
+  P:= Pos(PARA_OPEN + WIRING_LABEL, AStoredBody);
+  if P = 0 then Exit;
+  Inc(P, Length(PARA_OPEN + WIRING_LABEL));
+  E:= PosEx('<', AStoredBody, P);
+  if E = 0 then Exit;
+  Result:= Copy(AStoredBody, P, E - P).Replace('&lt;', '<').Replace('&gt;', '>').Replace('&amp;', '&');
+end;
+
 { Does any managed block of AUnitPath show another project, or carry a tag on its
   own `Registered as:` line? }
 function FileNamesOtherProject(const AStore: ISymbolStore; const AUnitPath: string): Boolean;
@@ -103,7 +120,9 @@ begin
     E:= PosEx(AUTO_END, Text, B);
     if E = 0 then Exit;
     Body  := Copy(Text, B, E - B).Replace(DOC_SLASHES, '');
-    Result:= Body.Contains(PARA_OPEN + WIRING_LABEL + ' [') or TSharedFacts.BlockNamesOtherProject(Body, AStore);
+    { 1.54.1 review R1: a tag anywhere on the line counts -- entries sort by their bare
+      text, so an untagged leftover can come first and hide the tags after it }
+    Result:= AnyTagged(SplitWiringEntries(StoredWiring(Body))) or TSharedFacts.BlockNamesOtherProject(Body, AStore);
     B:= PosEx(AUTO_BEGIN, Text, E);
   end;
 end;
@@ -122,22 +141,6 @@ begin
     FEvidenceKey:= Key;
   end;
   Result:= FEvidence;
-end;
-
-{ The content of the stored line, unescaped, or ''. The renderer wraps every fact
-  in its own para; an unwrapped (pre-2026-08-24) line has no reliable end and is
-  left to the fresh render. }
-function StoredWiring(const AStoredBody: string): string;
-var
-  P, E: Integer;
-begin
-  Result:= '';
-  P:= Pos(PARA_OPEN + WIRING_LABEL, AStoredBody);
-  if P = 0 then Exit;
-  Inc(P, Length(PARA_OPEN + WIRING_LABEL));
-  E:= PosEx('<', AStoredBody, P);
-  if E = 0 then Exit;
-  Result:= Copy(AStoredBody, P, E - P).Replace('&lt;', '<').Replace('&gt;', '>').Replace('&amp;', '&');
 end;
 
 { The interface an entry registers: the entry without its ` (lifetime)`. }
@@ -229,7 +232,7 @@ begin
   Result := AWiring;
   Content:= StoredWiring(AStoredBody);
   if (AStore = nil) or ((Content = '') and not AWiring.Contains(DI_PREFIX)) then Exit;
-  if not SeenElsewhere(AStore, AUnitPath) then Exit;
+  if not SeenElsewhere(AStore, AUnitPath) and not AnyTagged(SplitWiringEntries(Content)) then Exit;
 
   Others:= nil;
   Stored:= TList<TWiringEntry>.Create;

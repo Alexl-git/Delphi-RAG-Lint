@@ -238,7 +238,7 @@ function Seed([string]$u, [string]$decl, [string]$indent, [string[]]$facts) {
 
 $both = '[CliApp]IFoo (singleton), [SrvApp]IFoo (transient)'
 try {
-  $s0 = Bytes $uS
+  $s0 = Bytes $uS; $sO = Bytes $uO
 
   Write-Host '--- PINGPONG' -ForegroundColor Cyan
   DocA; DocB; DocA; DocB
@@ -315,6 +315,15 @@ try {
   Check 'MARKED the old untagged line migrates' ((Reg $uM $mk) -eq '[SrvApp]IMarked (singleton)') (Reg $uM $mk)
   DocA $uM
   Check 'MARKED ... once' ((Bytes $uM) -ceq $m1) ''
+
+  Write-Host '--- FIRSTUNTAGGED (review R1: an untagged entry sorts first; the tags after it are still evidence)' -ForegroundColor Cyan
+  Put $uO $sO
+  Seed $uO '  TOnly = class(' '  ' @('Registered as: IAlpha (singleton), [CliApp]IBeta (transient), [SrvApp]IOnly (singleton)')
+  DocA $uO
+  Check 'FIRSTUNTAGGED the other project''s tagged entry survives' ((Reg $uO $only) -match '\[CliApp\]IBeta \(transient\)') (Reg $uO $only)
+  Check 'FIRSTUNTAGGED the line stays tagged, own part included' ((Reg $uO $only) -eq 'IAlpha (singleton), [CliApp]IBeta (transient), [SrvApp]IOnly (singleton)') (Reg $uO $only)
+  $o2 = Bytes $uO; DocA $uO
+  Check 'FIRSTUNTAGGED ... and a second run writes nothing' ((Bytes $uO) -ceq $o2) (Reg $uO $only)
 } finally {
   if (Test-Path -LiteralPath $root) { try { [IO.Directory]::Delete($root, $true) } catch { } }
 }
