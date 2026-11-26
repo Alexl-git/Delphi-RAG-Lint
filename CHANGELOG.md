@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.54.1-alpha -- unreleased
+## v1.54.1-alpha -- 2026-11-26
 
 - AUTODOC (REGTAG, Q21): `Registered as:` on a unit two projects compile is tagged per project -- `[CliApp]IFoo (singleton), [SrvApp]IFoo (transient)` -- and a run adds and removes only its own tag, so `document` and doc-drift reach a fixpoint; before, each project replaced the other's line on every run. Old untagged lines are tagged once; a unit of one project is unchanged. `doc-forget` sees these tags. No re-parse. 1.54.1 review R1: a project tag on ANY entry of a stored line is evidence, also when an untagged leftover sorts first (before, that run wrote its own untagged line and deleted the other project's tagged entries).
 - LINT (CONSOLE): `writeln-in-gui-app` asks the program before it says "this program has no console": `{$APPTYPE}` in the `.dpr` (directives only, the last one wins, a conditional `CONSOLE` counts), `AllocConsole` / `AttachConsole`, else `DCC_ConsoleTarget` of the `.dproj` for the indexed platform and config. A unit of a console program is no longer reported. `lint`, `lint-all` and the LSP.
