@@ -7,7 +7,7 @@ drag-lint repo read-dfm --dfm <file.dfm>[;...] [--dataset <Name>] --direction df
 
 Reads the datasets of a form (one with `--dataset`, all without) and prints the change set that brings the repository
 in line with their persistent fields. Nothing is written without `--apply` or `--select`; the form and its unit are
-never written. The direction is required, there is no default. The repository must be schema 3 or later (`repo migrate --apply`).
+never written. The direction is required, there is no default. The repository must be schema 4 (`repo migrate --apply`); `repo gen-handlers` needs schema 4 too.
 
 | What | Where it goes |
 |---|---|
@@ -41,8 +41,39 @@ A field without a table is listed as `  no table: <field>: <why>` (computed by t
 no schema facts, `the calc code reads 2 tables: A B`, `the calc code reads X, which has no table`, no calc code,
 the key fields come from two tables). A summary line `joins: N datasets; C calc, L lookup, D data fields with a table;
 W without` follows `calc bodies:`; `--json` has `join`, `noTable` per dataset and `totals.joins`. Memory tables filled
-in code (bulk copies, field copies) and calc fields over several tables are not placed yet. Design:
+in code by field copies are not placed yet (bulk copies and links: below). Design:
 `docs/superpowers/specs/2026-11-26-join-field-origin-design.md`.
+
+**Calc fields over several tables (1.55).** A join calc field whose code reads fields of several tables belongs to ONE
+of them, the **child end**: the one table from which every other one it reads is reached going UP the relation graph
+(`repo paths`: FKs onto a PK / UNIQUE, plus stored FORM / HAND relations). `IPCHART` + `MSCLIST` -> `IPCHART`. The other
+tables become input aliases, named like the table (`MSCLIST`, ruling XQ2), and the body is stored with
+`{{MSCLIST.DECIMALS}}` for their fields. Each alias gets a `DL_FIELD_INPUTS` row of the default binding with the path the
+form's own SQL uses: the equalities of its `ON` conditions and the `WHERE` equalities between two FROM tables (a condition
+with a top-level `OR` gives none), matched column for column to the relations; else the stored binding, the IS_DEFAULT
+relations, or the only path. The FK steps of a path get their `DL_RELATIONS` row (checked) when a binding first uses
+them. A join on a parent key that matches no FK is **offered** as a FORM relation `CHILD_PARENT` (unchecked: choosing it
+confirms it, ruling XQ6); a field whose input goes through an offer is unchecked too, so its alias is never undeclared.
+Not placed, with the reason: `no table of A B reaches all the others`, `A B each reach all the others (a 1:1 pair)`, `X is
+in the FROM 2 times`, `home A; 2 paths to B, none chosen (asked once)`. The summary line is `cross-table calc: P placed,
+U unresolved; I inputs; relations: F FK used, O offered`; `--json` has `totals.crossTable`.
+
+**Memory tables (1.55).** A dataset with no table and no SQL takes the source of a link: the kbmMemTable `AttachedTo`
+property of the DFM, or a literal call in its unit: `T.AttachTable(S)`, `T.CloneCursor(S, ...)`, `T.CopyDataSet(S, ...)`,
+`T.CopyData(S)`, `T.AppendData(S)`, `T.Data := S.Data` (receiver and source a name, `Self.X` or `module.X`; a comment in
+the argument is skipped; arrays, locals and FindComponent are not followed). Links are followed transitively: `memB ->
+IPCHART (via AttachedTo memA > AttachedTo tblChart)`; a source that is a join makes the memory table that join. A cycle,
+two different sources (`linked to 2 sources: ...`) or a source that is no dataset of the form or of a module beside it is
+UNRESOLVED. After a COPY (CopyDataSet, CopyData, AppendData, `Data :=`) a data field the unit also writes keeps no table
+(`no table: written in code after the copy (Unit.pas:51)`). The summary line is `links: N datasets got a source:
+AttachedTo a, CopyDataSet c, ...; M unresolved`; `--json` has `via` per dataset and `totals.links`.
+
+Measured 2026-11-26 on M2022 (182 DFMs, the MICRONITEV6A schema facts, a copy): unresolved datasets 245 -> 185; 99 calc
+fields over several tables placed with a home and every binding, 11 not (4 with two paths and no form join, 1 with no
+child end, 1 1:1 pair, 5 reading a field without a table); 94 inputs, 11 FK relations used, 9 FORM relations offered;
+60 memory tables got a source (CopyDataSet 59, CloneCursor 1), 33 links did not (22 of them name a dataset of an inherited
+data module's ancestor). On Micronite2027 (ORM3 CLIENT, 119 DFMs): 99 -> 96 unresolved, no calc over several tables, 3
+CopyDataSet links: its memory tables are filled through the pipe.
 
 **Calc code.** One OnCalcFields handler computes many fields. The body of a field is the part of the handler it needs:
 the statements that assign it, the local variables they read (declared inline) and every earlier statement with another

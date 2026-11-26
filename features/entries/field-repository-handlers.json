@@ -54,7 +54,7 @@
         }
       ],
       "helpOrder": 113,
-      "help": ["  drag-lint repo gen-handlers   --dfm <file.dfm>[;...] [--dataset <Name>] (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (writes the stored event code of a form's datasets (OnCalcFields, OnGetText, OnSetText, OnValidate, OnChange) into the handlers the DFM assigns, as hash-checked DLFR regions; a region edited by hand is refused and kept; everything outside the regions stays byte for byte; no --apply = dry run; exit 1 a region or unit refused or not written, 2 usage)", "  drag-lint repo gen-maxlen     --code-dir <folder> [--table <T,...>] (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (writes the <TABLE>_<FIELD>_MAXLEN constants into region DLFR 2a of each interface unit i<TABLE>.pas; no --apply = dry run; exit codes as gen-handlers)", "  drag-lint repo renumber-regions (--code-dir <folder> | --in <file.pas>[;...]) (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (renames the numbered ORM region markers DB-RAD n to DLFR n, whole units only; update-orm reads both; no --apply = dry run; exit codes as gen-handlers)"]
+      "help": ["  drag-lint repo gen-handlers   --dfm <file.dfm>[;...] [--dataset <Name>] (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (writes the stored event code of a form's datasets (OnCalcFields, OnGetText, OnSetText, OnValidate, OnChange) into the handlers the DFM assigns, as hash-checked DLFR regions; a region edited by hand is refused and kept; a body that reads another table ({{ALIAS.FIELD}}) is refused until its SQL is composed; needs a schema-4 repository; everything outside the regions stays byte for byte; no --apply = dry run; exit 1 a region or unit refused or not written, 2 usage)", "  drag-lint repo gen-maxlen     --code-dir <folder> [--table <T,...>] (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (writes the <TABLE>_<FIELD>_MAXLEN constants into region DLFR 2a of each interface unit i<TABLE>.pas; no --apply = dry run; exit codes as gen-handlers)", "  drag-lint repo renumber-regions (--code-dir <folder> | --in <file.pas>[;...]) (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (renames the numbered ORM region markers DB-RAD n to DLFR n, whole units only; update-orm reads both; no --apply = dry run; exit codes as gen-handlers)"]
     },
     {
       "type": "cli",
@@ -70,9 +70,9 @@
   "audience": "both",
   "related": ["field-repository"],
   "verified": {
-    "date": "2026-11-23",
+    "date": "2026-11-26",
     "by": "ENGINE",
-    "build": "1.54.0-alpha",
-    "surfaceHash": "61b83189658493fa866ea6abf3d76878c8655efa9419b8704cd1deb952a12382"
+    "build": "1.54.1-alpha",
+    "surfaceHash": "4db3bbef6db4dcc00dd5e677a2235e4d64ea6ff16e426b3b3511f1fde004e73c"
   }
 }
