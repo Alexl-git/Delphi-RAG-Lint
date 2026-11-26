@@ -32,6 +32,8 @@ type
   TDragLintStatusBar = class(TPanel)
   private
     FStateLbl: TLabel      ;
+    { the running job, NEXT TO the note in FStateLbl (lane 1.54.1 HOVERNOTE) }
+    FProgLbl : TLabel      ;
     FBar     : TProgressBar;
     FDepthLbl: TLabel      ;
     FCancel  : TButton     ;
@@ -102,6 +104,9 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Relayout;
+    { Pixel width of AText in the strip's font; 0 for an empty text. Measured on
+      a bitmap: a label canvas needs a parent window the strip may not have yet. }
+    function  TextPx(const AText: string): Integer;
     /// <param name="AState"><!-- drag-lint:auto type -->const TQueueState</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -205,9 +210,10 @@ const
 /// drag-lint status strip already existed and was the one the owner watches
 /// (it is where 'Reindex ...' appears). Two status bars is how a note gets
 /// written correctly and still never seen. There is now one.</para>
-/// <para>A note YIELDS to job state: while the queue is running, the running
-/// job and its percentage are the more important thing and win. The note
-/// reappears when the queue goes idle, until cleared.</para>
+/// <para>A note and a running job are shown TOGETHER (2026-11-25): the note
+/// first, the job next to it -- for an index job as 'reindexing... 42% phase'.
+/// In a narrow strip the note is ellipsised first and the progress stays
+/// (DragLint.Plugin.HoverNote.DLStripLayout).</para>
 /// <para>STATED PLAINLY: the strip is docked in the drag-lint dock window, so
 /// the note is visible when that window is. Main thread only; guarded.</para>
 /// <!-- drag-lint:auto BEGIN -->
@@ -225,15 +231,19 @@ implementation
 
 uses
   DragLint.Plugin.ProcRun { ProcRunBeatText -- 1.40: the running engine child's own status }
+  , DragLint.Plugin.HoverNote { DLStripTexts / DLStripLayout -- what the row says and where }
+  , Vcl.Graphics
   ;
 
 const
   { The strip's one-line row: the state label, bar, depth and Cancel live here. }
   STRIP_ROW_HEIGHT = 26;
-  { Left inset of every label in the strip. }
+  { Left inset of the task lines. }
   LABEL_INSET = 6;
-  { Space the state label leaves before the depth label. }
-  STATE_LABEL_GAP = 10;
+  { A label needs a few pixels more than its text measures. }
+  TEXT_PAD = 4;
+  CANCEL_HEIGHT = 22;
+  BAR_HEIGHT    = 14;
   { Extra pixels per task line above the font's own height. }
   TASK_LINE_LEADING = 4;
 
@@ -281,7 +291,18 @@ begin
   FStateLbl.AutoSize   := False;
   FStateLbl.Transparent:= True;
   FStateLbl.Layout     := tlCenter;
+  FStateLbl.ShowAccelChar:= False; { a token may contain an ampersand }
+  FStateLbl.EllipsisPosition:= epEndEllipsis;
   FStateLbl.Caption    := 'drag-lint: idle';
+
+  FProgLbl:= TLabel.Create(Self);
+  FProgLbl.Parent     := Self;
+  FProgLbl.AutoSize   := False;
+  FProgLbl.Transparent:= True;
+  FProgLbl.Layout     := tlCenter;
+  FProgLbl.ShowAccelChar:= False;
+  FProgLbl.EllipsisPosition:= epEndEllipsis;
+  FProgLbl.Caption    := '';
 
   FDepthLbl:= TLabel.Create(Self);
   FDepthLbl.Parent     := Self;
@@ -331,9 +352,24 @@ begin
   inherited;
 end;
 
+function TDragLintStatusBar.TextPx(const AText: string): Integer;
+var
+  Bmp: TBitmap;
+begin
+  if AText = '' then Exit(0);
+  Bmp:= TBitmap.Create;
+  try
+    Bmp.Canvas.Font:= FStateLbl.Font;
+    Result:= Bmp.Canvas.TextWidth(AText) + TEXT_PAD;
+  finally
+    Bmp.Free;
+  end;
+end;
+
 procedure TDragLintStatusBar.Relayout;
 var
   H, W: Integer;
+  L   : TDLStripLayout;
 begin
   { Guard: Resize can fire during construction (Align/Height set) before the
     child controls exist; and use Height/Width (field reads) not ClientHeight/
@@ -343,10 +379,13 @@ begin
     rest of the height below it. }
   H:= STRIP_ROW_HEIGHT;
   W:= Width;
-  FCancel  .SetBounds(W - 4 - 60, (H - 22) div 2, 60, 22);
-  FBar     .SetBounds(FCancel.Left - 8 - 150, (H - 14) div 2, 150, 14);
-  FDepthLbl.SetBounds(FBar.Left - 8 - 80, 0, 80, H);
-  FStateLbl.SetBounds(LABEL_INSET, 0, FDepthLbl.Left - STATE_LABEL_GAP, H);
+  L:= DLStripLayout(W, TextPx(FStateLbl.Caption), TextPx(FProgLbl.Caption), FDepthLbl.Caption <> '');
+  FCancel  .SetBounds(L.CancelLeft, (H - CANCEL_HEIGHT) div 2, L.CancelWidth, CANCEL_HEIGHT);
+  FBar     .SetBounds(L.BarLeft, (H - BAR_HEIGHT) div 2, L.BarWidth, BAR_HEIGHT);
+  FBar     .Visible:= L.BarWidth > 0;
+  FDepthLbl.SetBounds(L.DepthLeft, 0, L.DepthWidth, H);
+  FStateLbl.SetBounds(L.NoteLeft, 0, L.NoteWidth, H);
+  FProgLbl .SetBounds(L.ProgressLeft, 0, L.ProgressWidth, H);
   FLinesLbl.SetBounds(LABEL_INSET, H, W - 2 * LABEL_INSET, Height - H);
 end;
 
@@ -467,15 +506,23 @@ begin
 end;
 
 procedure TDragLintStatusBar.ApplyState(const AState: TQueueState);
+var
+  Job     : TDLStripJob;
+  Note    : string     ;
+  Progress: string     ;
 begin
+  Job.Running:= AState.Running;
+  Job.IsIndex:= AState.CurrentKind = jkReindex;
+  Job.Title  := AState.CurrentTitle;
+  Job.Percent:= AState.Percent;
+  Job.Phase  := AState.Phase;
+  Job.Beat   := FBeat;
+  DLStripTexts(Job, GNote, 'drag-lint: idle' + (if AState.LastResult <> '' then '   (' + AState.LastResult + ')' else ''),
+    Note, Progress);
+  FStateLbl.Caption:= Note;
+  FProgLbl .Caption:= Progress;
   if AState.Running then
   begin
-    if AState.Percent >= 0 then
-      FStateLbl.Caption:= AState.CurrentTitle + '  ' + IntToStr(AState.Percent) + '%'
-                        + (if AState.Phase <> '' then '  ' + AState.Phase else '')
-    else
-      FStateLbl.Caption:= AState.CurrentTitle + '  ' + (if FBeat <> '' then '[' + FBeat + ']' else '...');
-    if not FBar.Visible then FBar.Visible:= True;
     if AState.Percent < 0 then
       FBar.Style:= pbstMarquee
     else
@@ -483,18 +530,6 @@ begin
       FBar.Style   := pbstNormal;
       FBar.Position:= AState.Percent;
     end;
-  end
-  else
-  begin
-    { The transient note outranks 'idle' but never a running job -- a hover note
-      must not hide a reindex's progress. }
-    if GNote <> '' then
-      FStateLbl.Caption:= GNote
-    else if AState.LastResult <> '' then
-      FStateLbl.Caption:= 'drag-lint: idle   (' + AState.LastResult + ')'
-    else
-      FStateLbl.Caption:= 'drag-lint: idle';
-    if FBar.Visible then FBar.Visible:= False;
   end;
   if AState.QueueDepth > 0 then
     FDepthLbl.Caption:= IntToStr(AState.QueueDepth) + ' queued'
@@ -503,6 +538,7 @@ begin
   { lane X-BT: also for a running job that takes a cancel (a cycle-fix run) }
   FCancel.Enabled:= (AState.QueueDepth > 0) or AState.CanCancelRunning;
   ApplyTaskLines(AState);
+  Relayout; { the texts decide the widths }
 
   { PAINT NOW, DO NOT MERELY INVALIDATE.
 
@@ -524,6 +560,7 @@ begin
     the note is on screen BEFORE the caller blocks. Cheap, and idempotent when
     nothing is invalid. }
   FStateLbl.Update;
+  FProgLbl .Update;
   FDepthLbl.Update;
 end;
 

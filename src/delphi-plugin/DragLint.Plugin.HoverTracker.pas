@@ -27,12 +27,25 @@ unit DragLint.Plugin.HoverTracker;
      status strip says 'drag-lint: engine busy'. The tick also runs the stuck-
      engine watchdog.
 
-   Known limitation (still present):
-     Uses caret row, not pixel-to-token mapping. OTAPI doesn't expose
-     reliable mouse->token resolution without brittle font-metrics
-     arithmetic. Caret-based is sufficient until OTAPI gains the hook. *)
+   2026-11-25 (lane 1.54.1 HOVERNOTE): the dwell asks about the cell under the
+     POINTER and about nothing else. The cell comes from the state of the editor
+     control under the pointer (ToolsAPI.Editor: its own view, lines, folds and
+     scroll). The grid the gutter painter published could never be used: its
+     window is WindowFromDC of the IDE's memory DC, which is 0, so every dwell
+     fell back to the CARET and the strip spoke about another place. No cell and
+     the gutter: no question. *)
 
 interface
+
+uses
+  ToolsAPI
+  ;
+
+/// <summary>The whole text of a view's buffer, as edited (unsaved changes included).</summary>
+/// <param name="AView">The view; nil is allowed.</param>
+/// <returns>The text; an empty string when it cannot be read.</returns>
+/// <remarks>Main thread only. Never raises.</remarks>
+function EditViewText(const AView: IOTAEditView): string;
 
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -60,7 +73,7 @@ uses
   , Vcl.Controls
   , Vcl.ExtCtrls
   , Winapi.Windows
-  , ToolsAPI
+  , ToolsAPI.Editor              { INTACodeEditorServices -- the editor under the pointer }
   , DragLint.Plugin.DiagnosticCache
   , DragLint.Plugin.HoverForm
   , DragLint.Plugin.Settings
@@ -71,6 +84,8 @@ uses
   , DragLint.Plugin.StatusBar    { SetDragLintNote -- the 'thinking' note }
   , DragLint.Plugin.Telemetry    { DLT -- item 5: where a dwell fired, and whether it showed }
   , DragLint.Plugin.HoverGate    { DLHoverGate -- the async answer's show-gate }
+  , DragLint.Plugin.HoverNote    { the token under the pointer and the note text }
+  , DragLint.Plugin.JobQueue     { IndexGeneration -- an index job finished }
   ;
 
 function IdeIsForeground: Boolean;
@@ -122,11 +137,13 @@ end;
   how popups used to appear over them. }
 const
   EDITOR_CONTROL_CLASS = 'TEditControl';
-  { Half-size in px of the fallback show-gate box, used before the editor grid
-    has been painted once. }
-  FALLBACK_HALF_BOX = 8;
+  { The row of a pointer below the last line of the buffer: no buffer has it. }
+  PAST_EOF_ROW = MaxInt div 2;
   { The dwell popup opens this far below the pointer (unchanged since v0.42). }
   POPUP_BELOW_PX = 20;
+  { The gutter popup opens beside the glyph. }
+  GUTTER_POPUP_DX = 18;
+  GUTTER_POPUP_DY = 8;
   { v152 ASYNC (ruling B9c): the engine's deferred-hover protocol. The server's
     copy lives in DRagLint.LSP.Deferred; the two must stay equal. }
   DEFER_HOVER_METHOD   = 'draglint/deferHover';
@@ -185,32 +202,164 @@ begin
   if (H = GGutterAnchorHwnd) or SameText(ClassNameOf(H), EDITOR_CONTROL_CLASS) then Result:= H;
 end;
 
-{ One line of the view's buffer (1-based row), or '' when unreadable. }
-function BufferLineText(const AView: IOTAEditView; ARow1: Integer): string;
+function EditViewText(const AView: IOTAEditView): string;
 const
-  LINE_BUF = 1024;
+  CHUNK = 16 * 1024;
 var
-  CP    : TOTACharPos;
   Reader: IOTAEditReader;
-  Buf   : array[0..LINE_BUF - 1] of AnsiChar;
+  Bytes : TBytes ;
+  Len   : Integer;
   N     : Integer;
-  Eol   : Integer;
 begin
   Result:= '';
   try
-    if (AView = nil) or (AView.Buffer = nil) or (ARow1 < 1) then Exit;
-    CP.Line     := ARow1;
-    CP.CharIndex:= 0;
+    if (AView = nil) or (AView.Buffer = nil) then Exit;
     Reader:= AView.Buffer.CreateReader;
     if Reader = nil then Exit;
-    N:= Reader.GetText(AView.CharPosToPos(CP), Buf, LINE_BUF);
-    if N <= 0 then Exit;
-    Eol:= 0;
-    while (Eol < N) and (Buf[Eol] not in [#10, #13]) do Inc(Eol);
-    SetString(Result, PAnsiChar(@Buf[0]), Eol);
+    Len:= 0;
+    repeat
+      SetLength(Bytes, Len + CHUNK);
+      N:= Reader.GetText(Len, PAnsiChar(Bytes) + Len, CHUNK);
+      if N > 0 then Inc(Len, N);
+    until N < CHUNK;
+    SetLength(Bytes, Len);
+    { the IDE hands the buffer out as UTF-8 whatever the file's encoding }
+    try
+      Result:= TEncoding.UTF8.GetString(Bytes);
+    except
+      on E: EEncodingError do Result:= TEncoding.ANSI.GetString(Bytes); { not valid UTF-8 after all }
+    end;
   except
-    on E: Exception do Result:= '';   { an unreadable buffer is no token: the fallback box applies }
+    on E: Exception do DLT('hover', 'buffer not readable: ' + E.Message);
   end;
+end;
+
+type
+  { The text cell under a screen point, from the editor control under it. Row0 /
+    Col0 are buffer positions; they are -1 when there is none. }
+  TDLPointerCell = record
+    Verdict  : TDLCellVerdict;
+    Why      : string ; { hcvNoGrid: what was missing }
+    Ctl      : HWND   ;
+    Client   : TPoint ;
+    View     : IOTAEditView;
+    FilePath : string ;
+    Row0     : Integer;
+    Col0     : Integer;
+    VisCol0  : Integer; { Col0 before tabs: the column the pixels count }
+    CodeLeft : Integer;
+    CharWidth: Integer;
+    LeftCol1 : Integer;
+    LineTop  : Integer;
+    LineHeight: Integer;
+    ApiCol   : Integer; { what PointToCharacterPos says, for telemetry only }
+    ApiLine  : Integer;
+  end;
+
+{ Row of the pointer: the painted line whose rectangle holds its Y. A folded
+  block is one painted line with its own logical number, so folds need no
+  arithmetic. False when the editor reports no line at all. }
+function FindPointerRow(const AState: INTACodeEditorState; var ACell: TDLPointerCell; out ALineText: string): Boolean;
+var
+  Line: INTACodeEditorLineState;
+  R   : TRect;
+begin
+  Result   := False;
+  ALineText:= '';
+  for var V: Integer:= AState.TopLine to AState.BottomLine do
+  begin
+    Line:= AState.LineState[V];
+    if Line = nil then Continue;
+    R     := Line.WholeRect;
+    Result:= True;
+    if (ACell.Client.Y < R.Top) or (ACell.Client.Y >= R.Bottom) then Continue;
+    ACell.Row0      := Line.LogicalLineNum - 1;
+    ACell.LineTop   := R.Top;
+    ACell.LineHeight:= R.Height;
+    ALineText       := Line.Text;
+    Exit;
+  end;
+  ACell.Row0:= PAST_EOF_ROW; { below the last painted line }
+end;
+
+procedure FillPointerCell(const AScreenPt: TPoint; var ACell: TDLPointerCell);
+var
+  Svcs : INTACodeEditorServices;
+  State: INTACodeEditorState   ;
+  Ctl  : TWinControl           ;
+  Text : string                ;
+  EdPos: TOTAEditPos           ;
+  ChPos: TOTACharPos           ;
+begin
+  ACell.Ctl:= EditorControlAt(AScreenPt);
+  Ctl      := FindControl(ACell.Ctl);
+  ACell.Why:= 'no editor control';
+  if (Ctl = nil) or not Supports(BorlandIDEServices, INTACodeEditorServices, Svcs) then Exit;
+  ACell.Why:= 'no editor state';
+  if not Svcs.IsIDEEditor(Ctl) then Exit;
+  State     := Svcs.GetEditorState(Ctl);
+  ACell.View:= Svcs.GetViewForEditor(Ctl);
+  if (State = nil) or (ACell.View = nil) or (ACell.View.Buffer = nil) then Exit;
+  State.Refresh; { the state may be the one of the last paint }
+  ACell.FilePath:= ACell.View.Buffer.FileName;
+  ACell.Client  := AScreenPt;
+  ACell.Why     := 'no lines';
+  if not ScreenToClient(ACell.Ctl, ACell.Client) or not FindPointerRow(State, ACell, Text) then Exit;
+  ACell.Why      := '';
+  ACell.CodeLeft := State.CodeLeftEdge;
+  ACell.CharWidth:= State.CharWidth;
+  ACell.LeftCol1 := ACell.View.LeftColumn;
+  State.PointToCharacterPos(ACell.Client, ACell.ApiCol, ACell.ApiLine);
+  ACell.Verdict:= DLColumnAt(ACell.Client.X, ACell.CodeLeft, ACell.CharWidth, ACell.LeftCol1, ACell.VisCol0);
+  ACell.Col0   := ACell.VisCol0;
+  if (ACell.Verdict = hcvText) and Text.Contains(#9) then
+  begin
+    { a tab is several cells and one character }
+    EdPos.Col := ACell.VisCol0 + 1;
+    EdPos.Line:= ACell.Row0 + 1;
+    ACell.View.ConvertPos(True, EdPos, ChPos);
+    ACell.Col0:= ChPos.CharIndex;
+  end;
+end;
+
+{ The cell under a SCREEN point now. A point without one is hcvNoGrid. }
+function PointerCellAt(const AScreenPt: TPoint): TDLPointerCell;
+begin
+  Result        := Default(TDLPointerCell);
+  Result.Verdict:= hcvNoGrid;
+  Result.Row0   := -1;
+  Result.Col0   := -1;
+  Result.VisCol0:= -1;
+  try
+    FillPointerCell(AScreenPt, Result);
+  except
+    on E: Exception do
+    begin
+      Result.Verdict:= hcvNoGrid;
+      Result.Why    := E.Message;
+    end;
+  end;
+end;
+
+{ Telemetry: where the cell came from and what was seen there. }
+function CellInfo(const ACell: TDLPointerCell; const AToken: TDLToken): string;
+begin
+  Result:= Format('src=%s x=%d y=%d codeLeft=%d charW=%d leftCol=%d lineTop=%d lineH=%d api=%d,%d vis=%d tok=%s "%s"',
+    ['pointer', ACell.Client.X, ACell.Client.Y, ACell.CodeLeft, ACell.CharWidth, ACell.LeftCol1, ACell.LineTop,
+     ACell.LineHeight, ACell.ApiCol, ACell.ApiLine, ACell.VisCol0, DLTokenKindName(AToken.Kind), AToken.Text]);
+end;
+
+{ The show-gate's anchor: the token's span in the cell's own grid. }
+function AnchorOf(const ACell: TDLPointerCell; const AToken: TDLToken): TDLHoverAnchor;
+var
+  Shift: Integer; { cells by which tabs move this row's characters right }
+begin
+  Shift := ACell.VisCol0 - ACell.Col0;
+  Result:= DLHoverAnchorFor(ACell.Ctl, ACell.CodeLeft - (ACell.LeftCol1 - 1) * ACell.CharWidth, ACell.CharWidth,
+    ACell.LineTop, ACell.LineHeight, AToken.Start0 + Shift, AToken.End0 + Shift);
+  Result.Row0     := ACell.Row0;
+  Result.StartCol0:= AToken.Start0;
+  Result.EndCol0  := AToken.End0;
 end;
 
 type
@@ -252,6 +401,14 @@ type
         completes a partial popup already on screen. }
       FInflightAnnounced : Boolean                    ;
       FInflightSecond    : Boolean                    ;
+      FInflightToken     : TDLToken                   ; { the token the question is about }
+      FInflightInfo      : string                     ; { its CellInfo }
+      FInflightFile      : string                     ;
+      FShowInfo          : string                     ; { CellInfo of the answer ShowHoverPopup is about to show }
+      { lane 1.54.1 HOVERNOTE: the place of the last EMPTY answer -- not asked
+        about and not announced again until a re-dwell or a finished index job }
+      FEmpty             : TDLEmptyMemo               ;
+      FNoCellLogged      : Boolean                    ; { gutter / no cell: one telemetry line per dwell }
       procedure OnTick(Sender: TObject);
       { v(session 73): editor caret line -> drag-lint panel selection. }
       procedure DriveCaretPanelSelection;
@@ -261,6 +418,12 @@ type
         const AMarkdown, AQName: string; const AModel: TDragLintHoverModel;
         const ACallers: TArray<TDragLintCallerInfo>);
       procedure OnHoverTextAnswer(AId: Integer; AStatus: TDLHoverStatus; const AMarkdown: string);
+      { Empty answer: names the token on the strip, once. }
+      procedure ShowEmptyAnswer(const AFile: string; ARow0: Integer; const AToken: TDLToken);
+      { Takes an arrived answer into the cache; an EMPTY one is never cached. }
+      procedure CacheAnswer(const AMarkdown: string; AOk: Boolean; const AModel: TDragLintHoverModel;
+        const ACallers: TArray<TDragLintCallerInfo>);
+      function  ShowGutterDiagnostics(const ACell: TDLPointerCell; const APos: TPoint): Boolean;
       function  InflightGateVerdict: TDLHoverGateVerdict;
       function  GateAndShowInflight(const AText: string; const AModel: TDragLintHoverModel;
         const ACallers: TArray<TDragLintCallerInfo>): Boolean;
@@ -301,8 +464,10 @@ end;
 
 procedure TDragLintHoverHelper.ResetState;
 begin
-  FStableCount:= 0;
-  FHintShown  := False;
+  FStableCount := 0;
+  FHintShown   := False;
+  FNoCellLogged:= False;
+  FEmpty.Clear; { a re-dwell asks again }
 end;
 
 procedure TDragLintHoverHelper.CancelInflight;
@@ -363,17 +528,14 @@ begin
       Exit;
     end;
     FInflightClient   := nil;
-    FLastLspKey       := FInflightKey;
-    FLastLspText      := AMarkdown;
-    FLastBundleOk     := AStatus = hvsOk;
-    FLastBundleModel  := AModel;
-    FLastBundleCallers:= ACallers;
+    CacheAnswer(AMarkdown, AStatus = hvsOk, AModel, ACallers);
     { v152 ASYNC: the whole answer replaces its partial popup IN PLACE (at the
       dwell point) while that popup is up -- the user may be reading it, with
       the pointer on the popup rather than on the token. }
     if WasSecond and IsDragLintHoverVisible and (FLastShownKey = FInflightKey) then
     begin
       DLT('hover', 'deferred hover completed: popup updated in place');
+      FShowInfo:= FInflightInfo;
       ShowHoverPopup(FInflightPos, FInflightKey, FLastLspText, FLastBundleModel,
         FLastBundleCallers, FInflightDiags, FInflightDiagText);
       Exit;
@@ -396,64 +558,53 @@ begin
     end;
     FInflightId    := 0;
     FInflightClient:= nil;
-    FLastLspKey       := FInflightKey;
-    FLastLspText      := AMarkdown;
-    FLastBundleOk     := False;
-    FLastBundleModel  := Default(TDragLintHoverModel);
-    SetLength(FLastBundleCallers, 0);
+    CacheAnswer(AMarkdown, False, Default(TDragLintHoverModel), nil);
+    if (AStatus = hvsUnsupported) and (FInflightDiagText = '') then
+    begin
+      { an ERROR answer says nothing about the index }
+      SetDragLintNote('drag-lint: hover -- engine could not answer');
+      Exit;
+    end;
     GateAndShowInflight(FLastLspText, FLastBundleModel, FLastBundleCallers);
   except
     on E: Exception do DLT('hover', 'text answer raised: ' + E.Message);
   end;
 end;
 
+procedure TDragLintHoverHelper.CacheAnswer(const AMarkdown: string; AOk: Boolean; const AModel: TDragLintHoverModel;
+  const ACallers: TArray<TDragLintCallerInfo>);
+begin
+  FLastLspKey       := if AMarkdown <> '' then FInflightKey else ''; { empty: asked again by the next dwell there }
+  FLastLspText      := AMarkdown;
+  FLastBundleOk     := AOk;
+  FLastBundleModel  := AModel;
+  FLastBundleCallers:= ACallers;
+end;
+
+procedure TDragLintHoverHelper.ShowEmptyAnswer(const AFile: string; ARow0: Integer; const AToken: TDLToken);
+begin
+  SetDragLintNote(DLEmptyAnswerNote(AToken));
+  FEmpty.Remember(AFile, ARow0, AToken, JobQueue.GetState.IndexGeneration);
+  { The memo, not FHintShown, keeps this quiet: a drift of a few pixels onto the
+    next token must still be asked about. }
+  FHintShown:= False;
+end;
+
 { The owner's show-gate (2026-10-29): the answer is shown only while the pointer
   is still over the editor control the dwell started in AND on the same token
   -- see DragLint.Plugin.HoverGate. Otherwise it is discarded (and stays cached,
   so pointing back at the token shows it at once). }
-{ The 0-based buffer cell under a SCREEN point NOW, through the grid the gutter
-  painter publishes -- the same arithmetic OnTick uses to ask the question, so a
-  wheel scroll (GGutterAnchorLine moved) or an edit lands on a different cell
-  under a stationary pointer. False (-1, -1) when no grid is painted or the
-  point is left of the text. }
-function PointerCellNow(const AScreenPt: TPoint; out ARow0, ACol0: Integer): Boolean;
-var
-  Pt  : TPoint ;
-  DY  : Integer;
-  ROff: Integer;
-begin
-  ARow0:= -1;
-  ACol0:= -1;
-  Result:= False;
-  if (GGutterAnchorHwnd = 0) or (GGutterLineHeight <= 0) or (GGutterCharWidth <= 0) then Exit;
-  Pt:= AScreenPt;
-  if not ScreenToClient(GGutterAnchorHwnd, Pt) then Exit;
-  if Pt.X < GGutterTextLeft then Exit;
-  DY:= Pt.Y - GGutterAnchorTopY;
-  ROff:= if DY >= 0 then DY div GGutterLineHeight
-         else -((-DY + GGutterLineHeight - 1) div GGutterLineHeight);
-  ARow0:= (GGutterAnchorLine + ROff) - 1;
-  ACol0:= (Pt.X - GGutterTextLeft) div GGutterCharWidth;
-  Result:= ARow0 >= 0;
-  if not Result then
-  begin
-    ARow0:= -1;
-    ACol0:= -1;
-  end;
-end;
-
 function TDragLintHoverHelper.InflightGateVerdict: TDLHoverGateVerdict;
 var
-  NowPt  : TPoint;
-  Client : TPoint;
-  NowRow0: Integer;
-  NowCol0: Integer;
+  NowPt : TPoint;
+  Client: TPoint;
+  Cell  : TDLPointerCell;
 begin
   GetCursorPos(NowPt);
   Client:= NowPt;
   if FInflightAnchor.Hwnd <> 0 then ScreenToClient(FInflightAnchor.Hwnd, Client);
-  PointerCellNow(NowPt, NowRow0, NowCol0);
-  Result:= DLHoverGate(FInflightAnchor, EditorControlAt(NowPt), Client, NowRow0, NowCol0);
+  Cell  := PointerCellAt(NowPt);
+  Result:= DLHoverGate(FInflightAnchor, Cell.Ctl, Client, Cell.Row0, Cell.Col0);
 end;
 
 function TDragLintHoverHelper.GateAndShowInflight(const AText: string; const AModel: TDragLintHoverModel;
@@ -473,6 +624,7 @@ begin
     Exit;
   end;
   GetCursorPos(NowPt);
+  FShowInfo:= FInflightInfo;
   ShowHoverPopup(NowPt, FInflightKey, AText, AModel, ACallers, FInflightDiags, FInflightDiagText);
 end;
 
@@ -509,14 +661,14 @@ begin
 
   { Item 5 (over-eagerness): one line per dwell that reaches this decision, so a
     popup "in non-code areas" is locatable (shown=0 is a correct decline). }
-  DLT('hover', Format('dwell %s model=%d lspLen=%d diagLen=%d shown=%d',
-    [AKey, Ord(AModel.QualifiedName <> ''), Length(ALspText), Length(ADiagText), Ord(Combined <> '')]));
+  DLT('hover', Format('dwell %s model=%d lspLen=%d diagLen=%d shown=%d %s',
+    [AKey, Ord(AModel.QualifiedName <> ''), Length(ALspText), Length(ADiagText), Ord(Combined <> ''), FShowInfo]));
 
   { THE NOTE MUST DIE ON EVERY PATH (2026-08-27: "hover TDeltaBatch forever").
     "Asked and got nothing back" stays distinguishable from "here is the popup". }
   if Combined = '' then
   begin
-    SetDragLintNote('drag-lint: hover -- nothing indexed at the cursor');
+    ShowEmptyAnswer(FInflightFile, FInflightRow, FInflightToken);
     Exit;
   end;
 
@@ -551,7 +703,9 @@ begin
     Combined:= StripFirstHeaderLine(Combined);
     ShowDragLintHover(DwellHeader, Combined, DwellCallers, APos.X, APos.Y + POPUP_BELOW_PX, True, APos.X, APos.Y);
   end;
-  FLastShownKey:= AKey; { v0.42: don't re-pop this same position }
+  { v0.42: don't re-pop this same position -- unless only the line's finding was
+    shown: the symbol question was empty and is asked again by a re-dwell. }
+  FLastShownKey:= if ALspText <> '' then AKey else '';
 end;
 
 
@@ -602,22 +756,49 @@ begin
   SelectDockedDiagnosticForLine(Line);
 end;
 
+{ v0.46: the pointer over the gutter of a line with findings shows them. True
+  when it did. }
+function TDragLintHoverHelper.ShowGutterDiagnostics(const ACell: TDLPointerCell; const APos: TPoint): Boolean;
+var
+  Diags: TArray<TDragLintDiagnostic> ;
+  Empty: TArray<TDragLintCallerInfo> ;
+  Lines: TStringBuilder;
+begin
+  Diags := Cache.GetForLine(ACell.FilePath, ACell.Row0);
+  Result:= Length(Diags) > 0;
+  if not Result then Exit;
+  Lines:= TStringBuilder.Create;
+  try
+    for var D: TDragLintDiagnostic in Diags do
+    begin
+      if Lines.Length > 0 then Lines.Append(sLineBreak);
+      if D.Code <> '' then Lines.Append('[' + D.Code + '] ');
+      Lines.Append(D.Message);
+      { v0.46 lightbulb hint }
+      if System.Pos('add unit ', LowerCase(D.Message)) > 0 then Lines.Append('   <-- click to add');
+    end;
+    FHintShown:= True;
+    SetLength(Empty, 0);
+    CloseDragLintHover;
+    ShowDragLintHover('Diagnostics', Lines.ToString, Empty, APos.X + GUTTER_POPUP_DX, APos.Y + GUTTER_POPUP_DY, True, APos.X, APos.Y);
+    FLastShownKey:= Format('gutter|%s|%d', [ACell.FilePath, ACell.Row0 + 1]);
+  finally
+    Lines.Free;
+  end;
+end;
+
 procedure TDragLintHoverHelper.OnTick(Sender: TObject);
 var
   Settings: TDragLintSettings          ;
   Pos     : TPoint                     ;
-  ESS     : IOTAEditorServices         ;
-  EditView: IOTAEditView               ;
-  FilePath: string                     ;
-  CaretRow: Integer                    ;
-  CaretCol: Integer                    ;
+  Cell    : TDLPointerCell             ;
+  Token   : TDLToken                   ;
+  Info    : string                     ;
   Diags   : TArray<TDragLintDiagnostic>;
   LspKey  : string                     ;
   DiagText: string                     ;
   Uri     : string                     ;
   Client  : TDragLintLspClient         ;
-  Anchor  : TDLHoverAnchor             ;
-  UnderHwnd: HWND                      ;
 begin
   try
     Settings:= LoadSettings;
@@ -669,8 +850,7 @@ begin
     { 2026-10-29: AND the window under the pointer must be the editor control
       itself. The form rectangle alone also covers docked panes (Project
       Manager, Structure), which is how popups appeared over them. }
-    UnderHwnd:= EditorControlAt(Pos);
-    if (not IsMouseOverEditorView(Pos)) or (UnderHwnd = 0) then
+    if (not IsMouseOverEditorView(Pos)) or (EditorControlAt(Pos) = 0) then
     begin
       { v0.42: mouse left the editor view -> clear the popup so it never lingers
         over the Project Manager / Messages / other panes. Keep it alive only
@@ -716,124 +896,27 @@ begin
       Exit;
     end;
 
-    { Query the active editor's caret row + column }
-    if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
-    EditView:= ESS.TopView;
-    if EditView = nil then Exit;
-
-    FilePath:= EditView.Buffer.FileName;
-    if FilePath = '' then Exit;
-
-    { v0.46: GUTTER-glyph hover. Map the MOUSE screen point to an editor row via
-      the anchor the painter publishes, and if the cursor is over the gutter
-      (x < text start) on a line that has diagnostics, show that line's
-      message(s). This is independent of the caret -- it's true mouse hover. }
-    if (GGutterAnchorHwnd <> 0) and (GGutterLineHeight > 0) then
+    { What is under the POINTER, in the view under the pointer. Over the gutter
+      only that line's findings are shown; without a cell nothing is asked. }
+    Cell:= PointerCellAt(Pos);
+    if (Cell.Verdict = hcvGutter) and ShowGutterDiagnostics(Cell, Pos) then Exit;
+    if (Cell.Verdict <> hcvText) or (Cell.FilePath = '') then
     begin
-      var CliPt: TPoint:= Pos;
-      if ScreenToClient(GGutterAnchorHwnd, CliPt) then
-      begin
-        var DeltaY: Integer:= CliPt.Y - GGutterAnchorTopY;
-        var RowOff: Integer                              ;
-        if DeltaY >= 0 then RowOff:= DeltaY div GGutterLineHeight
-        else RowOff:= -((-DeltaY + GGutterLineHeight - 1) div GGutterLineHeight);
-        var MouseRow1: Integer:= GGutterAnchorLine + RowOff; { 1-based }
-        if (CliPt.X >= 0) and (CliPt.X < GGutterTextLeft) and (MouseRow1 >= 1) then
-        begin
-          var GDiags:= Cache.GetForLine(FilePath, MouseRow1 - 1);
-          if Length(GDiags) > 0 then
-          begin
-            var GMsg: string:= '';
-            for var GI:= 0 to High(GDiags) do
-            begin
-              if GMsg <> '' then GMsg:= GMsg + #13#10;
-              if GDiags[GI].Code <> '' then GMsg:= GMsg + '[' + GDiags[GI].Code + '] ';
-              GMsg:= GMsg + GDiags[GI].Message;
-              { v0.46 lightbulb hint }
-              if System.Pos('add unit ', LowerCase(GDiags[GI].Message)) > 0 then GMsg:= GMsg + '   <-- click to add';
-            end;
-            FHintShown:= True;
-            var GEmpty: TArray<TDragLintCallerInfo>;
-            SetLength(GEmpty, 0);
-            CloseDragLintHover;
-            ShowDragLintHover('Diagnostics', GMsg, GEmpty, Pos.X + 18, Pos.Y + 8, True, Pos.X, Pos.Y);
-            FLastShownKey:= Format('gutter|%s|%d', [FilePath, MouseRow1]);
-            Exit;
-          end; // if
-        end; // if
-      end; // if
-    end; // if
-
-    { Fallback anchor (no painted grid yet): a small box around the dwell
-      point in the control under the pointer -- the answer still has to land
-      where it was asked. Replaced below when the grid is known. }
-    begin
-      var BoxPt: TPoint:= Pos;
-      ScreenToClient(UnderHwnd, BoxPt);
-      Anchor:= DLHoverAnchorFor(UnderHwnd, BoxPt.X - FALLBACK_HALF_BOX, 1,
-        BoxPt.Y - FALLBACK_HALF_BOX, 2 * FALLBACK_HALF_BOX, 0, 2 * FALLBACK_HALF_BOX);
+      if not FNoCellLogged then
+        DLT('hover', Format('dwell no question: %s (%s) %s', [if Cell.Verdict = hcvGutter then 'gutter' else 'no cell',
+          Cell.Why, CellInfo(Cell, Default(TDLToken))]));
+      FNoCellLogged:= True;
+      Exit;
     end;
-
-    { IOTAEditView.Position is 1-based; LSP / diagnostic cache is 0-based }
-    CaretRow:= EditView.Position.Row    - 1;
-    CaretCol:= EditView.Position.Column - 1;
-    if CaretRow < 0 then CaretRow:= 0;
-    if CaretCol < 0 then CaretCol:= 0;
-
-    { v(hover-follows-mouse): THE dwell-hover defect. The caret position above is
-      where the user last CLICKED; the popup is placed at the MOUSE. So pointing at
-      an identifier described whatever the caret happened to be sitting on -- a
-      different token, and after switching tabs a token in a different unit
-      entirely. That is the reported "fires in other tabs showing information for a
-      different or previous popup": not a stale popup at all, but a correctly-fresh
-      popup about the wrong symbol.
-
-      It also explains the popup that never appears. FLastShownKey and FLastLspKey
-      are keyed on (file,row,col); with caret coordinates every token on the line
-      produced the SAME key, so after the first dwell the "already shown for this
-      caret" guard above swallowed every later hover until the caret itself moved.
-
-      Fix: map the pointer to a buffer cell with the grid the gutter painter
-      publishes -- the same arithmetic the gutter branch above already uses for
-      rows, plus the column now that GGutterCharWidth is exported. The IDE editor
-      is fixed-pitch, so the division is exact. Falls back to the caret whenever
-      the grid has not been painted yet (GGutter* zero) or the pointer is left of
-      the text (the gutter branch above owns that case and has already returned).
-      Safe against a split view / second tab: IsMouseOverEditorView(Pos) at the top
-      of this timer already established that the pointer is over THIS view, so the
-      coordinates and EditView.Buffer.FileName describe the same buffer. }
-    if (GGutterAnchorHwnd <> 0) and (GGutterLineHeight > 0) and (GGutterCharWidth > 0) then
-    begin
-      var MPt: TPoint:= Pos;
-      if ScreenToClient(GGutterAnchorHwnd, MPt) then
-      begin
-        var DY  : Integer:= MPt.Y - GGutterAnchorTopY;
-        var ROff: Integer                            ;
-        if DY >= 0 then ROff:= DY div GGutterLineHeight
-        else ROff:= -((-DY + GGutterLineHeight - 1) div GGutterLineHeight);
-        var MouseRow0: Integer:= (GGutterAnchorLine + ROff) - 1;  { 0-based }
-        var MouseCol0: Integer:= (MPt.X - GGutterTextLeft) div GGutterCharWidth;
-        if (MouseRow0 >= 0) and (MPt.X >= GGutterTextLeft) and (MouseCol0 >= 0) then
-        begin
-          CaretRow:= MouseRow0;
-          CaretCol:= MouseCol0;
-          { 2026-10-29: the show-gate's anchor -- the hovered identifier's span
-            in the SAME grid, so the answer is shown only while the pointer is
-            still on that token. Not on an identifier: the fallback box stays. }
-          var TokS, TokE: Integer;
-          if DLIdentSpanAt(BufferLineText(EditView, MouseRow0 + 1), MouseCol0, TokS, TokE) then
-          begin
-            Anchor:= DLHoverAnchorFor(GGutterAnchorHwnd, GGutterTextLeft, GGutterCharWidth,
-              GGutterAnchorTopY + ROff * GGutterLineHeight, GGutterLineHeight, TokS, TokE);
-            Anchor.Row0:= MouseRow0; { the gate's cell rule: same row + column span }
-          end;
-        end;
-      end;
-    end;
+    { The empty answer already on the strip: neither repeated nor asked again. }
+    if FEmpty.Holds(Cell.FilePath, Cell.Row0, Cell.Col0, JobQueue.GetState.IndexGeneration) then Exit;
+    Token:= DLTokenInText(EditViewText(Cell.View), Cell.Row0, Cell.Col0);
+    Info := CellInfo(Cell, Token);
+    FShowInfo:= Info;
 
     { Pull cached diagnostic for this row, if any. }
     DiagText:= '';
-    Diags:= Cache.GetForLine(FilePath, CaretRow);
+    Diags:= Cache.GetForLine(Cell.FilePath, Cell.Row0);
     if Length(Diags) > 0 then
     begin
       DiagText:= Diags[0].Message;
@@ -841,7 +924,7 @@ begin
       if System.Pos('add unit ', LowerCase(DiagText)) > 0 then DiagText:= DiagText + '   <-- click to add';
     end;
 
-    LspKey:= Format('%s|%d|%d', [FilePath, CaretRow, CaretCol]);
+    LspKey:= Format('%s|%d|%d', [Cell.FilePath, Cell.Row0, Cell.Col0]);
 
     { v0.42: show a given position's popup once; only a position change re-arms it. }
     if LspKey = FLastShownKey then
@@ -870,6 +953,19 @@ begin
       CancelInflight;
     end;
 
+    FInflightToken:= Token;
+    FInflightInfo := Info;
+    FInflightFile := Cell.FilePath;
+    FInflightRow  := Cell.Row0;
+    FInflightCol  := Cell.Col0;
+
+    { White space is no symbol: nothing to ask. The line's findings still show. }
+    if Token.Kind = htkBlank then
+    begin
+      ShowHoverPopup(Pos, LspKey, '', Default(TDragLintHoverModel), nil, Diags, DiagText);
+      Exit;
+    end;
+
     { Diagnostics are local: when the engine cannot be asked they still show. }
     Client:= EnsureLspClient;
     if (Client = nil) or Client.IsBusy then
@@ -886,20 +982,17 @@ begin
     end;
 
     { Announce BEFORE the request (2026-08-19): a slow hover reads as THINKING
-      rather than absent. Named through the SAME AnnounceHoverStart the menu
-      path uses, so the two paths can never name the same caret differently. }
-    AnnounceHoverStart;
-    Uri:= 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
+      rather than absent. It names the token the question is about. }
+    SetDragLintNote(DLHoverAnnounceNote(Token));
+    Uri:= 'file:///' + StringReplace(Cell.FilePath, '\', '/', [rfReplaceAll]);
 
     FInflightKey     := LspKey;
     FInflightClient  := Client;
     FInflightPos     := Pos;
-    FInflightAnchor  := Anchor;
+    FInflightAnchor  := AnchorOf(Cell, Token);
     FInflightDiags   := Diags;
     FInflightDiagText:= DiagText;
     FInflightUri     := Uri;
-    FInflightRow     := CaretRow;
-    FInflightCol     := CaretCol;
     FHintShown       := True;
 
     { ONE request for markdown + model + callers; shown when it arrives, if the
@@ -911,9 +1004,9 @@ begin
       sections at once and the slow ones on our second ask (OnHoverBundleAnswer). }
     FInflightAnnounced:= not HoverBundleUnsupported;
     FInflightSecond   := False;
-    if FInflightAnnounced then AnnounceDeferredHover(Client, Uri, CaretRow, CaretCol);
-    FInflightId:= if HoverBundleUnsupported then RequestHoverTextAsync(Uri, CaretRow, CaretCol, OnHoverTextAnswer)
-                  else RequestHoverBundleAsync(Uri, CaretRow, CaretCol, OnHoverBundleAnswer);
+    if FInflightAnnounced then AnnounceDeferredHover(Client, Uri, Cell.Row0, Cell.Col0);
+    FInflightId:= if HoverBundleUnsupported then RequestHoverTextAsync(Uri, Cell.Row0, Cell.Col0, OnHoverTextAnswer)
+                  else RequestHoverBundleAsync(Uri, Cell.Row0, Cell.Col0, OnHoverBundleAnswer);
     if FInflightId = 0 then
     begin
       FInflightClient:= nil;

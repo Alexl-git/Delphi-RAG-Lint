@@ -93,6 +93,24 @@ dwell) is sent and the card appears when the answer arrives:
   the line still show. An engine silent for 60 seconds with questions pending
   is restarted automatically.
 
+## What the status strip says
+Resting the mouse on code asks about the place under the **pointer**; the menu
+command asks about the caret. When there is nothing to show, the strip at the
+bottom of the drag-lint window names what is there:
+
+| Under the pointer / caret | Strip |
+|---|---|
+| an identifier the index does not have | `drag-lint: 'DoExport' is not indexed` |
+| a keyword, directive, number, operator | `drag-lint: 'function' (keyword)` |
+| a word in a comment, string or compiler directive | `drag-lint: 'word' (in a comment)` |
+| white space, past the end of the line or file | `drag-lint: <SPACE> is under the cursor` |
+
+White space and the gutter are never asked about (a gutter line with findings
+shows them). An empty answer is said once; it is asked again when the pointer
+comes back or an index job ends. While a job runs the strip shows both: the note,
+and next to it `reindexing... 42% <phase>`. In a narrow window the note is
+shortened first. Engine busy or not ready has its own text.
+
 ## What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the index when
 omitted. An index must still exist. In the IDE, it also needs an open

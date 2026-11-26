@@ -39,6 +39,7 @@ contains
   DragLint.Plugin.LspClient in 'DragLint.Plugin.LspClient.pas',
   DragLint.Plugin.LspWriteQueue in 'DragLint.Plugin.LspWriteQueue.pas',
   DragLint.Plugin.HoverGate in 'DragLint.Plugin.HoverGate.pas',
+  DragLint.Plugin.HoverNote in 'DragLint.Plugin.HoverNote.pas',
   DragLint.Plugin.Editor in 'DragLint.Plugin.Editor.pas',
   DragLint.Plugin.ProjectNotifier in 'DragLint.Plugin.ProjectNotifier.pas',
   DragLint.Plugin.Settings in 'DragLint.Plugin.Settings.pas',

@@ -58,6 +58,12 @@ type
     { The running job takes a Cancel (its CancelGraceMs > 0) and none was sent
       yet: the status strip enables its Cancel button for it (lane X-BT). }
     CanCancelRunning: Boolean;
+    { The running job's kind (jkGeneric when none runs): the strip words an
+      index job differently beside a note. }
+    CurrentKind: TJobKind;
+    { Index jobs finished so far, failed ones included: a changed value is the
+      hover tracker's signal that an empty answer is out of date. }
+    IndexGeneration: Integer;
   end;
 
   /// <remarks>
@@ -1138,6 +1144,7 @@ begin
           Job:= FPending.Extract(FPending[Idx]); { take ownership, remove from list }
           FState.Running     := True;
           FState.CurrentTitle:= Job.Title;
+          FState.CurrentKind := Job.Kind;
           FState.Percent     := -1;
           SyncPendingLocked;
         end;
@@ -1154,10 +1161,13 @@ begin
       { RunOne clears Busy once it has queued the release; still set means it
         raised first, and the count must not stay up (a stuck wait cursor) }
       if Job.Busy then TThread.Queue(nil, procedure begin AdjustBusy(-1); end);
+      var WasIndex: Boolean:= Job.Kind = jkReindex;
       Job.Free;
 
       FLock.Enter;
       try
+        if WasIndex then Inc(FState.IndexGeneration);
+        FState.CurrentKind := jkGeneric;
         FState.Running     := False;
         FState.CurrentTitle:= '';
         FState.Percent     := -1;
