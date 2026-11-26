@@ -339,13 +339,6 @@ function ListTags(const AText: string): TArray<string>;
 /// </remarks>
 function FindInboundLabel(const AText: string; AFrom: Integer; out ALabel: string): Integer;
 
-/// <summary>The first label whose entries can carry project tags at or after
-/// AFrom: an inbound label or `Registered as:`.</summary>
-/// <param name="AText">Text to search.</param>
-/// <param name="AFrom">1-based start position.</param>
-/// <param name="ALabel">The whole label found, or empty.</param>
-/// <returns>Its 1-based position, or 0 when there is none.</returns>
-function FindTaggedLabel(const AText: string; AFrom: Integer; out ALabel: string): Integer;
 
 /// <summary>Wave 149 LX: True for an accessor echo label 'Used in (via property X):'.</summary>
 /// <param name="ALabel">A label as FindInboundLabel returns it.</param>
@@ -602,6 +595,12 @@ begin
   end;
 end;
 
+/// <summary>The first label whose entries can carry project tags at or after
+/// AFrom: an inbound label or `Registered as:`.</summary>
+/// <param name="AText">Text to search.</param>
+/// <param name="AFrom">1-based start position.</param>
+/// <param name="ALabel">The whole label found, or empty.</param>
+/// <returns>Its 1-based position, or 0 when there is none.</returns>
 function FindTaggedLabel(const AText: string; AFrom: Integer; out ALabel: string): Integer;
 var
   WiringAt: Integer;

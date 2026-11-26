@@ -63,7 +63,7 @@ uses
   , System.Generics.Defaults
   , DRagLint.Core.Encoding    { ReadSourceFileText }
   , DRagLint.Doc.Regions      // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END are the managed-block fence TDocRegions writes; every reader of a block must share them (B-33 item 1)
-  , DRagLint.Doc.ProjectTags
+  , DRagLint.Doc.ProjectTags  // dl:unit DRagLint.Doc.ProjectTags accepted -- WIRING_LABEL and the tag routines (SplitTagged, FormatTagged, AnyTagged, SplitWiringEntries) are one spelling of the tagged line; writer and reader must share it
   , DRagLint.Doc.SharedFacts
   , DRagLint.Lint.SharedUnit
   ;
