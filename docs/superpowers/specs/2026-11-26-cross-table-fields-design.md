@@ -190,6 +190,17 @@ today but does not read ON / WHERE.
 Measured check (1.55 test): `repo paths` over the MICRONITEV6A schema facts must reproduce the draft's table
 (274 / 1,089 / 1,653 pairs; 11 / 334 / 1,168 with more than one path at 1 / 2 / 3 steps, the two-column key counted once).
 
+As built (X2, 2026-11-26): `DRagLint.FieldRepo.RelationGraph` (pure: edges, `FindPaths`, `Choose` = rules 1-5, `Stats`,
+`DefaultInputAlias`), `DRagLint.FieldRepo.RelationRepo` (`LoadRelationGraph`: FKs whose REF_CONSTRAINT is a PK / UNIQUE
+of the referenced table; on schema 4 the DL_RELATIONS rows: SOURCE FK renames its edge and carries IS_DEFAULT, FORM /
+HAND rows are edges only when PARENT_KEY is a key of the parent on exactly the parent columns), `repo paths` (rules 3-5:
+the CLI has no stored binding and no form; read-dfm, X3, passes those). Rule 3 takes the only all-IS_DEFAULT path, else
+the only path with no overridden step (a non-default step beside a default role between the same two tables).
+Measured on the live MICRONITEV6A schema read into a fresh repository (`repo seed-fb`, read-only), on a COPY: pairs
+274 / 1,089 / 1,653 (= the draft) and 10 / 332 / 1,165 with more than one path. The draft's 11 / 334 / 1,168 counted the
+two-column FK_PROBLEMS12 once per column (a script counting per column reproduces 11 / 334 / 1,168 exactly); counted
+once, 1 / 2 / 3 pairs fewer at depth 1 / 2 / 3.
+
 ## 4. Delivery 1: JOIN (Firebird SQL)
 
 Input: the dataset's DFM SQL (parsed by DfmReadSql), the selected fields, their bindings. Steps:

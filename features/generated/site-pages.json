@@ -400,7 +400,7 @@
     "version": "1.54.0-alpha"
   },
   "features/field-repository.md": {
-    "hash": "fc750bfc1d33918930ea851e43649124ae1b490f3f0c256f67a879fced430e1e",
+    "hash": "b97fe72fc17a5a69e8f3914add944766484034262e981d559deccab611ae8ea6",
     "version": "1.54.1-alpha"
   },
   "features/finalization-after-dependency.md": {
