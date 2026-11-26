@@ -183,10 +183,12 @@ begin
     if VName <> '' then
       AddWrite(Result, VName, LineAt(VCode, VMatch.Index));
   end;
-  for VField in pFields do
-    for VMatch in TRegEx.Matches(VCode, '(?<![\w.])(?:Self\s*\.\s*)?' + TRegEx.Escape(VField.Name) + '\s*\.\s*\w+' + ASSIGN,
-      [roIgnoreCase]) do
-      AddWrite(Result, VField.Value, LineAt(VCode, VMatch.Index));
+  if Length(pFields) = 0 then
+    Exit;
+  for VMatch in TRegEx.Matches(VCode, '(?<![\w.])(?:Self\s*\.\s*)?(\w+)\s*\.\s*\w+' + ASSIGN) do
+    for VField in pFields do
+      if SameText(VField.Name, VMatch.Groups[1].Value) then
+        AddWrite(Result, VField.Value, LineAt(VCode, VMatch.Index));
 end;
 
 end.
