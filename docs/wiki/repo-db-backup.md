@@ -14,6 +14,8 @@ drag-lint repo backup purge --keep <N> [--connection "<Firebird connection strin
 ([[field-repository]]). Everything else on the line makes it a database verb: a flag or word that does not belong, has no
 value (`--connection ""`) or is given twice is an error (exit 1) and nothing is written, so a forgotten `--connection`
 never ends in a text backup. `list` / `purge` stand directly after `backup`.
+Beside `--repo` the error names the flag that does not belong and says to drop it (1.54.1); `--repo` with
+`--connection` says which of the two to drop.
 
 | Flag | Meaning |
 |---|---|
