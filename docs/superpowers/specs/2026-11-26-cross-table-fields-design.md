@@ -1,6 +1,7 @@
 # Fields that need data of other tables (cross-table fields) -- design 2026-11-26
 
-Status: DESIGN, nothing built. Lane `lane/v155-xtable` (spec only). Owner answers to the open questions: section 12.
+Status: DESIGN APPROVED 2026-11-26 (owner: XQ1-XQ14 all A, section 12; FireDAC copy sources added to X3, section 3.1).
+Lane `lane/v155-xtable`; slice X1 is being built there.
 
 Inputs:
 * Goals draft `2026-11-25-cross-table-fields-goals-DRAFT.md` (G1-G8, N1-N7, owner answers P1-P4 in its sections 9-10).
@@ -112,6 +113,7 @@ it is composed from stored bindings, not searched. Cycle guard as today, over (t
 | ORIGIN 2.3: calc of a join reading ONE table | home = that table | built |
 | NEW: calc of a join reading SEVERAL tables (60 in M2022) | home = the CHILD END (below), inputs = aliases | 1.55 |
 | NEW: kbmMemTable `AttachedTo = X` in the DFM, `AttachTable(X)` in code (Q7) | the memtable has X's fields, so X's origins, transitively | 1.55 (DFM + direct call) |
+| NEW (owner 2026-11-26): TFDDataSet literal calls `T.CloneCursor(S, ...)`, `T.CopyDataSet(S, ...)`, `T.CopyData(S)`, `T.AppendData(S)`, and the assignment `T.Data := S.Data` | the same role as AttachedTo: link T -> S, follow transitively; a field of T named like a field of S gets S's origin | 1.55 (X3) |
 | Survey steps 2a-4 (bulk copy, created in code, AssignRecord, field copies) | per-field origins of memtables | later slices (9) |
 
 CHILD END rule for a calc over several tables: the home is the ONE table among the inputs' tables from which every
@@ -123,6 +125,32 @@ AttachedTo: the DFM property and a literal `X.AttachTable(Y...)` call in the for
 arrays (INSPFLDR.pas:10168), variables or other forms are not followed. In M2022's tip only one link exists
 (INSPFLDR.pas:2373), so the measured gain there is small: the survey's +64 calc of step 6 came from the hg rev 25 DFMs
 and is NOT claimed (Q7: M2022 is not fixed). The lost-link warning is a later slice (January, Q7).
+
+FireDAC copy sources (owner 2026-11-26). Read from the index: the call sites of CloneCursor / CopyDataSet / CopyData /
+AppendData (`find-callers`, bare name) and the writes of `Data` (`usages`); a site counts only when the receiver and
+argument 0 are literal dataset names (`X`, `Self.X`, `dm.X`, a field of the form or a data module the unit uses), with
+comments removed from the argument (M2022 has `tblIPChartB.CopyDataSet({ dmlGlbReadings.tblIPChart }qryLoadIPSamples)`).
+The link target -> source is followed transitively with a cycle guard; two different sources for one target = report
+(survey rule "never pick"); a copy into a dataset that ALSO gets field writes keeps the copy as origin only for the
+fields not written afterwards (survey events overlap; per field, as the ORIGIN unit is the field). Locals, arrays,
+parameters and FindComponent are not followed.
+
+Measured 2026-11-26, read-only (M2022: the survey's index copy `MEMSURVEY\m.sqlite`; Micronite2027: a copy of
+`C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite`, 663 files, 2 changed since built; script output
+`C:\TEMP\claude\lanes\v155\XTABLE\scratch\fd-copy-calls.csv`):
+
+| | CloneCursor | CopyDataSet | CopyData | AppendData | `Data :=` of a dataset |
+|---|---|---|---|---|---|
+| M2022 call sites (literal) | 6 (6) | 131 (130) | 0 | 0 | 0 (188 writes of `Data`, none a dataset) |
+| Micronite2027 call sites (literal) | 1 (1) | 0 | 0 | 0 | 0 |
+
+M2022: 91 of the 245 no-SQL datasets are the target of a literal site; 75 of them get a source that has a table
+(73 directly, 2 through another target), carrying 67 calc and 39 lookup fields. 1.54.1 resolves none of the 245, so that
+is the X3 gain from these sources (INFERRED: datasets matched by unit + name, the source by name only; X3 measures it
+with the engine). Of the survey's 111 unresolved datasets only 4 are linked (the survey already followed these copies
+as step 2a). Micronite2027: one site (`FIgnoreTbl.CloneCursor(FRegionsTbl, ...)`, Blueprint4.PDFImport.ViewModel.pas:1565,
+two fields of a view model, no DFM dataset): the CLIENT fills its memory tables through the pipe (cmdDelta), so these
+sources resolve about nothing there; its origins need the delta / view-model path (not designed).
 
 ### 3.2 The relation graph and the path (N2, N3, P1 B)
 
@@ -229,7 +257,7 @@ DRAGLINT_EXTRACTOR_VERSION: unchanged by every slice here (read-dfm reads DFM / 
 |---|---|---|
 | **1.55** | X1 schema 4: three tables, migrate 3 -> 4, `#DLREPO 4`, `repo check` rules (2.3), `{{ALIAS.F}}` legal when declared, CalcDependencies + ExpandSelection over aliases (2.4) | fixtures green; migrate of a 1.54 repository copy byte-checked |
 | **1.55** | X2 relation graph + path finder (pure unit) and `repo paths` | reproduces the draft's 274/1,089/1,653 and 11/334/1,168 on MICRONITEV6A facts |
-| **1.55** | X3 read-dfm: join conditions parsed; calc of a join over SEVERAL tables -> child-end home + aliases + bindings from the form's joins; AttachedTo (DFM) + literal AttachTable | of M2022's 60 SEVERAL calc fields, the count that gets a home and a full binding is MEASURED and reported (no target promised); 0 wrong home in a 20-field sample read by hand |
+| **1.55** | X3 read-dfm: join conditions parsed; calc of a join over SEVERAL tables -> child-end home + aliases + bindings from the form's joins; AttachedTo (DFM) + literal AttachTable; literal CloneCursor / CopyDataSet / CopyData / AppendData / `Data :=` links (3.1) | of M2022's 60 SEVERAL calc fields, the count that gets a home and a full binding is MEASURED and reported (no target promised); 0 wrong home in a 20-field sample read by hand |
 | **1.55** | X4 `repo compose-sql`, Firebird dialect, dry run, proof P1-P2 (P3-P4 when `--connection` is given) | fixture forms: added joins reused / added, refusals of section 4 step 4; IPCHART -> MSCLIST on a copy of MICRONITEV6A proved P1-P4 |
 | 1.56 | apply into the DFM (repo -> DFM engine, the dataset's SQL and new persistent fields); IDE dialog "also needs ..."; unique indexes into the schema facts (OWNER Q7) | round trip on the all-kinds fixture; IDE test |
 | 1.57 | KEYED delivery with the generated key proof; Local SQL dialect | CLIENT memtable fixture: same value as the join delivery |
@@ -264,7 +292,14 @@ a 1:1 pair; forms uXJoin.dfm / .pas, uXMem.dfm / .pas with AttachedTo).
 * Unique indexes behind the 34 M2022 conditions with no FK (3.2).
 * How many of the 60 SEVERAL calc fields have a child end: not counted (X3 measures it).
 
-## 12. OWNER QUESTIONS (A = recommended)
+## 12. OWNER QUESTIONS (A = recommended) -- ANSWERED 2026-11-26: all A
+
+Rulings (owner, 2026-11-26, via the coordinator): XQ1-XQ14 = A, as written below. So: `{{ALIAS.FIELD}}` with declared
+aliases; alias = target table name (`_2` for a second path); home = child end, else ask; default binding + per-dataset
+override; depth 3; form relations offered once; unique indexes in 1.56; parameterised SQL proved statically only;
+COUNT + 500 rows; added join columns read-only with ProviderFlags []; AttachedTo from current sources only; KEYED
+fetches a missing key when the form has a connection; 1.55 composes as a dry run; KEYED + Local SQL in 1.57.
+Addition: FireDAC CloneCursor / CopyDataSet / CopyData / AppendData / `Data :=` as origin sources in X3 (3.1).
 
 1. Foreign input syntax in stored code: A `{{ALIAS.FIELD}}` with aliases declared per field (2.1); B `{{TABLE.FIELD}}` with table names only. -- B cannot hold two paths to one table.
 2. Default alias name: A the target table name when the field reaches it by one path, `<TABLE>_2` for a second; B always the role name. -- A reads like the owner's `T2.B`.
