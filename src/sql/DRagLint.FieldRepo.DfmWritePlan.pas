@@ -36,7 +36,7 @@ type
     /// <summary>Dataset and field component names.</summary>
     Dataset: string;
     Component: string;
-    /// <summary>dwaDelete: FieldName of the removed field.</summary>
+    /// <summary>dwaDelete: FieldName of the removed field; dwaEvent: FieldName of the field the handler is for.</summary>
     FieldName: string;
     /// <summary>Class of the field (its declaration in the unit, the order of its properties).</summary>
     FieldClass: string;
@@ -368,6 +368,7 @@ type
     procedure PlanEvents(const pComponent, pFieldClass: string; const pHandlers: TArray<TDfmrPair>; const pRow: TRepoField;
       const pRequires: TArray<Integer>);
     procedure TryEvent(const pItem: TDfmwItem);
+    function HandlerClash(pIndex: Integer): string;
   public
     constructor Create(pRepo: TFDConnection);
     destructor Destroy; override;
@@ -1684,6 +1685,18 @@ begin
   CheckUnit(VPas, FPlan.Files[FFileIndex], VTrial);
 end;
 
+{ The reason when an earlier planned handler has the same name (the names keep only identifier characters, so ORDER-NO and
+  ORDERNO meet); the apply would fail on the second one. A name the unit already has is found by TryEvent. }
+function TDfmWritePlanner.HandlerClash(pIndex: Integer): string;
+var
+  VI: Integer;
+begin
+  Result := '';
+  for VI := 0 to pIndex - 1 do
+    if (FItems[VI].Action = dwaEvent) and (FItems[VI].FileIndex = FItems[pIndex].FileIndex) and SameText(FItems[VI].Literal, FItems[pIndex].Literal) then
+      Exit('handler ' + FItems[pIndex].Literal + ' is the name of two fields: ' + FItems[VI].FieldName + ' and ' + FItems[pIndex].FieldName);
+end;
+
 { One unchecked change per TField event the repository holds code for and the field has no handler for. }
 procedure TDfmWritePlanner.PlanEvents(const pComponent, pFieldClass: string; const pHandlers: TArray<TDfmrPair>;
   const pRow: TRepoField; const pRequires: TArray<Integer>);
@@ -1707,12 +1720,15 @@ begin
     VItem := NewItem(dwaEvent, pComponent, pFieldClass);
     VItem.PropName := VEvent;
     VItem.Literal := HandlerName(FDataset.Name, pRow.FieldName, VEvent);
+    VItem.FieldName := pRow.FieldName;
     VItem.MethodParams := FieldEventSignature(VEvent);
     VItem.Requires := pRequires;
     if not NewHandlerRegion(HandlerFields, pComponent, VEvent, pRow.Events[VI], sLineBreak, VItem.MethodBody, VReason) then
       VItem.MethodBody := '';
     VIndex := AddItem(VItem, fcoInsert, '', VItem.Literal);
     FChanges.List[VIndex].Checked := False;
+    if FChanges.List[VIndex].Blocked = '' then
+      Block(VIndex, HandlerClash(VIndex));
     if VItem.MethodBody = '' then
       Block(VIndex, VReason);
   end;

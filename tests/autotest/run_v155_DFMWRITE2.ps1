@@ -141,6 +141,26 @@ try {
   $r = Write-Dfm @() (Join-Path $cf 'uAllKinds.dfm')
   Check 'E5 a name the unit already has: BLOCKED' ($r.Out -match 'memOrdersQTY OnGetText:  -> memOrdersQTYGetText\n  BLOCKED: uAllKinds\.pas: the unit already has memOrdersQTYGetText') $r.Out
 
+  # two fields whose names differ only by non-identifier characters get one handler name: the second is BLOCKED in the plan
+  $c2 = Get-Content -LiteralPath $bk -Raw
+  $pi = $c2.IndexOf('[DL_FIELDS_INFO ORDERS|PRICE]'); $qi = $c2.IndexOf('[DL_FIELDS_INFO ORDERS|QTY]')
+  $dup = $c2.Substring($pi, $qi - $pi).Replace('ORDERS|PRICE', 'ORDERS|PRI-CE')
+  $c2 = $c2.Substring(0, $qi) + $dup + $c2.Substring($qi)
+  $c2 = $c2.Replace('#end DL_FIELDS_INFO 17', '#end DL_FIELDS_INFO 18')
+  $bk2 = Join-Path $work 'bk2.txt'; [IO.File]::WriteAllText($bk2, $c2)
+  $y2 = Join-Path $work 'y2.dlrepo'
+  $null = Run @('repo', 'restore', '--repo', $y2, '--in', $bk2)
+  $hf = NewForms 'handlerclash'
+  $hdfm = Join-Path $hf 'uAllKinds.dfm'; $hpas = Join-Path $hf 'uAllKinds.pas'
+  $hOldDfm = Text $hdfm; $hOldPas = Text $hpas
+  $hn = @('--dataset', 'memOrders', '--names', 'ID,QTY,NOTE,OLDCOL,USEDCOL,PRICE,PRI-CE')
+  $r = Write-Dfm $hn $hdfm $y2
+  Check 'E11a two fields with one handler name: the second event is BLOCKED naming both' (($r.Out -match 'memOrdersPRICE OnGetText:  -> memOrdersPRICEGetText\n  \(unchecked\)') -and ($r.Out -match 'BLOCKED: handler memOrdersPRICEGetText is the name of two fields: (PRICE and PRI-CE|PRI-CE and PRICE)')) $r.Out
+  $all = @([regex]::Matches($r.Out, '(?m)^\[(\d+)\] ') | ForEach-Object { $_.Groups[1].Value })
+  PutSel $sel $r $all
+  $rs = Write-Dfm ($hn + @('--select', $sel)) $hdfm $y2
+  Check 'E11b selecting the blocked event is refused, the files stay as they were' (($rs.Code -eq 2) -and ($rs.Out -match 'change \d+ is blocked: handler memOrdersPRICEGetText is the name of two fields') -and ((Text $hdfm) -ceq $hOldDfm) -and ((Text $hpas) -ceq $hOldPas)) $rs.Out
+
   # ---- Q3(2): removing a field takes its grid items ----
   $rf = NewForms 'remove'
   $rdfm = Join-Path $rf 'uAllKinds.dfm'; $rpas = Join-Path $rf 'uAllKinds.pas'
