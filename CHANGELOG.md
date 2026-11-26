@@ -6,6 +6,10 @@ breaking changes** until v2.0.
 ## Unreleased -- 1.55
 
 - LINT (QIL, owner Q8): `query-in-loop` is now ON by default (was OFF in 1.54): a query run once per loop iteration is very slow, BDE most of all. Rules: 463 total, 375 on by default. Turn it off with `"disabled": ["query-in-loop"]` or a `dl:ok` marker.
+- CLI (BKNAME review fixes): a backup made by a server on another machine is recorded and printed as `remote, not verified` (text, `--json` `verified`, `repo backup list`, the `repo alter-table --apply` backup line), no longer as `quick`; `--backup-name` with a remote server is refused (exit 1 before connecting) because gbak would silently overwrite a same-named file there: the automatic time-stamped name is used (default ruling, one check: `RemoteNameProblem`).
+- CLI (BKNAME, Q10 = B): `repo backup --connection` and `repo alter-table --apply` ALLOW a Firebird server on another machine. The server writes the backup on its own disk; the host and that path are printed, recorded (list: `host`, state `remote`) and in `--json` (`host`). The restore test is not possible from here, so `--verify quick` must be given explicitly (without it: exit 1 before anything is opened); free space is not checked; `purge` never deletes a remote entry. A server named like this computer, or `localhost`, stays local.
+- CLI (BKNAME, Q-ALTER-3 = B): with `--hook micronite`, a successful `repo alter-table --apply` is followed by a DRY RUN of `repo update-orm` for the table (`--code-dir`, `--server-dir`, `--client-dir`) that lists the ORM units that would change and their count; it never writes and a failure only warns.
+- CLI (BKNAME): a database backup (`repo backup --connection`, and the one `repo alter-table --apply` makes first) is named `DLFR_BACKUP_<database>_<yyyymmdd>_<hhnnss>.fbk` (a second backup of the same second gets `_2`); new `--backup-name <name>` on both verbs chooses the name (a name, not a path; `.fbk` added; an existing file is refused). `repo backup purge` still deletes backups recorded under the old `<database>-yyyymmdd-hhnnsszzz.fbk` form, the new form and chosen names (the list marks them `named`).
 
 ## v1.54.1-alpha -- 2026-11-26
 

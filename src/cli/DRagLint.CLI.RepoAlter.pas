@@ -12,7 +12,7 @@ interface
 /// <param name="pJson">--json: one JSON object on stdout.</param>
 /// <returns>0 = ok (a dry run included, and an apply with nothing to do); 1 = bad arguments, no such table, a refused or
 /// failed apply (the report is still printed when groups ran).</returns>
-/// <remarks>An apply first makes a verified backup of the database (DRagLint.CLI.RepoBackup: --backup-dir, --verify
+/// <remarks>An apply first makes a verified backup of the database (DRagLint.CLI.RepoBackup: --backup-dir, --backup-name <name>, --verify
 /// full|quick; --project names the project whose setting gives the folder); when that fails nothing is changed.
 /// DRY RUN unless --apply is on the command line; --select &lt;file&gt; only chooses, it does not write (with --apply
 /// it must hold the "plan &lt;hash&gt;" line of the dry run its ids come from; another plan is refused);
@@ -222,6 +222,11 @@ begin
     Result := if VReport.Outcome.Success then EXIT_OK else EXIT_FAIL;
   end;
   PrintReport(VReport, pJson);
+  { owner Q-ALTER-3 = B: the ORM units that the alter outdated, as a dry run; never changes the result }
+  if pArgs.Apply and VReport.HasOutcome then
+    for VLine in MicroniteOrmFollowUp(pArgs.Hook, VReport.Outcome.Success, pPath, pArgs.Table, CommandLineValue('--code-dir'),
+      CommandLineValue('--server-dir'), CommandLineValue('--client-dir')) do
+      if pJson then Writeln(ErrOutput, VLine) else Writeln(VLine);
 end;
 
 function RunRepoAlterTable(const pPath, pConnection: string; pJson: Boolean): Integer;
@@ -238,8 +243,8 @@ begin
     else
     begin
       RequireFbConnectionSafe(pConnection);
-      if VArgs.Apply then
-        RequireLocalFbServer(pConnection); // a backup is not possible: found before anything is opened
+      if VArgs.Apply and (RemoteBackupProblem(pConnection) <> '') then
+        raise Exception.Create(RemoteBackupProblem(pConnection)); // found before anything is opened
       Result := AlterTable(VArgs, pPath, pConnection, pJson);
     end;
   except

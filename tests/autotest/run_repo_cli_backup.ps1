@@ -103,7 +103,7 @@ COMMIT;
   $cs = "Database=$fdb;User_Name=SYSDBA;Password=$pw"
   $r = Run @('repo', 'backup', '--connection', $cs)
   $made = Fbk $dbDir
-  Check 'C3a a verified backup beside the database, the total printed, no password' (($r.Code -eq 0) -and ($made.Count -eq 1) -and ($made[0].Name -match '(?i)^scratch-\d{8}-\d{9}\.fbk$') -and
+  Check 'C3a a verified backup beside the database, the total printed, no password' (($r.Code -eq 0) -and ($made.Count -eq 1) -and ($made[0].Name -match '(?i)^DLFR_BACKUP_scratch_\d{8}_\d{6}\.fbk$') -and
     ($r.Out -match 'verified full: 1 table\(s\)') -and ($r.Out -match 'backups on disk: 1 file\(s\), \d+ bytes in total') -and ($r.Out -notmatch $pw)) $r.Out
   Check 'C3b only database and backup are in the folder' (@(Get-ChildItem -LiteralPath $dbDir).Count -eq 2) ((Get-ChildItem -LiteralPath $dbDir).Name -join ',')
   $r = Run @('repo', 'backup', '--connection', $cs, '--verify', 'quick', '--table', 't', '--json')

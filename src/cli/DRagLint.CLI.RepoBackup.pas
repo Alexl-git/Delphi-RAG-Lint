@@ -28,9 +28,14 @@ function IsRepoDbBackup(const pSub, pConnection: string): Boolean;
 /// the database the connection opens.</remarks>
 function RunRepoDbBackup(const pRepo, pConnection: string; pJson: Boolean): Integer;
 
-/// <summary>What is wrong with --verify on this command line.</summary>
+/// <summary>What is wrong with --verify or --backup-name on this command line.</summary>
 /// <returns>'' = usable.</returns>
 function BackupArgsProblem: string;
+
+/// <summary>What stops a backup of the server of --connection with the --verify of this command line.</summary>
+/// <param name="pConnection">--connection.</param>
+/// <returns>'' = nothing; a server on another machine needs --verify quick given explicitly (see RemoteVerifyProblem).</returns>
+function RemoteBackupProblem(const pConnection: string): string;
 
 /// <summary>Makes the verified, recorded backup of `alter-table --apply`.</summary>
 /// <param name="pConnection">--connection.</param>
@@ -158,7 +163,7 @@ begin
   else if SameText(pWord, WORD_PURGE) then
     Result := StrayArgument(WORD_ARG + 1, [FLAG_CONNECTION, FLAG_KEEP], [FLAG_APPLY, FLAG_DRY_RUN, FLAG_JSON])
   else
-    Result := StrayArgument(WORD_ARG, [FLAG_CONNECTION, '--verify', FLAG_TABLE, '--backup-dir', '--project'], [FLAG_JSON]);
+    Result := StrayArgument(WORD_ARG, [FLAG_CONNECTION, '--verify', FLAG_TABLE, '--backup-dir', '--backup-name', '--project'], [FLAG_JSON]);
 end;
 
 { '' = usable; else what is wrong with the arguments of a database backup, its list or its purge. }
@@ -194,9 +199,19 @@ begin
 end;
 
 function BackupArgsProblem: string;
+var
+  VFile, VProblem: string;
 begin
   Result := if CommandLineFlag('--verify') and not MatchText(CommandLineValue('--verify'), [VERIFY_FULL, VERIFY_QUICK]) then
     '--verify takes full (default: restore test) or quick' else '';
+  if (Result = '') and CommandLineFlag('--backup-name') then
+  begin
+    VProblem := ResolveBackupName(CommandLineValue('--backup-name'), VFile);
+    if VProblem <> '' then
+      Result := '--backup-name: ' + VProblem;
+    if (Result = '') and CommandLineFlag(FLAG_CONNECTION) then
+      Result := RemoteNameProblem(CommandLineValue(FLAG_CONNECTION), CommandLineValue('--backup-name'));
+  end;
 end;
 
 function ManifestFile: string;
@@ -242,6 +257,11 @@ begin
     Result := SettingBackupDir;
 end;
 
+function RemoteBackupProblem(const pConnection: string): string;
+begin
+  Result := RemoteVerifyProblem(pConnection, if SameText(CommandLineValue('--verify'), VERIFY_QUICK) then fvmQuick else fvmFull);
+end;
+
 function MakeBackup(const pConnection, pTable: string; pIdentity: Int64): TFrAlterBackup;
 var
   VRequest: TFrBackupRequest;
@@ -250,6 +270,7 @@ begin
   VRequest := Default(TFrBackupRequest);
   VRequest.Connection := pConnection;
   VRequest.BackupDir := BackupDir;
+  VRequest.BackupName := CommandLineValue('--backup-name');
   VRequest.TableName := pTable;
   VRequest.Identity := pIdentity;
   VRequest.Verify := if SameText(CommandLineValue('--verify'), VERIFY_QUICK) then fvmQuick else fvmFull;
@@ -262,6 +283,7 @@ begin
   Result.Tables := VMade.Tables;
   Result.Rows := VMade.Rows;
   Result.Leftover := VMade.Leftover;
+  Result.Host := VMade.Entry.Host;
   Result.TotalSize := TotalBackupSize(ReadBackupManifest(ManifestFile), Result.TotalFiles);
 end;
 
@@ -307,12 +329,13 @@ begin
   Result.AddPair('size', TJSONNumber.Create(pEntry.Size));
   Result.AddPair('created_utc', DateToISO8601(pEntry.CreatedUtc, True));
   Result.AddPair('verified', VERIFIED_NAMES[pEntry.Verified]);
+  Result.AddPair('host', pEntry.Host);
 end;
 
 function EntryText(const pEntry: TFrBackupEntry): string;
 begin
-  Result := Format('%s  %d bytes  %s UTC  verified %s  (%s)', [pEntry.FileName, pEntry.Size, FormatDateTime(DATE_FORMAT, pEntry.CreatedUtc),
-    VERIFIED_NAMES[pEntry.Verified], pEntry.Database]);
+  Result := Format('%s%s  %d bytes  %s UTC  %s  (%s)', [if pEntry.Host = '' then '' else pEntry.Host + ': ', pEntry.FileName, pEntry.Size,
+    FormatDateTime(DATE_FORMAT, pEntry.CreatedUtc), if pEntry.Verified = fbvRemote then 'NOT verified (remote)' else 'verified ' + VERIFIED_NAMES[pEntry.Verified], pEntry.Database]);
 end;
 
 { The recorded backups of one database; '' = of every one. }

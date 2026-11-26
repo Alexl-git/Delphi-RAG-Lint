@@ -13,9 +13,9 @@ type
   /// <summary>Raised when a backup, its verification or the manifest fails.</summary>
   EFrBackupError = class(Exception);
 
-  /// <summary>How far a backup was verified. fbvFull = restored and compared; fbvQuick = only written; fbvFailed = the
+  /// <summary>How far a backup was verified. fbvFull = restored and compared; fbvQuick = only written; fbvRemote = made by a server on another machine, nothing checked; fbvFailed = the
   /// verification failed.</summary>
-  TFrBackupVerified = (fbvFailed, fbvQuick, fbvFull);
+  TFrBackupVerified = (fbvFailed, fbvQuick, fbvFull, fbvRemote);
 
   /// <summary>One backup file drag-lint made.</summary>
   TFrBackupEntry = record
@@ -27,10 +27,16 @@ type
     ModifiedUtc: TDateTime;
     CreatedUtc: TDateTime;
     Verified: TFrBackupVerified;
+    /// <summary>True when the user chose the file name (--backup-name): a purge then accepts any plain full path ending in
+    /// .fbk, not only the names drag-lint gives by itself. Written to the list as "named"; absent = False.</summary>
+    Named: Boolean;
+    /// <summary>The server host when the backup was written on the disk of ANOTHER machine (the file name is then a path on that
+    /// server, and Size / ModifiedUtc are 0); '' = this machine. Written to the list as "host"; absent = ''.</summary>
+    Host: string;
   end;
 
   /// <summary>The file behind an entry: as recorded, different, or gone.</summary>
-  TFrBackupFileState = (ffsMatch, ffsChanged, ffsMissing);
+  TFrBackupFileState = (ffsMatch, ffsChanged, ffsMissing, ffsRemote);
 
   /// <summary>What a purge does with an entry. fpaSkip = the file is not as recorded and is left alone; fpaForget = the
   /// file is gone, only the entry goes.</summary>
@@ -47,9 +53,9 @@ type
 
 const
   /// <summary>Names of TFrBackupVerified in reports and in the manifest.</summary>
-  VERIFIED_NAMES: array[TFrBackupVerified] of string = ('failed', 'quick', 'full');
+  VERIFIED_NAMES: array[TFrBackupVerified] of string = ('failed', 'quick', 'full', 'remote, not verified');
   /// <summary>Names of TFrBackupFileState in reports.</summary>
-  FILE_STATE_NAMES: array[TFrBackupFileState] of string = ('ok', 'changed', 'missing');
+  FILE_STATE_NAMES: array[TFrBackupFileState] of string = ('ok', 'changed', 'missing', 'remote');
   /// <summary>Names of TFrPurgeAction in reports.</summary>
   PURGE_ACTION_NAMES: array[TFrPurgeAction] of string = ('keep', 'delete', 'skip', 'forget');
 
@@ -72,7 +78,8 @@ function BackupManifestLockName(const pManifest: string): string;  // dl:ok unus
 
 /// <summary>Compares the file of an entry with what was recorded.</summary>
 /// <param name="pEntry">The entry.</param>
-/// <returns>ffsMatch only when size and last write time are unchanged.</returns>
+/// <returns>ffsRemote for an entry with a Host (the file is on another machine and is never looked at); else ffsMatch only when size
+/// and last write time are unchanged.</returns>
 function BackupFileState(const pEntry: TFrBackupEntry): TFrBackupFileState;
 
 /// <summary>Bytes of the recorded backups whose file is still as recorded.</summary>
@@ -102,7 +109,7 @@ function PlanBackupPurge(const pEntries: TArray<TFrBackupEntry>; pKeep: Integer)
 /// <returns>The plan for that database; Error is set where a deletion failed (that entry stays).</returns>
 /// <exception cref="EFrBackupError">The manifest is malformed or locked, pKeep is below 1, pApply without a database, or the
 /// manifest could not be written afterwards (the message names the deleted files).</exception>
-/// <remarks>Attributes, size and date are checked again on the handle the file is deleted through, so a file that
+/// <remarks>An entry with a Host (a backup on another machine) is always skipped: it is shown, never deleted. Attributes, size and date are checked again on the handle the file is deleted through, so a file that
 /// was swapped after the plan is not deleted.</remarks>
 function PurgeBackups(const pManifest, pDatabase: string; pKeep: Integer; pApply: Boolean;
   const pBeforeDelete: TProc<string> = nil): TArray<TFrPurgeItem>;
@@ -110,8 +117,17 @@ function PurgeBackups(const pManifest, pDatabase: string; pKeep: Integer; pApply
 /// <summary>The name of a backup file made now.</summary>
 /// <param name="pDatabase">The database file.</param>
 /// <param name="pNow">Local time.</param>
-/// <returns>&lt;database&gt;-yyyymmdd-hhnnsszzz.fbk, the only form of name a purge deletes.</returns>
-function BackupFileName(const pDatabase: string; pNow: TDateTime): string;
+/// <param name="pSuffix">0 or 1 = none; 2 or more appends _<n> (a second backup of the same second).</param>
+/// <returns>DLFR_BACKUP_&lt;database&gt;_yyyymmdd_hhnnss.fbk (from 1.55; before it &lt;database&gt;-yyyymmdd-hhnnsszzz.fbk).
+/// A purge deletes entries made under either form, with or without the _&lt;n&gt; suffix, and files named by --backup-name
+/// only when the entry says so (TFrBackupEntry.Named).</returns>
+function BackupFileName(const pDatabase: string; pNow: TDateTime; pSuffix: Integer = 0): string;
+
+/// <summary>Checks a --backup-name and gives the file name it makes.</summary>
+/// <param name="pName">The name as typed: a name, not a path.</param>
+/// <param name="pFile">The file name: pName with .fbk added when it does not end in it. '' when refused.</param>
+/// <returns>'' = usable; else what is wrong (empty, a path or drive in it, characters Windows refuses, a trailing dot).</returns>
+function ResolveBackupName(const pName: string; out pFile: string): string;
 
 implementation
 
@@ -136,12 +152,17 @@ const
   KEY_MODIFIED = 'modified_utc';
   KEY_CREATED = 'created_utc';
   KEY_VERIFIED = 'verified';
+  KEY_NAMED = 'named';
+  KEY_HOST = 'host';
   MANIFEST_VERSION = 1;
   LOCK_WAIT_MS = 5000;
   { a file time keeps 100 ns, a TDateTime in ISO text one millisecond }
   SAME_DATE_MS = 2;
   BACKUP_EXT = '.fbk';
+  { old form <db>-yyyymmdd-hhnnsszzz.fbk, or the 1.55 form DLFR_BACKUP_<db>_yyyymmdd_hhnnss[_n].fbk }
   STAMP_PATTERN = '-\d{8}-\d{9}';
+  STAMP_PATTERN_NEW = '_\d{8}_\d{6}(_\d+)?';
+  NEW_PREFIX = 'DLFR_BACKUP_';
 
 type
   { SetFileInformationByHandle, class FileDispositionInfo }
@@ -178,6 +199,8 @@ begin
     Result.ModifiedUtc := ISO8601ToDate(pNode.GetValue<string>(KEY_MODIFIED), True);
     Result.CreatedUtc := ISO8601ToDate(pNode.GetValue<string>(KEY_CREATED), True);
     VVerified := pNode.GetValue<string>(KEY_VERIFIED);
+    pNode.TryGetValue<Boolean>(KEY_NAMED, Result.Named);
+    pNode.TryGetValue<string>(KEY_HOST, Result.Host);
   except
     on E: Exception do
       raise Malformed(pManifest);
@@ -237,6 +260,10 @@ begin
       VItem.AddPair(KEY_MODIFIED, DateToISO8601(VEntry.ModifiedUtc, True));
       VItem.AddPair(KEY_CREATED, DateToISO8601(VEntry.CreatedUtc, True));
       VItem.AddPair(KEY_VERIFIED, VERIFIED_NAMES[VEntry.Verified]);
+      if VEntry.Named then
+        VItem.AddPair(KEY_NAMED, TJSONBool.Create(True));
+      if VEntry.Host <> '' then
+        VItem.AddPair(KEY_HOST, VEntry.Host);
       VList.AddElement(VItem);
     end;
     WriteJsonFileAtomic(pManifest, VRoot);
@@ -277,6 +304,8 @@ end;
 
 function BackupFileState(const pEntry: TFrBackupEntry): TFrBackupFileState;
 begin
+  if pEntry.Host <> '' then
+    Exit(ffsRemote);
   if not TFile.Exists(pEntry.FileName) then
     Exit(ffsMissing);
   Result := if (TFile.GetSize(pEntry.FileName) = pEntry.Size) and
@@ -309,9 +338,30 @@ begin
     end));
 end;
 
-function BackupFileName(const pDatabase: string; pNow: TDateTime): string;
+function BackupFileName(const pDatabase: string; pNow: TDateTime; pSuffix: Integer): string;
+const
+  FIRST_SUFFIX = 2;
 begin
-  Result := ChangeFileExt(ExtractFileName(pDatabase), '') + FormatDateTime('"-"yyyymmdd"-"hhnnsszzz', pNow) + BACKUP_EXT;
+  Result := NEW_PREFIX + ChangeFileExt(ExtractFileName(pDatabase), '') + FormatDateTime('"_"yyyymmdd"_"hhnnss', pNow) +
+    (if pSuffix >= FIRST_SUFFIX then '_' + IntToStr(pSuffix) else '') + BACKUP_EXT;
+end;
+
+function ResolveBackupName(const pName: string; out pFile: string): string;
+begin
+  pFile := '';
+  Result := '';
+  if Trim(pName) = '' then
+    Result := 'the name is empty'
+  else if pName.IndexOfAny(['\', '/', ':']) >= 0 then
+    Result := 'give a name, not a path: it has a path separator or a drive (--backup-dir picks the folder)'
+  else if pName.IndexOfAny(['*', '?', '"', '<', '>', '|']) >= 0 then
+    Result := 'the name has a character a file name cannot have'
+  else if pName.EndsWith('.') or pName.EndsWith(' ') or (pName <> Trim(pName)) then
+    Result := 'the name ends in a dot or a space'
+  else if SameText(pName, BACKUP_EXT) then
+    Result := 'the name is only the extension'
+  else
+    pFile := if pName.EndsWith(BACKUP_EXT, True) then pName else pName + BACKUP_EXT;
 end;
 
 function IsReparsePoint(pAttributes: DWORD): Boolean;
@@ -341,14 +391,16 @@ function NameProblem(const pEntry: TFrBackupEntry): string;
 const
   DRIVE_COLON = 2;
 var
-  VName: string;
+  VName, VBase: string;
 begin
   Result := '';
-  VName := '^' + TRegEx.Escape(ChangeFileExt(ExtractFileName(pEntry.Database), '')) + STAMP_PATTERN + '\' + BACKUP_EXT + '$';
+  VBase := TRegEx.Escape(ChangeFileExt(ExtractFileName(pEntry.Database), ''));
+  VName := '^(' + VBase + STAMP_PATTERN + '|' + NEW_PREFIX + VBase + STAMP_PATTERN_NEW + ')\' + BACKUP_EXT + '$';
   if not SameStr(ExpandFileName(pEntry.FileName), pEntry.FileName) or TPath.IsExtendedPrefixed(pEntry.FileName) or pEntry.FileName.StartsWith('\\.\') or
     (LastDelimiter(':', pEntry.FileName) > DRIVE_COLON) then
     Result := 'not a full path in its plain form'
-  else if not TRegEx.IsMatch(ExtractFileName(pEntry.FileName), VName, [roIgnoreCase]) then
+  else if not (pEntry.Named and ExtractFileName(pEntry.FileName).EndsWith(BACKUP_EXT, True)) and
+    not TRegEx.IsMatch(ExtractFileName(pEntry.FileName), VName, [roIgnoreCase]) then
     Result := 'not the name drag-lint gives a backup of this database';
 end;
 
@@ -356,6 +408,11 @@ end;
 function PurgeExclusion(const pEntry: TFrBackupEntry; pTimesListed: Integer; out pReason: string): TFrPurgeAction;
 begin
   Result := fpaSkip;
+  if pEntry.Host <> '' then
+  begin
+    pReason := 'the backup is on the server ' + pEntry.Host + ', not on this machine: drag-lint never deletes it';
+    Exit;
+  end;
   pReason := NameProblem(pEntry);
   if pReason <> '' then
     Exit;
