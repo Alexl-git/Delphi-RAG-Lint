@@ -10,7 +10,7 @@ breaking changes** until v2.0.
 - LINT: `ui-call-in-console-or-service` decides "console program" the same way, in the per-file check and in the `lint-all` cross-unit pass: a `.dproj` with `DCC_ConsoleTarget` is now seen, and `{$APPTYPE CONSOLE}` inside a comment, or followed by `{$APPTYPE GUI}`, no longer counts. Wiki known limit updated.
 - IDE (HOVERNOTE): resting the mouse asks about the place under the pointer (the menu command: the caret); with nothing to show, the drag-lint strip names what is there (an unindexed identifier, a keyword, a word in a comment / string, white space); the note and the reindex progress show side by side.
 - CLI: `repo backup --repo X` with a flag the text backup does not take (e.g. `--json`) names the flag and says to drop it; before, it said "--repo does not go with a database backup" although none was asked for. `--repo` with `--connection` says which of the two to drop.
-- Shipped text: the ConvRules editor's built-in project index is a neutral example path (no customer database name in the binary).
+- Shipped text: the ConvRules editor's built-in project index and the `docs\INSTALL.md` examples are neutral paths (no customer project or database name, no machine-specific folder).
 - CHANGELOG: the 1.51.0 and 1.51.1 dates (their merges to main; neither was tagged).
 - Versions: 1.54.1-alpha (engine and plugin); extractor unchanged, no re-parse.
 
