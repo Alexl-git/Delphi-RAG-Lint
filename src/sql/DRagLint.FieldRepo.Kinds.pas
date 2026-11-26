@@ -14,6 +14,19 @@ type
   /// <summary>Raised for an unknown FIELD_KIND code or a malformed calc-body macro.</summary>
   EFrKindError = class(Exception);
 
+  /// <summary>Raised when a body names `{{ALIAS.FIELD}}` with an alias its field does not declare in DL_FIELD_INPUTS
+  /// (design 2026-11-26-cross-table-fields-design.md 2.1).</summary>
+  EFrAliasError = class(EFrKindError);
+
+  /// <summary>One input of a body: an own field (Alias '') or a field of another table reached through a declared
+  /// input alias.</summary>
+  TFrInput = record
+    /// <summary>'' for an own field, else the alias as written.</summary>
+    Alias: string;
+    /// <summary>The field name as written.</summary>
+    Field: string;
+  end;
+
   /// <summary>The kind of a DL_FIELDS_INFO row (spec 4.1).</summary>
   /// <remarks>Codes: data 1 (NULL reads as data), calc 2, lookup 3, internal-calc 4, aggregate 5,
   /// graphical 10 (a grid column drawn by events; no data field).</remarks>
@@ -21,8 +34,10 @@ type
 
   /// <summary>One `{{FIELD}}` macro found in a calc body.</summary>
   TFrMacro = record
-    /// <summary>The identifier between the braces, as written.</summary>
+    /// <summary>The identifier between the braces, as written; for `{{ALIAS.FIELD}}` the FIELD part.</summary>
     Name: string;
+    /// <summary>'' for `{{FIELD}}`; the ALIAS part of `{{ALIAS.FIELD}}` (ParseMacrosWithAliases only).</summary>
+    Alias: string;
     /// <summary>1-based offset of the opening `{{` in the body.</summary>
     Offset: Integer;
     /// <summary>Length of the whole macro text including both brace pairs.</summary>
@@ -97,6 +112,24 @@ function ParseMacros(const pBody: string): TArray<TFrMacro>;
 /// use of pSelf in its own assignment or before one stays a dependency: `repo check` reports it as a cycle
 /// TOTAL -> TOTAL.</remarks>
 function CalcDependencies(const pBody, pSelf: string): TArray<string>;
+
+/// <summary>As ParseMacros, but `{{ALIAS.FIELD}}` is legal when ALIAS is one of pAliases (design 2.1, ruling R3 as
+/// amended 2026-11-26).</summary>
+/// <param name="pBody">A CALC_BODY or event-column body.</param>
+/// <param name="pAliases">The input aliases the field declares (its default binding); compared case-insensitively.</param>
+/// <returns>The macros in order; Alias is '' for an own field, else the alias as written.</returns>
+/// <exception cref="EFrAliasError">ALIAS is not in pAliases.</exception>
+/// <exception cref="EFrKindError">As ParseMacros, and for a second dot or an empty alias / field part.</exception>
+function ParseMacrosWithAliases(const pBody: string; const pAliases: array of string): TArray<TFrMacro>;  // dl:ok unused-public-symbol@4edc -- REVIEWED 2026-11-26 XTABLE: public API of the X1 rule unit, called by tests\fieldrepo\CrossTableTests.dpr (outside this index) and by later slices (X3 read-dfm, the 1.56 dialog)
+
+/// <summary>The inputs of a body: own fields as CalcDependencies finds them, plus every `{{ALIAS.FIELD}}`.</summary>
+/// <param name="pBody">The body text.</param>
+/// <param name="pSelf">The field that owns the body (same rule as CalcDependencies; an aliased macro is never it).</param>
+/// <param name="pAliases">The declared input aliases of the field.</param>
+/// <returns>Distinct (alias, field) pairs, compared case-insensitively, in order of first appearance, as written.</returns>
+/// <exception cref="EFrAliasError">As ParseMacrosWithAliases.</exception>
+/// <exception cref="EFrKindError">As ParseMacrosWithAliases.</exception>
+function CalcInputs(const pBody, pSelf: string; const pAliases: array of string): TArray<TFrInput>;
 
 implementation
 
@@ -230,9 +263,20 @@ begin
   end;
 end;
 
-function ParseMacros(const pBody: string): TArray<TFrMacro>;
+function IsIdent(const pText: string): Boolean;
 var
-  VPos, VClose, VI: Integer;
+  VI: Integer;
+begin
+  Result := (pText <> '') and IsIdentStart(pText[1]);
+  for VI := 2 to Length(pText) do
+    Result := Result and IsIdentChar(pText[VI]);
+end;
+
+// The macros of a body; pAllowAliases False = an ALIAS.FIELD macro is the reserved error of 1.53, True = legal when
+// ALIAS is in pAliases.
+function ScanMacros(const pBody: string; pAllowAliases: Boolean; const pAliases: array of string): TArray<TFrMacro>;
+var
+  VPos, VClose, VDot: Integer;
   VCode, VInner: string;
   VMacro: TFrMacro;
 begin
@@ -247,19 +291,33 @@ begin
     VInner := Copy(VCode, VPos + MACRO_OPEN_LEN, VClose - VPos - MACRO_OPEN_LEN);
     if VInner = '' then
       raise EFrKindError.CreateFmt('empty macro {{}} at offset %d', [VPos]);
-    if VInner.Contains('.') then
-      raise EFrKindError.CreateFmt('{{TABLE.FIELD}} is not supported (reserved) at offset %d: {{%s}}', [VPos, VInner]);
-    if not IsIdentStart(VInner[1]) then
-      raise EFrKindError.CreateFmt('invalid macro identifier at offset %d: {{%s}}', [VPos, VInner]);
-    for VI := 2 to Length(VInner) do
-      if not IsIdentChar(VInner[VI]) then
-        raise EFrKindError.CreateFmt('invalid macro identifier at offset %d: {{%s}}', [VPos, VInner]);
+    VMacro.Alias := '';
     VMacro.Name := VInner;
+    VDot := Pos('.', VInner);
+    if (VDot > 0) and not pAllowAliases then
+      raise EFrKindError.CreateFmt('{{TABLE.FIELD}} is not supported (reserved) at offset %d: {{%s}}', [VPos, VInner]);
+    if VDot > 0 then
+    begin
+      VMacro.Alias := Copy(VInner, 1, VDot - 1);
+      VMacro.Name := Copy(VInner, VDot + 1, MaxInt);
+      if not (IsIdent(VMacro.Alias) and IsIdent(VMacro.Name)) then
+        raise EFrKindError.CreateFmt('invalid macro {{ALIAS.FIELD}} at offset %d: {{%s}}', [VPos, VInner]);
+      if not MatchText(VMacro.Alias, pAliases) then
+        raise EFrAliasError.CreateFmt('macro {{%s}} at offset %d: %s is no declared input alias of this field',
+          [VInner, VPos, VMacro.Alias]);
+    end
+    else if not IsIdent(VInner) then
+      raise EFrKindError.CreateFmt('invalid macro identifier at offset %d: {{%s}}', [VPos, VInner]);
     VMacro.Offset := VPos;
     VMacro.Len := VClose + MACRO_CLOSE_LEN - VPos;
     Result := Result + [VMacro];
     VPos := Pos(MACRO_OPEN, VCode, VClose + MACRO_CLOSE_LEN);
   end;
+end;
+
+function ParseMacros(const pBody: string): TArray<TFrMacro>;
+begin
+  Result := ScanMacros(pBody, False, []);
 end;
 
 function SkipBlanks(const pText: string; pPos: Integer): Integer;
@@ -549,6 +607,38 @@ begin
   for VMacro in ParseMacros(pBody) do
     if (not SameText(VMacro.Name, pSelf) or (VMacro.Offset = VSelfRead)) and not MatchText(VMacro.Name, Result) then
       Result := Result + [VMacro.Name];
+end;
+
+function ParseMacrosWithAliases(const pBody: string; const pAliases: array of string): TArray<TFrMacro>;
+begin
+  Result := ScanMacros(pBody, True, pAliases);
+end;
+
+function CalcInputs(const pBody, pSelf: string; const pAliases: array of string): TArray<TFrInput>;
+var
+  VMacro: TFrMacro;
+  VWalk: TSelfWalk;
+  VSelfRead: Integer;
+  VInput: TFrInput;
+  VSeen: TArray<string>;
+  VKey: string;
+begin
+  Result := nil;
+  VSeen := nil;
+  VWalk := Default(TSelfWalk);
+  VSelfRead := VWalk.FirstRead(BlankStringsAndComments(pBody), pSelf);
+  for VMacro in ParseMacrosWithAliases(pBody, pAliases) do
+  begin
+    if (VMacro.Alias = '') and SameText(VMacro.Name, pSelf) and (VMacro.Offset <> VSelfRead) then
+      Continue;
+    VKey := VMacro.Alias + '.' + VMacro.Name;
+    if MatchText(VKey, VSeen) then
+      Continue;
+    VSeen := VSeen + [VKey];
+    VInput.Alias := VMacro.Alias;
+    VInput.Field := VMacro.Name;
+    Result := Result + [VInput];
+  end;
 end;
 
 end.

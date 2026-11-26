@@ -1,7 +1,8 @@
 # Fields that need data of other tables (cross-table fields) -- design 2026-11-26
 
 Status: DESIGN APPROVED 2026-11-26 (owner: XQ1-XQ14 all A, section 12; FireDAC copy sources added to X3, section 3.1).
-Lane `lane/v155-xtable`; slice X1 is being built there.
+Lane `lane/v155-xtable`; slice X1 BUILT there 2026-11-26 (tests `tests\fieldrepo\CrossTableTests.dpr`, runner
+`tests\autotest\run_v155_XTABLE.ps1`; as-built notes at the end of 2.3).
 
 Inputs:
 * Goals draft `2026-11-25-cross-table-fields-goals-DRAFT.md` (G1-G8, N1-N7, owner answers P1-P4 in its sections 9-10).
@@ -63,9 +64,9 @@ R3 is amended: `{{X.F}}` is legal exactly when X is a declared alias of the fiel
 | 1 | CHILD_TABLE | VARCHAR(68) | N | |
 | 2 | PARENT_TABLE | VARCHAR(68) | N | |
 | 3 | SOURCE | VARCHAR(10) | N | `FK` (from DL_CONSTRAINTS), `FORM` (found in a form's join, confirmed), `HAND` |
-| 4 | CONSTRAINT_NAME | VARCHAR(63) | Y | the FK for SOURCE = FK; columns then come from DL_CONSTRAINT_COLUMNS |
+| 4 | CONSTRAINT_NAME | VARCHAR(68) | Y | the FK for SOURCE = FK; columns then come from DL_CONSTRAINT_COLUMNS |
 | 5 | PARENT_KEY | VARCHAR(63) | N | the PK / UNIQUE constraint the parent columns match (proof of "one row") |
-| 6 | IS_DEFAULT | SMALLINT | N | 1 = the stored answer of P1 B for (CHILD_TABLE, PARENT_TABLE) |
+| 6 | IS_DEFAULT | BOOLEAN | N | default false; true = the stored answer of P1 B for (CHILD_TABLE, PARENT_TABLE) |
 
 `DL_RELATION_COLUMNS` -- PK (RELATION_NAME, POSITION): CHILD_COLUMN, PARENT_COLUMN. Written for FORM / HAND relations;
 for FK relations a copy of the constraint columns (so a relation survives a schema refresh that renames nothing).
@@ -102,6 +103,18 @@ IPCHART.FTRNAME selects its own inputs, and for every `(MSC, DECIMALS)` the requ
 PATH". When an input is itself a calc field of the parent table (MSCLIST.X), its own inputs are taken with the paths
 CONCATENATED (IPCHART path + MSCLIST's path); a concatenated path may be longer than the search depth (3.2), because
 it is composed from stored bindings, not searched. Cycle guard as today, over (table, field).
+
+As built (X1, 2026-11-26):
+* `ParseMacros` (used by the generators) still refuses `{{A.F}}`: nothing can deliver a foreign input before X4 / 1.56.
+  `ParseMacrosWithAliases` / `CalcInputs` accept a declared alias; on schema 3 and older `repo check` keeps the 1.53 error.
+* read-dfm and gen-handlers still accept schema 3: they write nothing into the new tables yet. X3, which does, raises their
+  minimum to 4.
+* `repo check` codes: input-alias-undeclared, input-unknown-field, input-no-field-row, input-path-broken,
+  input-target-mismatch, binding-no-default, binding-alias-set, relation-source-invalid, relation-no-columns,
+  relation-two-defaults, relation-key-not-unique, relation-fk-missing, relation-fk-mismatch; WARN relation-key-unknown and
+  relation-fk-gone (the schema facts lack the constraint). A cycle through aliases: `calc dependency cycle across tables`.
+* Restore: an older backup is migrated row-wise only into a file of the CURRENT schema (as before); `#DLREPO 2` into a
+  schema-3 file now goes in as it is (1.54 migrated it because 3 was current then).
 
 ## 3. Where origins come from
 

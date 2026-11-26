@@ -914,7 +914,8 @@ var
   VTable: TRepoTable;
 begin
   for VTable in RepoTablesFor(RepoSchemaVersion(pConnection)) do
-    if MatchText(VTable.Name, [REPO_TABLE_LAYOUT_EVENTS, REPO_TABLE_EXCEPTIONS, REPO_TABLE_GRID_COLUMNS])
+    if MatchText(VTable.Name, [REPO_TABLE_LAYOUT_EVENTS, REPO_TABLE_EXCEPTIONS, REPO_TABLE_GRID_COLUMNS, REPO_TABLE_RELATIONS,
+      REPO_TABLE_RELATION_COLUMNS, REPO_TABLE_FIELD_INPUTS])
       and (RepoRowCount(pConnection, VTable.Name) > 0) then
       Exit(False);
   Result := True;

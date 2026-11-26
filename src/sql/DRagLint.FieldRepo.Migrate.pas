@@ -1,7 +1,8 @@
 unit DRagLint.FieldRepo.Migrate;
 
-{ drag-lint 1.53 -- lane FR-MODEL, 1.54 -- lane EVCOLS: `repo migrate`, a repository file of schema 1 or 2 to the
-  current schema 3 (design 2026-11-22-field-repository-v2-design.md section 4.7, rulings 2026-11-23 R2 / R5 / R6).
+{ drag-lint 1.53 -- lane FR-MODEL, 1.54 -- lane EVCOLS, 1.55 -- lane XTABLE: `repo migrate`, a repository file of schema 1,
+  2 or 3 to the current schema 4 (design 2026-11-22-field-repository-v2-design.md section 4.7, rulings 2026-11-23 R2 /
+  R5 / R6; schema 4: 2026-11-26-cross-table-fields-design.md 2.3).
   No table, column or value is dropped or renamed; event code of layout type Field moves into the event columns. }
 
 interface
@@ -28,9 +29,10 @@ type
 /// <summary>Plans or applies the migration of a repository file to REPO_SCHEMA_VERSION.</summary>
 /// <param name="pFileName">Repository file.</param>
 /// <param name="pApply">False = dry run (the file is opened read-only and not a byte changes); True = write.</param>
-/// <returns>The result; Plan reads `v2 -> v3: add DL_FIELDS_INFO.ONGETTEXT_BODY, ..., create DL_GRID_COLUMNS, 
-/// ALIGNMENT -2 to NULL in N rows, move N Field events into columns, user_version 3` (from schema 1 also the schema-2
-/// tables and columns and FIELD_KIND 2).</returns>
+/// <returns>The result; Plan reads `v3 -> v4: create DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, ALIGNMENT -2 to
+/// NULL in N rows, user_version 4`; from schema 2 also `add DL_FIELDS_INFO.ONGETTEXT_BODY, ...`, DL_GRID_COLUMNS and `move N
+/// Field events into columns`; from schema 1 also the schema-2 tables and columns and FIELD_KIND 2. `add` is left out when
+/// no column is new.</returns>
 /// <exception cref="ERepoError">The file is missing.</exception>
 /// <exception cref="ERepoSchemaError">The file is not a repository of a known schema.</exception>
 /// <remarks>An apply first writes `&lt;repo&gt;.before-migrate-&lt;yyyymmdd-hhnnss&gt;.txt` (the text backup in the file's old
@@ -50,6 +52,7 @@ uses
 const
   FIELDS_TABLE = 'DL_FIELDS_INFO';
   KIND_VERSION = 2; // the schema that introduced FIELD_KIND 2 for ISCALCULATED rows
+  EVENTS_VERSION = 3; // the schema whose event columns took the Field events of DL_LAYOUT_EVENTS
   FIELDS_SQL = '"DL_FIELDS_INFO"';
 
 { New columns and tables are derived from the two table sets, so one that a lane adds to a schema migrates with no edit
@@ -124,12 +127,14 @@ begin
   VTables := nil;
   for VTable in NewTables(pFrom) do
     VTables := VTables + [VTable.Name];
-  Result := Format('v%d -> v%d: add %s.%s, create %s, ', [pFrom, REPO_SCHEMA_VERSION, FIELDS_TABLE, string.Join(', ', VColumns),
-    string.Join(', ', VTables)]);
+  Result := Format('v%d -> v%d: ', [pFrom, REPO_SCHEMA_VERSION]);
+  if VColumns <> nil then
+    Result := Result + Format('add %s.%s, ', [FIELDS_TABLE, string.Join(', ', VColumns)]);
+  Result := Result + Format('create %s, ', [string.Join(', ', VTables)]);
   if pFrom < KIND_VERSION then
     Result := Result + Format('FIELD_KIND 2 for %d ISCALCULATED rows, ', [pResult.CalcRows]);
   Result := Result + Format('ALIGNMENT -2 to NULL in %d rows, ', [pResult.AlignmentRows]);
-  if pFrom >= KIND_VERSION then
+  if (pFrom >= KIND_VERSION) and (pFrom < EVENTS_VERSION) then
     Result := Result + Format('move %d Field events into columns, ', [pResult.EventRows]);
   Result := Result + Format('user_version %d', [REPO_SCHEMA_VERSION]);
 end;

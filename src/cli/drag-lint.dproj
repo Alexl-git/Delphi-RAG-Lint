@@ -430,6 +430,7 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.OrmHeaders.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.DataServiceGen.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.Kinds.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.CrossTable.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.Exceptions.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.Check.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.Migrate.pas"/>

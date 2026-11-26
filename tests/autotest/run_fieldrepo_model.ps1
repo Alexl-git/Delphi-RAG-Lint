@@ -46,7 +46,7 @@ try {
   $fix = Join-Path $Repo 'tests\fixtures\fieldrepo'
   $x = Join-Path $work 'x.dlrepo'
   $r = Run @('repo', 'init', '--repo', $x)
-  Check 'B1 repo init creates a schema-3 file' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',$x)).Out -match 'schema_version: 3') -and ((Run @('repo','info','--repo',$x)).Out -match 'DL_LAYOUT_EVENTS: 0 rows') -and ((Run @('repo','info','--repo',$x)).Out -match 'DL_GRID_COLUMNS: 0 rows')) $r.Out
+  Check 'B1 repo init creates a schema-4 file' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',$x)).Out -match 'schema_version: 4') -and ((Run @('repo','info','--repo',$x)).Out -match 'DL_LAYOUT_EVENTS: 0 rows') -and ((Run @('repo','info','--repo',$x)).Out -match 'DL_GRID_COLUMNS: 0 rows')) $r.Out
   $r = Run @('repo', 'restore', '--repo', $x, '--in', (Join-Path $fix 'model_kinds.txt'))
   Check 'B2 restore model_kinds.txt' ($r.Code -eq 0) $r.Out
   $r = Run @('repo', 'check', '--repo', $x)
@@ -57,7 +57,7 @@ try {
   $bk = Join-Path $work 'x.txt'
   $r = Run @('repo', 'backup', '--repo', $x, '--output', $bk)
   $txt = [IO.File]::ReadAllText($bk)
-  Check 'B4 repo backup carries the layout-event rows and the exception' (($r.Code -eq 0) -and $txt.StartsWith('#DLREPO 3') -and $txt.Contains('[DL_LAYOUT_EVENTS ORDERS|PIC|TcxGridDBBandedTableView|OnCustomDrawCell]') -and $txt.Contains('[DL_EXCEPTIONS r1||ORDERS|PIC|DisplayWidth]')) "exit=$($r.Code)"
+  Check 'B4 repo backup carries the layout-event rows and the exception' (($r.Code -eq 0) -and $txt.StartsWith('#DLREPO 4') -and $txt.Contains('[DL_LAYOUT_EVENTS ORDERS|PIC|TcxGridDBBandedTableView|OnCustomDrawCell]') -and $txt.Contains('[DL_EXCEPTIONS r1||ORDERS|PIC|DisplayWidth]')) "exit=$($r.Code)"
 
   # migrate on a v1 file
   $v1 = Join-Path $work 'v1.dlrepo'
@@ -65,28 +65,28 @@ try {
   Check 'B5 restore of a #DLREPO 1 backup into a missing file creates a schema-1 file' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',$v1)).Out -match 'schema_version: 1')) $r.Out
   $h1 = (Get-FileHash -LiteralPath $v1).Hash
   $r = Run @('repo', 'migrate', '--repo', $v1)
-  Check 'B6 migrate dry run prints the plan and changes no byte' (($r.Code -eq 0) -and ($r.Out -match 'v1 -> v3: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, ONGETTEXT_BODY, ONSETTEXT_BODY, ONVALIDATE_BODY, ONCHANGE_BODY, GRID_DISPLAYTEXT_BODY, GRID_DRAWCELL_BODY, create DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, DL_GRID_COLUMNS, FIELD_KIND 2 for 0 ISCALCULATED rows, ALIGNMENT -2 to NULL in 0 rows, user_version 3') -and ($h1 -eq (Get-FileHash -LiteralPath $v1).Hash)) $r.Out
+  Check 'B6 migrate dry run prints the plan and changes no byte' (($r.Code -eq 0) -and ($r.Out -match 'v1 -> v4: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, ONGETTEXT_BODY, ONSETTEXT_BODY, ONVALIDATE_BODY, ONCHANGE_BODY, GRID_DISPLAYTEXT_BODY, GRID_DRAWCELL_BODY, create DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, DL_GRID_COLUMNS, DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, FIELD_KIND 2 for 0 ISCALCULATED rows, ALIGNMENT -2 to NULL in 0 rows, user_version 4') -and ($h1 -eq (Get-FileHash -LiteralPath $v1).Hash)) $r.Out
   $r = Run @('repo', 'restore', '--repo', $v1, '--in', (Join-Path $fix 'golden_v2.txt'), '--replace')
   Check 'B7 a #DLREPO 2 backup into a schema-1 file is refused (exit 2, migrate first)' (($r.Code -eq 2) -and ($r.Out -match 'migrate first')) "exit=$($r.Code) $($r.Out)"
   $r = Run @('repo', 'migrate', '--repo', $v1, '--apply')
-  Check 'B8 migrate --apply writes the before-migrate backup and reaches schema 3' (($r.Code -eq 0) -and ($r.Out -match 'before-migrate backup: ') -and ((Run @('repo','info','--repo',$v1)).Out -match 'schema_version: 3') -and (@(Get-ChildItem $work -Filter 'v1.dlrepo.before-migrate-*.txt').Count -eq 1)) $r.Out
+  Check 'B8 migrate --apply writes the before-migrate backup and reaches schema 4' (($r.Code -eq 0) -and ($r.Out -match 'before-migrate backup: ') -and ((Run @('repo','info','--repo',$v1)).Out -match 'schema_version: 4') -and (@(Get-ChildItem $work -Filter 'v1.dlrepo.before-migrate-*.txt').Count -eq 1)) $r.Out
   $r = Run @('repo', 'migrate', '--repo', $v1, '--apply')
-  Check 'B9 a second migrate says already at schema 3' (($r.Code -eq 0) -and ($r.Out -match 'already at schema 3')) $r.Out
+  Check 'B9 a second migrate says already at schema 4' (($r.Code -eq 0) -and ($r.Out -match 'already at schema 4')) $r.Out
   $r = Run @('repo', 'check', '--repo', $v1)
   Check 'B10 positive control: the migrated golden checks clean (exit 0, no kind mismatch)' (($r.Code -eq 0) -and ($r.Out -match 'check: clean')) "exit=$($r.Code) $($r.Out)"
   $r = Run @('repo', 'restore', '--repo', (Join-Path $work 'new2.dlrepo'), '--in', (Join-Path $fix 'golden_v2.txt'))
   Check 'B11 restore of a #DLREPO 2 backup into a missing file creates schema 2' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',(Join-Path $work 'new2.dlrepo'))).Out -match 'schema_version: 2')) $r.Out
-  # schema 2 -> 3
+  # schema 2 -> 4
   $n2 = Join-Path $work 'new2.dlrepo'
   $o2 = Join-Path $work 'new2.txt'
   $null = Run @('repo', 'backup', '--repo', $n2, '--output', $o2)
   Check 'B13 a schema-2 file still backs up as #DLREPO 2, byte for byte' ([IO.File]::ReadAllText($o2) -ceq [IO.File]::ReadAllText((Join-Path $fix 'golden_v2.txt')))
   $h2 = (Get-FileHash -LiteralPath $n2).Hash
   $r = Run @('repo', 'migrate', '--repo', $n2)
-  Check 'B14 v2 -> v3 dry run: plan, no byte changed' (($r.Code -eq 0) -and ($r.Out -match 'v2 -> v3: add DL_FIELDS_INFO\.ONGETTEXT_BODY, .* create DL_GRID_COLUMNS, ALIGNMENT -2 to NULL in 0 rows, move 0 Field events into columns, user_version 3') -and ($h2 -eq (Get-FileHash -LiteralPath $n2).Hash)) $r.Out
+  Check 'B14 v2 -> v4 dry run: plan, no byte changed' (($r.Code -eq 0) -and ($r.Out -match 'v2 -> v4: add DL_FIELDS_INFO\.ONGETTEXT_BODY, .* create DL_GRID_COLUMNS, DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, ALIGNMENT -2 to NULL in 0 rows, move 0 Field events into columns, user_version 4') -and ($h2 -eq (Get-FileHash -LiteralPath $n2).Hash)) $r.Out
   $r = Run @('repo', 'migrate', '--repo', $n2, '--apply')
   $b2 = @(Get-ChildItem $work -Filter 'new2.dlrepo.before-migrate-*.txt')
-  Check 'B15 v2 -> v3 apply: schema 3, the backup is the schema-2 text' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',$n2)).Out -match 'schema_version: 3') -and ($b2.Count -eq 1) -and ([IO.File]::ReadAllText($b2[0].FullName) -ceq [IO.File]::ReadAllText((Join-Path $fix 'golden_v2.txt')))) $r.Out
+  Check 'B15 v2 -> v4 apply: schema 4, the backup is the schema-2 text' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',$n2)).Out -match 'schema_version: 4') -and ($b2.Count -eq 1) -and ([IO.File]::ReadAllText($b2[0].FullName) -ceq [IO.File]::ReadAllText((Join-Path $fix 'golden_v2.txt')))) $r.Out
   $r = Run @('repo', 'restore', '--repo', (Join-Path $work 'new3.dlrepo'), '--in', (Join-Path $fix 'golden_v3.txt'))
   Check 'B16 restore of a #DLREPO 3 backup into a missing file creates schema 3' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',(Join-Path $work 'new3.dlrepo'))).Out -match 'schema_version: 3') -and ((Run @('repo','check','--repo',(Join-Path $work 'new3.dlrepo'))).Out -match 'check: clean')) $r.Out
   $r = Run @('repo', 'bogus', '--repo', $x)

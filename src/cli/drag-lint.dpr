@@ -259,6 +259,7 @@ uses
   DRagLint.FieldRepo.OrmHeaders in '..\sql\DRagLint.FieldRepo.OrmHeaders.pas',
   DRagLint.FieldRepo.DataServiceGen in '..\sql\DRagLint.FieldRepo.DataServiceGen.pas',
   DRagLint.FieldRepo.Kinds in '..\sql\DRagLint.FieldRepo.Kinds.pas',
+  DRagLint.FieldRepo.CrossTable in '..\sql\DRagLint.FieldRepo.CrossTable.pas',
   DRagLint.FieldRepo.Exceptions in '..\sql\DRagLint.FieldRepo.Exceptions.pas',
   DRagLint.FieldRepo.Check in '..\sql\DRagLint.FieldRepo.Check.pas',
   DRagLint.FieldRepo.Migrate in '..\sql\DRagLint.FieldRepo.Migrate.pas',
