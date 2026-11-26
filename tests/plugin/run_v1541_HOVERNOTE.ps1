@@ -44,7 +44,7 @@ try {
     ('dcc64 -B -E"{0}" -N0"{1}" -NSSystem;Winapi HoverNoteTests.dpr' -f $WorkDir, $dcu), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
   [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
   $log = Join-Path $WorkDir 'build.log'
-  $null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru
+  Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait
   $buildOut = [IO.File]::ReadAllText($log)
   if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
     Write-Host 'FATAL: compile failed' -ForegroundColor Red
