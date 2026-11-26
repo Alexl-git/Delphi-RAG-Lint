@@ -35,5 +35,15 @@ report. A loose file, a folder index, a package and a library have no known prog
 file's own text decides. `{$APPTYPE}` inside an include file of the `.dpr`, and a console
 allocated in another unit, are not seen.
 
-Known limit: `ui-call-in-console-or-service` looks at one file; a dialog call in a
-unit a console project merely uses is not reported.
+`ui-call-in-console-or-service` decides "console program" the same way (1.54.1): the
+`{$APPTYPE}` directives of the `.dpr` (not a comment or a string, the last one wins, a
+conditional `CONSOLE` counts), `AllocConsole` / `AttachConsole`, and `DCC_ConsoleTarget`
+of the run's `.dproj`. Per file it reports a dialog call in the program source itself
+and in a method of a Windows service class. In `lint-all` a second pass follows the
+program into the units it uses (transitively): each call in the program of a
+stand-alone routine that shows a dialog is reported at the call.
+
+Known limit: that pass follows stand-alone routines only (a method call needs a
+receiver type the text cannot give), matched by simple name; a dialog reached only
+through a method of a used unit is not reported. A dialog call in a unit that no
+program of the run uses is not reported either.
