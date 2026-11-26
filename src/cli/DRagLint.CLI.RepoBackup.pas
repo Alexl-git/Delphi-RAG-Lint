@@ -166,8 +166,16 @@ function DbBackupProblem(const pWord, pRepo, pConnection: string): string;
 var
   VStray: string;
 begin
+  { 1.54.1 INT: say what to do -- a stray flag beside --repo made this a "database backup" nobody asked for }
+  if (pRepo <> '') and (pConnection <> '') then
+    Exit('--repo and --connection do not go together: drop --connection for the text backup of the repository ' +
+      '(it takes --repo, --project and --output), or drop --repo for a backup of the database; nothing was written');
   if pRepo <> '' then
-    Exit('--repo does not go with a database backup (the text backup of the repository takes --repo, --project and --output only)');
+  begin
+    VStray := StrayArgument(WORD_ARG, ['--repo', '--project', '--output', '--out', '--report'], []);
+    Exit(Format('"%s" is not an option of the text backup of the repository, which takes --repo, --project and ' +
+      '--output only: drop "%s" (a database backup takes --connection instead of --repo); nothing was written', [VStray, VStray]));
+  end;
   Result := BackupArgsProblem;
   if (Result <> '') or (MatchText(pWord, [WORD_PURGE]) and (CommandLineValue(FLAG_KEEP) = '')) then
     Exit(if Result <> '' then Result else 'give --keep <number of backups per database>');

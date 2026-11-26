@@ -52,7 +52,7 @@ try {
   $null = Run @('repo', 'init', '--repo', $repo)
   $far = "Server=srv.invalid;Database=C:\x.fdb;User_Name=SYSDBA;Password=$pw"
   $r = Run @('repo', 'backup', '--connection', $far, '--repo', $repo)
-  Check 'C1a --repo with --connection -> exit 1' (($r.Code -eq 1) -and ($r.Out -match '--repo does not go with')) $r.Out
+  Check 'C1a --repo with --connection -> exit 1' (($r.Code -eq 1) -and ($r.Out -match '--repo and --connection do not go together')) $r.Out
   $r = Run @('repo', 'backup', '--connection', $far, '--verify', 'some')
   Check 'C1b a bad --verify -> exit 1' (($r.Code -eq 1) -and ($r.Out -match '--verify takes full')) $r.Out
   $r = Run @('repo', 'backup', '--connection', $far)
