@@ -10,7 +10,7 @@ SQLite index, no cloud, no Python/Node at runtime.
 |---|---|---|
 | `drag-lint.exe` | The engine (64-bit only): indexer, query CLI, and the LSP server the plugin talks to | `third_party\dll-win64\`, the BPL folder's sibling |
 | `dclDragLintWizard.bpl` | The RAD Studio IDE plugin (menu, dock panel, hover, diagnostics) | `third_party\dll-win32\` |
-| `library-Win32.sqlite` / `library-Win64.sqlite` | The shared **library** index (RTL/VCL/DevExpress/Spring4D/...), one per platform | `C:\Projects\.drag-lint\` (also read next to the BPL) |
+| `library-Win32.sqlite` / `library-Win64.sqlite` | The shared **library** index (RTL/VCL/DevExpress/Spring4D/...), one per platform | the manifest's `outDir` (also read next to the BPL) |
 | `drag_lint_graph.exe` | Standalone graph viewer | next to the BPL (already copied) |
 | `DragLintGraph*.bpl` (x3) | Graph **component** packages (optional -- to drop the graph control on your own forms) | `Delphi-RAG-Lint-Graph\bin\Win32\` |
 
@@ -96,7 +96,7 @@ drag-lint queries one or more `.sqlite` files. Two scopes matter:
 
 ### a) Per-project DB (deep -- enables Find Usages of variables)
 ```
-drag-lint index --project "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" --db "C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite" --deep
+drag-lint index --project "C:\Code\MyApp\MyApp.dproj" --db "C:\Code\MyApp\_D-RAG\MyApp.sqlite" --deep
 ```
 - **The target declares the scan type.** `--project <.dpr|.dproj>` indexes exactly
   that project's **compile closure** (members + transitively-used project-local
@@ -107,12 +107,12 @@ drag-lint index --project "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" --db 
   refreshes only that one file, with no project defines.
 - **Mode is separate from type:** `--recompile` (default, incremental) or
   `--rebuild` (from scratch).
-- One DB per project is the current layout on this machine, and (since
+- One DB per project is the current layout, and (since
   2026-08-11) each project's DB lives in a hidden `_D-RAG` folder **beside its
   own `.dproj`** rather than in a shared folder -- `<project folder>\_D-RAG\
   <project file base name>.sqlite`. The old per-repo union DBs were retired
   and deleted on 2026-08-09; the brief shared-folder layout that replaced them
-  (`C:\Projects\.drag-lint\<Repo>-<Project>.sqlite`) was itself replaced on
+  (`<outDir>\<Repo>-<Project>.sqlite`) was itself replaced on
   2026-08-11. In practice you rarely type this path by hand -- `index --all`
   (section c) derives it from the manifest.
 - `--deep` records identifier **usages** (reads/writes/attributes), so Find
