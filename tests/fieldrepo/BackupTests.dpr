@@ -44,6 +44,8 @@ uses
   DRagLint.FieldRepo.DbProvider in '..\..\src\sql\DRagLint.FieldRepo.DbProvider.pas',
   DRagLint.FieldRepo.DbProviderFb in '..\..\src\sql\DRagLint.FieldRepo.DbProviderFb.pas',
   DRagLint.FieldRepo.FbImport in '..\..\src\sql\DRagLint.FieldRepo.FbImport.pas',
+  DRagLint.FieldRepo.ChangeSet in '..\..\src\sql\DRagLint.FieldRepo.ChangeSet.pas',
+  DRagLint.FieldRepo.AlterReport in '..\..\src\sql\DRagLint.FieldRepo.AlterReport.pas',
   DRagLint.FieldRepo.BackupManifest in '..\..\src\sql\DRagLint.FieldRepo.BackupManifest.pas',
   DRagLint.FieldRepo.FbBackup in '..\..\src\sql\DRagLint.FieldRepo.FbBackup.pas';
 
@@ -341,6 +343,14 @@ begin
 end;
 
 { Q10 = B (1.55): a backup of a server on another machine is allowed, written on its disk, never restore-tested, never purged }
+function MakeAlterBackup(const pVerified: string): TFrAlterBackup;
+begin
+  Result := Default(TFrAlterBackup);
+  Result.FileName := '/srv/x.fbk';
+  Result.Verified := pVerified;
+  Result.Host := 'srv.invalid';
+end;
+
 procedure TestRemote;
 const
   REMOTE = 'Server=srv.invalid;Database=C:\x.fdb;User_Name=SYSDBA;Password=pw';
@@ -360,13 +370,17 @@ begin
   Check('Q2 server paths: Windows, Unix, with a folder', (ServerBackupFile('C:\db\A.FDB', '', 'x.fbk') = 'C:\db\x.fbk') and (ServerBackupFile('/srv/db/a.fdb', '', 'x.fbk') = '/srv/db/x.fbk') and
     (ServerBackupFile('C:\db\A.FDB', 'D:\bk\', 'x.fbk') = 'D:\bk\x.fbk') and (ServerBackupFile('/srv/db/a.fdb', '/bk', 'x.fbk') = '/bk/x.fbk'),
     ServerBackupFile('C:\db\A.FDB', '', 'x.fbk') + ' ' + ServerBackupFile('/srv/db/a.fdb', '', 'x.fbk'));
+  Check('Q1c --backup-name with a remote server is refused, naming the host and the automatic name; local and no name are not', RemoteNameProblem(REMOTE, 'mine').Contains('srv.invalid') and
+    RemoteNameProblem(REMOTE, 'mine').Contains('automatic') and (RemoteNameProblem(REMOTE, '') = '') and (RemoteNameProblem(LOCAL, 'mine') = ''), RemoteNameProblem(REMOTE, 'mine'));
+  Check('Q1d a remote backup is a state of its own, not quick, named not verified', (fbvRemote <> fbvQuick) and VERIFIED_NAMES[fbvRemote].Contains('not verified') and (RenderBackupText(MakeAlterBackup(VERIFIED_NAMES[fbvRemote]))[0].Contains('NOT verified')) and
+    not RenderBackupText(MakeAlterBackup(VERIFIED_NAMES[fbvRemote]))[0].Contains('verified quick'), RenderBackupText(MakeAlterBackup(VERIFIED_NAMES[fbvRemote]))[0]);
   vKeep := MakeEntry('q-keep', 'C:\db\A.FDB', 1, fbvFull);
   vRemote := Default(TFrBackupEntry);
   vRemote.FileName := '/srv/db/DLFR_BACKUP_A_20261126_090807.fbk';
   vRemote.Database := 'C:\db\A.FDB';
   vRemote.Host := 'srv.invalid';
   vRemote.CreatedUtc := IncHour(EncodeDate(2026, 11, 23), -5);
-  vRemote.Verified := fbvQuick;
+  vRemote.Verified := fbvRemote;
   Check('Q3 a remote entry reads as remote, though no such file is here', BackupFileState(vRemote) = ffsRemote);
   vText := '(none)';
   for vItem in PlanBackupPurge([vKeep, vRemote], 1) do

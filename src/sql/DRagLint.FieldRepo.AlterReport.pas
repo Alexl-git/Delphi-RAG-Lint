@@ -90,7 +90,7 @@ begin
   VCompared := if pBackup.Tables > 0 then Format(': %d table(s) and view(s) compared', [pBackup.Tables]) else '';
   if pBackup.Rows >= 0 then
     VCompared := VCompared + Format(', %d row(s)', [pBackup.Rows]);
-  Result := [Format('backup: %s (%d bytes, verified %s%s)', [pBackup.FileName, pBackup.Size, pBackup.Verified, VCompared]),
+  Result := [Format('backup: %s (%d bytes, %s%s)', [pBackup.FileName, pBackup.Size, if pBackup.Verified.Contains('not verified') then 'NOT verified: ' + pBackup.Verified else 'verified ' + pBackup.Verified, VCompared]),
     Format('backups on disk: %d file(s), %d bytes in total (repo backup purge --keep N)', [pBackup.TotalFiles, pBackup.TotalSize])];
   if pBackup.Host <> '' then
     Result := Result + [Format('server: %s -- the backup file is on the server''s disk (path above), not on this machine; its space was not checked, it was not restore-tested, and purge never deletes it', [pBackup.Host])];

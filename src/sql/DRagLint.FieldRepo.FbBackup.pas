@@ -84,6 +84,14 @@ procedure RequireLocalFbServer(const pConnection: string);  // dl:ok unused-publ
 /// <remarks>Judgment call, 1.55 (owner Q10 = B): a backup of a remote server is allowed, its verification is not.</remarks>
 function RemoteVerifyProblem(const pConnection: string; pVerify: TFrVerifyMode): string;
 
+/// <summary>Whether --backup-name can be used with this connection.</summary>
+/// <param name="pConnection">The --connection value.</param>
+/// <param name="pBackupName">The --backup-name value; '' = none given.</param>
+/// <returns>'' = fine; else the message: a server on another machine would overwrite an existing file of that name without a word
+/// (gbak does), so only the automatic time-stamped name is used there.</returns>
+/// <remarks>Default ruling 1.55 until the owner answers; flip it by returning '' here.</remarks>
+function RemoteNameProblem(const pConnection, pBackupName: string): string;
+
 /// <summary>The path of a backup file on the disk of another machine.</summary>
 /// <param name="pDatabase">The database file as the server reports it (a Windows or a Unix path).</param>
 /// <param name="pFolder">--backup-dir (a path on the server); '' = the folder of the database.</param>
@@ -445,6 +453,18 @@ begin
   if (VHost <> '') and (pVerify = fvmFull) then
     Result := Format('the server is not on this machine (%s): the backup is written on its disk and cannot be restore-tested from here; ' +
       'add --verify quick to make it without the restore test', [VHost]);
+end;
+
+function RemoteNameProblem(const pConnection, pBackupName: string): string;
+var
+  VHost: string;
+begin
+  Result := '';
+  if pBackupName = '' then
+    Exit;
+  VHost := RemoteFbHost(pConnection);
+  if VHost <> '' then
+    Result := Format('--backup-name is not used with a server on another machine (%s): it would overwrite a file of that name there without a word; the automatic time-stamped name is used, so nothing is overwritten', [VHost]);
 end;
 
 function ServerBackupFile(const pDatabase, pFolder, pFile: string): string;
@@ -813,7 +833,7 @@ begin
       raise EFrBackupError.CreateFmt('the backup failed: %s%s', [E.Message,
         if (Result.Host = '') and (RemoveOwnFile(Result.FileName) <> '') then '; an incomplete file is left: ' + Result.FileName else '']);
   end;
-  Result.Verified := fbvQuick;
+  Result.Verified := if Result.Host <> '' then fbvRemote else fbvQuick;
   if Result.Host <> '' then
     Exit;
   if not TFile.Exists(Result.FileName) then
@@ -846,6 +866,9 @@ begin
   { a list that cannot be written to must be found before the work }
   ReadBackupManifest(pManifest);
   VUnlisted := RemoteVerifyProblem(pRequest.Connection, pRequest.Verify);
+  if VUnlisted <> '' then
+    raise EFrBackupError.Create(VUnlisted);
+  VUnlisted := RemoteNameProblem(pRequest.Connection, pRequest.BackupName);
   if VUnlisted <> '' then
     raise EFrBackupError.Create(VUnlisted);
   Result := Default(TFrBackupResult);

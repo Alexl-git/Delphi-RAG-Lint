@@ -56,8 +56,8 @@ in `--json` (`file`, `host`) and in the list is a path on the server, and the li
   drag-lint can neither compare it with what it needs nor reliably remove it; without `--verify quick` the verb stops before
   anything is opened (exit 1, the message names the option). This is a judgment call, not a limit of Firebird.
 - Free space is not checked (a note says so); `--backup-dir` is a path on the server and is not created or looked at here.
-- An existing file of the same name on the server cannot be seen from here, and the Firebird service replaces it: with
-  `--backup-name` on a remote server, choose a name that is new. The default name carries the second.
+- `--backup-name` is REFUSED with a remote server (exit 1 before connecting): an existing file of that name on the server cannot be seen from here and the Firebird service replaces it without a word. The automatic time-stamped name is used there, so nothing is overwritten.
+- The backup is not verified at all, and says so: the report, `--json` (`verified`) and `repo backup list` show `remote, not verified` (`NOT verified`), never `quick`; `repo alter-table --apply` prints the same for its backup.
 - `purge` never deletes an entry that has a host (it is skipped, with the reason); `list` shows it, size 0 (unknown).
 - A server whose name is the name of this computer, or `localhost`, stays a local server with every check above.
 

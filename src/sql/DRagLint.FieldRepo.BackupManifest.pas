@@ -13,9 +13,9 @@ type
   /// <summary>Raised when a backup, its verification or the manifest fails.</summary>
   EFrBackupError = class(Exception);
 
-  /// <summary>How far a backup was verified. fbvFull = restored and compared; fbvQuick = only written; fbvFailed = the
+  /// <summary>How far a backup was verified. fbvFull = restored and compared; fbvQuick = only written; fbvRemote = made by a server on another machine, nothing checked; fbvFailed = the
   /// verification failed.</summary>
-  TFrBackupVerified = (fbvFailed, fbvQuick, fbvFull);
+  TFrBackupVerified = (fbvFailed, fbvQuick, fbvFull, fbvRemote);
 
   /// <summary>One backup file drag-lint made.</summary>
   TFrBackupEntry = record
@@ -53,7 +53,7 @@ type
 
 const
   /// <summary>Names of TFrBackupVerified in reports and in the manifest.</summary>
-  VERIFIED_NAMES: array[TFrBackupVerified] of string = ('failed', 'quick', 'full');
+  VERIFIED_NAMES: array[TFrBackupVerified] of string = ('failed', 'quick', 'full', 'remote, not verified');
   /// <summary>Names of TFrBackupFileState in reports.</summary>
   FILE_STATE_NAMES: array[TFrBackupFileState] of string = ('ok', 'changed', 'missing', 'remote');
   /// <summary>Names of TFrPurgeAction in reports.</summary>

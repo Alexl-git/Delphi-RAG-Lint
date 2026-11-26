@@ -66,6 +66,8 @@ try {
   Check 'B5a remote + default verify -> exit 1, names --verify quick, no password, nothing recorded' (($r.Code -eq 1) -and ($r.Out -match 'srv\.invalid') -and ($r.Out -match '--verify quick') -and ($r.Out -notmatch $pw) -and -not (Test-Path -LiteralPath $manifest)) $r.Out
   $r = Run @('repo', 'backup', '--connection', $far, '--verify', 'quick')
   Check 'B5b remote + --verify quick is attempted (the host is unreachable: a connection error, not a refusal for the host), no password' (($r.Code -eq 1) -and ($r.Out -notmatch 'add --verify quick') -and ($r.Out -notmatch $pw) -and -not (Test-Path -LiteralPath $manifest)) $r.Out
+  $r = Run @('repo', 'backup', '--connection', $far, '--verify', 'quick', '--backup-name', 'mine')
+  Check 'B5e remote + --backup-name -> exit 1 before connecting, says the automatic name is used, nothing recorded' (($r.Code -eq 1) -and ($r.Out -match 'automatic') -and ($r.Out -match 'srv\.invalid') -and ($r.Out -notmatch $pw) -and -not (Test-Path -LiteralPath $manifest)) $r.Out
   $r = Run @('repo', 'alter-table', '--repo', $repo, '--table', 'T', '--direction', 'repo-to-db', '--connection', $far, '--apply')
   Check 'B5c alter-table --apply on a remote server without --verify quick -> exit 1 before anything is opened' (($r.Code -eq 1) -and ($r.Out -match '--verify quick') -and ($r.Out -notmatch $pw)) $r.Out
   $r = Run @('repo', 'backup', 'list')

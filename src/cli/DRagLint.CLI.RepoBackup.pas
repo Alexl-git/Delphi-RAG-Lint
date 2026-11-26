@@ -209,6 +209,8 @@ begin
     VProblem := ResolveBackupName(CommandLineValue('--backup-name'), VFile);
     if VProblem <> '' then
       Result := '--backup-name: ' + VProblem;
+    if (Result = '') and CommandLineFlag(FLAG_CONNECTION) then
+      Result := RemoteNameProblem(CommandLineValue(FLAG_CONNECTION), CommandLineValue('--backup-name'));
   end;
 end;
 
@@ -332,8 +334,8 @@ end;
 
 function EntryText(const pEntry: TFrBackupEntry): string;
 begin
-  Result := Format('%s%s  %d bytes  %s UTC  verified %s  (%s)', [if pEntry.Host = '' then '' else pEntry.Host + ': ', pEntry.FileName, pEntry.Size,
-    FormatDateTime(DATE_FORMAT, pEntry.CreatedUtc), VERIFIED_NAMES[pEntry.Verified], pEntry.Database]);
+  Result := Format('%s%s  %d bytes  %s UTC  %s  (%s)', [if pEntry.Host = '' then '' else pEntry.Host + ': ', pEntry.FileName, pEntry.Size,
+    FormatDateTime(DATE_FORMAT, pEntry.CreatedUtc), if pEntry.Verified = fbvRemote then 'NOT verified (remote)' else 'verified ' + VERIFIED_NAMES[pEntry.Verified], pEntry.Database]);
 end;
 
 { The recorded backups of one database; '' = of every one. }

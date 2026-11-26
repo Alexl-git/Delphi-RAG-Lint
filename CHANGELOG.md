@@ -5,6 +5,7 @@ breaking changes** until v2.0.
 
 ## Unreleased (1.55)
 
+- CLI (BKNAME review fixes): a backup made by a server on another machine is recorded and printed as `remote, not verified` (text, `--json` `verified`, `repo backup list`, the `repo alter-table --apply` backup line), no longer as `quick`; `--backup-name` with a remote server is refused (exit 1 before connecting) because gbak would silently overwrite a same-named file there: the automatic time-stamped name is used (default ruling, one check: `RemoteNameProblem`).
 - CLI (BKNAME, Q10 = B): `repo backup --connection` and `repo alter-table --apply` ALLOW a Firebird server on another machine. The server writes the backup on its own disk; the host and that path are printed, recorded (list: `host`, state `remote`) and in `--json` (`host`). The restore test is not possible from here, so `--verify quick` must be given explicitly (without it: exit 1 before anything is opened); free space is not checked; `purge` never deletes a remote entry. A server named like this computer, or `localhost`, stays local.
 - CLI (BKNAME, Q-ALTER-3 = B): with `--hook micronite`, a successful `repo alter-table --apply` is followed by a DRY RUN of `repo update-orm` for the table (`--code-dir`, `--server-dir`, `--client-dir`) that lists the ORM units that would change and their count; it never writes and a failure only warns.
 
