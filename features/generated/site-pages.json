@@ -392,15 +392,15 @@
     "version": "1.35.1-alpha"
   },
   "features/field-repository-forms.md": {
-    "hash": "703b04d5050097ed9771635bfd36cde540df14a4d719de413dc2c7ed6fbe473f",
-    "version": "1.54.0-alpha"
+    "hash": "ab5909310cb824b9df5b08aab434db1c4368f0e1dd817fec19646e010c7ff921",
+    "version": "1.54.1-alpha"
   },
   "features/field-repository-handlers.md": {
     "hash": "5b03b5298fcb60cdfe67e47c986f9d76c7f694221e913185893811fe11c6527e",
     "version": "1.54.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "5933935a3a5773b6e83b7d204eaea8d10f2eaca67476848e3ee19703fdf1d2d1",
+    "hash": "a7541755bd3dffee24067e6fcbc2adb55ddcde7926896d10ee35986de2ea5589",
     "version": "1.54.1-alpha"
   },
   "features/finalization-after-dependency.md": {
@@ -700,8 +700,8 @@
     "version": "1.51.0-alpha"
   },
   "features/project-settings.md": {
-    "hash": "d06002710790e11f9364bd18da38be7df264719dad6aedeb022e58fd7ab24dce",
-    "version": "1.54.0-alpha"
+    "hash": "9a62e6b2368379b9303ce490d4d05bbcb0347e54880c8ab62f4c4d42fc4f022f",
+    "version": "1.54.1-alpha"
   },
   "features/proptree.md": {
     "hash": "cc8ac431a9b79627ab3a2ced24cefebf811be3482309248c78bd60669116d3eb",
@@ -804,11 +804,11 @@
     "version": "1.54.1-alpha"
   },
   "features/repo-read-dfm.md": {
-    "hash": "feefd05e1ccf2f407f7c69c592943dfad1764181f3e0ef19eb479f7899aee6f0",
-    "version": "1.54.0-alpha"
+    "hash": "8734cda9e9f8456e8418234e831bc55913d64169cfa3eb05b8262b1a545df46e",
+    "version": "1.54.1-alpha"
   },
   "features/repo-write-dfm.md": {
-    "hash": "6cb047d2d3070c40ecdfd7f4e171da56908bd13ca70da10a03d753e0fd79e780",
+    "hash": "2156f3336b8ffcbc0c2c8cd37880c479e49a8d145240ce67a9cb714d022b9e9f",
     "version": "1.54.1-alpha"
   },
   "features/rescan-this-unit.md": {
