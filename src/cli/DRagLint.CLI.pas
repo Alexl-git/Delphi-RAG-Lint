@@ -240,6 +240,7 @@ uses
   , DRagLint.Diagnostics.CloneChecks
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.V151.Api       { v151 lane FRAME: TV151FileCtx / TV151ProjectCtx }
+  , DRagLint.V151.APP.Support  { 1.54.1 CONSOLE: ProjectHasConsole }
   , DRagLint.V151.Dispatch  { v151 lane FRAME: the one entry to the v151 rule lanes }
   , DRagLint.Core.LintBudget  { 1.52 BUDGET: --no-budget, lint-all's rule-budget summary line }
   , DRagLint.Diagnostics.FlowChecks
@@ -5995,6 +5996,40 @@ begin
           if SameText(Tag, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(Candidate))) then Result:= Result + [Candidate];
   end;
   if (Length(Result) = 0) and (ProjectOfDb(ADbPath) <> '') then Result:= [ProjectOfDb(ADbPath)];
+end;
+
+{ 1.54.1 CONSOLE: does the program this run lints for have a console? AProjectPath (--project) names it, else
+  the project index does (its project_tag: a folder or library index names no program). The answer is computed
+  at the first call and kept for the run. }
+function ProgramConsoleProbe(const AStore: ISymbolStore; const ADbPath, AProjectPath: string): TProgramConsoleProbe;
+var
+  Known, Console: Boolean;
+begin
+  Known  := False;
+  Console:= False;
+  Result:=
+    function: Boolean
+    var
+      Projects: TArray<string>;
+      Build   : TActiveBuild;
+    begin
+      if Known then Exit(Console);
+      Known   := True;
+      Projects:= nil;
+      if MatchText(ExtractFileExt(AProjectPath), ['.dproj', '.dpr']) and TFile.Exists(AProjectPath) then
+        Projects:= [ExpandFileName(AProjectPath)]
+      else if (AStore <> nil) and (Trim(AStore.GetMetaValue(PROJECT_TAG_KEY)) <> '') then
+        Projects:= ProjectFilesOfStore(AStore, ADbPath);
+      if Length(Projects) > 0 then
+      begin
+        var Stored: string:= if AStore <> nil then AStore.GetMetaValue(INDEXER_FP_KEY) else '';
+        var Config: string:= FingerprintLimbValue(Stored, FP_LIMB_CONFIG);
+        if Config = FP_CONFIG_JSON then Config:= '';
+        Build  := ResolveIndexBuild(Projects[0], FingerprintLimbValue(Stored, FP_LIMB_PLATFORM), Config);
+        Console:= ProjectHasConsole(Projects[0], Build.Platform, Build.Config);
+      end;
+      Result:= Console;
+    end;
 end;
 
 { Reads how the database was built (TOneFilePlan). Inactive for a project / folder run, for --rebuild
@@ -16273,8 +16308,13 @@ begin
         bytes and its sibling .dfm. Wants is False while no lane declares a rule. }
       TraceLintChecker('v151');
       if TV151Dispatch.Wants(NarrowRule) then
-        for F in TV151Dispatch.CheckFile(TV151FileCtx.Make(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore, NarrowRule)) do
+      begin
+        var FileCtx: TV151FileCtx:= TV151FileCtx.Make(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore, NarrowRule);
+        if (FlowStore <> nil) or (AArgs.ProjectPath <> '') then
+          FileCtx.ProgramHasConsole:= ProgramConsoleProbe(FlowStore, FlowDb, AArgs.ProjectPath);
+        for F in TV151Dispatch.CheckFile(FileCtx) do
           if (NarrowRule = '') or SameText(NarrowRule, F.RuleId) then Findings:= Findings + [F];
+      end;
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
@@ -21073,6 +21113,7 @@ begin
   var Nr: string:= LintNarrowRule(if AArgs.RuleList <> '' then AArgs.RuleList else AArgs.Rule);
   var V151Ids: TArray<string>:= TV151Dispatch.RuleIds;
   var V151Wanted: Boolean:= (Length(V151Ids) > 0) and LintRuleWants(Nr, V151Ids);
+  var HasConsole: TProgramConsoleProbe:= ProgramConsoleProbe(Store, ProjectDb, AArgs.ProjectPath);
   { A list naming SEVERAL v151 ids runs the dispatch once per id, each narrowed to its
     lane, keeping only that id's findings: narrowed to '' every v151 lane ran (121 s of
     the 125 s list run on YADF vs 5.8 s for one id). }
@@ -21272,8 +21313,12 @@ begin
         { v151 lane FRAME: the v151 rule lanes, per file (same hook as DoLint). }
         if V151Wanted then
           for var V151Nr: string in V151Runs do
-            for F in TV151Dispatch.CheckFile(TV151FileCtx.Make(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore, V151Nr)) do
+          begin
+            var FileCtx: TV151FileCtx:= TV151FileCtx.Make(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore, V151Nr);
+            FileCtx.ProgramHasConsole:= HasConsole;
+            for F in TV151Dispatch.CheckFile(FileCtx) do
               if (Length(V151Runs) = 1) or SameText(F.RuleId, V151Nr) then Findings:= Findings + [F];
+          end;
         ScanMark(35);  // dl:ok magic-literal@4d39, large-magic-number@4d39 -- REVIEWED 2026-11-09 PF2: profiler scan-slot id of the SCAN_NAMES table, not a quantity
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));

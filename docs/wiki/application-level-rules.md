@@ -2,7 +2,7 @@
 
 Rules about what a whole program or unit does at run time rather than how one
 statement is written. All are text-based, run per unit in `lint` and `lint-all`,
-and need no index.
+and need no index (`writeln-in-gui-app` uses one to find the program).
 
 | Rule | Default | Severity | Fires on |
 |---|---|---|---|
@@ -18,6 +18,22 @@ and need no index.
 variable, including one declared in another unit and named `*File`, `*Log`,
 `*Txt`, `*Writer` or `*Stream`; it also skips code under `{$IFDEF CONSOLE}` /
 `DEBUG` and routines that test `IsConsole`.
+
+The rule also asks the program the file belongs to (1.54.1): the project whose index
+the run uses, or `--project <x.dproj>`. No finding when that program is a console
+program:
+
+- `{$APPTYPE CONSOLE}` in its `.dpr`, not in a comment or a string. The last
+  `{$APPTYPE}` wins, as in the compiler. A conditional `CONSOLE` counts, a conditional
+  `GUI` does not.
+- no `{$APPTYPE}`: `DCC_ConsoleTarget` = true in the `.dproj` for the indexed platform and
+  config. `AppType` = Console alone is IDE metadata, the compiler never sees it.
+- `AllocConsole` or `AttachConsole` in the `.dpr`.
+
+The `.dpr` / `.dproj` are read when linting, once per run, only when there is a write to
+report. A loose file, a folder index, a package and a library have no known program: the
+file's own text decides. `{$APPTYPE}` inside an include file of the `.dpr`, and a console
+allocated in another unit, are not seen.
 
 Known limit: `ui-call-in-console-or-service` looks at one file; a dialog call in a
 unit a console project merely uses is not reported.

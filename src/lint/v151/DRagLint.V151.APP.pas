@@ -158,7 +158,7 @@ begin
     if ACtx.Wants(RULE_CONTRACT_CLASS)   then TAppChecks.ContractUnitDeclaresClass(Src, ACtx.Path, Acc);
     if ACtx.Wants(RULE_WEAK_CIPHER)      then TAppChecks.WeakCipher(Src, ACtx.Path, Acc);
     if ACtx.Wants(RULE_ASM_NO_WIN64)     then TAppChecks.AsmWithoutWin64Variant(Src, ACtx.Path, Acc);
-    if ACtx.Wants(RULE_WRITELN_GUI)      then TAppChecks.WritelnInGuiApp(Src, ACtx.Path, Acc);
+    if ACtx.Wants(RULE_WRITELN_GUI)      then TAppChecks.WritelnInGuiApp(Src, ACtx.Path, ACtx.ProgramHasConsole, Acc);
     Result:= Acc.ToArray;
   finally
     Acc.Free;
