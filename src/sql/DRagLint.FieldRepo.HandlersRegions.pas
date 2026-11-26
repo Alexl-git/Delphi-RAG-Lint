@@ -169,6 +169,20 @@ function FindOrmRegion(const pText, pOrmId: string; out pRegion: TDlfrRegion): B
 /// TableTools emptied it).</remarks>
 function ReadOrmRegions(const pText: string; const pKnown: TArray<string>; out pRegions: TArray<TDlfrRegion>): string;
 
+/// <summary>The start marker of a numbered ORM region with the hash of its body.</summary>
+/// <param name="pName">The region name as the unit spells it (DB-RAD 4, DB-RADa 4, DLFR 4), an old hash or none.</param>
+/// <param name="pContent">The body: whole lines.</param>
+/// <returns>{$REGION '&lt;name&gt; hash=&lt;16 hex&gt;'}: the spelling of pName kept, its old hash replaced.</returns>
+/// <remarks>1.55 UPDORM (owner Q2 = A, 2026-11-26): every numbered region carries the hash of what was generated into
+/// it, so a later update-orm can tell a hand-edited body.</remarks>
+function OrmStartMarker(const pName, pContent: string): string;
+
+/// <summary>True when a numbered ORM region carries a hash and its body no longer matches it.</summary>
+/// <param name="pText">The text ReadOrmRegions read.</param>
+/// <param name="pRegion">One of the regions it returned.</param>
+/// <returns>False for a region without a hash (a legacy marker: treated as unchanged) and for an intact one.</returns>
+function OrmRegionEdited(const pText: string; const pRegion: TDlfrRegion): Boolean;
+
 /// <summary>Renames the numbered markers of a whole unit: DB-RAD n becomes DLFR n.</summary>
 /// <param name="pText">Unit text.</param>
 /// <returns>The new text. The unit is refused as a whole when a marker has no partner of the same id, the regions do
@@ -236,7 +250,8 @@ const
   ELSE_KEYWORDS: array[0..1] of string = ('ELSE', 'ELSEIF');
   PAT_DLFR_NAME = '^DLFR\s+(\S+)(?:\s+hash=([0-9a-f]{16}))?\s*$';
   PAT_ANY_DLFR = '^DLFR\s+(\S+)';
-  PAT_ORM_NAME = '^(?:DB-RADa?|DLFR)\s+(\d+[A-Z]?|CL-[A-Z]+)$';
+  PAT_ORM_NAME = '^(?:DB-RADa?|DLFR)\s+(\d+[A-Z]?|CL-[A-Z]+)(?:\s+hash=[0-9a-f]{16})?$';
+  PAT_ORM_HASH = '\s+hash=([0-9a-f]{16})$';
   PAT_DBRAD_WORD = 'DB-RADa?';
   PAT_DBRAD_NAME = '^DB-RADa?\s+\S';
   MAXLEN_ID = '2A'; // the one DLFR id that looks like an ORM id but is a hashed region of its own
@@ -715,6 +730,25 @@ begin
   Result := Result and (VDepth = 0);
 end;
 
+{ The hash a numbered region name carries; '' = none. }
+function OrmNameHash(const pName: string): string;
+var
+  VMatch: TMatch;
+begin
+  VMatch := Rx(PAT_ORM_HASH).Match(Trim(pName));
+  Result := if VMatch.Success then VMatch.Groups[1].Value.ToLower else '';
+end;
+
+function OrmStartMarker(const pName, pContent: string): string;
+begin
+  Result := Format('{$REGION ''%s hash=%s''}', [Rx(PAT_ORM_HASH).Replace(Trim(pName), ''), ContentHash(pContent)]);
+end;
+
+function OrmRegionEdited(const pText: string; const pRegion: TDlfrRegion): Boolean;
+begin
+  Result := (pRegion.Hash <> '') and (pRegion.Hash <> ContentHash(pRegion.Content(pText)));
+end;
+
 { '' or the generated region inside pRegion. }
 function InnerProblem(const pRegion: TDlfrRegion; const pAll: TArray<TDlfrRegion>): string;
 var
@@ -747,6 +781,7 @@ begin
         Result := 'the region holds a part of a conditional: ' + VRegion.Start.RegionName;
       pRegions := pRegions + [VRegion];
       pRegions[High(pRegions)].Id := OrmRegionId(VRegion.Start.RegionName);
+      pRegions[High(pRegions)].Hash := OrmNameHash(VRegion.Start.RegionName);
     end;
     if Result <> '' then
     begin

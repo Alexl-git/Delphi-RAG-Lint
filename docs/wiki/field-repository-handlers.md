@@ -81,5 +81,6 @@ region. A unit whose renamed regions `update-orm` would read differently is refu
 `update-orm` refuses a unit as a whole (`REFUSED` in its `skipped` line, the file unchanged) when a numbered region has no
 end, an unnamed end or the end of another id (when either id is one it generates), when a marker of a known region shares its line with
 code, when a region holds another numbered or `DLFR` region or a part of a conditional, or when a comment or string is left
-open. A region with an id it does not generate (`DB-RAD notes`, `DB-RAD 99`) is hand code and kept (1.55); a refused unit
+open. A region with an id it does not generate (`DB-RAD notes`, `DB-RAD 99`) is hand code and kept (1.55); 
+
 makes the run exit 1.

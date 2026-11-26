@@ -72,6 +72,11 @@ type
     /// <summary>Region 9 parameter binding form (--save-form legacy|current); update-orm and
     /// gen-dataservice. Default osfLegacy.</summary>
     SaveForm: TOrmSaveForm;
+    /// <summary>update-orm: comma-separated ids of hand-edited regions to overwrite (--overwrite-edited), ALL = every
+    /// one; '' = keep them all (1.55 UPDORM Q2).</summary>
+    OverwriteEdited: string;
+    /// <summary>update-orm: asked per hand-edited region not in OverwriteEdited; nil = non-interactive, keep it.</summary>
+    Ask: TOrmAskOverwrite;
   end;
 
 /// <summary>Runs one generator verb: plans, then prints the dry-run diff (default) or writes
@@ -83,9 +88,9 @@ type
 /// <param name="pOptions">The verb and its folders.</param>
 /// <param name="pOut">Receives the output lines; not cleared.</param>
 /// <returns>0 done; 1 bad arguments (a folder the verb needs is missing), unknown sub-verb,
-/// unknown table or a repository / generator error (the message is in pOut), or a unit update-orm
-/// REFUSED (its 'skipped &lt;file&gt;: REFUSED, ...' line is in pOut; the other units are still planned and,
-/// with Apply, written).</returns>
+/// unknown table or a repository / generator error (the message is in pOut), or (Apply only) a unit or a region
+/// update-orm REFUSED (its 'skipped &lt;file&gt;: REFUSED ...' line is in pOut; the other units are still written). A dry
+/// run lists the same REFUSED lines and returns 0.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Repo.RepoOrmVerb (DRagLint.CLI.Repo.pas)</para>
@@ -299,7 +304,8 @@ begin
       begin
         if not RequireDir(pOptions.CodeDir, '--code-dir', pOptions.Sub, pOut) then
           Exit;
-        pPlan:= PlanUpdateOrm(pConn, pOptions.CodeDir, pOptions.ServerDir, pOptions.ClientDir, pTables, pSkipped, pOptions.SaveForm);
+        pPlan:= PlanUpdateOrm(pConn, pOptions.CodeDir, pOptions.ServerDir, pOptions.ClientDir, pTables, pSkipped, pOptions.SaveForm,
+          pOptions.OverwriteEdited.ToUpper.Replace(' ', '').Split([','], TStringSplitOptions.ExcludeEmpty), pOptions.Ask);
       end;
     SUB_GEN_DATASERVICE:
       begin
@@ -352,10 +358,10 @@ begin
     [pOptions.Sub, Counts[ockNew], Counts[ockChanged], Counts[ockUnchanged], pSkipped.Count, Tail]));
 end;
 
-{ True when a skipped line is a unit PlanUpdateOrm refused (its text is '<file>: REFUSED, ...'). }
+{ True when a skipped line is a unit or a region PlanUpdateOrm refused ('<file>: REFUSED, ...' / '<file>: REFUSED region ...'). }
 function AnyRefused(pSkipped: TStrings): Boolean;
 const
-  REFUSED_MARK = ': REFUSED, ';
+  REFUSED_MARK = ': REFUSED';
 var
   S: string;
 begin
@@ -382,8 +388,10 @@ begin
         if not PlanVerb(Conn, pOptions, Tables, Skipped, Plan, pOut) then
           Exit;
         ReportPlan(pOptions, Plan, Skipped, pOut);
-        { 1.55 UPDORM Q9 (owner 2026-11-26): a refused unit fails the run; the other units are written }
-        Result:= if AnyRefused(Skipped) then 1 else 0;
+        { 1.55 UPDORM Q9 (owner 2026-11-26): a refused unit or region fails an --apply run; the other units are written.
+          A dry run lists the REFUSED lines and exits 0, so a dry-run-then-apply caller (the IDE menu command) can still
+          offer to write the units that are not refused. }
+        Result:= if pOptions.Apply and AnyRefused(Skipped) then 1 else 0;
       finally
         Conn.Free;
       end;

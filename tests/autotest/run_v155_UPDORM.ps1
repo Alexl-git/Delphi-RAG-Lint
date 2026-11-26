@@ -11,8 +11,11 @@
     U2  a second run writes nothing
     U3  one unit refused (a start marker without an end): exit 1, REFUSED named, that unit unchanged, the other
         unit still written
-    U4  the same in a dry run: exit 1, nothing written
+    U4  the same in a dry run: REFUSED listed, exit 0 (the IDE runs dry first), nothing written
     U5  control: the refused unit removed, exit 0
+  Q2 (1.55, owner 2026-11-26): every numbered region carries the hash of its generated body
+    U6  a legacy marker gets the hash on its write; U7 a hand-edited region is kept, REFUSED region, exit 1
+    U8  --overwrite-edited <id> / all overwrites it; U9 another id does not
   Run: pwsh -File tests\autotest\run_v155_UPDORM.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
@@ -31,14 +34,15 @@ $work = Join-Path ([IO.Path]::GetTempPath()) ('dl-v155-updorm-' + [guid]::NewGui
 [IO.Directory]::CreateDirectory($work) | Out-Null
 $ansi = [Text.Encoding]::GetEncoding(1252)
 function Run([string[]]$a) {
-  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }
+  # stdin is a pipe: update-orm never waits for an answer (its YES/NO question needs a console)
+  $o = & { $ErrorActionPreference = 'Continue'; '' | & $Exe @a 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = (($o | ForEach-Object { "$_" }) -join "`n") }
 }
 function ReadText($f) { [IO.File]::ReadAllText($f, $ansi) }
 function WriteText($f, $t) { [IO.File]::WriteAllText($f, $t, $ansi) }
 function Hash($f) { (Get-FileHash -LiteralPath $f).Hash }
-# the text with the body of region 2 removed (the marker lines stay)
-function Outside2($t) { [regex]::Replace($t, "(?s)(\{\`$REGION 'DB-RAD 2'\}\r\n).*?\r\n( *\{\`$ENDREGION 'DB-RAD 2'\})", '$1$2') }
+# the text with the body of region 2 and the hash of its start marker removed (the marker lines stay)
+function Outside2($t) { [regex]::Replace($t, "(?s)(\{\`$REGION 'DB-RAD 2)(?: hash=[0-9a-f]{16})?('\}\r\n).*?\r\n( *\{\`$ENDREGION 'DB-RAD 2'\})", '$1$2$3') }
 try {
   # a repository with one data field, made through the product's own text format
   $empty = Join-Path $work 'r.empty.dlrepo'
@@ -78,6 +82,22 @@ try {
   $h = Hash $iu
   $r = Update @('--apply')
   Check 'U2 a second run writes nothing' (($r.Code -eq 0) -and ($r.Out -match '1 unchanged') -and ((Hash $iu) -eq $h)) $r.Out
+  # 1.55 UPDORM Q2: the hash of each numbered region
+  Check 'U6 the legacy marker got the hash of its new body' ($inew -match "\{\`$REGION 'DB-RAD 2 hash=[0-9a-f]{16}'\}") $inew
+  $edited = [regex]::Replace($inew, '(?m)^(    procedure SetAAA.*)$', '$1 // mine')
+  WriteText $iu $edited
+  $h = Hash $iu
+  $r = Update @('--apply')
+  Check 'U7 a hand-edited region: kept, REFUSED region 2, exit 1' (($r.Code -eq 1) -and ($r.Out -match 'iORDERS\.PAS: REFUSED region 2, hand-edited') -and
+    ((Hash $iu) -eq $h) -and ($edited -cne $inew)) $r.Out
+  foreach ($w in '2', 'all') {
+    WriteText $iu $edited
+    $r = Update @('--apply', '--overwrite-edited', $w)
+    Check "U8 --overwrite-edited ${w}: overwritten, exit 0" (($r.Code -eq 0) -and ($r.Out -notmatch 'REFUSED') -and ((ReadText $iu) -ceq $inew)) $r.Out
+  }
+  WriteText $iu $edited
+  $r = Update @('--apply', '--overwrite-edited', '5')
+  Check 'U9 --overwrite-edited of another id: kept, exit 1' (($r.Code -eq 1) -and ($r.Out -match 'REFUSED region 2') -and ((ReadText $iu) -ceq $edited)) $r.Out
 
   WriteText $iu $iold
   $ubad = "unit uORDERS;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`n  {`$REGION 'DB-RAD 4'}`r`n  hand code with no end marker`r`n`r`nend.`r`n"
@@ -90,7 +110,8 @@ try {
   WriteText $iu $iold
   $hi = Hash $iu
   $r = Update @()
-  Check 'U4 dry run with a refused unit: exit 1, nothing written' (($r.Code -eq 1) -and ($r.Out -match 'REFUSED') -and ((Hash $iu) -eq $hi) -and
+  # a dry run lists REFUSED and exits 0: the IDE menu command runs dry first and offers Apply only on exit 0
+  Check 'U4 dry run with a refused unit: REFUSED listed, exit 0, nothing written' (($r.Code -eq 0) -and ($r.Out -match 'REFUSED') -and ((Hash $iu) -eq $hi) -and
     ((Hash $uu) -eq $hu)) $r.Out
   [IO.File]::Delete($uu)
   $r = Update @()

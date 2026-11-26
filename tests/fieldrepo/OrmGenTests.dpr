@@ -26,6 +26,7 @@ uses
   System.Classes,
   System.IOUtils,
   System.RegularExpressions,
+  System.Hash,
   System.Generics.Collections,
   Data.DB,
   FireDAC.Stan.Intf,
@@ -119,6 +120,18 @@ end;
 function Region(const pId: string; const pBody: string): string;
 begin
   Result := '  {$REGION ''DB-RAD ' + pId + '''}'#13#10 + pBody + '  {$ENDREGION ''DB-RAD ' + pId + '''}'#13#10;
+end;
+
+{ ContentHash of DRagLint.FieldRepo.HandlersRegions, written out: SHA-256 of the body with LF line ends, 16 hex }
+function HashOf(const pBody: string): string;
+begin
+  Result := THashSHA2.GetHashString(pBody.Replace(#13#10, #10)).Substring(0, 16).ToLower;
+end;
+
+{ Region with the hash of its body in the start marker, as update-orm writes it (1.55 UPDORM Q2) }
+function HRegion(const pId: string; const pBody: string): string;
+begin
+  Result := '  {$REGION ''DB-RAD ' + pId + ' hash=' + HashOf(pBody) + '''}'#13#10 + pBody + '  {$ENDREGION ''DB-RAD ' + pId + '''}'#13#10;
 end;
 
 function RegionBody(const pText, pId: string): string;
@@ -261,7 +274,7 @@ begin
     pRepo.ExecSQL('INSERT INTO DL_FIELDS_INFO (TABLE_NAME, FIELD_NAME, VAR_TYPE, FIELD_AS_TYPE, FIELD_KIND, ISCALCULATED) VALUES (''NOCOL'', ''C'', ''string'', ''AsString'', 1, 1)');
     try
       vOut := vGen.UpdateRegions(Region('4', 'x'#13#10) + Region('6', 'x'#13#10) + Region('11', 'x'#13#10), 'NOCOL', False, vCount);
-      Check('C3 no stored column: empty regions, no unused local', vOut = Region('4', '') + Region('6', '') + Region('11', ''), vOut);
+      Check('C3 no stored column: empty regions, no unused local', vOut = HRegion('4', '') + HRegion('6', '') + HRegion('11', ''), vOut);
     finally
       pRepo.ExecSQL('DELETE FROM DL_FIELDS_INFO WHERE TABLE_NAME = ''NOCOL''');
     end;
@@ -283,7 +296,7 @@ end;
 procedure TestBytesOutsideRegions(pRepo: TFDConnection);
 var
   vGen: TOrmGenerator;
-  vText, vOut, vWant: string;
+  vText, vOut, vWant, vBody4: string;
   vCount: Integer;
 
   function Updated(const pText: string): string;
@@ -314,13 +327,15 @@ begin
     vText := 'unit uORDERS;'#10'  x := 1;  '#9#10 + '  {$REGION ''DB-RAD 4''}'#10'stale'#10 +
       '  {$ENDREGION ''DB-RAD 4''}'#10'end.';
     vOut := vGen.UpdateRegions(vText, 'ORDERS', False, vCount);
-    Check('B1 outside bytes kept (LF, tab, blanks, no final EOL)', vOut =
-      'unit uORDERS;'#10'  x := 1;  '#9#10'  {$REGION ''DB-RAD 4''}'#10 +
-      '      var LSource:= TmcORDERS(Source);'#13#10 +
+    vWant := '      var LSource:= TmcORDERS(Source);'#13#10 +
       '      Self.fID' + Sp(23) + ':= LSource.ID' + Sp(23) + ';'#13#10 +
       '      Self.fNAME' + Sp(21) + ':= LSource.NAME' + Sp(21) + ';'#13#10 +
-      '      Self.fSTATUS' + Sp(19) + ':= LSource.STATUS' + Sp(19) + ';'#13#10 +
+      '      Self.fSTATUS' + Sp(19) + ':= LSource.STATUS' + Sp(19) + ';'#13#10;
+    { 1.55 UPDORM Q2: the start marker gets the hash of the new body }
+    Check('B1 outside bytes kept (LF, tab, blanks, no final EOL)', vOut =
+      'unit uORDERS;'#10'  x := 1;  '#9#10'  {$REGION ''DB-RAD 4 hash=' + HashOf(vWant) + '''}'#10 + vWant +
       '  {$ENDREGION ''DB-RAD 4''}'#10'end.', vOut);
+    vBody4 := vWant;
     { positive control: a text without regions comes back byte for byte }
     vText := 'a'#13'b'#10'c'#13#10'd';
     Check('B2 text without regions unchanged', vGen.UpdateRegions(vText, 'ORDERS', False, vCount) = vText);
@@ -368,14 +383,14 @@ begin
     Refused('B14b an $ELSE inside', '{$IFDEF X}'#13#10'{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'{$ELSE}'#13#10'{$ENDREGION ''DB-RAD 1''}'#13#10'{$ENDIF}'#13#10, 'conditional');
     Refused('B15 a comment left open', Region('1', '') + '{ x', 'has no end');
     vText := '{$IFDEF X}'#13#10 + Region('15', '{$IFDEF Y}a{$ELSE}b{$ENDIF}'#13#10) + '{$ENDIF}'#13#10;
-    CheckText('B14c a whole conditional inside, and around (control)', Updated(vText), '{$IFDEF X}'#13#10 + Region('15', '') + '{$ENDIF}'#13#10);
+    CheckText('B14c a whole conditional inside, and around (control)', Updated(vText), '{$IFDEF X}'#13#10 + HRegion('15', '') + '{$ENDIF}'#13#10);
     { copies that are not regions }
     vText := '(*'#13#10 + Region('1', 'old'#13#10) + '*)'#13#10;
     CheckText('B16 a region in a block comment is text', Updated(vText), vText);
     vText := 's := '''''''#13#10 + Region('1', 'old'#13#10) + '  '''''';'#13#10;
     CheckText('B17 a region in a multi-line string is text', Updated(vText), vText);
     vText := '{$REGION ''DB-RAD 15''}'#13#10'(*'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10'*)'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10'hand'#13#10;
-    CheckText('B18 the end in a comment is not the end', Updated(vText), '{$REGION ''DB-RAD 15''}'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10'hand'#13#10);
+    CheckText('B18 the end in a comment is not the end', Updated(vText), '{$REGION ''DB-RAD 15 hash=' + HashOf('') + '''}'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10'hand'#13#10);
     vText := '{$REGION ''DB-RAD''}'#13#10'hand'#13#10'{$ENDREGION}'#13#10'{$REGION ''DB-RADIUS''}'#13#10'hand'#13#10'{$ENDREGION ''DB-RADIUS''}'#13#10;
     CheckText('B19 DB-RAD without an id, another word: hand regions', Updated(vText), vText);
     { DLFR n is DB-RAD n, never by prefix }
@@ -387,7 +402,30 @@ begin
     CheckText('B21 the other DLFR regions are untouched', Updated(vText), vText);
     Check('B21b line by line too', not IsOrmRegionStart('{$REGION ''DLFR 2a hash=0123456789abcdef''}', vOut) and not IsOrmRegionStart('{$REGION ''DLFR 2a''}', vOut) and
       IsOrmRegionStart('{$REGION ''DLFR 2''}', vOut) and (vOut = '2') and IsOrmRegionEnd('{$ENDREGION ''DLFR CL-KEY''}') and not IsOrmRegionEnd('{$ENDREGION ''DLFR 2a''}'));
-    CheckText('B22 mixed spellings of the ends are fine', Updated('{$REGION ''DB-RADa 15''}'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10), '{$REGION ''DB-RADa 15''}'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10);
+    CheckText('B22 mixed spellings of the ends are fine', Updated('{$REGION ''DB-RADa 15''}'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10), '{$REGION ''DB-RADa 15 hash=' + HashOf('') + '''}'#13#10'{$ENDREGION ''DB-RAD 15''}'#13#10);
+    { 1.55 UPDORM Q2: the hash of each numbered region }
+    CheckText('H1 a legacy marker without a hash: overwritten and stamped', Updated(Region('4', 'stale'#13#10)), HRegion('4', vBody4));
+    CheckText('H2 a stamped, intact region: a second run changes nothing', Updated(HRegion('4', vBody4)), HRegion('4', vBody4));
+    Check('H2b nothing kept', Length(vGen.KeptEdited) = 0);
+    CheckText('H3 an intact region of an older generation: overwritten', Updated(HRegion('4', 'stale'#13#10)), HRegion('4', vBody4));
+    vText := HRegion('4', vBody4).Replace('Self.fNAME', 'Self.fNAME2');
+    CheckText('H4 a hand-edited region is kept byte for byte', Updated(vText), vText);
+    Check('H4b and named', (Length(vGen.KeptEdited) = 1) and (vGen.KeptEdited[0] = '4'), string.Join(',', vGen.KeptEdited));
+    Check('H4c control: the edit is real', vText <> HRegion('4', vBody4));
+    CheckText('H5 a hand-edited region beside a legacy one: that one updated', Updated(vText + Region('15', 'x'#13#10)), vText + HRegion('15', ''));
+    vGen.OverwriteEdited := ['5'];
+    CheckText('H6 OverwriteEdited of another id: still kept', Updated(vText), vText);
+    vGen.OverwriteEdited := ['4'];
+    CheckText('H6b OverwriteEdited 4: overwritten', Updated(vText), HRegion('4', vBody4));
+    Check('H6c nothing kept', Length(vGen.KeptEdited) = 0);
+    vGen.OverwriteEdited := [OVERWRITE_ALL];
+    CheckText('H6d OverwriteEdited ALL: overwritten', Updated(vText), HRegion('4', vBody4));
+    vGen.OverwriteEdited := nil;
+    CheckText('H7 DLFR n with a hash is DB-RAD n', Updated(HRegion('4', 'stale'#13#10).Replace('DB-RAD', 'DLFR')), HRegion('4', vBody4).Replace('DB-RAD', 'DLFR'));
+    Check('H8 a hashed marker is an ORM start, a hashed DLFR 2a is not', IsOrmRegionStart('  {$REGION ''DB-RAD 4 hash=0123456789abcdef''}', vOut) and (vOut = '4') and
+      not IsOrmRegionStart('{$REGION ''DLFR 2a hash=0123456789abcdef''}', vOut));
+    vText := Region('99 hash=0123456789abcdef', 'keep'#13#10);
+    CheckText('H9 an unknown id with a hash is hand code', Updated(vText), vText);
     vText := '{$REGION ''MicStream prototype -- hand-written, not DB-RAD''}'#13#10'hand code'#13#10 +
       '{$ENDREGION ''MicStream prototype -- hand-written, not DB-RAD''}'#13#10;
     Check('B6 hand-written region mentioning DB-RAD is kept', vGen.UpdateRegions(vText, 'ORDERS', False, vCount) = vText);
@@ -421,7 +459,7 @@ var
   vPlan: TArray<TOrmFileChange>;
   vSkipped: TStringList;
   vWritten: Integer;
-  vDiff, vText: string;
+  vDiff, vText, vAsked: string;
 begin
   vCode := TPath.Combine(GDir, 'OBJECTS');
   vSrv := TPath.Combine(GDir, 'SERVER');
@@ -489,8 +527,44 @@ begin
     vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped);
     Check('P19 a renumbered unit is regenerated', (Length(vPlan) = 2) and (vSkipped.Count = 0) and (vPlan[1].Kind = ockChanged) and vPlan[1].NewText.Contains('fZADDED'), KindsOf(vPlan) + vSkipped.Text);
     vDiff := if Length(vPlan) = 2 then OrmChangeDiff(vPlan[1]) else '';
-    Check('P20 its diff ends at the DLFR end markers', vDiff.Contains('+    fZADDED') and not vDiff.Contains('DLFR'), vDiff);
+    { 1.55 UPDORM Q2: a changed body changes the hash of its start marker; the end markers stay out of the diff }
+    Check('P20 its diff ends at the DLFR end markers', vDiff.Contains('+    fZADDED') and not vDiff.Contains('ENDREGION ''DLFR') and
+      vDiff.Contains('+{$REGION ''DLFR 1 hash='), vDiff);
     pRepo.ExecSQL('DELETE FROM DL_FIELDS_INFO WHERE FIELD_NAME = ''ZADDED''');
+    TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText);
+    { 1.55 UPDORM Q2: a hand-edited region (its body no longer matches its hash) is kept and named; asked or listed, it is overwritten }
+    Check('P21 control: the gen-orm unit carries hashed markers', vText.Contains('{$REGION ''DB-RAD 4 hash=') and vText.Contains('var LSource:= TmcORDERS(Source);'), Copy(vText, 1, 400));
+    TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText.Replace('var LSource:= TmcORDERS(Source);', 'var LSource:= TmcORDERS(Source); // mine'));
+    vSkipped.Clear;
+    vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped);
+    Check('P21a a hand-edited region is kept, named REFUSED region 4, the unit still planned', (Length(vPlan) = 2) and (vSkipped.Count = 1) and
+      vSkipped[0].Contains('uORDERS.PAS: REFUSED region 4, hand-edited') and vPlan[1].NewText.Contains('// mine'), KindsOf(vPlan) + vSkipped.Text);
+    vAsked := '';
+    vSkipped.Clear;
+    vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped, osfLegacy, nil,
+      function(const pFile, pRegionId: string): Boolean
+      begin
+        vAsked := vAsked + ExtractFileName(pFile) + ':' + pRegionId + ' ';
+        Result := True;
+      end);
+    Check('P21b asked once, YES: overwritten, nothing refused', (vAsked = 'uORDERS.PAS:4 ') and (vSkipped.Count = 0) and (Length(vPlan) = 2) and
+      not vPlan[1].NewText.Contains('// mine') and (vPlan[1].NewText = vText), vAsked + vSkipped.Text);
+    vSkipped.Clear;
+    vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped, osfLegacy, nil,
+      function(const pFile, pRegionId: string): Boolean
+      begin
+        Result := False;
+      end);
+    Check('P21c asked, NO: kept and refused', (vSkipped.Count = 1) and (Length(vPlan) = 2) and vPlan[1].NewText.Contains('// mine'), vSkipped.Text);
+    for vDiff in ['4', 'all'] do
+    begin
+      vSkipped.Clear;
+      vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped, osfLegacy, [vDiff.ToUpper]);
+      Check('P21d --overwrite-edited ' + vDiff + ': overwritten', (vSkipped.Count = 0) and (Length(vPlan) = 2) and (vPlan[1].NewText = vText), vSkipped.Text);
+    end;
+    vSkipped.Clear;
+    vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped, osfLegacy, ['5']);
+    Check('P21e --overwrite-edited 5 leaves region 4 kept', (vSkipped.Count = 1) and (Length(vPlan) = 2) and vPlan[1].NewText.Contains('// mine'), vSkipped.Text);
     TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText);
     Check('P17 unknown table in a plan raises', (function: Boolean
       begin
@@ -785,7 +859,8 @@ begin
   end;
 end;
 
-{ every byte outside the regions: the text with the region bodies cut out }
+{ every byte outside the regions: the text with the region bodies cut out; the hash a start marker carries (1.55 UPDORM Q2)
+  is part of the region, not of the outside }
 function OutsideRegions(const pText: string): string;
 var
   vLines: TArray<string>;
@@ -801,7 +876,7 @@ begin
     if vIn and IsOrmRegionEnd(vLines[I]) then
       vIn := False;
     if not vIn then
-      Result := Result + vLines[I] + #10;
+      Result := Result + TRegEx.Replace(vLines[I], ' hash=[0-9a-f]{16}''', '''') + #10;
     if (not vIn) and IsOrmRegionStart(vLines[I], vId) then
       vIn := True;
   end;

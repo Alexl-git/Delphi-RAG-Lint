@@ -317,7 +317,8 @@ try {
   $r = Renumber @()
   Check 'N1 dry run: one region of one unit, nothing written' (($r.Code -eq 0) -and ($r.Out -match 'updated 1 regions') -and ((ReadText $iu) -ceq $iold)) $r.Out
   $r = Renumber @('--apply')
-  function Dlfr($t) { $t.Replace("{`$REGION 'DB-RAD 2'}", "{`$REGION 'DLFR 2'}").Replace("{`$ENDREGION 'DB-RAD 2'}", "{`$ENDREGION 'DLFR 2'}") }
+  # 1.55 UPDORM Q2: the start marker may carry a hash
+  function Dlfr($t) { ([regex]::Replace($t, "\{\`$REGION 'DB-RAD 2( hash=[0-9a-f]{16})?'\}", '{$REGION ''DLFR 2$1''}')).Replace("{`$ENDREGION 'DB-RAD 2'}", "{`$ENDREGION 'DLFR 2'}") }
   Check 'N2a renamed: exactly the two markers, the comment stays' (($r.Code -eq 0) -and ((ReadText $iu) -ceq (Dlfr $iold))) $r.Out
   $h = Hash $iu
   $r = Renumber @('--apply')

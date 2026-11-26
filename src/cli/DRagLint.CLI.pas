@@ -1843,6 +1843,7 @@ begin
     else if (Result.Command = 'repo') and (A = '--keep') and (i < ParamCount) then Inc(i)
     else if (Result.Command = 'repo') and (A = '--server-dir') and (i < ParamCount) then Inc(i)
     else if (Result.Command = 'repo') and (A = '--client-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--overwrite-edited') and (i < ParamCount) then Inc(i) { 1.55 UPDORM: update-orm, read by CLI.Repo }
     else if (Result.Command = 'repo') and (A = '--save-form') and (i < ParamCount) then Inc(i) { --table: the gen-param-array branch above already consumes it }
     else raise Exception.Create(UNKNOWN_ARG_PREFIX + A);
     Inc(i);
