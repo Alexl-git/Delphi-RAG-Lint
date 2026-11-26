@@ -425,7 +425,7 @@ type
     /// <param name="ASrc"><!-- drag-lint:auto type -->const TAppSrc</param>
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AProgramHasConsole">Is the run's program a console program; nil = unknown. Asked only for a
-    /// .dpr: a program is a console program when its own text says so (ProgramSrcHasConsole) or the probe does.</param>
+    /// program (first word program, any extension): its own directives decide (ProgramSrcHasConsole), or the probe.</param>
     /// <param name="AOut"><!-- drag-lint:auto type -->TList&lt;TLintFinding&gt;</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -1176,10 +1176,11 @@ var
   end;
 
 begin
-  // 1.54.1 INT: a program asks the writeln-in-gui-app decision (directives, DCC_ConsoleTarget via the probe);
-  // a unit's own $APPTYPE never made a console, the cross-unit APP2 pass reports calls into units
-  IsConsoleApp:= SameText(ExtractFileExt(APath), '.dpr') and
-    (ProgramSrcHasConsole(ASrc, '', '', '') or (Assigned(AProgramHasConsole) and AProgramHasConsole()));
+  // 1.54.1 INT: the writeln-in-gui-app decision -- the file's own directives (not comments or strings, the
+  // last one wins), and for a program the run's probe too (DCC_ConsoleTarget); calls into units are APP2's
+  //   (a program is the file whose first word is `program`, whatever its extension)
+  IsConsoleApp:= ProgramSrcHasConsole(ASrc, '', '', '') or
+    ((ASrc.Toks.Count > 0) and (ASrc.Toks[0].Low = 'program') and Assigned(AProgramHasConsole) and AProgramHasConsole());
   Services:= TList<string>.Create;
   Reported:= TList<Integer>.Create;
   try
