@@ -135,7 +135,7 @@ end; // function
   The library index directory and the project index. The FROM/TO platform (each
   selectable via --from-platform / --to-platform, default FROM=Win64, TO=Win64)
   picks which library-Win32/Win64.sqlite each side draws types from; the project
-  DB (ORM3) is always-on and additive (project units + project-declared types).
+  DB is always-on and additive (project units + project-declared types).
   FROM defaulted to Both until 2026-07-29; library-Win32.sqlite is a 9.5 MB
   fragment that adds no names Win64 lacks, so the union only risked shadowing the
   healthy index (proptree resolves from the first --db that answers). }
@@ -143,11 +143,12 @@ const
   LibDir = 'C:\Projects\.drag-lint\';
   { The project index carrying the app's OWN forms and types. It MOVED on
     2026-08-09: indexes are now one DB per project inside that project's own
-    _D-RAG folder, and the old shared 'C:\Projects\DB\ORM3\drag-lint.sqlite' was
+    _D-RAG folder, and the old shared project database was
     DELETED. This constant still named that dead path, so project-declared types
     resolved against nothing and showed up as unindexed. Override with
-    --project-db when working on a different project. }
-  ProjectDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite';
+    --project-db (or launch with --convert-request) for a real project; the built-in
+    value is a neutral example (1.54.1: no private path in a shipped binary). }
+  ProjectDb = 'C:\Code\MyApp\_D-RAG\MyApp.sqlite';
 
   { Parse --from-platform / --to-platform (case-insensitive win32|win64|both).
   Absent -> ADefault, which the caller passes as DEFAULT_FROM_PLATFORM /
