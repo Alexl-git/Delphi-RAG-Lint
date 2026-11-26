@@ -59,6 +59,11 @@ type
     BodyOk: Integer;
     BodyBlocked: Integer;
     BodyNone: Integer;
+    /// <summary>The FROM tables of a join (a SELECT over several tables), in order; empty = no join. A join has no
+    /// TableName and is not unresolved: each field has its own table (design 2026-11-26-join-field-origin).</summary>
+    JoinTables: TArray<string>;
+    /// <summary>Fields of a join without a table: Name = FieldName, Value = why (never a guess).</summary>
+    NoTable: TArray<TDfmrPair>;
   end;
 
   /// <summary>What one change writes; parallel to the change set.</summary>
@@ -208,7 +213,18 @@ type
     Sql: TDfmrSqlSource;
     HasSql: Boolean;
     Reason: string;
+    IsJoin: Boolean;              // a SELECT over several tables: every field has its own table
+    Columns: TDfmrColumnCheck;    // schema facts for unqualified columns; nil = none
   end;
+
+  { The table and column of one field of a join; Table '' = none, Why says why. }
+  TFieldOrigin = record
+    Table: string;
+    Column: string;
+    Why: string;
+  end;
+
+  TOrigins = TDictionary<string, TFieldOrigin>; // lower-case component name -> origin
 
   { The dataset behind a grid view. }
   TViewSource = record
@@ -236,21 +252,27 @@ type
     FGridSeen: TDictionary<string, Boolean>; // key of every row of FGridRows
     FChanges: TList<TFrChange>;
     FItems: TList<TDfmrChangeItem>;
+    FColumns: TDfmrColumnCheck; // the repository's schema facts, for SqlFieldColumn
     procedure LoadRows;
+    function HasSchemaColumn(const pTable, pColumn: string; out pKnown: Boolean): Boolean;
+    function CalcBodyOf(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pContext: TDfmrCodeContext;
+      const pField: TDfmrField): TDfmrBody;
+    procedure JoinOrigins(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource;
+      const pContext: TDfmrCodeContext; pOrigins: TOrigins; pBodies: TDictionary<string, TDfmrBody>);
     function Form(const pFile: string): TDfmrForm;
     function UnitOf(const pFile: string): TDfmrUnit;
     function SiblingForm(const pFile, pRoot: string): string;
     function FactsOf(const pTable, pField: string): TFieldFacts;
     function LookupTarget(const pForm: TDfmrForm; const pName: string; out pDataset: TDfmrDataset): Boolean;
     procedure ReadDataset(const pForm: TDfmrForm; const pDataset: TDfmrDataset);
-    procedure ReadField(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pField: TDfmrField;
-      const pTable, pColumn: string);
-    procedure ReadLookup(const pForm: TDfmrForm; const pOwner: TDfmrDataset; const pField: TDfmrField; pFacts: TFieldFacts;
-      const pSource: string);
-    procedure ReadCalc(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pContext: TDfmrCodeContext;
+    procedure ReadField(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pOwnerSource: TDatasetSource;
+      const pField: TDfmrField; const pTable, pColumn: string);
+    procedure ReadLookup(const pForm: TDfmrForm; const pOwner: TDfmrDataset; const pOwnerSource: TDatasetSource;
+      const pField: TDfmrField; pFacts: TFieldFacts; const pSource: string);
+    procedure ReadCalc(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pBody: TDfmrBody;
       const pField: TDfmrField; pFacts: TFieldFacts; var pReport: TDfmrDatasetReport);
     procedure ReadEvents(const pForm: TDfmrForm; const pContext: TDfmrCodeContext; const pEvents: TArray<TDfmrPair>;
-      const pOwner: string; pFacts: TFieldFacts);
+      const pOwner: string; pFacts: TFieldFacts; pOrigins: TOrigins = nil);
     function OwnerForm(const pForm: TDfmrForm; const pName: string; out pOwner: TDfmrForm; out pLocal: string): Boolean;
     function ViewSource(const pForm: TDfmrForm; const pView: TDfmrGridView): TViewSource;
     procedure ReadView(const pForm: TDfmrForm; const pView: TDfmrGridView; const pDataset: string);
@@ -365,11 +387,12 @@ end;
 
 { ---- sources ---- }
 
-function SourceOf(const pDataset: TDfmrDataset): TDatasetSource;
+function SourceOf(const pDataset: TDfmrDataset; const pColumns: TDfmrColumnCheck = nil): TDatasetSource;
 var
   VTable: TDfmrSqlTable;
 begin
   Result := Default(TDatasetSource);
+  Result.Columns := pColumns;
   Result.HasSql := (pDataset.TableName = '') and (pDataset.Sql <> '');
   if Result.HasSql then
     Result.Sql := ReadSelectSource(pDataset.Sql);
@@ -385,23 +408,27 @@ begin
     Result.TableName := Result.Sql.Tables[0].Name
   else
   begin
+    Result.IsJoin := True;
     Result.Reason := Format('the SQL reads %d tables:', [Length(Result.Sql.Tables)]);
     for VTable in Result.Sql.Tables do
       Result.Reason := Result.Reason + ' ' + VTable.Name;
   end;
 end;
 
-{ The table and column of a persistent field; False = the DFM does not state it. }
+{ The table and column of a persistent field; False = the DFM does not state it. A calc / lookup field of a join gets
+  its table from TDfmRead.JoinOrigins, not here. }
 function FieldSource(const pSource: TDatasetSource; const pField: TDfmrField; out pTable, pColumn, pReason: string): Boolean;
 begin
   pTable := pSource.TableName;
   pColumn := UpperCase(Trim(pField.FieldName));
   pReason := pSource.Reason;
   if (pField.Kind = frkData) and pSource.HasSql and (pSource.Sql.Reason = '') then
-    Exit(SqlFieldColumn(pSource.Sql, pField.FieldName, pField.Origin, pTable, pColumn, pReason));
+    Exit(SqlFieldColumn(pSource.Sql, pField.FieldName, pField.Origin, pSource.Columns, pTable, pColumn, pReason));
   Result := pTable <> '';
 end;
 
+{ The macro a field gets in handler code: the column of its own table. In a join every field with a table has one (the
+  table of the whole body is checked afterwards); a calc or lookup field of a join is named by its FieldName. }
 function CodeContext(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource): TDfmrCodeContext;
 var
   VField: TDfmrField;
@@ -418,7 +445,11 @@ begin
     VCode.DataName := VField.FieldName;
     VCode.IsCalc := VField.Kind in [frkCalc, frkInternalCalc];
     VCode.MacroName := '';
-    if FieldSource(pSource, VField, VTable, VColumn, VReason) and (VTable = pSource.TableName) and IsValidIdent(VColumn) then
+    if pSource.IsJoin and (VField.Kind in [frkCalc, frkInternalCalc, frkLookup]) then
+      VColumn := UpperCase(Trim(VField.FieldName))
+    else if (not FieldSource(pSource, VField, VTable, VColumn, VReason)) or ((not pSource.IsJoin) and (VTable <> pSource.TableName)) then
+      VColumn := '';
+    if IsValidIdent(VColumn) then
       VCode.MacroName := VColumn;
     Result.Fields := Result.Fields + [VCode];
   end;
@@ -472,6 +503,15 @@ begin
   FGridSeen := TDictionary<string, Boolean>.Create;
   FChanges := TList<TFrChange>.Create;
   FItems := TList<TDfmrChangeItem>.Create;
+  FColumns := HasSchemaColumn;
+end;
+
+function TDfmRead.HasSchemaColumn(const pTable, pColumn: string; out pKnown: Boolean): Boolean;
+var
+  VRow: TRepoRow;
+begin
+  pKnown := FSchemaTables.ContainsKey(UpperCase(pTable));
+  Result := pKnown and FRows.TryGetValue(KeyOf(pTable, pColumn), VRow) and VRow.IsColumn;
 end;
 
 destructor TDfmRead.Destroy;
@@ -641,8 +681,8 @@ begin
     if pBlocked = '' then 'it comes from ' + VTable else pBlocked]);
 end;
 
-procedure TDfmRead.ReadLookup(const pForm: TDfmrForm; const pOwner: TDfmrDataset; const pField: TDfmrField;
-  pFacts: TFieldFacts; const pSource: string);
+procedure TDfmRead.ReadLookup(const pForm: TDfmrForm; const pOwner: TDfmrDataset; const pOwnerSource: TDatasetSource;
+  const pField: TDfmrField; pFacts: TFieldFacts; const pSource: string);
 var
   VDataset: TDfmrDataset;
   VSource: TDatasetSource;
@@ -653,13 +693,13 @@ begin
   if not LookupTarget(pForm, pField.LookupDataSet, VDataset) then
     VSource.Reason := 'not found in the DFMs of this folder'
   else
-    VSource := SourceOf(VDataset);
+    VSource := SourceOf(VDataset, FColumns);
   VTable := VSource.TableName;
   VMulti := if pField.KeyFields.Contains(MULTI_FIELD) or pField.LookupKeyFields.Contains(MULTI_FIELD)
     then 'multi-field lookup key' else '';
   if pField.KeyFields <> '' then
   begin
-    VKey := LookupColumn(pOwner, SourceOf(pOwner), pField.KeyFields, VBlocked);
+    VKey := LookupColumn(pOwner, pOwnerSource, pField.KeyFields, VBlocked);
     pFacts.Add(COL_SOURCE_KEY, VKey, if VMulti = '' then VBlocked else VMulti, pSource);
   end;
   VKey := LookupColumn(VDataset, VSource, pField.LookupKeyFields, VBlocked);
@@ -690,7 +730,19 @@ begin
     FWarnings.Add(pWhere + ': the code names form components: ' + string.Join(', ', pBody.FormNames));
 end;
 
-procedure TDfmRead.ReadCalc(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pContext: TDfmrCodeContext;
+{ The slice of the dataset's OnCalcFields that computes pField; empty when there is no handler or no unit. }
+function TDfmRead.CalcBodyOf(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pContext: TDfmrCodeContext;
+  const pField: TDfmrField): TDfmrBody;
+var
+  VUnit: TDfmrUnit;
+begin
+  Result := Default(TDfmrBody);
+  VUnit := UnitOf(pForm.FileName);
+  if (pDataset.OnCalcFields <> '') and (VUnit <> nil) then
+    Result := VUnit.CalcBody(pContext, pDataset.OnCalcFields, pField.CompName);
+end;
+
+procedure TDfmRead.ReadCalc(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pBody: TDfmrBody;
   const pField: TDfmrField; pFacts: TFieldFacts; var pReport: TDfmrDatasetReport);
 var
   VUnit: TDfmrUnit;
@@ -698,10 +750,8 @@ var
   VWhere: string;
 begin
   VWhere := pReport.DfmName + ' ' + pField.CompName;
-  VBody := Default(TDfmrBody);
+  VBody := pBody;
   VUnit := UnitOf(pForm.FileName);
-  if (pDataset.OnCalcFields <> '') and (VUnit <> nil) then
-    VBody := VUnit.CalcBody(pContext, pDataset.OnCalcFields, pField.CompName);
   if VBody.Text = '' then
   begin
     Inc(pReport.BodyNone);
@@ -722,14 +772,36 @@ begin
 end;
 
 { The code of assigned events (pOwner = component) as facts of the field's event columns. }
+{ Join fields the code names that are not of pTable: `OQ (ORDERS)`, `Dbl (no table)`; '' = none. }
+function OtherTableFields(const pContext: TDfmrCodeContext; const pUsed: TArray<string>; pOrigins: TOrigins;
+  const pTable: string): string;
+var
+  VUsed: string;
+  VCode: TDfmrCodeField;
+  VOrigin: TFieldOrigin;
+begin
+  Result := '';
+  for VUsed in pUsed do
+  begin
+    if not pOrigins.TryGetValue(VUsed, VOrigin) then
+      VOrigin := Default(TFieldOrigin);
+    if SameText(VOrigin.Table, pTable) then
+      Continue;
+    for VCode in pContext.Fields do
+      if SameText(VCode.CompName, VUsed) then
+        Result := Result + (if Result = '' then '' else ', ') + VCode.DataName + ' ('
+          + (if VOrigin.Table = '' then 'no table' else VOrigin.Table) + ')';
+  end;
+end;
+
 procedure TDfmRead.ReadEvents(const pForm: TDfmrForm; const pContext: TDfmrCodeContext; const pEvents: TArray<TDfmrPair>;
-  const pOwner: string; pFacts: TFieldFacts);
+  const pOwner: string; pFacts: TFieldFacts; pOrigins: TOrigins);
 var
   VEvent: TDfmrPair;
   VColumn: TFrEventColumn;
   VUnit: TDfmrUnit;
   VBody: TDfmrBody;
-  VWhere: string;
+  VWhere, VOther: string;
 begin
   if Length(pEvents) = 0 then
     Exit;
@@ -742,6 +814,11 @@ begin
       begin
         VWhere := ExtractFileName(pForm.FileName) + ' ' + pOwner + '.' + VEvent.Name;
         VBody := VUnit.EventBody(pContext, VEvent.Value, VColumn.Params.Split([',']));
+        VOther := if (pOrigins = nil) or (VBody.Text = '') then ''
+          else OtherTableFields(pContext, VBody.FieldsUsed, pOrigins, pFacts.TableName);
+        if VOther <> '' then
+          VBody.Blocked := VBody.Blocked + (if VBody.Blocked = '' then '' else '; ')
+            + 'the code reads fields of another table: ' + VOther;
         if VBody.Text = '' then
           FWarnings.Add(VWhere + ': not read: ' + (if VBody.Blocked = '' then 'the handler is empty' else VBody.Blocked))
         else
@@ -750,8 +827,8 @@ begin
       end;
 end;
 
-procedure TDfmRead.ReadField(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pField: TDfmrField;
-  const pTable, pColumn: string);
+procedure TDfmRead.ReadField(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pOwnerSource: TDatasetSource;
+  const pField: TDfmrField; const pTable, pColumn: string);
 var
   VFacts: TFieldFacts;
   VPair: TDfmrPair;
@@ -765,53 +842,244 @@ begin
   for VPair in pField.Typed do
     VFacts.Add(VPair.Name, VPair.Value, '', VSource);
   if pField.Kind = frkLookup then
-    ReadLookup(pForm, pDataset, pField, VFacts, VSource);
+    ReadLookup(pForm, pDataset, pOwnerSource, pField, VFacts, VSource);
   if (pField.Kind = frkAggregate) and (pField.Expression <> '') then
     VFacts.Add(COL_BODY, pField.Expression, '', VSource);
+end;
+
+{ pTables in the order of the FROM clause. }
+function InFromOrder(const pSource: TDatasetSource; const pTables: TArray<string>): TArray<string>;
+var
+  VTable: TDfmrSqlTable;
+begin
+  Result := nil;
+  for VTable in pSource.Sql.Tables do
+    if MatchText(VTable.Name, pTables) and (not MatchText(VTable.Name, Result)) then
+      Result := Result + [VTable.Name];
+end;
+
+{ The table of a lookup field of a join: the one table of its key fields. }
+function LookupOrigin(const pDataset: TDfmrDataset; const pSource: TDatasetSource; const pField: TDfmrField): TFieldOrigin;
+var
+  VKey, VTable, VColumn, VReason: string;
+  VTables: TArray<string>;
+begin
+  Result := Default(TFieldOrigin);
+  VTables := nil;
+  if Trim(pField.KeyFields) = '' then
+    Result.Why := 'the lookup has no KeyFields';
+  for VKey in pField.KeyFields.Split([MULTI_FIELD], TStringSplitOptions.ExcludeEmpty) do
+    if not FieldSource(pSource, NamedField(pDataset, VKey), VTable, VColumn, VReason) then
+    begin
+      Result.Why := Format('the key field %s has no table: %s', [Trim(VKey), VReason]);
+      Exit;
+    end
+    else if not MatchText(VTable, VTables) then
+      VTables := VTables + [VTable];
+  if Length(VTables) > 1 then
+    Result.Why := Format('the key fields come from %d tables: %s', [Length(VTables), string.Join(' ', InFromOrder(pSource, VTables))])
+  else if Length(VTables) = 1 then
+  begin
+    Result.Table := VTables[0];
+    Result.Column := UpperCase(Trim(pField.FieldName));
+  end;
+end;
+
+{ Origins of every field of a join (design 2026-11-26-join-field-origin 2.1-2.3): data fields from the SELECT, lookups from
+  their key fields, calc fields from the table fields their code reads, also through other calc fields. pBodies receives
+  the calc bodies, keyed like pOrigins. }
+procedure TDfmRead.JoinOrigins(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource;
+  const pContext: TDfmrCodeContext; pOrigins: TOrigins; pBodies: TDictionary<string, TDfmrBody>);
+var
+  VField: TDfmrField;
+  VOrigin, VUsedOrigin: TFieldOrigin;
+  VBody: TDfmrBody;
+  VKey, VUsed, VMissing, VName: string;
+  VTables, VCalcs: TArray<string>;
+  VI: Integer;
+  VNames: TDictionary<string, string>;
+  VResults: TOrigins;
+  VQueue: TList<string>;
+begin
+  VNames := TDictionary<string, string>.Create;
+  try
+    for VField in pDataset.Fields do
+    begin
+      VKey := LowerCase(VField.CompName);
+      VNames.AddOrSetValue(VKey, VField.FieldName);
+      VOrigin := Default(TFieldOrigin);
+      case VField.Kind of
+        frkData:
+          if not FieldSource(pSource, VField, VOrigin.Table, VOrigin.Column, VOrigin.Why) then
+            VOrigin.Table := '';
+        frkLookup:
+          VOrigin := LookupOrigin(pDataset, pSource, VField);
+        frkCalc, frkInternalCalc:
+          begin
+            pBodies.AddOrSetValue(VKey, CalcBodyOf(pForm, pDataset, pContext, VField));
+            Continue;
+          end;
+      else
+        VOrigin.Why := 'a field of this kind in a join is not placed';
+      end;
+      pOrigins.AddOrSetValue(VKey, VOrigin);
+    end;
+    { A calc field gets the tables of the table fields its code reads, directly or through other calc fields of the
+      dataset (breadth first; a calc field already visited adds nothing, so a cycle is no error). }
+    VResults := TOrigins.Create;
+    VQueue := TList<string>.Create;
+    try
+      for VKey in pBodies.Keys do
+      begin
+        VOrigin := Default(TFieldOrigin);
+        VTables := nil;
+        VMissing := '';
+        VCalcs := nil;
+        VQueue.Clear;
+        VQueue.Add(VKey);
+        VI := 0;
+        while VI < VQueue.Count do
+        begin
+          VBody := pBodies[VQueue[VI]];
+          if (VI > 0) and (VBody.Text = '') and (VMissing = '') then
+            VMissing := VNames[VQueue[VI]];
+          for VUsed in VBody.FieldsUsed do
+            if VQueue.Contains(VUsed) then
+              Continue
+            else if pBodies.ContainsKey(VUsed) then
+            begin
+              VQueue.Add(VUsed);
+              if VI = 0 then
+                VCalcs := VCalcs + [VNames[VUsed]];
+            end
+            else if pOrigins.TryGetValue(VUsed, VUsedOrigin) and (VUsedOrigin.Table <> '') then
+            begin
+              if not MatchText(VUsedOrigin.Table, VTables) then
+                VTables := VTables + [VUsedOrigin.Table];
+            end
+            else if (VMissing = '') and VNames.TryGetValue(VUsed, VName) then
+              VMissing := VName;
+          Inc(VI);
+        end;
+        VBody := pBodies[VKey];
+        if (VBody.Text <> '') and (VMissing = '') and (Length(VTables) = 1) then
+        begin
+          VOrigin.Table := VTables[0];
+          VOrigin.Column := UpperCase(Trim(VNames[VKey]));
+        end
+        else if VBody.Text = '' then
+          VOrigin.Why := 'no calc code: ' + (if VBody.Blocked <> '' then VBody.Blocked
+            else if pDataset.OnCalcFields = '' then 'the dataset has no OnCalcFields'
+            else pDataset.OnCalcFields + ' does not assign it')
+        else if VMissing <> '' then
+          VOrigin.Why := Format('the calc code reads %s, which has no table', [VMissing])
+        else if Length(VTables) > 1 then
+          VOrigin.Why := Format('the calc code reads %d tables: %s', [Length(VTables), string.Join(' ', InFromOrder(pSource, VTables))])
+        else if Length(VCalcs) > 0 then
+          VOrigin.Why := 'the calc code reads no table field, only calc fields: ' + string.Join(', ', VCalcs)
+        else
+          VOrigin.Why := 'the calc code reads no field of the dataset';
+        VResults.Add(VKey, VOrigin);
+      end;
+      for VKey in VResults.Keys do
+        pOrigins.AddOrSetValue(VKey, VResults[VKey]);
+    finally
+      VQueue.Free;
+      VResults.Free;
+    end;
+  finally
+    VNames.Free;
+  end;
 end;
 
 procedure TDfmRead.ReadDataset(const pForm: TDfmrForm; const pDataset: TDfmrDataset);
 var
   VReport: TDfmrDatasetReport;
-  VSource: TDatasetSource;
+  VSource, VHome: TDatasetSource;
   VContext: TDfmrCodeContext;
   VField: TDfmrField;
   VRef: TDfmrFieldRef;
+  VSqlTable: TDfmrSqlTable;
   VTable, VColumn, VReason: string;
+  VFound: Boolean;
+  VOrigin: TFieldOrigin;
+  VOrigins: TOrigins;
+  VBodies: TDictionary<string, TDfmrBody>;
+  VBody: TDfmrBody;
 begin
-  VSource := SourceOf(pDataset);
+  VSource := SourceOf(pDataset, FColumns);
   VContext := CodeContext(pForm, pDataset, VSource);
   VReport := Default(TDfmrDatasetReport);
   VReport.DfmName := ExtractFileName(pForm.FileName);
   VReport.Dataset := pDataset.Name;
   VReport.DatasetClass := pDataset.DatasetClass;
   VReport.TableName := VSource.TableName;
-  if VSource.TableName = '' then
+  if VSource.IsJoin then
+    for VSqlTable in VSource.Sql.Tables do
+      if not MatchText(VSqlTable.Name, VReport.JoinTables) then
+        VReport.JoinTables := VReport.JoinTables + [VSqlTable.Name];
+  if (VSource.TableName = '') and (not VSource.IsJoin) then
     VReport.Unresolved := VSource.Reason + (if pDataset.ObjKind = 'object' then '' else ' (' + pDataset.ObjKind
       + ': its own properties are in the ancestor''s DFM)');
-  for VField in pDataset.Fields do
+  VOrigins := nil;
+  VBodies := nil;
+  if VSource.IsJoin then
   begin
-    Inc(VReport.Counts[VField.Kind]);
-    VRef := Default(TDfmrFieldRef);
-    VRef.FieldName := VField.FieldName;
-    VRef.CompName := VField.CompName;
-    VRef.FieldClass := VField.FieldClass;
-    VRef.Kind := VField.Kind;
-    if FieldSource(VSource, VField, VTable, VColumn, VReason) then
+    VOrigins := TOrigins.Create;
+    VBodies := TDictionary<string, TDfmrBody>.Create;
+  end;
+  try
+    if VSource.IsJoin then
+      JoinOrigins(pForm, pDataset, VSource, VContext, VOrigins, VBodies);
+    for VField in pDataset.Fields do
     begin
-      VRef.TableName := VTable;
-      VRef.Column := VColumn;
+      Inc(VReport.Counts[VField.Kind]);
+      VRef := Default(TDfmrFieldRef);
+      VRef.FieldName := VField.FieldName;
+      VRef.CompName := VField.CompName;
+      VRef.FieldClass := VField.FieldClass;
+      VRef.Kind := VField.Kind;
+      if VSource.IsJoin then
+      begin
+        VOrigins.TryGetValue(LowerCase(VField.CompName), VOrigin);
+        VTable := VOrigin.Table;
+        VColumn := VOrigin.Column;
+        VReason := VOrigin.Why;
+        VFound := VTable <> '';
+        if not VFound then
+          VReport.NoTable := VReport.NoTable + [MakePair(VField.FieldName, VReason)];
+      end
+      else
+      begin
+        VFound := FieldSource(VSource, VField, VTable, VColumn, VReason);
+        if (not VFound) and VReason.StartsWith('conflict') then
+          FWarnings.Add(Format('%s %s %s: %s', [VReport.DfmName, pDataset.Name, VField.FieldName, VReason]));
+      end;
+      if VFound then
+      begin
+        VRef.TableName := VTable;
+        VRef.Column := VColumn;
+      end;
+      VReport.Fields := VReport.Fields + [VRef];
+      if VRef.TableName = '' then
+      begin
+        VReport.Unattributed := VReport.Unattributed + [VField.FieldName];
+        Continue;
+      end;
+      VHome := VSource;
+      VHome.TableName := VTable;
+      ReadField(pForm, pDataset, VHome, VField, VTable, VColumn);
+      if VField.Kind in [frkCalc, frkInternalCalc] then
+      begin
+        if (VBodies = nil) or (not VBodies.TryGetValue(LowerCase(VField.CompName), VBody)) then
+          VBody := CalcBodyOf(pForm, pDataset, VContext, VField);
+        ReadCalc(pForm, pDataset, VBody, VField, FactsOf(VTable, VColumn), VReport);
+      end;
+      ReadEvents(pForm, VContext, VField.Events, VField.CompName, FactsOf(VTable, VColumn), VOrigins);
     end;
-    VReport.Fields := VReport.Fields + [VRef];
-    if VRef.TableName = '' then
-    begin
-      VReport.Unattributed := VReport.Unattributed + [VField.FieldName];
-      Continue;
-    end;
-    ReadField(pForm, pDataset, VField, VTable, VColumn);
-    if VField.Kind in [frkCalc, frkInternalCalc] then
-      ReadCalc(pForm, pDataset, VContext, VField, FactsOf(VTable, VColumn), VReport);
-    ReadEvents(pForm, VContext, VField.Events, VField.CompName, FactsOf(VTable, VColumn));
+  finally
+    VBodies.Free;
+    VOrigins.Free;
   end;
   if Length(pDataset.InheritedFields) > 0 then
     FWarnings.Add(Format('%s %s: %d inherited fields not read (FieldName is in the ancestor''s DFM): %s', [VReport.DfmName,
@@ -850,7 +1118,7 @@ begin
     end;
   if not Result.Found then
     Exit;
-  Result.Source := SourceOf(Result.Dataset);
+  Result.Source := SourceOf(Result.Dataset, FColumns);
   if Result.Local then
     Result.Context := CodeContext(pForm, Result.Dataset, Result.Source);
 end;

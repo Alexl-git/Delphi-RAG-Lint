@@ -23,9 +23,26 @@ never written. The direction is required, there is no default. The repository mu
 
 **The table of a dataset** is `UpdateOptions.UpdateTableName`, else `TableName` (`Tools.DB` is `TOOLS`), else the one
 table of its SELECT. A data field of a SELECT belongs to the column its select-list item names, or to the one its
-`Origin` property names when that table is in the FROM. Everything else is reported as `UNRESOLVED` or
-`no table column` and gives no change: joins (for calc and lookup fields), UNION, derived tables, TFDMemTable without a
-table, computed items, fields that are only overridden in an inherited form.
+`Origin` property names when that table is in the FROM (`"X.DB".COL`, `ALIAS."X.DB".COL`, `X.DB.COL`, a bare `COL`).
+When the select list and the Origin name different columns, the field is reported as a `conflict` and gets no table:
+nothing is picked. Everything else is reported as `UNRESOLVED` or `no table column` and gives no change: UNION, derived
+tables, TFDMemTable without a table, computed items, fields that are only overridden in an inherited form.
+
+**Joins (1.54.1).** A SELECT over several tables is `JOIN T1 T2 ...`, not unresolved: every field gets its own table.
+
+| Field | Its table |
+|---|---|
+| data | the select-list item (`O.Qty AS OQ` is `ORDERS.QTY`); a repeated column without alias is `NAME_1`, `NAME_2` in list order; an unqualified column or a `*` over several tables: the one FROM table whose schema facts have it, or the Origin |
+| lookup | the one table of its KeyFields; `SOURCEKEY` is the key field's column there |
+| calc / internal-calc | the one table of every table field its calc code reads, also through other calc fields (a cycle is no error); the condition of an `if` whose branches only assign other fields is not counted |
+| event code (OnGetText, ...) | stored only when every field it reads is of the field's own table; otherwise BLOCKED |
+
+A field without a table is listed as `  no table: <field>: <why>` (computed by the SQL, `ID is in 2 tables of the FROM`,
+no schema facts, `the calc code reads 2 tables: A B`, `the calc code reads X, which has no table`, no calc code,
+the key fields come from two tables). A summary line `joins: N datasets; C calc, L lookup, D data fields with a table;
+W without` follows `calc bodies:`; `--json` has `join`, `noTable` per dataset and `totals.joins`. Memory tables filled
+in code (bulk copies, field copies) and calc fields over several tables are not placed yet. Design:
+`docs/superpowers/specs/2026-11-26-join-field-origin-design.md`.
 
 **Calc code.** One OnCalcFields handler computes many fields. The body of a field is the part of the handler it needs:
 the statements that assign it, the local variables they read (declared inline) and every earlier statement with another

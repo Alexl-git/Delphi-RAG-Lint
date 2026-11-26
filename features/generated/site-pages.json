@@ -804,7 +804,7 @@
     "version": "1.54.1-alpha"
   },
   "features/repo-read-dfm.md": {
-    "hash": "9b7b39e2412448a3f49ce8d2f261dbab63e6a1d8397cc72f6325cc81f4406983",
+    "hash": "feefd05e1ccf2f407f7c69c592943dfad1764181f3e0ef19eb479f7899aee6f0",
     "version": "1.54.0-alpha"
   },
   "features/repo-write-dfm.md": {

@@ -71,8 +71,8 @@ try {
   $r = Dfm @()
   Check 'D1a kinds and table of a TTable' (Has $r 'tblOrders (TTable) -> ORDERS: 5 data, 3 calc, 3 lookup, 1 internal-calc, 1 aggregate') $r.Out
   Check 'D1b one-table SELECT; the computed column has no table column' ((Has $r 'qryTools2 (TFDQuery) -> TOOLS: 3 data') -and (Has $r "`n  no table column: Cnt`n")) $r.Out
-  Check 'D1c join and TFDMemTable unresolved, named, never guessed' ((Has $r 'qryJoin (TQuery) -> UNRESOLVED (the SQL reads 2 tables: ORDERS TOOLS)') -and (Has $r 'memX (TFDMemTable) -> UNRESOLVED (no TableName and no SQL in the DFM)')) $r.Out
-  Check 'D1d totals, header, dry run, no byte written' (($r.Code -eq 0) -and (Has $r 'total 6 datasets, 2 unresolved; 13 data, 4 calc, 3 lookup, 1 internal-calc, 1 aggregate; 3 without a table column') -and (Has $r 'direction dfm-to-repo, 21 changes, 4 blocked, 2 unchecked') -and (Has $r 'dry run: nothing written') -and ($h0 -eq (Get-FileHash -LiteralPath $x).Hash)) "exit=$($r.Code)`n$($r.Out)"
+  Check 'D1c a join is read per field (1.54.1 ORIGIN); TFDMemTable unresolved, named, never guessed' ((Has $r 'qryJoin (TQuery) -> JOIN ORDERS TOOLS') -and (Has $r 'memX (TFDMemTable) -> UNRESOLVED (no TableName and no SQL in the DFM)')) $r.Out
+  Check 'D1d totals, header, dry run, no byte written' (($r.Code -eq 0) -and (Has $r 'total 6 datasets, 1 unresolved; 13 data, 4 calc, 3 lookup, 1 internal-calc, 1 aggregate; 3 without a table column') -and (Has $r 'direction dfm-to-repo, 21 changes, 4 blocked, 2 unchecked') -and (Has $r 'dry run: nothing written') -and ($h0 -eq (Get-FileHash -LiteralPath $x).Hash)) "exit=$($r.Code)`n$($r.Out)"
   $ri = Dfm @() (Join-Path $fix 'uChild.dfm')
   Check 'D1e inherited dataset and fields are reported, not guessed' ((Has $ri 'tblOrders (TTable) -> UNRESOLVED (no TableName and no SQL in the DFM (inherited: its own properties are in the ancestor''s DFM))') -and (Has $ri '1 inherited fields not read (FieldName is in the ancestor''s DFM): tblOrdersQTY')) $ri.Out
   Check 'D2a calc body with macros' (Has $r 'ORDERS|TOTAL:  -> FIELD_KIND=2; FIELD_AS_TYPE=AsFloat; VAR_TYPE=double; CALC_BODY={{TOTAL}}.Value := {{QTY}}.Value * {{PRICE}}.Value;') $r.Out
@@ -233,7 +233,7 @@ end
   # json
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe repo read-dfm --repo $y --dfm $dfm --direction dfm-to-repo --json 2>$null }
   $j = ($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
-  Check 'D12 --json: one object, same counts' (($j.totals.datasets -eq 6) -and ($j.totals.unresolved -eq 2) -and ($j.totals.fields.calc -eq 4) -and ($j.changeSet.count -eq 21) -and ($j.changeSet.blocked -eq 4) -and ($j.applied -eq 0) -and ($j.datasets.Count -eq 6)) ($o -join "`n")
+  Check 'D12 --json: one object, same counts' (($j.totals.datasets -eq 6) -and ($j.totals.unresolved -eq 1) -and ($j.totals.fields.calc -eq 4) -and ($j.changeSet.count -eq 21) -and ($j.changeSet.blocked -eq 4) -and ($j.applied -eq 0) -and ($j.datasets.Count -eq 6)) ($o -join "`n")
 
   # ---- grid columns and event columns ----
   $g = Join-Path $fix 'uGrid.dfm'

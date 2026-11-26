@@ -34,6 +34,7 @@ uses
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.ChangeSet,
   DRagLint.FieldRepo.DfmReadSelection,
+  DRagLint.FieldRepo.DfmRead,
   DRagLint.FieldRepo.DfmReadPlan;
 
 const
@@ -59,6 +60,11 @@ type
     BodyBlocked: Integer;
     BodyNone: Integer;
     Counts: TDfmrKindCounts;
+    Joins: Integer;       // join datasets
+    JoinCalc: Integer;    // calc / internal-calc fields of joins with a table
+    JoinLookup: Integer;
+    JoinData: Integer;
+    JoinWithout: Integer; // fields of joins without a table
     procedure Add(const pReport: TDfmrDatasetReport);
   end;
 
@@ -90,9 +96,22 @@ end;
 procedure TTotals.Add(const pReport: TDfmrDatasetReport);
 var
   VKind: TFrFieldKind;
+  VRef: TDfmrFieldRef;
 begin
-  if pReport.TableName = '' then
+  if (pReport.TableName = '') and (Length(pReport.JoinTables) = 0) then
     Inc(Unresolved);
+  if Length(pReport.JoinTables) > 0 then
+  begin
+    Inc(Joins);
+    Inc(JoinWithout, Length(pReport.NoTable));
+    for VRef in pReport.Fields do
+      if VRef.TableName <> '' then
+        case VRef.Kind of
+          frkData: Inc(JoinData);
+          frkLookup: Inc(JoinLookup);
+          frkCalc, frkInternalCalc: Inc(JoinCalc);
+        end;
+  end;
   Inc(Unattributed, Length(pReport.Unattributed));
   Inc(BodyOk, pReport.BodyOk);
   Inc(BodyBlocked, pReport.BodyBlocked);
@@ -120,24 +139,40 @@ begin
     Result.Add(VReport);
 end;
 
+{ `ORDERS`, `JOIN ORDERS TOOLS` or `UNRESOLVED (why)`. }
+function SourceText(const pReport: TDfmrDatasetReport): string;
+begin
+  if pReport.TableName <> '' then
+    Result := pReport.TableName
+  else if Length(pReport.JoinTables) > 0 then
+    Result := 'JOIN ' + string.Join(' ', pReport.JoinTables)
+  else
+    Result := 'UNRESOLVED (' + pReport.Unresolved + ')';
+end;
+
 procedure PrintText(const pPlan: TDfmrPlan);
 var
   VReport: TDfmrDatasetReport;
   VTotals: TTotals;
   VLine: string;
+  VWhy: TDfmrPair;
 begin
   for VReport in pPlan.Datasets do
   begin
-    Writeln('dataset ', VReport.DfmName, ' ', VReport.Dataset, ' (', VReport.DatasetClass, ') -> ',
-      if VReport.TableName = '' then 'UNRESOLVED (' + VReport.Unresolved + ')' else VReport.TableName, ': ',
+    Writeln('dataset ', VReport.DfmName, ' ', VReport.Dataset, ' (', VReport.DatasetClass, ') -> ', SourceText(VReport), ': ',
       CountsText(VReport.Counts));
     if Length(VReport.Unattributed) > 0 then
       Writeln('  no table column: ', string.Join(', ', VReport.Unattributed));
+    for VWhy in VReport.NoTable do
+      Writeln('  no table: ', VWhy.Name, ': ', VWhy.Value);
   end;
   VTotals := TotalsOf(pPlan);
   Writeln(Format('total %d datasets, %d unresolved; %s; %d without a table column', [Length(pPlan.Datasets), VTotals.Unresolved,
     CountsText(VTotals.Counts), VTotals.Unattributed]));
   Writeln(Format('calc bodies: %d read, %d blocked, %d none', [VTotals.BodyOk, VTotals.BodyBlocked, VTotals.BodyNone]));
+  if VTotals.Joins > 0 then
+    Writeln(Format('joins: %d datasets; %d calc, %d lookup, %d data fields with a table; %d without', [VTotals.Joins,
+      VTotals.JoinCalc, VTotals.JoinLookup, VTotals.JoinData, VTotals.JoinWithout]));
   for VLine in RenderChangeSetText(pPlan.ChangeSet) do
     Writeln(VLine);
   for VLine in pPlan.Warnings do
@@ -198,6 +233,21 @@ begin
   end;
 end;
 
+function NoTableJson(const pWhy: TArray<TDfmrPair>): TJSONArray;
+var
+  VPair: TDfmrPair;
+  VItem: TJSONObject;
+begin
+  Result := TJSONArray.Create;
+  for VPair in pWhy do
+  begin
+    VItem := TJSONObject.Create;
+    Result.AddElement(VItem);
+    VItem.AddPair('field', VPair.Name);
+    VItem.AddPair('why', VPair.Value);
+  end;
+end;
+
 { pRepo = nil: without the field lists. }
 function DatasetsJson(const pPlan: TDfmrPlan; pRepo: TFDConnection): TJSONArray;
 var
@@ -216,6 +266,8 @@ begin
     VItem.AddPair('unresolved', VReport.Unresolved);
     VItem.AddPair('fields', CountsJson(VReport.Counts));
     VItem.AddPair('noColumn', StringsJson(VReport.Unattributed));
+    VItem.AddPair('join', StringsJson(VReport.JoinTables));
+    VItem.AddPair('noTable', NoTableJson(VReport.NoTable));
     if pRepo = nil then
       Continue;
     VItem.AddPair('persistent', PersistentJson(VReport));
@@ -226,6 +278,7 @@ end;
 function TotalsJson(const pPlan: TDfmrPlan): TJSONObject;
 var
   VTotals: TTotals;
+  VJoins: TJSONObject;
 begin
   VTotals := TotalsOf(pPlan);
   Result := TJSONObject.Create;
@@ -236,6 +289,13 @@ begin
   Result.AddPair('bodiesRead', TJSONNumber.Create(VTotals.BodyOk));
   Result.AddPair('bodiesBlocked', TJSONNumber.Create(VTotals.BodyBlocked));
   Result.AddPair('bodiesNone', TJSONNumber.Create(VTotals.BodyNone));
+  VJoins := TJSONObject.Create;
+  Result.AddPair('joins', VJoins);
+  VJoins.AddPair('datasets', TJSONNumber.Create(VTotals.Joins));
+  VJoins.AddPair('calc', TJSONNumber.Create(VTotals.JoinCalc));
+  VJoins.AddPair('lookup', TJSONNumber.Create(VTotals.JoinLookup));
+  VJoins.AddPair('data', TJSONNumber.Create(VTotals.JoinData));
+  VJoins.AddPair('without', TJSONNumber.Create(VTotals.JoinWithout));
 end;
 
 procedure PrintJson(const pPlan: TDfmrPlan; pRepo: TFDConnection; pApplied: Integer);

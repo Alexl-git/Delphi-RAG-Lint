@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.54.0-alpha",
-  "summary": "Reads the persistent fields, lookup wiring and calc / OnGetText code of a DFM into the field repository as a change set, dry run by default",
+  "summary": "Reads the fields, lookup wiring and calc / event code of a DFM into the field repository as a change set; every field of a join gets its own table",
   "intro": "Read this when the fields of a form should become rows of the field repository. drag-lint repo read-dfm reads a text or binary DFM and its unit, prints the changes that bring the repository in line with them, and writes only with --apply or --select. What the DFM does not state is reported, never guessed.",
   "wikiPage": "repo-read-dfm",
   "surfaces": [
@@ -24,10 +24,14 @@
     {
       "ask": "Which datasets of a form have a table drag-lint can name?",
       "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file> --json"
+    },
+    {
+      "ask": "Which table does each calc and lookup field of a join belong to, and why does a field get none?",
+      "command": "drag-lint repo read-dfm --dfm <form.dfm> --dataset <join query> --direction dfm-to-repo --repo <file>"
     }
   ],
   "verified": {
-    "date": "2026-11-24",
+    "date": "2026-11-26",
     "by": "ENGINE",
     "build": "1.54.0-alpha",
     "surfaceHash": "14384b5823f8afb2ba9d3c60d8b7e94e0938e5549c5c792e01f5780723e08111"

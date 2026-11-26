@@ -62,6 +62,9 @@ type
     Blocked: string;
     /// <summary>Form components the body names besides the dataset's own fields: it is not portable as is.</summary>
     FormNames: TArray<string>;
+    /// <summary>Component names (lower case) of every field of the dataset the kept code names, read or written, in
+    /// the order they occur; a join gives a calc field the one table of these (design 2026-11-26-join-field-origin).</summary>
+    FieldsUsed: TArray<string>;
   end;
 
   /// <summary>The handlers of one form unit.</summary>
@@ -170,6 +173,8 @@ type
     FProblems: TStringList;
     FFormNames: TStringList;
     FReads: TArray<string>; // calculated fields the scanned statement reads (or writes in an assignment kept whole)
+    FUsed: TArray<string>;  // every dataset field the kept code names, lower case
+    FDead: TList<TByteRange>; // conditions of an if whose branches are all cut: their fields compute nothing kept
     procedure ReadHeader;
     procedure ReadLocals(const pNode: TTSNode; const pKeyword: string);
     procedure ReadDeclarations;
@@ -205,6 +210,8 @@ type
     procedure Scan(const pNode: TTSNode);
     procedure CutOthers(const pNode: TTSNode; const pKeep: string);
     function IsCut(const pNode: TTSNode): Boolean;
+    function IsDead(const pNode: TTSNode): Boolean;
+    function InDead(const pNode: TTSNode): Boolean;
     function NodeEdited(const pNode: TTSNode): string;
     function EditedText(const pNode: TTSNode): string;
     function RenderStatement(const pStatement: TStatement; pGuards: Boolean): string;
@@ -247,6 +254,8 @@ const
   N_INHERITED = 'inherited';
   N_WITH = 'with';
   N_IF = 'if';
+  N_IF_ELSE = 'ifElse';
+  KEYWORD_PREFIX = 'k'; // tree-sitter-delphi names keyword nodes kIf, kThen, kBegin, ...
   EXIT_ONLY = '^(exit|begin\s+exit\s*;?\s*end)\s*;?$';
   GUARD_CHILDREN = 4; // kIf, condition, kThen, statement
   PARAM_DATASET = 'DataSet';
@@ -324,6 +333,7 @@ begin
   FStdParams := pStdParams;
   FEdits := TList<TTextEdit>.Create;
   FCuts := TList<TByteRange>.Create;
+  FDead := TList<TByteRange>.Create;
   FProblems := TStringList.Create(dupIgnore, True, False);
   FFormNames := TStringList.Create(dupIgnore, True, False);
   ReadHeader;
@@ -334,6 +344,7 @@ destructor THandler.Destroy;
 begin
   FFormNames.Free;
   FProblems.Free;
+  FDead.Free;
   FCuts.Free;
   FEdits.Free;
   inherited;
@@ -755,6 +766,43 @@ begin
   end;
   for VI := 0 to Integer(pNode.NamedChildCount) - 1 do
     CutOthers(pNode.NamedChild(VI), pKeep);
+  if MatchStr(pNode.NodeType, [N_IF, N_IF_ELSE]) and (pNode.NamedChildCount > 1) and IsDead(pNode) then
+  begin
+    VCut := ConditionOf(pNode);
+    VRange.First := VCut.StartByte;
+    VRange.Last := VCut.EndByte;
+    FDead.Add(VRange);
+  end;
+end;
+
+{ True when nothing of pNode is left to run: it is cut, a keyword or a comment, or all its parts are; an `if` whose
+  branches are all dead is dead, whatever its condition. }
+function THandler.IsDead(const pNode: TTSNode): Boolean;
+var
+  VI: Integer;
+  VCondition: TTSNode;
+  VIf: Boolean;
+begin
+  if IsCut(pNode) or (pNode.NodeType = N_COMMENT) or pNode.NodeType.StartsWith(KEYWORD_PREFIX) then
+    Exit(True);
+  if pNode.NamedChildCount = 0 then
+    Exit(False);
+  VIf := MatchStr(pNode.NodeType, [N_IF, N_IF_ELSE]);
+  VCondition := if VIf then ConditionOf(pNode) else pNode;
+  for VI := 0 to Integer(pNode.NamedChildCount) - 1 do
+    if not (VIf and (pNode.NamedChild(VI).StartByte = VCondition.StartByte)) and (not IsDead(pNode.NamedChild(VI))) then
+      Exit(False);
+  Result := True;
+end;
+
+function THandler.InDead(const pNode: TTSNode): Boolean;
+var
+  VRange: TByteRange;
+begin
+  Result := False;
+  for VRange in FDead do
+    if (Integer(pNode.StartByte) >= VRange.First) and (Integer(pNode.EndByte) <= VRange.Last) then
+      Exit(True);
 end;
 
 { pNode is the field component; pMember is what the macro needs behind it to mean the same. }
@@ -762,6 +810,8 @@ procedure THandler.UseField(const pNode: TTSNode; const pField: TDfmrCodeField; 
 begin
   if pField.IsCalc then
     AddName(FReads, pField.CompName);
+  if not InDead(pNode) then
+    AddName(FUsed, pField.CompName);
   if pField.MacroName = '' then
     Problem(pField.CompName + ' is not a field of the dataset''s table')
   else
@@ -1073,6 +1123,7 @@ begin
   Result.Text := pText;
   Result.Blocked := string.Join('; ', FProblems.ToStringArray);
   Result.FormNames := FFormNames.ToStringArray;
+  Result.FieldsUsed := FUsed;
 end;
 
 function THandler.CalcBody(const pField: string): TDfmrBody;
