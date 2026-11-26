@@ -90,7 +90,7 @@ try {
   $pl = (NodeEval "const ps=require(process.env.PS_LIB);process.stdout.write(JSON.stringify(ps.parseList(process.env.PS_ARG)));" $l.Out) | ConvertFrom-Json | ForEach-Object { $_ }
   $want = 'ownRoots,excludeRoots,reportsDir,fieldRepository,backupDir,popupForms,checkInit,lint.config,lint.profile,taint.envSource,fieldrepo.bde'
   $got = ($pl.rows | ForEach-Object { $_.key }) -join ','
-  Check 'E5 parseList on real list --json: 10 rows in spec order' ($pl.rows.Count -eq 10 -and $got -eq $want -and $pl.error -eq '') "got=$got err=$($pl.error)"
+  Check 'E5 parseList on real list --json: 11 rows in spec order' ($pl.rows.Count -eq 11 -and $got -eq $want -and $pl.error -eq '') "got=$got err=$($pl.error)"
 
   $pf = $pl.rows | Where-Object key -eq 'popupForms'
   $ch = (NodeEval "const ps=require(process.env.PS_LIB);process.stdout.write(JSON.stringify(ps.choicesFor(JSON.parse(process.env.PS_ARG))));" ($pf | ConvertTo-Json -Compress -Depth 5))

@@ -275,7 +275,8 @@ end
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID') $odfm
   Check 'W10e no field is added to an inherited dataset' ($r.Out -match 'insert [^\n]*memOrdersID[^\n]*\n  BLOCKED: the dataset is inherited') $r.Out
   $r = Write-Dfm @('--dataset', 'tblOrders', '--names', 'ID,TOTAL') $odfm
-  Check 'W10f a BDE dataset: no column field, a calc field yes' (($r.Out -match 'insert uOther\.dfm tblOrdersID: [^\n]*\n  BLOCKED: the repository holds the Firebird type') -and ($r.Out -match 'insert uOther\.dfm tblOrdersTOTAL: [^\n]*\n(?!  BLOCKED)')) $r.Out
+  # 1.55 owner ruling 2026-11-26: BDE policy is per project (fieldrepo.bde); with no setting (full) a BDE dataset gets column fields like any other; readonly / none: run_v155_DFMWRITE2 B2
+  Check 'W10f a BDE dataset, no fieldrepo.bde setting: the column field and the calc field are planned' (($r.Out -match 'insert uOther\.dfm tblOrdersID: [^\n]*\n(?!  BLOCKED)') -and ($r.Out -match 'insert uOther\.dfm tblOrdersTOTAL: [^\n]*\n(?!  BLOCKED)')) $r.Out
   $r = Write-Dfm @('--dataset', 'qryOrders', '--names', 'ID,QTY,PRICE') $odfm
   Check 'W10g a column the SELECT does not return is not added' (($r.Out -match 'insert uOther\.dfm qryOrdersPRICE: [^\n]*\n  BLOCKED: the SQL does not return it') -and ($r.Out -match "insert uOther\.dfm qryOrdersID:  -> TIntegerField; FieldName = 'ID'\n(?!  BLOCKED)") -and ($r.Out -notmatch 'insert uOther\.dfm qryOrdersQTY')) $r.Out
   $r = Write-Dfm @('--dataset', 'qryJoin', '--names', 'ID') $odfm

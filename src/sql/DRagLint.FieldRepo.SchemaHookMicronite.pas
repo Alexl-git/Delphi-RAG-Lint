@@ -72,7 +72,7 @@ begin
       'Micronite: the FIB$ registry rows of these columns are not changed'];
 end;
 
-function MicroniteOrmFollowUp(const pHook: string; pApplied: Boolean; const pRepo, pTable, pCodeDir, pServerDir, pClientDir: string;
+function MicroniteOrmFollowUp(const pHook: string; pApplied: Boolean; const pRepo, pTable, pCodeDir, pServerDir, pClientDir: string;  // dl:ok too-many-parameters@173e -- REVIEWED 2026-11-26 v155 INT: the alter-table verb options passed straight through (hook, apply, repo, table, three folders, output); a record would only move the same list
   const pRun: TOrmDryRun): TArray<string>;
 var
   VOptions: TOrmVerbOptions;

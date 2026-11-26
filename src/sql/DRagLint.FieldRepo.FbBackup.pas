@@ -73,7 +73,7 @@ function RemoteFbHost(const pConnection: string): string;  // dl:ok unused-publi
 /// <param name="pConnection">The --connection value.</param>
 /// <exception cref="EFrBackupError">The server is not this machine, a key is given twice, or there is no Database.
 /// Nothing is opened.</exception>
-procedure RequireLocalFbServer(const pConnection: string);  // dl:ok unused-public-symbol@a1b2 -- REVIEWED 2026-11-26 BKNAME: since Q10 = B no verb refuses a remote server; the pure check stays as a tested seam (BackupTests.dpr, outside the indexed project)
+procedure RequireLocalFbServer(const pConnection: string);  // dl:ok unused-public-symbol@89ba -- REVIEWED 2026-11-26 BKNAME: since Q10 = B no verb refuses a remote server; the pure check stays as a tested seam (BackupTests.dpr, outside the indexed project)
 
 /// <summary>What stops a backup of the server of a connection string with this verification, found before anything is opened.</summary>
 /// <param name="pConnection">The --connection value.</param>
@@ -97,7 +97,7 @@ function RemoteNameProblem(const pConnection, pBackupName: string): string;
 /// <param name="pFolder">--backup-dir (a path on the server); '' = the folder of the database.</param>
 /// <param name="pFile">The file name.</param>
 /// <returns>Folder + the separator the server's own path uses + file; nothing is looked up on this machine.</returns>
-function ServerBackupFile(const pDatabase, pFolder, pFile: string): string;
+function ServerBackupFile(const pDatabase, pFolder, pFile: string): string;  // dl:ok unused-public-symbol@ecf2 -- REVIEWED 2026-11-26 v155 INT: public as the test seam of the server path rule; BackupTests.dpr Q2 (outside the indexed project) calls it
 /// <summary>The database file a connection string names.</summary>
 /// <param name="pConnection">The --connection value.</param>
 /// <returns>MON$DATABASE_NAME, the name the list of backups records.</returns>
@@ -476,7 +476,7 @@ begin
   VCut := Max(LastDelimiter('\', pDatabase), LastDelimiter('/', pDatabase));
   if (VFolder = '') and (VCut > 0) then
     VFolder := Copy(pDatabase, 1, VCut - 1);
-  VSep := if (Pos('/', VFolder + pDatabase) > 0) and (Pos('\', VFolder + pDatabase) = 0) then '/' else '\';
+  VSep := if (VFolder + pDatabase).Contains('/') and not (VFolder + pDatabase).Contains('\') then '/' else '\';
   VFolder := VFolder.TrimRight(['\', '/']);
   Result := VFolder + VSep + pFile;
 end;
@@ -527,7 +527,7 @@ begin
     pTarget := ParseTarget(Result);
     pRemoteHost := RemoteTargetHost(pTarget);
     if pTarget.Kind = ftkOther then
-      raise EFrBackupError.CreateFmt('the connection protocol %s is not supported here: use TCP (Server=<host>) or a plain Database path', [pRemoteHost]);
+      raise EFrBackupError.CreateFmt('the connection protocol %s is not supported here: use TCP (a Server key naming the host) or a plain Database path', [pRemoteHost]);
     if pRemoteHost = '' then
     begin
       VReported := if Assigned(pAttachment) then pAttachment() else string(Result.ExecSQLScalar(SQL_ATTACHMENT));

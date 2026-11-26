@@ -243,9 +243,12 @@ begin
     else
     begin
       RequireFbConnectionSafe(pConnection);
-      if VArgs.Apply and (RemoteBackupProblem(pConnection) <> '') then
-        raise Exception.Create(RemoteBackupProblem(pConnection)); // found before anything is opened
-      Result := AlterTable(VArgs, pPath, pConnection, pJson);
+      { found before anything is opened }
+      VProblem := if VArgs.Apply then RemoteBackupProblem(pConnection) else '';
+      if VProblem <> '' then
+        Writeln(ErrOutput, 'repo alter-table: ', ScrubSecrets(VProblem, pConnection))
+      else
+        Result := AlterTable(VArgs, pPath, pConnection, pJson);
     end;
   except
     on E: Exception do
