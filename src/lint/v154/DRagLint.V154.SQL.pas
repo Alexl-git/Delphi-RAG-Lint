@@ -54,7 +54,7 @@ uses
 class procedure TV154SQLRules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
   ADecls.Add(V151Rule(RULE_SQL_PARAM, 'firedac', 'warning', 'ParamByName of a parameter the SQL does not have, or a SQL parameter that is never set'));
-  ADecls.Add(V151Rule(RULE_QUERY_LOOP, 'firedac', 'hint', 'Query run once per loop iteration, directly or through a call', False));  // OFF: see "Measured" in docs\wiki\v154-sql-rules.md
+  ADecls.Add(V151Rule(RULE_QUERY_LOOP, 'firedac', 'hint', 'Query run once per loop iteration, directly or through a call'));  // ON since 1.55 (owner Q8, BDE); see "Measured" in docs\wiki\v154-sql-rules.md
   ADecls.Add(V151Host(RULE_FIELD_LOOP));
 end;
 

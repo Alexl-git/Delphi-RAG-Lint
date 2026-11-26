@@ -63,6 +63,12 @@ Compare-Rule 'sql-param-mismatch' $OffCfg
 Compare-Rule 'query-in-loop' $OffCfg
 Compare-Rule 'field-by-name-in-loop' $OnCfg
 
+# 1.55 QIL (owner Q8): query-in-loop is ON by default -- no --rule, no --enable, an empty config
+$def = Get-Found @('lint-all', '--db', $Db, '--config', $OffCfg)
+$wantQ = Get-Wanted 'query-in-loop'
+$gotQ = @($def | Where-Object { $_ -like '* query-in-loop' })
+Check 'query-in-loop fires with no --rule and no --enable (default ON)' (($wantQ.Count -gt 0) -and (@($wantQ | Where-Object { $gotQ -notcontains $_ }).Count -eq 0)) ("want $($wantQ.Count) got $($gotQ.Count)")
+
 Write-Host 'THE OPTION' -ForegroundColor Cyan
 $off = Get-Found @('lint-all', '--db', $Db, '--config', $OffCfg, '--rule', 'field-by-name-in-loop')
 Check 'ParamByName part is off by default, FieldByName is not' (($off.Count -eq 1) -and ($off[0] -like 'ArrayDml.pas:30 *')) ($off -join ', ')
