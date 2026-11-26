@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "repo",
       "sub": "alter-table",
-      "usage": "drag-lint repo alter-table --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--backup-dir <folder>] [--verify <full|quick>] [--json]",
+      "usage": "drag-lint repo alter-table --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--backup-dir <folder>] [--backup-name <name>] [--verify <full|quick>] [--json]",
       "flags": [
         {
           "name": "--table",
@@ -65,6 +65,10 @@
           "arg": "<folder>"
         },
         {
+          "name": "--backup-name",
+          "arg": "<name>"
+        },
+        {
           "name": "--verify",
           "arg": "<full|quick>"
         },
@@ -73,7 +77,7 @@
         }
       ],
       "helpOrder": 111,
-      "help": ["  drag-lint repo alter-table    --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--backup-dir <folder>] [--verify <full|quick>] [--json]   (make ONE Firebird table match the repository; prints the change set with the exact DDL and writes NOTHING without --apply; a change Firebird refuses, or accepts and loses data on, is BLOCKED; drops, DROP NOT NULL, safe-path changes and the widening of a column other objects use are unchecked: name their ids, after the plan line of the dry run, in --select; all in that file never takes a drop; --apply first makes a backup, restored and compared unless --verify quick, see repo backup --connection; --safe-path offers add-copy-compare-swap for refused type changes; --hook micronite = the Micronite rules; exit 0 ok, 1 bad arguments or a refused or failed apply)"]
+      "help": ["  drag-lint repo alter-table    --table <T> --direction repo-to-db --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--safe-path] [--rename <OLD=NEW[,...]>] [--order <A,B,...>] [--hook <name>] [--select <id file>] [--apply] [--dry-run] [--backup-dir <folder>] [--backup-name <name>] [--verify <full|quick>] [--json]   (make ONE Firebird table match the repository; prints the change set with the exact DDL and writes NOTHING without --apply; a change Firebird refuses, or accepts and loses data on, is BLOCKED; drops, DROP NOT NULL, safe-path changes and the widening of a column other objects use are unchecked: name their ids, after the plan line of the dry run, in --select; all in that file never takes a drop; --apply first makes a backup, restored and compared unless --verify quick, see repo backup --connection; --safe-path offers add-copy-compare-swap for refused type changes; --hook micronite = the Micronite rules; exit 0 ok, 1 bad arguments or a refused or failed apply)"]
     }
   ],
   "audience": "both",
@@ -92,9 +96,9 @@
     }
   ],
   "verified": {
-    "date": "2026-11-23",
+    "date": "2026-11-26",
     "by": "ENGINE",
-    "build": "1.54.0-alpha",
-    "surfaceHash": "dd8d8168f2269a81e271eb1d9342988f6d1763101b2819de83f8e7777b83171b"
+    "build": "1.54.1-alpha",
+    "surfaceHash": "ac80dbea94a41e4eadeb69d18899b6f680fcf750debb9ae3b6656699495ca646"
   }
 }

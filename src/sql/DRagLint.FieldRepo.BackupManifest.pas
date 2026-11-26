@@ -27,6 +27,9 @@ type
     ModifiedUtc: TDateTime;
     CreatedUtc: TDateTime;
     Verified: TFrBackupVerified;
+    /// <summary>True when the user chose the file name (--backup-name): a purge then accepts any plain full path ending in
+    /// .fbk, not only the names drag-lint gives by itself. Written to the list as "named"; absent = False.</summary>
+    Named: Boolean;
   end;
 
   /// <summary>The file behind an entry: as recorded, different, or gone.</summary>
@@ -110,8 +113,17 @@ function PurgeBackups(const pManifest, pDatabase: string; pKeep: Integer; pApply
 /// <summary>The name of a backup file made now.</summary>
 /// <param name="pDatabase">The database file.</param>
 /// <param name="pNow">Local time.</param>
-/// <returns>&lt;database&gt;-yyyymmdd-hhnnsszzz.fbk, the only form of name a purge deletes.</returns>
-function BackupFileName(const pDatabase: string; pNow: TDateTime): string;
+/// <param name="pSuffix">0 or 1 = none; 2 or more appends _<n> (a second backup of the same second).</param>
+/// <returns>DLFR_BACKUP_&lt;database&gt;_yyyymmdd_hhnnss.fbk (from 1.55; before it &lt;database&gt;-yyyymmdd-hhnnsszzz.fbk).
+/// A purge deletes entries made under either form, with or without the _&lt;n&gt; suffix, and files named by --backup-name
+/// only when the entry says so (TFrBackupEntry.Named).</returns>
+function BackupFileName(const pDatabase: string; pNow: TDateTime; pSuffix: Integer = 0): string;
+
+/// <summary>Checks a --backup-name and gives the file name it makes.</summary>
+/// <param name="pName">The name as typed: a name, not a path.</param>
+/// <param name="pFile">The file name: pName with .fbk added when it does not end in it. '' when refused.</param>
+/// <returns>'' = usable; else what is wrong (empty, a path or drive in it, characters Windows refuses, a trailing dot).</returns>
+function ResolveBackupName(const pName: string; out pFile: string): string;
 
 implementation
 
@@ -136,12 +148,16 @@ const
   KEY_MODIFIED = 'modified_utc';
   KEY_CREATED = 'created_utc';
   KEY_VERIFIED = 'verified';
+  KEY_NAMED = 'named';
   MANIFEST_VERSION = 1;
   LOCK_WAIT_MS = 5000;
   { a file time keeps 100 ns, a TDateTime in ISO text one millisecond }
   SAME_DATE_MS = 2;
   BACKUP_EXT = '.fbk';
+  { old form <db>-yyyymmdd-hhnnsszzz.fbk, or the 1.55 form DLFR_BACKUP_<db>_yyyymmdd_hhnnss[_n].fbk }
   STAMP_PATTERN = '-\d{8}-\d{9}';
+  STAMP_PATTERN_NEW = '_\d{8}_\d{6}(_\d+)?';
+  NEW_PREFIX = 'DLFR_BACKUP_';
 
 type
   { SetFileInformationByHandle, class FileDispositionInfo }
@@ -178,6 +194,7 @@ begin
     Result.ModifiedUtc := ISO8601ToDate(pNode.GetValue<string>(KEY_MODIFIED), True);
     Result.CreatedUtc := ISO8601ToDate(pNode.GetValue<string>(KEY_CREATED), True);
     VVerified := pNode.GetValue<string>(KEY_VERIFIED);
+    pNode.TryGetValue<Boolean>(KEY_NAMED, Result.Named);
   except
     on E: Exception do
       raise Malformed(pManifest);
@@ -237,6 +254,8 @@ begin
       VItem.AddPair(KEY_MODIFIED, DateToISO8601(VEntry.ModifiedUtc, True));
       VItem.AddPair(KEY_CREATED, DateToISO8601(VEntry.CreatedUtc, True));
       VItem.AddPair(KEY_VERIFIED, VERIFIED_NAMES[VEntry.Verified]);
+      if VEntry.Named then
+        VItem.AddPair(KEY_NAMED, TJSONBool.Create(True));
       VList.AddElement(VItem);
     end;
     WriteJsonFileAtomic(pManifest, VRoot);
@@ -309,9 +328,30 @@ begin
     end));
 end;
 
-function BackupFileName(const pDatabase: string; pNow: TDateTime): string;
+function BackupFileName(const pDatabase: string; pNow: TDateTime; pSuffix: Integer): string;
+const
+  FIRST_SUFFIX = 2;
 begin
-  Result := ChangeFileExt(ExtractFileName(pDatabase), '') + FormatDateTime('"-"yyyymmdd"-"hhnnsszzz', pNow) + BACKUP_EXT;
+  Result := NEW_PREFIX + ChangeFileExt(ExtractFileName(pDatabase), '') + FormatDateTime('"_"yyyymmdd"_"hhnnss', pNow) +
+    (if pSuffix >= FIRST_SUFFIX then '_' + IntToStr(pSuffix) else '') + BACKUP_EXT;
+end;
+
+function ResolveBackupName(const pName: string; out pFile: string): string;
+begin
+  pFile := '';
+  Result := '';
+  if Trim(pName) = '' then
+    Result := 'the name is empty'
+  else if pName.IndexOfAny(['\', '/', ':']) >= 0 then
+    Result := 'give a name, not a path: it has a path separator or a drive (--backup-dir picks the folder)'
+  else if pName.IndexOfAny(['*', '?', '"', '<', '>', '|']) >= 0 then
+    Result := 'the name has a character a file name cannot have'
+  else if pName.EndsWith('.') or pName.EndsWith(' ') or (pName <> Trim(pName)) then
+    Result := 'the name ends in a dot or a space'
+  else if SameText(pName, BACKUP_EXT) then
+    Result := 'the name is only the extension'
+  else
+    pFile := if pName.EndsWith(BACKUP_EXT, True) then pName else pName + BACKUP_EXT;
 end;
 
 function IsReparsePoint(pAttributes: DWORD): Boolean;
@@ -341,14 +381,16 @@ function NameProblem(const pEntry: TFrBackupEntry): string;
 const
   DRIVE_COLON = 2;
 var
-  VName: string;
+  VName, VBase: string;
 begin
   Result := '';
-  VName := '^' + TRegEx.Escape(ChangeFileExt(ExtractFileName(pEntry.Database), '')) + STAMP_PATTERN + '\' + BACKUP_EXT + '$';
+  VBase := TRegEx.Escape(ChangeFileExt(ExtractFileName(pEntry.Database), ''));
+  VName := '^(' + VBase + STAMP_PATTERN + '|' + NEW_PREFIX + VBase + STAMP_PATTERN_NEW + ')\' + BACKUP_EXT + '$';
   if not SameStr(ExpandFileName(pEntry.FileName), pEntry.FileName) or TPath.IsExtendedPrefixed(pEntry.FileName) or pEntry.FileName.StartsWith('\\.\') or
     (LastDelimiter(':', pEntry.FileName) > DRIVE_COLON) then
     Result := 'not a full path in its plain form'
-  else if not TRegEx.IsMatch(ExtractFileName(pEntry.FileName), VName, [roIgnoreCase]) then
+  else if not (pEntry.Named and ExtractFileName(pEntry.FileName).EndsWith(BACKUP_EXT, True)) and
+    not TRegEx.IsMatch(ExtractFileName(pEntry.FileName), VName, [roIgnoreCase]) then
     Result := 'not the name drag-lint gives a backup of this database';
 end;
 

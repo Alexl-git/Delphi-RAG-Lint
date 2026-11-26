@@ -8,14 +8,14 @@ drag-lint repo alter-table --table <T> --direction repo-to-db --connection "<Fir
     (--repo <file> | --project <project file>)
     [--safe-path] [--rename OLD=NEW[,...]] [--order A,B,...] [--hook <name>]
     [--select <id file>] [--apply] [--dry-run] [--json]
-    [--backup-dir <folder>] [--verify full|quick]
+    [--backup-dir <folder>] [--backup-name <name>] [--verify full|quick]
 ```
 
 | Flag | Meaning |
 |---|---|
 | `--direction repo-to-db` | Required; there is no default direction. |
 | `--apply` | Makes a verified backup of the database, then writes the checked changes. `--dry-run` wins over it. |
-| `--backup-dir`, `--verify` | Where the backup goes and whether it is restored for a test (`full`, the default) or not (`quick`): [[repo-db-backup]]. |
+| `--backup-dir`, `--backup-name`, `--verify` | Where the backup goes, what it is called (default `DLFR_BACKUP_<database>_<yyyymmdd>_<hhnnss>.fbk`) and whether it is restored for a test (`full`, the default) or not (`quick`): [[repo-db-backup]]. |
 | `--select <file>` | Ids to apply, one per line, or `all` (never a blocked one, and never a DROP COLUMN: a drop needs its own id, alone or beside `all`). Alone it writes nothing. With `--apply` the file must also hold the line `plan <hash>` that the dry run printed (`plan_hash` in JSON): ids are positions in ONE plan, and when the table or the repository changed since, the apply is refused. |
 | `--safe-path` | Offers add-copy-compare-swap for type changes Firebird refuses. Unchecked: they need `--select`. |
 | `--rename OLD=NEW` | A rename must be named: the repository knows columns by name only. Without it a rename reads as an add and an unchecked drop. |

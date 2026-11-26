@@ -5,7 +5,7 @@ makes one itself before its first DDL ([[repo-alter-table]]); the verbs below ma
 
 ```
 drag-lint repo backup --connection "<Firebird connection string>" [--verify full|quick] [--table <T>]
-                      [--backup-dir <folder>] [--project <project file>] [--json]
+                      [--backup-dir <folder>] [--backup-name <name>] [--project <project file>] [--json]
 drag-lint repo backup list  [--connection "<Firebird connection string>"] [--json]
 drag-lint repo backup purge --keep <N> [--connection "<Firebird connection string>" [--apply]] [--dry-run] [--json]
 ```
@@ -26,7 +26,9 @@ Beside `--repo` the error names the flag that does not belong and says to drop i
 `--connection` is read as FireDAC reads it (`$(NAME)` expanded); a key given twice is refused. The temporary database is opened
 without its database triggers.
 
-The file is `<database>-<yyyymmdd>-<hhnnsszzz>.fbk`; an existing file is never overwritten. Free space is checked first, with 10 % head
+The file is `DLFR_BACKUP_<database>_<yyyymmdd>_<hhnnss>.fbk` (before 1.55: `<database>-<yyyymmdd>-<hhnnsszzz>.fbk`). Two backups of the same second
+get `_2`, `_3` ... before the extension. `--backup-name <name>` chooses the name instead: a name, not a path (a path separator or
+drive is refused; `--backup-dir` picks the folder), `.fbk` is added when missing. An existing file is never overwritten. Free space is checked first, with 10 % head
 room: one database size, two with the restore test. When anything fails the exit code is 1 and the source database was
 only read. A backup whose verification failed stays on disk, recorded as `failed`; an incomplete one is removed.
 
@@ -41,7 +43,7 @@ whatever its state, the newest `N` fully verified ones, the newest `N` that did 
 verified one, the newest failed one. So the only backup of a database is never purged.
 
 Only a file of the list is ever deleted, and only when the entry is a full plain path (no relative part, link or junction)
-with the name above, the file is listed once, and its size and date are as recorded; that is checked again on the handle the
+with a name drag-lint gives (either form above) or a name chosen with `--backup-name` (the list records that choice), the file is listed once, and its size and date are as recorded; that is checked again on the handle the
 file is deleted through. Anything else is skipped and counts for nothing. An entry whose file is gone is dropped from the
 list; when its folder is gone too (an unplugged drive) it stays. A list that cannot be read, or was written by a newer
 drag-lint, stops the verb and is left as it is.

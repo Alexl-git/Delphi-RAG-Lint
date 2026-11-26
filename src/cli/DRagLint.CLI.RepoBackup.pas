@@ -28,7 +28,7 @@ function IsRepoDbBackup(const pSub, pConnection: string): Boolean;
 /// the database the connection opens.</remarks>
 function RunRepoDbBackup(const pRepo, pConnection: string; pJson: Boolean): Integer;
 
-/// <summary>What is wrong with --verify on this command line.</summary>
+/// <summary>What is wrong with --verify or --backup-name on this command line.</summary>
 /// <returns>'' = usable.</returns>
 function BackupArgsProblem: string;
 
@@ -158,7 +158,7 @@ begin
   else if SameText(pWord, WORD_PURGE) then
     Result := StrayArgument(WORD_ARG + 1, [FLAG_CONNECTION, FLAG_KEEP], [FLAG_APPLY, FLAG_DRY_RUN, FLAG_JSON])
   else
-    Result := StrayArgument(WORD_ARG, [FLAG_CONNECTION, '--verify', FLAG_TABLE, '--backup-dir', '--project'], [FLAG_JSON]);
+    Result := StrayArgument(WORD_ARG, [FLAG_CONNECTION, '--verify', FLAG_TABLE, '--backup-dir', '--backup-name', '--project'], [FLAG_JSON]);
 end;
 
 { '' = usable; else what is wrong with the arguments of a database backup, its list or its purge. }
@@ -194,9 +194,17 @@ begin
 end;
 
 function BackupArgsProblem: string;
+var
+  VFile, VProblem: string;
 begin
   Result := if CommandLineFlag('--verify') and not MatchText(CommandLineValue('--verify'), [VERIFY_FULL, VERIFY_QUICK]) then
     '--verify takes full (default: restore test) or quick' else '';
+  if (Result = '') and CommandLineFlag('--backup-name') then
+  begin
+    VProblem := ResolveBackupName(CommandLineValue('--backup-name'), VFile);
+    if VProblem <> '' then
+      Result := '--backup-name: ' + VProblem;
+  end;
 end;
 
 function ManifestFile: string;
@@ -250,6 +258,7 @@ begin
   VRequest := Default(TFrBackupRequest);
   VRequest.Connection := pConnection;
   VRequest.BackupDir := BackupDir;
+  VRequest.BackupName := CommandLineValue('--backup-name');
   VRequest.TableName := pTable;
   VRequest.Identity := pIdentity;
   VRequest.Verify := if SameText(CommandLineValue('--verify'), VERIFY_QUICK) then fvmQuick else fvmFull;

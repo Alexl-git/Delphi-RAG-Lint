@@ -23,6 +23,11 @@ type
     Connection: string;
     /// <summary>Folder for the backup (created when missing); '' = beside the database.</summary>
     BackupDir: string;
+    /// <summary>The user's file name (--backup-name), a name and not a path; '' = DLFR_BACKUP_&lt;database&gt;_&lt;date&gt;_&lt;time&gt;.fbk.
+    /// .fbk is added when missing; an existing file is never overwritten; the entry is recorded as Named.</summary>
+    BackupName: string;
+    /// <summary>Test seam: the clock of the default name; nil = Now.</summary>
+    Now: TFunc<TDateTime>;
     /// <summary>Table whose row count is compared too; '' = only the table list.</summary>
     TableName: string;
     Verify: TFrVerifyMode;
@@ -702,12 +707,39 @@ begin
   pResult.Rows := pSource.Rows;
 end;
 
+{ The path of the new backup: the user's --backup-name, or the default name; a default name taken by a backup of the same second gets _2, _3 ... }
+function ChooseFile(const pRequest: TFrBackupRequest; const pSource: TFbSource; var pEntry: TFrBackupEntry): string;
+const
+  FIRST_SUFFIX = 2;
+var
+  VFolder, VName, VProblem: string;
+  VNow: TDateTime;
+  VSuffix: Integer;
+begin
+  VFolder := PrepareFolder(pRequest, pSource);
+  if pRequest.BackupName <> '' then
+  begin
+    VProblem := ResolveBackupName(pRequest.BackupName, VName);
+    if VProblem <> '' then
+      raise EFrBackupError.CreateFmt('--backup-name: %s', [VProblem]);
+    pEntry.Named := True;
+    Exit(TPath.Combine(VFolder, VName));
+  end;
+  VNow := if Assigned(pRequest.Now) then pRequest.Now() else Now;
+  VSuffix := 0;
+  Result := TPath.Combine(VFolder, BackupFileName(pSource.FileName, VNow));
+  while TFile.Exists(Result) or TDirectory.Exists(Result) do
+  begin
+    VSuffix := if VSuffix = 0 then FIRST_SUFFIX else VSuffix + 1;
+    Result := TPath.Combine(VFolder, BackupFileName(pSource.FileName, VNow, VSuffix));
+  end;
+end;
 function WriteBackup(const pRequest: TFrBackupRequest; const pTarget: TFbTarget; pConn: TFDConnection; const pSource: TFbSource): TFrBackupEntry;
 begin
   Result := Default(TFrBackupEntry);
   Result.Database := pSource.FileName;
   Result.CreatedUtc := TTimeZone.Local.ToUniversalTime(Now);
-  Result.FileName := TPath.Combine(PrepareFolder(pRequest, pSource), BackupFileName(pSource.FileName, Now));
+  Result.FileName := ChooseFile(pRequest, pSource, Result);
   if Assigned(pRequest.BeforeBackup) then
     pRequest.BeforeBackup(Result.FileName);
   if TFile.Exists(Result.FileName) or TDirectory.Exists(Result.FileName) then

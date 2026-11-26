@@ -11,6 +11,7 @@ uses
   Winapi.Windows,
   System.SysUtils,
   System.IOUtils,
+  System.RegularExpressions,
   System.Classes,
   System.DateUtils,
   System.SyncObjs,
@@ -101,6 +102,7 @@ end;
 { One backup of a database; its folder is the label the checks print. }
 function MakeEntry(const pName, pDatabase: string; pAgeHours: Integer; pVerified: TFrBackupVerified): TFrBackupEntry;
 begin
+  Result := Default(TFrBackupEntry);
   Result.FileName := TPath.Combine(TPath.Combine(GDir, pName), ChangeFileExt(ExtractFileName(pDatabase), '') + '-20261123-101112000.fbk');
   TDirectory.CreateDirectory(ExtractFilePath(Result.FileName));
   TFile.WriteAllText(Result.FileName, 'backup ' + pName);
@@ -338,6 +340,82 @@ begin
   RemoveDir(ExtractFileDir(vOld.FileName));
 end;
 
+{ BKNAME (1.55): the new default name, --backup-name, and what a purge recognises }
+procedure TestNames;
+var
+  vDir, vFile, vProblem, vResolved: string;
+  vOld, vEntry, vKeep: TFrBackupEntry;
+  vManifest: string;
+  vRead: TArray<TFrBackupEntry>;
+
+  function PlanOf(const pEntry: TFrBackupEntry): string;
+  var
+    vItem: TFrPurgeItem;
+  begin
+    Result := '(none)';
+    for vItem in PlanBackupPurge([vKeep, pEntry], 1) do
+      if vItem.Entry.FileName = pEntry.FileName then
+        Result := PURGE_ACTION_NAMES[vItem.Action] + ' ' + vItem.Reason;
+  end;
+
+  { an entry whose file is vDir\pName, older than vKeep }
+  function Named(const pName: string; pNamed: Boolean): TFrBackupEntry;
+  begin
+    Result := vOld;
+    Result.FileName := TPath.Combine(vDir, pName);
+    TFile.WriteAllText(Result.FileName, 'x');
+    Result.Size := TFile.GetSize(Result.FileName);
+    Result.ModifiedUtc := TFile.GetLastWriteTimeUtc(Result.FileName);
+    Result.Named := pNamed;
+  end;
+
+begin
+  Check('N1 default name', BackupFileName('C:\db\A.FDB', EncodeDateTime(2026, 11, 26, 9, 8, 7, 654)) = 'DLFR_BACKUP_A_20261126_090807.fbk',
+    BackupFileName('C:\db\A.FDB', EncodeDateTime(2026, 11, 26, 9, 8, 7, 654)));
+  Check('N1b collision suffix', BackupFileName('C:\db\A.FDB', EncodeDateTime(2026, 11, 26, 9, 8, 7, 654), 2) = 'DLFR_BACKUP_A_20261126_090807_2.fbk');
+  vProblem := ResolveBackupName('mine', vResolved);
+  Check('N2 .fbk is added', (vProblem = '') and (vResolved = 'mine.fbk'), vProblem + ' ' + vResolved);
+  vProblem := ResolveBackupName('Mine.FBK', vResolved);
+  Check('N2b .fbk kept as typed', (vProblem = '') and (vResolved = 'Mine.FBK'), vProblem + ' ' + vResolved);
+  Check('N2c a path separator or drive is refused', (ResolveBackupName('x\y.fbk', vResolved) <> '') and (ResolveBackupName('x/y', vResolved) <> '') and
+    (ResolveBackupName('C:y', vResolved) <> '') and (ResolveBackupName('..\y', vResolved) <> ''));
+  Check('N2d empty, only the extension, bad characters, trailing dot -> refused', (ResolveBackupName('', vResolved) <> '') and (ResolveBackupName('  ', vResolved) <> '') and
+    (ResolveBackupName('.fbk', vResolved) <> '') and (ResolveBackupName('a*b', vResolved) <> '') and (ResolveBackupName('a.', vResolved) <> '') and
+    (ResolveBackupName('a?', vResolved) <> ''));
+  vDir := TPath.Combine(GDir, 'names');
+  TDirectory.CreateDirectory(vDir);
+  vKeep := MakeEntry('names-keep', 'C:\db\A.FDB', 1, fbvFull);
+  vOld := MakeEntry('names-old', 'C:\db\A.FDB', 2, fbvFull);
+  Check('N3 the old form is still deleted', PlanOf(vOld).StartsWith('delete'), PlanOf(vOld));
+  vFile := 'DLFR_BACKUP_A_20261126_090807.fbk';
+  vEntry := Named(vFile, False);
+  Check('N3b the new form is deleted', PlanOf(vEntry).StartsWith('delete'), PlanOf(vEntry));
+  vEntry := Named('DLFR_BACKUP_A_20261126_090807_2.fbk', False);
+  Check('N3c the new form with a collision suffix is deleted', PlanOf(vEntry).StartsWith('delete'), PlanOf(vEntry));
+  vEntry := Named('dlfr_backup_a_20261126_090807.FBK', False);
+  Check('N3d case does not matter', PlanOf(vEntry).StartsWith('delete'), PlanOf(vEntry));
+  vEntry := Named('DLFR_BACKUP_B_20261126_090807.fbk', False);
+  Check('N3e the new form of another database is left alone', PlanOf(vEntry).StartsWith('skip '), PlanOf(vEntry));
+  vEntry := Named('DLFR_BACKUP_A_20261126.fbk', False);
+  Check('N3f a new form without the time is left alone', PlanOf(vEntry).StartsWith('skip '), PlanOf(vEntry));
+  vEntry := Named('mine.fbk', False);
+  Check('N4 a free name NOT recorded as chosen is left alone', PlanOf(vEntry).StartsWith('skip '), PlanOf(vEntry));
+  vEntry := Named('mine.fbk', True);
+  Check('N4b a free name recorded as chosen (--backup-name) is deleted', PlanOf(vEntry).StartsWith('delete'), PlanOf(vEntry));
+  vEntry := Named('mine.fdb', True);
+  Check('N4c a chosen name that is not .fbk is left alone', PlanOf(vEntry).StartsWith('skip '), PlanOf(vEntry));
+  vEntry := Named('mine.fbk', True);
+  vEntry.FileName := vEntry.FileName.Replace('\', '/');
+  Check('N4d a chosen name still needs the plain full path', PlanOf(vEntry).StartsWith('skip '), PlanOf(vEntry));
+  vManifest := TPath.Combine(GDir, 'names\list.json');
+  vEntry := Named('mine.fbk', True);
+  AddToBackupManifest(vManifest, vEntry);
+  AddToBackupManifest(vManifest, vOld);
+  vRead := ReadBackupManifest(vManifest);
+  Check('N5 the chosen-name mark survives the list file, and is absent for an old entry', (Length(vRead) = 2) and vRead[0].Named and not vRead[1].Named);
+  Check('N5b an old list without the mark reads as not chosen', not ReadBackupManifest(vManifest)[1].Named);
+end;
+
 { M4: a path that is not exactly what drag-lint writes is left alone, though size and date match }
 procedure TestPurgePaths;
 var
@@ -499,6 +577,8 @@ var
   vRes: TFrBackupResult;
   vNeed: Int64;
   vHeld: IFrDbProvider;
+  vSaveReq: TFrBackupRequest;
+  vSaveManifest: string;
 
   function Request(const pSub: string; pVerify: TFrVerifyMode = fvmFull): TFrBackupRequest;
   begin
@@ -545,12 +625,36 @@ begin
   vName := ExtractFileName(vRes.Entry.FileName);
   Check('L1 full: the file is there, verified, two relations and two rows compared', TFile.Exists(vRes.Entry.FileName) and (vRes.Entry.Verified = fbvFull) and
     (vRes.Tables = 2) and (vRes.Rows = 2) and (vRes.Leftover = '') and (vRes.Entry.Size = TFile.GetSize(vRes.Entry.FileName)));
-  Check('L1b the name carries the database and a timestamp', vName.StartsWith('scratch-', True) and vName.Contains(FormatDateTime('yyyymmdd', Now)) and vName.EndsWith('.fbk'), vName);
+  Check('L1b the name is DLFR_BACKUP_<database>_<date>_<time>.fbk', TRegEx.IsMatch(vName, '^DLFR_BACKUP_scratch_\d{8}_\d{6}\.fbk$', [roIgnoreCase]) and vName.Contains(FormatDateTime('yyyymmdd', Now)), vName);
   Check('L1c only the backup is left in the folder', (Files(vDir, '*') = 1) and (Files(vDir, 'drag-lint-verify-*') = 0));
   Check('L1d it is recorded', (Length(ReadBackupManifest(vManifest)) = 1) and (BackupFileState(ReadBackupManifest(vManifest)[0]) = ffsMatch) and
     SameText(ExtractFileName(ReadBackupManifest(vManifest)[0].Database), 'scratch.fdb'));
   Check('L1e the source is untouched: its tables and rows', OpenFirebirdProvider(ScratchConn).ReadScalar(
     'SELECT 10 * (SELECT COUNT(*) FROM T) + COUNT(*) FROM RDB$RELATIONS WHERE COALESCE(RDB$SYSTEM_FLAG, 0) = 0') = 22);
+  { BKNAME: the chosen name; an existing file is refused; the same-second default name gets a suffix }
+  vSaveReq := vReq;
+  vSaveManifest := vManifest;
+  Fresh('bkname');
+  vReq.Verify := fvmQuick;
+  vRes := BackupFbDatabase(vReq, vManifest);
+  vReq.BackupName := 'chosen';
+  vFail := Fails;
+  Check('L1f --backup-name: the file is <name>.fbk, recorded as chosen', (vFail = '') and TFile.Exists(TPath.Combine(vDir, 'chosen.fbk')) and
+    (Length(ReadBackupManifest(vManifest)) = 2) and ReadBackupManifest(vManifest)[1].Named and not ReadBackupManifest(vManifest)[0].Named, vFail);
+  vFail := Fails;
+  Check('L1g --backup-name over an existing file is refused, nothing more recorded', vFail.Contains('exists already') and (Length(ReadBackupManifest(vManifest)) = 2), vFail);
+  vReq.BackupName := 'a\b';
+  vFail := Fails;
+  Check('L1h a name with a path separator is refused', vFail.Contains('path') and (Length(ReadBackupManifest(vManifest)) = 2), vFail);
+  vReq.BackupName := '';
+  TFile.Copy(vRes.Entry.FileName, TPath.Combine(vDir, 'DLFR_BACKUP_scratch_29990101_000000.fbk'));
+  vReq.Now := function: TDateTime begin Result := EncodeDateTime(2999, 1, 1, 0, 0, 0, 0) end;
+  vRes := BackupFbDatabase(vReq, vManifest);
+  Check('L1i the default name of the same second gets _2 instead of failing', SameText(ExtractFileName(vRes.Entry.FileName), 'DLFR_BACKUP_scratch_29990101_000000_2.fbk'), ExtractFileName(vRes.Entry.FileName));
+  vReq.Now := nil;
+  vReq := vSaveReq;
+  vManifest := vSaveManifest;
+  vDir := vReq.BackupDir;
   vReq.Verify := fvmQuick;
   vReq.TableName := '';
   vRes := BackupFbDatabase(vReq, vManifest);
@@ -695,6 +799,7 @@ begin
       TestPurge;
       TestPurgeLast;
       TestPurgePaths;
+      TestNames;
       TestPurgeSwap;
       TestHosts;
       TestLive;

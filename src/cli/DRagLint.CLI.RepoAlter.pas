@@ -12,7 +12,7 @@ interface
 /// <param name="pJson">--json: one JSON object on stdout.</param>
 /// <returns>0 = ok (a dry run included, and an apply with nothing to do); 1 = bad arguments, no such table, a refused or
 /// failed apply (the report is still printed when groups ran).</returns>
-/// <remarks>An apply first makes a verified backup of the database (DRagLint.CLI.RepoBackup: --backup-dir, --verify
+/// <remarks>An apply first makes a verified backup of the database (DRagLint.CLI.RepoBackup: --backup-dir, --backup-name <name>, --verify
 /// full|quick; --project names the project whose setting gives the folder); when that fails nothing is changed.
 /// DRY RUN unless --apply is on the command line; --select &lt;file&gt; only chooses, it does not write (with --apply
 /// it must hold the "plan &lt;hash&gt;" line of the dry run its ids come from; another plan is refused);
