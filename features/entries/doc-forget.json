@@ -5,8 +5,8 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.17.0-alpha",
-  "summary": "Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply",
-  "intro": "Read this when documentation facts carry the wrong project tag, or tags need cleaning up. doc-forget removes or renames project tags on inbound doc facts for a file or folder, and is a dry run unless you pass --apply.",
+  "summary": "Reap or rename the project tags on inbound and Registered as: documentation facts; a dry run unless told to apply",
+  "intro": "Read this when documentation facts carry the wrong project tag, or tags need cleaning up. doc-forget removes or renames project tags on inbound and Registered as: doc facts for a file or folder, and is a dry run unless you pass --apply.",
   "wikiPage": "Features",
   "surfaces": [
     {
@@ -66,9 +66,9 @@
   ],
   "notes": "seed: needs own page",
   "verified": {
-    "date": "2026-11-08",
+    "date": "2026-11-24",
     "by": "ENGINE",
-    "build": "1.50.0-alpha",
+    "build": "1.54.0-alpha",
     "surfaceHash": "f9ceb71c5380ad62dcb2168d93fc060e3eb055095a49f13d069becc17d79a344"
   }
 }

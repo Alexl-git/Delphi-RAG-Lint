@@ -409,6 +409,18 @@ type
     /// </remarks>
     class function StoredBlockBody(const AText: string): string; static;
 
+    /// <summary>Does a managed block show that another project documents this
+    /// unit too: an inbound entry naming a unit the index does not hold, or an
+    /// inbound entry carrying a project tag?</summary>
+    /// <param name="ABody">The block's body, between the markers.</param>
+    /// <param name="AStore">The index asking.</param>
+    /// <returns>True on such evidence; False for nil store or empty body.</returns>
+    /// <remarks>The evidence half of the participation rule, without the
+    /// `dl:shared` marker. DRagLint.Doc.SharedWiring asks it of every block of a
+    /// file, because the block holding a registration line often has no inbound
+    /// fact of its own.</remarks>
+    class function BlockNamesOtherProject(const ABody: string; const AStore: ISymbolStore): Boolean; static;
+
     /// <summary>The `Calls:` entries the STORED block names that the regenerated
     /// block no longer names, and that this index cannot vouch for (E-DOC-REFUSE).</summary>
     /// <param name="AStore">The index the regeneration was made from. Not owned.
@@ -2237,6 +2249,11 @@ end;
 class function TSharedFacts.StoredBlockBody(const AText: string): string;
 begin
   Result:= DRagLint.Doc.SharedFacts.StoredBlockBody(AText);
+end;
+
+class function TSharedFacts.BlockNamesOtherProject(const ABody: string; const AStore: ISymbolStore): Boolean;
+begin
+  Result:= BlockHoldsUnvouchable(AStore, ABody) or ((AStore <> nil) and BlockCarriesTags(ABody));
 end;
 
 class function TSharedFacts.CallsLostUnseen(const AStore: ISymbolStore; const AStoredBody,

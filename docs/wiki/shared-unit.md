@@ -56,6 +56,21 @@ sees, and since 2026-09-23 each inbound entry (`Called from:`, `Used by:`,
   is left alone; once any project tags a line, the others adopt their entries
   on their next run (one write per project per line).
 * Lists on such a block are never windowed as `(+N more)`.
+* `Registered as:` is tagged the same way since 1.54.1, because two projects
+  that compile one unit have their own DI registrations:
+
+  ```
+  /// <para>Registered as: [CliApp]IFoo (singleton), [SrvApp]IFoo (transient)</para>
+  ```
+
+  It applies to every block of a unit that is marked `dl:shared`, or whose file
+  holds a project tag or a fact naming a unit this index does not hold (usually
+  the other project's registrar in `Used by:`). A unit of one project is never
+  tagged. An untagged line from before is tagged once by the project that
+  renders it; the other projects leave it as it stands, except where they
+  register the same interface themselves. When both registrars are units of the same
+  name, or both are compiled by both projects, there is no evidence in the file:
+  mark the unit `dl:shared`.
 
 `doc-forget` reaps tags directly, without an index -- for a project that was
 retired or renamed:

@@ -75,6 +75,11 @@ const
   VIA_PROPERTY_LABEL_PREFIX = 'Used in (via property ';
   /// <summary>Wave 149 LX: what closes an accessor echo label after the property name.</summary>
   VIA_PROPERTY_LABEL_END    = '):';
+  { Q21 (1.54.1): the DI fact. Tagged per project on a unit another project is
+    seen in, like the inbound labels, but reconciled by DRagLint.Doc.SharedWiring:
+    its entries (`IFoo (transient)`) name no unit, so the inbound rule "keep what
+    names a unit this index does not hold" cannot judge them. }
+  WIRING_LABEL = 'Registered as:';
 
 type
   /// <summary>What one `doc-forget` pass does to the project tags on inbound
@@ -137,6 +142,15 @@ type
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SplitEntries(const AContent: string): TArray<string>;
+
+/// <summary>Splits the content of a `Registered as:` fact into entries.</summary>
+/// <param name="AContent">The text after the label, XML-escaped or not, e.g.
+/// `[A,B]IFoo (transient), IPair&lt;string, Integer&gt; (singleton)`.</param>
+/// <returns>The trimmed, non-empty entries, in order, spelled as given.</returns>
+/// <remarks>Unlike SplitEntries a comma inside `&lt;...&gt;` or `(...)` is not a
+/// separator: an entry is an interface TYPE, which may be a generic of several
+/// arguments.</remarks>
+function SplitWiringEntries(const AContent: string): TArray<string>;
 
 /// <summary>Splits `[A,B]rest` into its tags and the bare entry.</summary>
 /// <param name="AEntry">One entry.</param>
@@ -325,6 +339,14 @@ function ListTags(const AText: string): TArray<string>;
 /// </remarks>
 function FindInboundLabel(const AText: string; AFrom: Integer; out ALabel: string): Integer;
 
+/// <summary>The first label whose entries can carry project tags at or after
+/// AFrom: an inbound label or `Registered as:`.</summary>
+/// <param name="AText">Text to search.</param>
+/// <param name="AFrom">1-based start position.</param>
+/// <param name="ALabel">The whole label found, or empty.</param>
+/// <returns>Its 1-based position, or 0 when there is none.</returns>
+function FindTaggedLabel(const AText: string; AFrom: Integer; out ALabel: string): Integer;
+
 /// <summary>Wave 149 LX: True for an accessor echo label 'Used in (via property X):'.</summary>
 /// <param name="ALabel">A label as FindInboundLabel returns it.</param>
 /// <returns>True when ALabel starts with VIA_PROPERTY_LABEL_PREFIX and ends with
@@ -382,7 +404,9 @@ begin
   end;
 end;
 
-function SplitEntries(const AContent: string): TArray<string>;
+{ The comma-separated parts of AContent, blanks collapsed, not splitting between
+  a character of AOpens and one of ACloses. }
+function SplitTopLevel(const AContent, AOpens, ACloses: string): TArray<string>;
 var
   L    : TList<string>;
   S    : string;
@@ -402,8 +426,8 @@ begin
     Start:= 1;
     Depth:= 0;
     for I:= 1 to Length(S) do
-      if S[I] = TAG_OPEN then Inc(Depth)
-      else if (S[I] = TAG_CLOSE) and (Depth > 0) then Dec(Depth)
+      if AOpens.Contains(S[I]) then Inc(Depth)
+      else if ACloses.Contains(S[I]) and (Depth > 0) then Dec(Depth)
       else if (S[I] = ',') and (Depth = 0) then
       begin
         AddTok(Copy(S, Start, I - Start));
@@ -414,6 +438,26 @@ begin
   finally
     L.Free;
   end;
+end;
+
+function SplitEntries(const AContent: string): TArray<string>;
+begin
+  Result:= SplitTopLevel(AContent, TAG_OPEN, TAG_CLOSE);
+end;
+
+function SplitWiringEntries(const AContent: string): TArray<string>;
+const
+  { One-character stand-ins for the entities while splitting, restored after, so
+    an entry keeps the spelling it came with. }
+  LT_STAND_IN = #1;
+  GT_STAND_IN = #2;
+var
+  I: Integer;
+begin
+  Result:= SplitTopLevel(AContent.Replace('&lt;', LT_STAND_IN).Replace('&gt;', GT_STAND_IN),
+    TAG_OPEN + '(<' + LT_STAND_IN, TAG_CLOSE + ')>' + GT_STAND_IN);
+  for I:= 0 to High(Result) do
+    Result[I]:= Result[I].Replace(LT_STAND_IN, '&lt;').Replace(GT_STAND_IN, '&gt;');
 end;
 
 procedure SplitTagged(const AEntry: string; out ATags: TArray<string>; out ABare: string);
@@ -558,12 +602,26 @@ begin
   end;
 end;
 
+function FindTaggedLabel(const AText: string; AFrom: Integer; out ALabel: string): Integer;
+var
+  WiringAt: Integer;
+begin
+  Result  := FindInboundLabel(AText, AFrom, ALabel);
+  WiringAt:= PosEx(WIRING_LABEL, AText, AFrom);
+  if (WiringAt > 0) and ((Result = 0) or (WiringAt < Result)) then
+  begin
+    Result:= WiringAt;
+    ALabel:= WIRING_LABEL;
+  end;
+end;
+
 function IsViaPropertyLabel(const ALabel: string): Boolean;
 begin
   Result:= StartsStr(VIA_PROPERTY_LABEL_PREFIX, ALabel) and EndsStr(VIA_PROPERTY_LABEL_END, ALabel);
 end;
 
-{ Takes one source line apart if it is an inbound fact line: AHead is everything
+{ Takes one source line apart if it is a fact line that can carry tags (an inbound
+  one, or since 1.54.1 `Registered as:`): AHead is everything
   up to and including the label, AEntries its entries, and the three tails --
   a `(+N more)` marker, a closing </para>, a CR -- are held aside so a rewrite
   puts them back exactly. False for any other line. }
@@ -582,7 +640,7 @@ begin
   ATail   := '';
   ACR     := '';
   { 149 LX: FindInboundLabel, so an accessor echo line ('Used in (via property X):') is one too. }
-  P:= FindInboundLabel(ALine, 1, Lab);
+  P:= FindTaggedLabel(ALine, 1, Lab);
   if P > 0 then
   begin
     AHead:= Copy(ALine, 1, P + Length(Lab) - 1);
@@ -600,7 +658,7 @@ begin
     end;
     Bare:= WithoutMoreSuffix(Rest);
     if Bare <> Rest then AMore:= Copy(Rest, Length(Bare) + 1, MaxInt);
-    AEntries:= SplitEntries(Bare);
+    AEntries:= if Lab = WIRING_LABEL then SplitWiringEntries(Bare) else SplitEntries(Bare);
     Exit(True);
   end;
 end;

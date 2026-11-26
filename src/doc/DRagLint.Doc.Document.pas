@@ -264,7 +264,7 @@ uses
   System.IOUtils, System.Generics.Collections,
   DRagLint.Doc.Facts, DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   DRagLint.Parser.DocComments, DRagLint.Refactor.DocStub,
-  DRagLint.Doc.SharedFacts, DRagLint.Doc.Harvest;
+  DRagLint.Doc.SharedFacts, DRagLint.Doc.SharedWiring, DRagLint.Doc.Harvest;
 
 { C14: the caller edges TDocFactsBuilder refused this RUN (see
   TDocFacts.SkippedCallers), reported as ONE stderr line when the unit
@@ -1233,6 +1233,10 @@ begin
                                   {AIncludeCalleeRaises=}True,
                                   TSharedFacts.WantsWholeInboundLists(
                                     TSharedFacts.StoredBlockBody(Existing.Remarks), AStore, Path));
+  { Q21 (1.54.1): the DI registrations of the other projects that compile this
+    unit are put back BEFORE the render, so a block whose only fact is another
+    project's registration renders at all. TDocDrift.Analyze does the same. }
+  Facts.Wiring:= ReconcileWiring(Facts.Wiring, TSharedFacts.StoredBlockBody(Existing.Remarks), AStore, Path);
   // C14: say which unverified caller edges were refused, and why -- on stderr,
   // so stdout (the proposed block, or --json) keeps its shape; one summary line
   // per run, see ReportSkippedCallers.
