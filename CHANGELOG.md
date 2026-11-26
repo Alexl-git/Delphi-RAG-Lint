@@ -5,7 +5,14 @@ breaking changes** until v2.0.
 
 ## v1.54.1-alpha -- unreleased
 
-- AUTODOC (REGTAG, Q21): `Registered as:` on a unit two projects compile is tagged per project -- `[CliApp]IFoo (singleton), [SrvApp]IFoo (transient)` -- and a run adds and removes only its own tag, so `document` and doc-drift reach a fixpoint; before, each project replaced the other's line on every run. Old untagged lines are tagged once; a unit of one project is unchanged. `doc-forget` sees these tags. No re-parse.
+- AUTODOC (REGTAG, Q21): `Registered as:` on a unit two projects compile is tagged per project -- `[CliApp]IFoo (singleton), [SrvApp]IFoo (transient)` -- and a run adds and removes only its own tag, so `document` and doc-drift reach a fixpoint; before, each project replaced the other's line on every run. Old untagged lines are tagged once; a unit of one project is unchanged. `doc-forget` sees these tags. No re-parse. 1.54.1 review R1: a project tag on ANY entry of a stored line is evidence, also when an untagged leftover sorts first (before, that run wrote its own untagged line and deleted the other project's tagged entries).
+- LINT (CONSOLE): `writeln-in-gui-app` asks the program before it says "this program has no console": `{$APPTYPE}` in the `.dpr` (directives only, the last one wins, a conditional `CONSOLE` counts), `AllocConsole` / `AttachConsole`, else `DCC_ConsoleTarget` of the `.dproj` for the indexed platform and config. A unit of a console program is no longer reported. `lint`, `lint-all` and the LSP.
+- LINT: `ui-call-in-console-or-service` decides "console program" the same way, in the per-file check and in the `lint-all` cross-unit pass: a `.dproj` with `DCC_ConsoleTarget` is now seen, and `{$APPTYPE CONSOLE}` inside a comment, or followed by `{$APPTYPE GUI}`, no longer counts. Wiki known limit updated.
+- IDE (HOVERNOTE): resting the mouse asks about the place under the pointer (the menu command: the caret); with nothing to show, the drag-lint strip names what is there (an unindexed identifier, a keyword, a word in a comment / string, white space); the note and the reindex progress show side by side.
+- CLI: `repo backup --repo X` with a flag the text backup does not take (e.g. `--json`) names the flag and says to drop it; before, it said "--repo does not go with a database backup" although none was asked for. `--repo` with `--connection` says which of the two to drop.
+- Shipped text: the ConvRules editor's built-in project index is a neutral example path (no customer database name in the binary).
+- CHANGELOG: the 1.51.0 and 1.51.1 dates (their merges to main; neither was tagged).
+- Versions: 1.54.1-alpha (engine and plugin); extractor unchanged, no re-parse.
 
 ## v1.54.0-alpha -- 2026-11-24
 
@@ -434,7 +441,7 @@ Hotfix release. No re-parse: extractor, resolver, grammar and rule counts unchan
 - RPT: the drag-lint > Reports menu items did nothing in the IDE (the click handler read the question from the sender Tag and returned silently). The question index is now bound at menu-build time; every click logs a Reports: line and every early stop logs or shows why. Tests: TReportClickTests (4), ReportTextTests 45/45.
 
 
-## v1.51.1-alpha -- date TBD
+## v1.51.1-alpha -- 2026-11-17
 
 Bug-fix release (wave v1511, 25 lanes). 423 rules, 341 enabled by default, 125 with an auto-fix (unchanged; no
 default flipped). One re-parse: extractor 1.39.0 -> 1.40.0-alpha, resolver 1.27.0 -> 1.28.0-alpha, index schema
@@ -564,7 +571,7 @@ default flipped). One re-parse: extractor 1.39.0 -> 1.40.0-alpha, resolver 1.27.
 - B27: the grammar still accepts `Inline` / `Library` as identifiers (tree-sitter session, low).
 - `index --resolve-only` on a DB copy without a library store still clears `external_target` (now warned, F3).
 
-## v1.51.0-alpha -- date TBD
+## v1.51.0-alpha -- 2026-11-15
 
 Wave v151 (39 lanes). 423 rules (was 317): 341 enabled by default (was 263), 125 with an auto-fix (was 113),
 310 built-in and 113 external `.scm`. One re-parse: extractor 1.38.0 -> 1.39.0-alpha, resolver 1.26.0 -> 1.27.0-alpha.
