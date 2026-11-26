@@ -3,6 +3,10 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## Unreleased (1.55)
+
+- FIELD REPOSITORY (UPDORM, owner 2026-11-26): `repo update-orm` keeps a region whose id it does not generate (`DB-RAD 99`, `DB-RAD notes`) byte for byte as hand code and still updates the known regions of the unit; 1.53.1-1.54 refused such a unit. A unit whose markers cannot be trusted (regions that do not nest, a known region closed by another id, a known marker sharing its line with code, a known region holding another region or part of a conditional, an open comment / string) is still REFUSED, and the run now exits 1 (Q9; dry run too) while the other units are written. No re-parse.
+
 ## v1.54.1-alpha -- 2026-11-26
 
 - AUTODOC (REGTAG, Q21): `Registered as:` on a unit two projects compile is tagged per project -- `[CliApp]IFoo (singleton), [SrvApp]IFoo (transient)` -- and a run adds and removes only its own tag, so `document` and doc-drift reach a fixpoint; before, each project replaced the other's line on every run. Old untagged lines are tagged once; a unit of one project is unchanged. `doc-forget` sees these tags. No re-parse. 1.54.1 review R1: a project tag on ANY entry of a stored line is evidence, also when an untagged leftover sorts first (before, that run wrote its own untagged line and deleted the other project's tagged entries).

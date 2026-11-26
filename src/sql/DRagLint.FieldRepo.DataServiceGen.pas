@@ -83,7 +83,9 @@ type
 /// <param name="pOptions">The verb and its folders.</param>
 /// <param name="pOut">Receives the output lines; not cleared.</param>
 /// <returns>0 done; 1 bad arguments (a folder the verb needs is missing), unknown sub-verb,
-/// unknown table or a repository / generator error (the message is in pOut).</returns>
+/// unknown table or a repository / generator error (the message is in pOut), or a unit update-orm
+/// REFUSED (its 'skipped &lt;file&gt;: REFUSED, ...' line is in pOut; the other units are still planned and,
+/// with Apply, written).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Repo.RepoOrmVerb (DRagLint.CLI.Repo.pas)</para>
@@ -350,6 +352,19 @@ begin
     [pOptions.Sub, Counts[ockNew], Counts[ockChanged], Counts[ockUnchanged], pSkipped.Count, Tail]));
 end;
 
+{ True when a skipped line is a unit PlanUpdateOrm refused (its text is '<file>: REFUSED, ...'). }
+function AnyRefused(pSkipped: TStrings): Boolean;
+const
+  REFUSED_MARK = ': REFUSED, ';
+var
+  S: string;
+begin
+  Result:= False;
+  for S in pSkipped do
+    if S.Contains(REFUSED_MARK) then
+      Exit(True);
+end;
+
 function RunOrmGenVerb(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer;
 var
   Conn: TFDConnection;
@@ -367,7 +382,8 @@ begin
         if not PlanVerb(Conn, pOptions, Tables, Skipped, Plan, pOut) then
           Exit;
         ReportPlan(pOptions, Plan, Skipped, pOut);
-        Result:= 0;
+        { 1.55 UPDORM Q9 (owner 2026-11-26): a refused unit fails the run; the other units are written }
+        Result:= if AnyRefused(Skipped) then 1 else 0;
       finally
         Conn.Free;
       end;

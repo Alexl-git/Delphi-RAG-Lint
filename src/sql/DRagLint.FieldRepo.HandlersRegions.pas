@@ -157,11 +157,16 @@ function FindOrmRegion(const pText, pOrmId: string; out pRegion: TDlfrRegion): B
 /// <summary>Reads the numbered ORM regions of a unit that is to be rewritten.</summary>
 /// <param name="pText">Unit text.</param>
 /// <param name="pKnown">Upper-case ids the caller generates.</param>
-/// <param name="pRegions">Receives the regions in the order of the text, Id = the id; empty when the unit is refused.</param>
-/// <returns>'' or why the unit must not be rewritten: regions that do not nest; a start and an end of different ids; a
-/// region named DB-RAD or DLFR n whose id is not in pKnown; a marker that shares its line with other code; a region that
-/// holds another DB-RAD or DLFR region or a part of a conditional.</returns>
-/// <remarks>DLFR n (a bare ORM id) is the same region as DB-RAD n; every other DLFR region is hand code here.</remarks>
+/// <param name="pRegions">Receives the regions whose id is in pKnown, in the order of the text, Id = the id; empty when
+/// the unit is refused.</param>
+/// <returns>'' or why the unit must not be rewritten: the text cannot be scanned (a comment or string left open); regions
+/// that do not nest (an end without a start, a start without an end, whatever the id); a start and an end of different ids
+/// when either id is in pKnown; a marker of a known region that shares its line with other code; a known region that holds
+/// another DB-RAD or DLFR region (known or not) or a part of a conditional.</returns>
+/// <remarks>DLFR n (a bare ORM id) is the same region as DB-RAD n; every other DLFR region is hand code here. A region named
+/// DB-RAD or DLFR n whose id is not in pKnown (DB-RAD 99, DB-RAD notes) is hand code too: it is not returned, so the caller
+/// keeps it byte for byte, and it never refuses the unit by itself (1.55, owner ruling 2026-11-26; 1.53.1-1.54 refused it,
+/// TableTools emptied it).</remarks>
 function ReadOrmRegions(const pText: string; const pKnown: TArray<string>; out pRegions: TArray<TDlfrRegion>): string;
 
 /// <summary>Renames the numbered markers of a whole unit: DB-RAD n becomes DLFR n.</summary>
@@ -666,24 +671,24 @@ begin
   Result := False;
 end;
 
-{ '' or why the pair of one region cannot be trusted; a pair that names no ORM region is never a problem. }
+{ '' or why the pair of one region cannot be trusted. Only a pair with a KNOWN id at either end is checked: a pair
+  that names no ORM region, or only ids the caller does not generate, is hand code (1.55 UPDORM, owner 2026-11-26). }
 function OrmPairProblem(const pText: string; const pRegion: TDlfrRegion; const pKnown: TArray<string>): string;
 var
-  VStart, VFinish, VId: string;
+  VStart, VFinish, VId, VFinishId: string;
   VFirst: Integer;
 begin
   VStart := pRegion.Start.RegionName;
   VFinish := pRegion.Finish.RegionName;
   VId := OrmRegionId(VStart);
+  VFinishId := OrmRegionId(VFinish);
   VFirst := pRegion.Start.Start;
   while (VFirst > 1) and (pText[VFirst - 1] <> LF) do
     Dec(VFirst);
-  if (VId = '') and (OrmRegionId(VFinish) = '') and not Rx(PAT_DBRAD_NAME).IsMatch(VStart) and not Rx(PAT_DBRAD_NAME).IsMatch(VFinish) then
+  if not MatchText(VId, pKnown) and not MatchText(VFinishId, pKnown) then
     Result := ''
-  else if OrmRegionId(VFinish) <> VId then
+  else if VFinishId <> VId then
     Result := Format('the end marker of "%s" is "%s"', [VStart, VFinish])
-  else if not MatchText(VId, pKnown) then
-    Result := 'unknown region id: ' + VStart
   else if (pRegion.Body.Last < pRegion.Body.First) or (Trim(Copy(pText, VFirst, pRegion.Start.Start - VFirst)) <> '') then
     Result := 'a marker is not alone on its line: ' + VStart
   else
@@ -735,7 +740,7 @@ begin
   for VRegion in VAll do
   begin
     Result := OrmPairProblem(pText, VRegion, pKnown);
-    if (Result = '') and (OrmRegionId(VRegion.Start.RegionName) <> '') then
+    if (Result = '') and MatchText(OrmRegionId(VRegion.Start.RegionName), pKnown) then
     begin
       Result := InnerProblem(VRegion, VAll);
       if (Result = '') and not HoldsWholeConditionals(VRegion, VScan) then

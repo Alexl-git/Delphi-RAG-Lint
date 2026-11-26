@@ -64,12 +64,22 @@ Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then
 | `upgrade-orm-headers` | `--code-dir` | one time (1.54): in the existing `u<T>.PAS`, the generated text AROUND regions 4 / 6 (`if not (Source is T) then inherited else with Source as T do`) becomes `if Source is not T then inherited else`, and the `StreamSize` / `ByteTemp` locals of `Reader` go when nothing uses them; in each `i<T>.PAS` + `u<T>.PAS` pair the generated `AssignI` becomes the overloaded `Assign` (below), both units or neither. Only the exact generated shape is recognised, in any layout; a hand-edited header or pair is listed as `skipped` and left alone, and every remaining call of `AssignI` in the units under `--code-dir` is listed as `file(line)` and never edited |
 | `gen-dataservice` | `--server-dir` `--client-dir` | new `u<T>_SERVER.PAS` + `u<T>_CLIENT.PAS` and the two DI container units; prints `add to project:` per new file |
 
-`update-orm` pairs region markers by id with a Pascal scan (1.53.1; 1.54 reads `DLFR n` as `DB-RAD n`). It refuses a whole unit --
-`<file>: REFUSED, the unit is left unchanged: <why>` among the skipped files, the other units go on -- when a start marker has no end of its
-own id (missing, unnamed, another id, inside a comment), an id is unknown (`DB-RAD notes`, `DB-RAD 99`), a marker shares
-its line with code, a region holds another DB-RAD region or a part of a conditional, or the text has an unclosed comment
-or string. Up to 1.53.0 it read on to the next DB-RAD end whatever its id and emptied a region with an unknown id. A
-marker inside a comment or a multi-line string is text.
+`update-orm` pairs region markers by id with a Pascal scan (1.53.1; 1.54 reads `DLFR n` as `DB-RAD n`). A region whose id it does not
+generate (`DB-RAD 99`, `DB-RAD notes`, `DLFR 99`) is hand code (1.55): it is kept byte for byte, whatever its markers look
+like, and the known regions of the unit are still updated. It refuses a whole unit --
+`<file>: REFUSED, the unit is left unchanged: <why>` among the skipped files, the other units go on, and the run exits 1
+(1.55; dry run too) -- when:
+
+* the regions do not nest: an end marker without a start, or a start marker without an end, whatever the id;
+* a start and its end name different ids and either id is one it generates (`DB-RAD 4` closed by `DB-RAD 99`, an
+  unnamed end, or the reverse);
+* a marker of a known region shares its line with code;
+* a known region holds another DB-RAD / DLFR region (an unknown one included: rewriting the outer region would drop it)
+  or a part of a conditional;
+* the text has an unclosed comment or string.
+
+Up to 1.53.0 it read on to the next DB-RAD end whatever its id and emptied a region with an unknown id; 1.53.1-1.54
+refused such a unit. A marker inside a comment or a multi-line string is text.
 
 **Assign / AssignTo (1.54).** TableTools wrote `fX:= X` inside `with Source as T do` and `X:= fX` inside
 `with Dest as T do`: both copy the other object onto itself, so nothing was ever copied. Regions 4 / 6 now name

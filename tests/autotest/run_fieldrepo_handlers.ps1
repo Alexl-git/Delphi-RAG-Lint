@@ -338,7 +338,9 @@ try {
   WriteText $iu $iold.Replace("'DB-RAD 2'", "'DB-RAD 99'")
   $h = Hash $iu
   $r = Update
-  Check 'N2e update-orm refuses a unit with an unknown id, unchanged' (($r.Out -match 'skipped .*iORDERS\.PAS: REFUSED.*unknown region id: DB-RAD 99') -and ((Hash $iu) -eq $h)) $r.Out
+  # 1.55 UPDORM (owner 2026-11-26): an unknown id is hand code -- kept, not refused (it was refused in 1.53.1-1.54)
+  Check 'N2e update-orm keeps a region with an unknown id as hand code, unchanged, exit 0' (($r.Code -eq 0) -and ($r.Out -notmatch 'REFUSED') -and
+    ($r.Out -match '1 unchanged') -and ((Hash $iu) -eq $h)) $r.Out
   WriteText $iu $iold
   $r = Run @('repo', 'renumber-regions', '--repo', $x, '--in', "$iu;$($iu.ToUpper())", '--apply')
   Check 'N5 a unit named twice is renamed and written once' (($r.Code -eq 0) -and ($r.Out -match '(?m)^1 units, 1 to write') -and ($r.Out -match 'written: 1 units') -and ((ReadText $iu) -ceq (Dlfr $iold))) $r.Out

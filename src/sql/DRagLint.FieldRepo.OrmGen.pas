@@ -15,7 +15,9 @@ unit DRagLint.FieldRepo.OrmGen;  // dl:ok unit-too-large@1be3 -- REVIEWED 2026-1
   Region update (repo update-orm) rewrites ONLY the lines between a DB-RAD n (or DLFR n) region start
   and its end; every other byte of the file, line ends included, is kept as it was. A unit whose markers
   cannot be trusted is refused as a whole (1.54; TableTools read line by line to the next DB-RAD end,
-  whatever its id, and emptied a region with an unknown id).
+  whatever its id, and emptied a region with an unknown id). A region with an id update-orm does not
+  generate (DB-RAD 99) is hand code: kept byte for byte, the known regions are still updated (1.55,
+  owner 2026-11-26; ReadOrmRegions lists what still refuses).
 
   1.54 TT-GENFIX, deliberate differences from TableTools (owner rulings 2026-11-23):
   * regions 4 / 6 (Assign / AssignTo) copy from / to the other object. TableTools wrote

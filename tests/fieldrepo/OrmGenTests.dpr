@@ -283,7 +283,7 @@ end;
 procedure TestBytesOutsideRegions(pRepo: TFDConnection);
 var
   vGen: TOrmGenerator;
-  vText, vOut: string;
+  vText, vOut, vWant: string;
   vCount: Integer;
 
   function Updated(const pText: string): string;
@@ -325,11 +325,34 @@ begin
     vText := 'a'#13'b'#10'c'#13#10'd';
     Check('B2 text without regions unchanged', vGen.UpdateRegions(vText, 'ORDERS', False, vCount) = vText);
     Check('B3 no region counted', vCount = 0);
-    { the regions TableTools emptied or ran past: the unit is refused }
-    Refused('B4 unknown region id', Region('99', 'keep?'#13#10), 'unknown region id: DB-RAD 99');
-    Refused('B4b a hand region named DB-RAD', Region('notes', 'keep'#13#10), 'unknown region id: DB-RAD notes');
-    Refused('B4c an id with text behind it', Region('2 mine', 'keep'#13#10), 'unknown region id: DB-RAD 2 mine');
-    Refused('B4d DLFR with an unknown number', Region('99', 'keep'#13#10).Replace('DB-RAD', 'DLFR'), 'unknown region id: DLFR 99');
+    { 1.55 UPDORM (owner 2026-11-26): a region whose id update-orm does not generate is hand code, kept byte for
+      byte; the known regions of the unit are still updated. TableTools emptied such a region (1.53.1 refused the unit). }
+    vText := Region('99', 'keep?'#13#10) + Region('4', 'stale'#13#10);
+    vWant := Region('99', 'keep?'#13#10) + Updated(Region('4', ''));
+    CheckText('B4 unknown region id: kept as it is, region 4 updated', Updated(vText), vWant);
+    Check('B4a only region 4 is counted', vCount = 1, IntToStr(vCount));
+    Check('B4a2 control: region 4 changed', vWant <> vText);
+    CheckText('B4b a hand region named DB-RAD is kept', Updated(Region('notes', 'keep'#13#10)), Region('notes', 'keep'#13#10));
+    CheckText('B4c an id with text behind it is kept', Updated(Region('2 mine', 'keep'#13#10)), Region('2 mine', 'keep'#13#10));
+    vText := Region('99', 'keep'#13#10).Replace('DB-RAD', 'DLFR');
+    CheckText('B4d DLFR with an unknown number is kept', Updated(vText), vText);
+    vText := '{$REGION ''DB-RAD 99''}'#13#10'keep'#13#10'{$ENDREGION}'#13#10;
+    CheckText('B4e an unknown id with an unnamed end is kept', Updated(vText), vText);
+    vText := 'x; {$REGION ''DB-RAD 99''} y;'#13#10'keep'#13#10'{$ENDREGION ''DB-RAD 99''}'#13#10;
+    CheckText('B4f an unknown id whose marker shares its line is kept', Updated(vText), vText);
+    vText := '{$REGION ''DB-RAD 99''}'#13#10'hand'#13#10'{$ENDREGION ''DB-RAD 98''}'#13#10;
+    CheckText('B4g two unknown ids on one pair: kept', Updated(vText), vText);
+    vText := '{$REGION ''DB-RAD 99''}'#13#10'hand'#13#10 + Region('4', 'stale'#13#10) + 'hand2'#13#10'{$ENDREGION ''DB-RAD 99''}'#13#10;
+    vWant := '{$REGION ''DB-RAD 99''}'#13#10'hand'#13#10 + Updated(Region('4', '')) + 'hand2'#13#10'{$ENDREGION ''DB-RAD 99''}'#13#10;
+    CheckText('B4h a known region inside an unknown one: updated, the hand code around it kept', Updated(vText), vWant);
+    { an unknown id still refuses where a KNOWN region's bounds or content depend on it }
+    Refused('B4i an unknown start closed by a known end', '{$REGION ''DB-RAD 99''}'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 4''}'#13#10,
+      'the end marker of "DB-RAD 99" is "DB-RAD 4"');
+    Refused('B4j a known start closed by an unknown end', '{$REGION ''DB-RAD 4''}'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 99''}'#13#10,
+      'the end marker of "DB-RAD 4" is "DB-RAD 99"');
+    Refused('B4k an unknown region inside a known one', '{$REGION ''DB-RAD 4''}'#13#10 + Region('99', 'keep'#13#10) + '{$ENDREGION ''DB-RAD 4''}'#13#10,
+      'holds the region');
+    Refused('B4l an unknown start without an end', Region('4', '') + '{$REGION ''DB-RAD 99''}'#13#10'tail'#13#10, 'without an end marker: DB-RAD 99');
     Refused('B5 start without end', '{$REGION ''DB-RAD 15''}'#13#10'tail'#13#10, 'without an end marker: DB-RAD 15');
     Refused('B7 an unnamed end', '{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'{$ENDREGION}'#13#10'hand'#13#10 + Region('3', ''), 'the end marker of "DB-RAD 1" is "');
     Refused('B8 the end of another id', '{$REGION ''DB-RAD 1''}'#13#10'x'#13#10'{$ENDREGION ''DB-RAD 2''}'#13#10, 'the end marker of "DB-RAD 1" is "DB-RAD 2"');
@@ -447,13 +470,19 @@ begin
     vSkipped.Clear;
     vPlan := PlanUpdateOrm(pRepo, vCode, vSrv, vCli, ['ORDERS'], vSkipped);
     Check('P16 missing client file is skipped and named', (vSkipped.Count = 1) and vSkipped[0].Contains('uORDERS_CLIENT.PAS'), vSkipped.Text);
-    { a unit with a hand region DB-RAD notes: refused, named, not planned; the other units of the table are }
+    { a unit with a start marker and no end: refused, named, not planned; the other units of the table are }
     vText := TFile.ReadAllText(TPath.Combine(vCode, 'uORDERS.PAS'));
-    TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText.Replace('end.', Region('notes', 'hand'#13#10) + 'end.'));
+    TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText.Replace('end.', '{$REGION ''DB-RAD 4''}'#13#10'hand'#13#10 + 'end.'));
     vSkipped.Clear;
     vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped);
     Check('P18 a refused unit is named and not planned, the other one is', (Length(vPlan) = 1) and vPlan[0].FileName.EndsWith('iORDERS.PAS') and (vSkipped.Count = 1) and
-      vSkipped[0].Contains('uORDERS.PAS: REFUSED') and vSkipped[0].Contains('DB-RAD notes'), KindsOf(vPlan) + vSkipped.Text);
+      vSkipped[0].Contains('uORDERS.PAS: REFUSED') and vSkipped[0].Contains('without an end marker: DB-RAD 4'), KindsOf(vPlan) + vSkipped.Text);
+    { 1.55 UPDORM: a hand region DB-RAD notes is kept, the unit is planned }
+    TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText.Replace('end.', Region('notes', 'hand'#13#10) + 'end.'));
+    vSkipped.Clear;
+    vPlan := PlanUpdateOrm(pRepo, vCode, '', '', ['ORDERS'], vSkipped);
+    Check('P18b a unit with a region of an unknown id is planned, the region kept', (Length(vPlan) = 2) and (vSkipped.Count = 0) and
+      vPlan[1].NewText.Contains(Region('notes', 'hand'#13#10)), KindsOf(vPlan) + vSkipped.Text);
     TFile.WriteAllText(TPath.Combine(vCode, 'uORDERS.PAS'), vText.Replace('DB-RAD', 'DLFR'));
     AddRow(pRepo, 'ORDERS', 'ZADDED', 'Double', 'AsFloat', False, '');
     vSkipped.Clear;
