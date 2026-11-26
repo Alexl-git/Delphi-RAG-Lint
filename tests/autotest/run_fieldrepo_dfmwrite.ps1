@@ -480,7 +480,7 @@ end
   Both 'a new lookup' 'insert uLook\.dfm qryMainTOOL:'
   # ---- M1: by-name bindings ----
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID') (Join-Path $nd 'uAllKinds.dfm')
-  Check 'W13a a column of a tree list binds NOTE, a grid QTY; OLDCOL is free' (($r.Out -match "delete uAllKinds\.dfm memOrdersNOTE: [^\n]*\n  BLOCKED: the DFM names 'NOTE': TreeNOTE\.DataBinding\.FieldName") -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersQTY: [^\n]*\n  BLOCKED: the DFM names') -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersOLDCOL: [^\n]*\n  \(unchecked\)')) $r.Out
+  Check 'W13a a column of a tree list binds NOTE (1.55: removed with it, run_v155_DFMWRITE2 E7), a grid QTY; OLDCOL is free' (($r.Out -match "delete uAllKinds\.dfm TreeNOTE: [^\n]*\n  \(unchecked\)\n\[\d+\] delete uAllKinds\.dfm memOrdersNOTE: [^\n]*\n  \(unchecked\)") -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersQTY: [^\n]*\n  BLOCKED: its grid item GridViewQTY cannot be removed: used in the DFM') -and ($r.Out -match 'delete uAllKinds\.dfm memOrdersOLDCOL: [^\n]*\n  \(unchecked\)')) $r.Out
   $r = Write-Dfm @('--dataset', 'memTools', '--names', 'ID') $dfm
   Check 'W13b the result field of a lookup' ($r.Out -match "delete uAllKinds\.dfm memToolsNAME: [^\n]*\n  BLOCKED: the DFM names 'NAME': memOrdersTOOL\.LookupResultField") $r.Out
   $bd2 = Join-Path $work 'bind'; [IO.Directory]::CreateDirectory($bd2) | Out-Null
