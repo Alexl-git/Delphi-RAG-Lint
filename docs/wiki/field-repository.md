@@ -64,12 +64,43 @@ Every verb prints a dry-run diff (`new` / `changed` / `unchanged` per file, then
 | `upgrade-orm-headers` | `--code-dir` | one time (1.54): in the existing `u<T>.PAS`, the generated text AROUND regions 4 / 6 (`if not (Source is T) then inherited else with Source as T do`) becomes `if Source is not T then inherited else`, and the `StreamSize` / `ByteTemp` locals of `Reader` go when nothing uses them; in each `i<T>.PAS` + `u<T>.PAS` pair the generated `AssignI` becomes the overloaded `Assign` (below), both units or neither. Only the exact generated shape is recognised, in any layout; a hand-edited header or pair is listed as `skipped` and left alone, and every remaining call of `AssignI` in the units under `--code-dir` is listed as `file(line)` and never edited |
 | `gen-dataservice` | `--server-dir` `--client-dir` | new `u<T>_SERVER.PAS` + `u<T>_CLIENT.PAS` and the two DI container units; prints `add to project:` per new file |
 
-`update-orm` pairs region markers by id with a Pascal scan (1.53.1; 1.54 reads `DLFR n` as `DB-RAD n`). It refuses a whole unit --
-`<file>: REFUSED, the unit is left unchanged: <why>` among the skipped files, the other units go on -- when a start marker has no end of its
-own id (missing, unnamed, another id, inside a comment), an id is unknown (`DB-RAD notes`, `DB-RAD 99`), a marker shares
-its line with code, a region holds another DB-RAD region or a part of a conditional, or the text has an unclosed comment
-or string. Up to 1.53.0 it read on to the next DB-RAD end whatever its id and emptied a region with an unknown id. A
-marker inside a comment or a multi-line string is text.
+`update-orm` pairs region markers by id with a Pascal scan (1.53.1; 1.54 reads `DLFR n` as `DB-RAD n`). A region whose id it does not
+generate (`DB-RAD 99`, `DB-RAD notes`, `DLFR 99`) is hand code (1.55): it is kept byte for byte, whatever its markers look
+like, and the known regions of the unit are still updated. It refuses a whole unit --
+`<file>: REFUSED, the unit is left unchanged: <why>` among the skipped files, the other units go on, and an `--apply` run exits 1
+(1.55; a dry run lists the same lines and exits 0, so the IDE command can still offer Apply) -- when:
+
+* the regions do not nest: an end marker without a start, or a start marker without an end, whatever the id;
+* a start and its end name different ids and either id is one it generates (`DB-RAD 4` closed by `DB-RAD 99`, an
+  unnamed end, or the reverse);
+* a marker of a known region shares its line with code;
+* a known region holds another DB-RAD / DLFR region (an unknown one included: rewriting the outer region would drop it)
+  or a part of a conditional;
+* the text has an unclosed comment or string.
+
+Up to 1.53.0 it read on to the next DB-RAD end whatever its id and emptied a region with an unknown id; 1.53.1-1.54
+refused such a unit. A marker inside a comment or a multi-line string is text.
+
+### Hand-edited regions (1.55)
+
+Every numbered region `update-orm` (and `gen-orm` / `gen-dataservice`) writes carries the hash of its generated body in
+its start marker: `{$REGION 'DB-RAD 4 hash=0123456789abcdef'}` (the unit's spelling -- `DB-RAD`, `DB-RADa`, `DLFR` -- is
+kept; the end marker does not change). A marker without a hash (every unit TableTools or drag-lint 1.54 wrote) is treated
+as unchanged: the region is regenerated and gets its hash on that write, so **the first 1.55 run changes every existing
+ORM unit once** (the start marker lines only, when the bodies are current).
+
+A region whose body no longer matches the hash of its marker was edited by hand. `update-orm` keeps it byte for byte,
+still updates the other regions of the unit, lists it as
+`<file>: REFUSED region <id>, hand-edited (...); kept -- --overwrite-edited <id> overwrites it` and (with `--apply`) exits 1. To overwrite:
+
+* `--overwrite-edited 4,9` overwrites the hand-edited regions 4 and 9 of every unit of the run; `--overwrite-edited all`
+  every one;
+* with `--apply` and stdin a console, `update-orm` asks per region:
+  `WARNING: <file>: region <id> is hand-edited ...  Overwrite it with the generated code? YES overwrite / NO keep it for now [y/N]`.
+  A pipe, a file or no console (a script, an agent, the IDE menu command) never waits: the region is kept and refused.
+
+A kept region counts as REFUSED for the exit code on purpose: the run left generated code stale, and a script must see
+that. An intact region of an older generation (its hash matches its body) is overwritten as before.
 
 **Assign / AssignTo (1.54).** TableTools wrote `fX:= X` inside `with Source as T do` and `X:= fX` inside
 `with Dest as T do`: both copy the other object onto itself, so nothing was ever copied. Regions 4 / 6 now name

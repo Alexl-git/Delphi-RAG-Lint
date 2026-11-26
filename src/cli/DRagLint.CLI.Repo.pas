@@ -49,6 +49,7 @@ function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile
 implementation
 
 uses
+  Winapi.Windows,
   System.SysUtils,
   System.Classes,
   System.IOUtils,
@@ -355,6 +356,24 @@ begin
   Result:= EXIT_OK;
 end;
 
+{ 1.55 UPDORM Q2: the console question before update-orm --apply overwrites a hand-edited region. Only when stdin is a
+  console: a pipe, a file or no console (the IDE plugin, a script, an agent) never waits for an answer and keeps the region. }
+function ConsoleAsk: TOrmAskOverwrite;
+begin
+  Result:= nil;
+  if GetFileType(GetStdHandle(STD_INPUT_HANDLE)) <> FILE_TYPE_CHAR then
+    Exit;
+  Result:= function(const pFile, pRegionId: string): Boolean
+    var
+      Answer: string;
+    begin
+      Writeln(ErrOutput, Format('WARNING: %s: region %s is hand-edited (its body does not match the hash of its start marker).', [pFile, pRegionId]));
+      Write(ErrOutput, 'Overwrite it with the generated code? YES overwrite / NO keep it for now [y/N]: ');
+      Readln(Answer);
+      Result:= MatchText(Trim(Answer), ['y', 'yes']);
+    end;
+end;
+
 { 1.52 TTGEN, 1.54 TT-GENFIX: the generator verbs; dry run (diff) unless --apply. }
 function RepoOrmVerb(const pSub, pPath: string): Integer;
 var
@@ -370,6 +389,9 @@ begin
   Opt.Tables:= CommandLineValue('--table', '');
   Opt.Apply:= CommandLineFlag('--apply');
   Opt.Backup:= not CommandLineFlag('--no-backup');
+  Opt.OverwriteEdited:= CommandLineValue('--overwrite-edited', '');
+  if Opt.Apply and (pSub = 'update-orm') then
+    Opt.Ask:= ConsoleAsk();
   { B33 (1.52): region 9 binding form; legacy = the form the ORM3 units carry }
   case IndexText(CommandLineValue('--save-form', 'legacy'), ['legacy', 'current']) of
     SAVE_FORM_LEGACY: Opt.SaveForm:= osfLegacy;

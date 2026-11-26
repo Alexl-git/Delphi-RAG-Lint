@@ -15,7 +15,9 @@ unit DRagLint.FieldRepo.OrmGen;  // dl:ok unit-too-large@1be3 -- REVIEWED 2026-1
   Region update (repo update-orm) rewrites ONLY the lines between a DB-RAD n (or DLFR n) region start
   and its end; every other byte of the file, line ends included, is kept as it was. A unit whose markers
   cannot be trusted is refused as a whole (1.54; TableTools read line by line to the next DB-RAD end,
-  whatever its id, and emptied a region with an unknown id).
+  whatever its id, and emptied a region with an unknown id). A region with an id update-orm does not
+  generate (DB-RAD 99) is hand code: kept byte for byte, the known regions are still updated (1.55,
+  owner 2026-11-26; ReadOrmRegions lists what still refuses).
 
   1.54 TT-GENFIX, deliberate differences from TableTools (owner rulings 2026-11-23):
   * regions 4 / 6 (Assign / AssignTo) copy from / to the other object. TableTools wrote
@@ -44,6 +46,8 @@ const
   ORM_INTF_PREFIX = 'i';
   /// <summary>Extension of every generated unit (TableTools writes upper case).</summary>
   ORM_FILE_EXT = '.PAS';
+  /// <summary>The id in TOrmGenerator.OverwriteEdited (--overwrite-edited all) that overwrites every hand-edited region.</summary>
+  OVERWRITE_ALL = 'ALL';
 
 type
   /// <summary>Raised when a table has no rows in the repository or a file cannot be planned.</summary>
@@ -63,6 +67,12 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   EOrmRegionError = class(EOrmGenError);
+
+  /// <summary>Asked by update-orm before it overwrites a hand-edited region (1.55 UPDORM Q2).</summary>
+  /// <param name="pFile">The unit.</param>
+  /// <param name="pRegionId">The upper-case region id, e.g. 4 or CL-KEY.</param>
+  /// <returns>True overwrites the region; False keeps it (the unit's line in the skipped list says REFUSED region).</returns>
+  TOrmAskOverwrite = reference to function(const pFile, pRegionId: string): Boolean;
 
   /// <summary>One column of a table as the generators see it (a DL_FIELDS_INFO row,
   /// FIELD_KIND = 1, not calculated, not lookup).</summary>
@@ -182,6 +192,8 @@ type
     FLoadedTable: string;
     FGuidProvider: TFunc<TGUID>;
     FSaveForm: TOrmSaveForm;
+    FOverwriteEdited: TArray<string>;
+    FKeptEdited: TArray<string>;
     /// <returns><!-- drag-lint:auto -->TGUID -- Observed: FGuidProvider().</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -747,11 +759,14 @@ type
     /// <param name="pTableName">Table name as stored.</param>
     /// <param name="pIsInterface">True for an i&lt;T&gt; unit (region 2 = interface form).</param>
     /// <param name="pRegionCount">Receives the number of DB-RAD regions found.</param>
-    /// <returns>The new text: region start / end lines and every byte outside the regions are
-    /// unchanged; generated lines end with CRLF.</returns>
+    /// <returns>The new text: every byte outside the regions and the end lines are unchanged; generated lines end with
+    /// CRLF. The start marker of each regenerated region carries the hash of its new body (1.55: a legacy marker without
+    /// a hash gets one). A region whose body no longer matches the hash of its marker (hand-edited) is kept byte for byte
+    /// and named in KeptEdited, unless its id or ALL is in OverwriteEdited. A region of an id it does not generate is
+    /// hand code and kept.</returns>
     /// <exception cref="EOrmGenError">Unknown table.</exception>
-    /// <exception cref="EOrmRegionError">A start without its end (missing, unnamed, another id), an unknown id, a marker
-    /// that shares its line, a region inside a region or across a conditional, a text that cannot be scanned.</exception>
+    /// <exception cref="EOrmRegionError">A start without its end (missing, unnamed, another known id), a known marker
+    /// that shares its line, a known region holding another region or across a conditional, a text that cannot be scanned.</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FieldRepo.OrmGen.PlanUpdateOrm.One (DRagLint.FieldRepo.OrmGen.pas)</para>
@@ -772,6 +787,12 @@ type
     property GuidProvider: TFunc<TGUID> read FGuidProvider write FGuidProvider;
     /// <summary>Parameter binding form of region 9; osfLegacy unless set.</summary>
     property SaveForm: TOrmSaveForm read FSaveForm write FSaveForm;
+    /// <summary>Ids of hand-edited regions UpdateRegions overwrites (case-insensitive); ALL (OVERWRITE_ALL) = every one.
+    /// Empty (the default) keeps every hand-edited region.</summary>
+    property OverwriteEdited: TArray<string> read FOverwriteEdited write FOverwriteEdited;
+    /// <summary>Ids of the regions the last UpdateRegions call kept because they were hand-edited (their body no longer
+    /// matches the hash of the start marker); empty when it kept none.</summary>
+    property KeptEdited: TArray<string> read FKeptEdited;
     /// <summary>Number of generator fields of the loaded table (0 when every row of the table
     /// has a FIELD_KIND other than 1).</summary>
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: FFieldList.Count.</returns>
@@ -876,7 +897,11 @@ function IsOrmRegionEnd(const pLine: string): Boolean;  // dl:ok unused-public-s
 /// <param name="pTables">Tables to update; empty = every repository table.</param>
 /// <param name="pSkipped">Receives one line per file that does not exist; not cleared.</param>
 /// <param name="pSaveForm">Region 9 parameter binding form (TOrmSaveForm).</param>
-/// <returns>One entry per existing file, in table order (i, u, _SERVER, _CLIENT).</returns>
+/// <param name="pOverwrite">Ids of hand-edited regions to overwrite in every unit (OVERWRITE_ALL = all); nil = none.</param>
+/// <param name="pAsk">Asked once per hand-edited region not in pOverwrite; nil (non-interactive) = keep it.</param>
+/// <returns>One entry per existing file, in table order (i, u, _SERVER, _CLIENT). A unit with a kept hand-edited
+/// region is still planned (its other regions updated) and gets one pSkipped line per kept region:
+/// '&lt;file&gt;: REFUSED region &lt;id&gt;, hand-edited ...'.</returns>
 /// <exception cref="EOrmGenError">A named table is not in the repository.</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -893,7 +918,8 @@ function IsOrmRegionEnd(const pLine: string): Boolean;  // dl:ok unused-public-s
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function PlanUpdateOrm(pRepo: TFDConnection; const pCodeDir, pServerDir, pClientDir: string;
-  const pTables: TArray<string>; pSkipped: TStrings; pSaveForm: TOrmSaveForm = osfLegacy): TArray<TOrmFileChange>;
+  const pTables: TArray<string>; pSkipped: TStrings; pSaveForm: TOrmSaveForm = osfLegacy;
+  const pOverwrite: TArray<string> = nil; const pAsk: TOrmAskOverwrite = nil): TArray<TOrmFileChange>;
 
 /// <summary>The numbered regions update-orm would regenerate in a unit.</summary>
 /// <param name="pText">The unit text.</param>
@@ -3496,6 +3522,28 @@ begin
     raise EOrmRegionError.Create(Reason);
 end;
 
+{ 1.55 UPDORM Q2: a generated unit with the hash of each numbered region's body in its start marker, so update-orm
+  over a fresh gen-orm unit changes nothing and can tell a later hand edit. }
+function StampOrmRegions(const pText: string): string;
+var
+  Region: TDlfrRegion;
+  SB: TStringBuilder;
+  Kept: Integer;
+begin
+  SB:= TStringBuilder.Create;
+  try
+    Kept:= 1;
+    for Region in TrustedRegions(pText) do
+    begin
+      SB.Append(Copy(pText, Kept, Region.Start.Start - Kept)).Append(OrmStartMarker(Region.Start.RegionName, Region.Content(pText)));
+      Kept:= Region.Start.Finish;
+    end;
+    Result:= SB.Append(Copy(pText, Kept, MaxInt)).ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
 function OrmRegionIds(const pText: string): TArray<string>;
 var
   Region: TDlfrRegion;
@@ -3513,10 +3561,12 @@ var
   SB: TStringBuilder;
   Code: TStringList;
   Kept: Integer;
+  Body: string;
 begin
   pRegionCount:= 0;
   if FLoadedTable <> pTableName then
     LoadTable(pTableName);
+  FKeptEdited:= nil;
   Regions:= TrustedRegions(pText);
   SB:= TStringBuilder.Create;
   Code:= TStringList.Create;
@@ -3524,9 +3574,18 @@ begin
     Kept:= 1;
     for Region in Regions do
     begin
+      { 1.55 UPDORM Q2: a hand-edited body is kept unless its id (or ALL) is in OverwriteEdited }
+      if OrmRegionEdited(pText, Region) and not MatchText(Region.Id, FOverwriteEdited) and
+        not MatchText(OVERWRITE_ALL, FOverwriteEdited) then
+      begin
+        FKeptEdited:= FKeptEdited + [Region.Id];
+        Continue;
+      end;
       Code.Clear;
       GenerateRegion(Region.Id, pIsInterface, Code);
-      SB.Append(Copy(pText, Kept, Region.Body.First - Kept)).Append(OrmJoinLines(Code));
+      Body:= OrmJoinLines(Code);
+      SB.Append(Copy(pText, Kept, Region.Start.Start - Kept)).Append(OrmStartMarker(Region.Start.RegionName, Body))
+        .Append(Copy(pText, Region.Start.Finish, Region.Body.First - Region.Start.Finish)).Append(Body);
       Kept:= Region.Body.Last;
     end;
     pRegionCount:= Length(Regions);
@@ -3579,8 +3638,9 @@ begin
   Result:= pTables;
 end;
 
-function PlanUpdateOrm(pRepo: TFDConnection; const pCodeDir, pServerDir, pClientDir: string;
-  const pTables: TArray<string>; pSkipped: TStrings; pSaveForm: TOrmSaveForm): TArray<TOrmFileChange>;
+function PlanUpdateOrm(pRepo: TFDConnection; const pCodeDir, pServerDir, pClientDir: string;  // dl:ok too-many-parameters@12ce -- REVIEWED 2026-11-26 v155 UPDORM: pOverwrite / pAsk are defaulted additions (Q2) beside pSaveForm; the plan's callers pass the verb options straight through, a record would only move the same list
+  const pTables: TArray<string>; pSkipped: TStrings; pSaveForm: TOrmSaveForm;
+  const pOverwrite: TArray<string>; const pAsk: TOrmAskOverwrite): TArray<TOrmFileChange>;
 var
   Gen: TOrmGenerator;
   L: TList<TOrmFileChange>;
@@ -3588,8 +3648,9 @@ var
 
   procedure One(const pFile: string; pIsInterface: Boolean);
   var
-    OldL: string;
+    OldL, NewL, Id: string;
     N: Integer;
+    Yes: TArray<string>;
   begin
     if not TFile.Exists(pFile) then
     begin
@@ -3605,7 +3666,23 @@ var
       Exit;
     end;
     try
-      L.Add(ChangeOf(pFile, OldL, Gen.UpdateRegions(OldL, T, pIsInterface, N), True));
+      Gen.OverwriteEdited:= pOverwrite;
+      NewL:= Gen.UpdateRegions(OldL, T, pIsInterface, N);
+      { 1.55 UPDORM Q2: ask about each kept hand-edited region; the yes ones are overwritten in a second pass }
+      Yes:= nil;
+      if Assigned(pAsk) then
+        for Id in Gen.KeptEdited do
+          if pAsk(pFile, Id) then
+            Yes:= Yes + [Id];
+      if Yes <> nil then
+      begin
+        Gen.OverwriteEdited:= pOverwrite + Yes;
+        NewL:= Gen.UpdateRegions(OldL, T, pIsInterface, N);
+      end;
+      for Id in Gen.KeptEdited do
+        pSkipped.Add(Format('%s: REFUSED region %s, hand-edited (its body does not match the hash of its start marker); ' +
+          'kept -- --overwrite-edited %s overwrites it', [pFile, Id, Id]));
+      L.Add(ChangeOf(pFile, OldL, NewL, True));
     except
       on E: EOrmRegionError do
         pSkipped.Add(pFile + ': REFUSED, the unit is left unchanged: ' + E.Message);
@@ -3696,7 +3773,7 @@ var
 begin
   Exists:= TFile.Exists(pFileName);
   OldL:= if Exists then ReadUnitText(pFileName) else '';
-  Result:= ChangeOf(pFileName, OldL, OrmJoinLines(pLines), Exists);
+  Result:= ChangeOf(pFileName, OldL, StampOrmRegions(OrmJoinLines(pLines)), Exists);
 end;
 
 function PlanGenOrm(pRepo: TFDConnection; const pCodeDir: string; const pTables: TArray<string>;

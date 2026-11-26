@@ -317,7 +317,8 @@ try {
   $r = Renumber @()
   Check 'N1 dry run: one region of one unit, nothing written' (($r.Code -eq 0) -and ($r.Out -match 'updated 1 regions') -and ((ReadText $iu) -ceq $iold)) $r.Out
   $r = Renumber @('--apply')
-  function Dlfr($t) { $t.Replace("{`$REGION 'DB-RAD 2'}", "{`$REGION 'DLFR 2'}").Replace("{`$ENDREGION 'DB-RAD 2'}", "{`$ENDREGION 'DLFR 2'}") }
+  # 1.55 UPDORM Q2: the start marker may carry a hash
+  function Dlfr($t) { ([regex]::Replace($t, "\{\`$REGION 'DB-RAD 2( hash=[0-9a-f]{16})?'\}", '{$REGION ''DLFR 2$1''}')).Replace("{`$ENDREGION 'DB-RAD 2'}", "{`$ENDREGION 'DLFR 2'}") }
   Check 'N2a renamed: exactly the two markers, the comment stays' (($r.Code -eq 0) -and ((ReadText $iu) -ceq (Dlfr $iold))) $r.Out
   $h = Hash $iu
   $r = Renumber @('--apply')
@@ -338,7 +339,9 @@ try {
   WriteText $iu $iold.Replace("'DB-RAD 2'", "'DB-RAD 99'")
   $h = Hash $iu
   $r = Update
-  Check 'N2e update-orm refuses a unit with an unknown id, unchanged' (($r.Out -match 'skipped .*iORDERS\.PAS: REFUSED.*unknown region id: DB-RAD 99') -and ((Hash $iu) -eq $h)) $r.Out
+  # 1.55 UPDORM (owner 2026-11-26): an unknown id is hand code -- kept, not refused (it was refused in 1.53.1-1.54)
+  Check 'N2e update-orm keeps a region with an unknown id as hand code, unchanged, exit 0' (($r.Code -eq 0) -and ($r.Out -notmatch 'REFUSED') -and
+    ($r.Out -match '1 unchanged') -and ((Hash $iu) -eq $h)) $r.Out
   WriteText $iu $iold
   $r = Run @('repo', 'renumber-regions', '--repo', $x, '--in', "$iu;$($iu.ToUpper())", '--apply')
   Check 'N5 a unit named twice is renamed and written once' (($r.Code -eq 0) -and ($r.Out -match '(?m)^1 units, 1 to write') -and ($r.Out -match 'written: 1 units') -and ((ReadText $iu) -ceq (Dlfr $iold))) $r.Out

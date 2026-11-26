@@ -64,11 +64,11 @@ uses
   System.RegularExpressions;
 
 const
-  { %0 = class name, %1 = method, %2 = parameter, %3 = region id }
+  { %0 = class name, %1 = method, %2 = parameter, %3 = region id; a start marker may carry the hash of its body (1.55 UPDORM) }
   PAT_METHOD = '\bprocedure\s+%0:s\.%1:s\s*\(\s*%2:s\s*:\s*TPersistent\s*\)\s*;\s*begin\s+';
   PAT_OLD = 'if\s+not\s*\(\s*%2:s\s+is\s+%0:s\s*\)\s*then\s+inherited\s+else\s+with\s+%2:s\s+as\s+%0:s\s+do\s+begin' +
-    '(?=\s*\{\$REGION\s+''(?:DB-RAD|DLFR) %3:s''\s*\})';
-  PAT_NEW = 'if\s+%2:s\s+is\s+not\s+%0:s\s+then\s+inherited\s+else\s+begin(?=\s*\{\$REGION\s+''(?:DB-RAD|DLFR) %3:s''\s*\})';
+    '(?=\s*\{\$REGION\s+''(?:DB-RAD|DLFR) %3:s(?: hash=[0-9a-f]{16})?''\s*\})';
+  PAT_NEW = 'if\s+%2:s\s+is\s+not\s+%0:s\s+then\s+inherited\s+else\s+begin(?=\s*\{\$REGION\s+''(?:DB-RAD|DLFR) %3:s(?: hash=[0-9a-f]{16})?''\s*\})';
   PAT_TAIL = '\{\$ENDREGION\s+''(?:DB-RAD|DLFR) %3:s''\s*\}';
   { '// else' is what the YADF formatter writes behind the generated 'end;' of a long block }
   PAT_TAIL_END = '\G\s*end\s*;([ \t]*//[ \t]*else[ \t]*(?=[\r\n]))?\s*end\s*;';
@@ -82,7 +82,7 @@ const
   PAT_I_NEW = '\bprocedure\s+Assign\s*\(\s*const\s+IValue\s*:\s*Imc%0:s\s*\)\s*;';
   PAT_U_DECL_OLD = '^[ \t]*procedure\s+AssignI\s*\(\s*const\s+Value\s*:\s*Imc%0:s\s*\)\s*;';
   PAT_U_DECL_NEW = '^[ \t]*public\s+procedure\s+Assign\s*\(\s*const\s+Value\s*:\s*Imc%0:s\s*\)\s*;\s*reintroduce\s*;\s*overload\s*;\s*published\b';
-  PAT_U_IMPL_REGION = '\s*\(\s*const\s+Value\s*:\s*Imc%0:s\s*\)\s*;\s*begin\s*\{\$REGION\s+''(?:DB-RAD|DLFR) 5''\s*\}';
+  PAT_U_IMPL_REGION = '\s*\(\s*const\s+Value\s*:\s*Imc%0:s\s*\)\s*;\s*begin\s*\{\$REGION\s+''(?:DB-RAD|DLFR) 5(?: hash=[0-9a-f]{16})?''\s*\}';
   PAT_U_IMPL_OLD = '(\bprocedure\s+%1:s\.)AssignI(' + PAT_U_IMPL_REGION + ')';
   PAT_U_IMPL_NEW = '\bprocedure\s+%1:s\.Assign' + PAT_U_IMPL_REGION;
   PAT_SRC_OLD = '(\bprocedure\s+Assign\s*\(\s*Source\s*:\s*TPersistent\s*\)\s*;\s*)(override\s*;)';
