@@ -34,6 +34,8 @@ change that is not blocked, removed fields included. Plain `--apply` needs no pl
 | a removed persistent field (`--names`) | not in the selection | unchecked |
 | a removed grid / layout item | bound to a removed field (see below) | unchecked; the field's removal needs it |
 | a new event handler | `ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY` of a field the form has or the selection adds, when the DFM assigns no handler | unchecked |
+| a new grid column | a graphical row (`FIELD_KIND` 10) of the dataset's table whose column the form lacks | unchecked |
+| a new grid-column handler | `GRID_DISPLAYTEXT_BODY`, `GRID_DRAWCELL_BODY` of that row | unchecked; needs its column |
 
 **Adding and removing fields.** `--names` is the field selection of one dataset: field names, or `all`. A calculated
 field pulls in the fields it uses, a lookup its key. A new field is written as the IDE would write it, and declared in
@@ -61,7 +63,25 @@ part blocks all, and `--select` refuses a part without the others and names the 
 
 **Removing a field takes its grid items (1.55).** A DevExpress item bound to the removed field -- a grid column, card row, layout-view item or tree-list column whose `DataBinding.FieldName` is the field, inside a view or tree list whose `DataController.DataSource` is a data source of the dataset -- is removed with it: an unchecked delete of its own (block and declaration), which the field's removal needs; `--select` refuses the field without them. An item that another property of the DFM names (a footer summary's `Column`) or that the code of the unit uses is BLOCKED, and the field with it. Every other binding still blocks the field.
 
-**What is never written:** calc code, the code of a handler the DFM already assigns, graphical columns (they are grid columns), fields that are only
+**Grid columns that are not fields (1.55).** A graphical row (`FIELD_KIND` 10) is a grid column drawn by events, not a
+field. When the form has no column for it -- no column of a `TcxGridDBTableView` of the dataset whose
+`DataBinding.FieldName` is the row's `FIELD_NAME` or whose name is the one it would get -- one change adds
+`object <Name>: TcxGridDBColumn` with `Caption = DISPLAY_LABEL` (when there is one) and
+`DataBinding.FieldName = '<FIELD_NAME>'` (no field of that name exists: the column is unbound, `repo read-dfm` finds its row again by the name),
+declared in the form class beside its neighbours. Where it goes: the view, name and `COLUMN_INDEX` of the
+`DL_GRID_COLUMNS` rows of this form for the row's table and field; without one, the only `TcxGridDBTableView` whose
+`DataController.DataSource` is a data source of the dataset, as `<View><FIELD_NAME>`, after its last column. Two such
+views and no row: a warning names them and nothing is written. `GRID_DISPLAYTEXT_BODY` / `GRID_DRAWCELL_BODY` become
+`OnGetDisplayText = <Column>GetDisplayText` / `OnCustomDrawCell = <Column>CustomDrawCell` handlers made as above (a DLFR
+region, macros expanded), each a change of its own that needs the column.
+
+These changes are always **unchecked**: they are usually the user's own decision, so the dry run shows them and only
+their ids in a `--select` file write them (the second confirmation); `--apply` never does. BLOCKED: a name the form or
+the unit already has, an inherited view, a unit that does not use `cxGridDBTableView` (the column),
+`cxGridCustomTableView` (both handlers) or `cxGraphics` (`OnCustomDrawCell`). The editor properties of an image,
+check-box or button column are not in the repository and are not written.
+
+**What is never written:** calc code, the code of a handler the DFM already assigns, the editor properties of a grid column, fields that are only
 overridden in an inherited form, datasets whose table the DFM does not state.
 
 **BLOCKED**, with the reason: a property the field class does not have; a class, length or lookup dataset the repository or

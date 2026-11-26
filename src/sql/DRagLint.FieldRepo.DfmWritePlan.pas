@@ -8,7 +8,8 @@ unit DRagLint.FieldRepo.DfmWritePlan;  // dl:ok unit-too-large@fa17 -- REVIEWED 
   repository does not hold changes nothing. Fields are added and removed only for an explicit selection of one
   dataset, and then in the unit too (the published field is what lets Delphi find the class when the form loads).
   Calc code is never written here. A field event the repository holds and the form lacks gets a new handler (1.55, Q1 A),
-  and the grid and layout items bound to a removed field are removed with it (Q3(2)). }
+  and the grid and layout items bound to a removed field are removed with it (Q3(2)). A graphical row whose column the
+  form lacks becomes a TcxGridDBColumn with its GRID_* handlers, unchecked (Q3(1)). }
 
 interface
 
@@ -39,10 +40,11 @@ type
     FileIndex: Integer;
     /// <summary>What to do.</summary>
     Action: TDfmwAction;
-    /// <summary>Dataset and field component names.</summary>
+    /// <summary>Dataset and field component names; a grid column (Q3(1)) and its handlers: the grid view and the column.</summary>
     Dataset: string;
     Component: string;
-    /// <summary>dwaDelete: FieldName of the removed field; dwaEvent: FieldName of the field the handler is for.</summary>
+    /// <summary>dwaDelete: FieldName of the removed field; dwaEvent: FieldName of the field the handler is for; a grid
+    /// column: FIELD_NAME of its graphical row.</summary>
     FieldName: string;
     /// <summary>Class of the field (its declaration in the unit, the order of its properties).</summary>
     FieldClass: string;
@@ -100,7 +102,9 @@ type
 /// removed. ExpandSelection adds what the selected fields depend on.</param>
 /// <returns>The plan. Checked: property changes and added fields. Unchecked: removed fields, the grid and layout items bound
 /// to a removed field (the field's removal Requires them), new field-event handlers for code the repository holds (one of an
-/// added field Requires its insert), hidden fields, changed kinds and the first persistent fields of a dataset. Blocked: everything that cannot be written so that the form still loads, a
+/// added field Requires its insert), a new TcxGridDBColumn for a graphical row whose column the form lacks and its
+/// OnGetDisplayText / OnCustomDrawCell handlers (each Requires the column; the column goes where DL_GRID_COLUMNS puts it,
+/// else into the only TcxGridDBTableView of the dataset), hidden fields, changed kinds and the first persistent fields of a dataset. Blocked: everything that cannot be written so that the form still loads, a
 /// lookup whose current dataset has no known table, and a removed field that the form or its unit names.</returns>
 /// <exception cref="EDfmWriteError">A binary DFM, or one that Delphi or the readers do not understand.</exception>
 /// <exception cref="EDfmWriteSelection">pFields without exactly one dataset with a table.</exception>
@@ -191,6 +195,16 @@ const
   EVENT_PREFIX = 'On';
   EVENT_GET_TEXT = 'OnGetText';
   EVENT_SET_TEXT = 'OnSetText';
+  EVENT_GET_DISPLAY_TEXT = 'OnGetDisplayText';
+  PROP_CAPTION = 'Caption';
+  CLASS_GRID_COLUMN = 'TcxGridDBColumn';
+  { units a new grid column and its handlers are declared with }
+  UNIT_CX_DB_TABLE = 'cxGridDBTableView';
+  UNIT_CX_TABLE = 'cxGridCustomTableView';
+  UNIT_CX_GRAPHICS = 'cxGraphics';
+  SCHEMA_WITH_GRID = 3; // DL_GRID_COLUMNS
+  SQL_GRID_PLACES = 'SELECT "VIEW_NAME", "COLUMN_NAME", "COLUMN_INDEX" FROM "DL_GRID_COLUMNS" WHERE UPPER("FORM_NAME") = UPPER(:F) ' +
+    'AND UPPER("TABLE_NAME") = UPPER(:T) AND UPPER("FIELD_NAME") = UPPER(:N) ORDER BY "VIEW_NAME", "COLUMN_INDEX", "COLUMN_NAME"';
   { strings that are read by people or declare columns, not by-name bindings }
   UNBOUND_PROPS: array[0..4] of string = ('Caption', 'Hint', PROP_LABEL, 'Lines', 'FieldDefs');
   { tables the plan is made from }
@@ -301,6 +315,13 @@ type
     ChangeId: Integer; // 0 = already there
   end;
 
+  { Where a new grid column goes (Q3(1)). }
+  TGridPlace = record
+    View: TDfmrGridView;
+    Column: string;
+    Index: Integer; // -1 = after the last column
+  end;
+
   { A lookup's dataset. }
   TLookupTarget = record
     RefName: string; // as the DFM names it: `tblTools`, `dmMain.tblTools`, `Frame1.tblTools`
@@ -335,6 +356,7 @@ type
     FModuleTargets: TArray<TLookupTarget>;
     FModulesRead: Boolean;
     FReads: TStringList; // file=hash of everything read from disk
+    FGridTable: Boolean; // the repository has DL_GRID_COLUMNS
     procedure LoadRows;
     procedure NoteRead(const pFile: string; const pBytes: TBytes);
     function PlanId: string;
@@ -389,6 +411,12 @@ type
     procedure TryEvent(const pItem: TDfmwItem);
     function HandlerClash(pIndex: Integer): string;
     function BdeBlockReason: string;
+    function MissingUnit(const pUnits: TArray<string>): string;
+    function GridViewsOf: TArray<TDfmrGridView>;
+    function GridPlaces(const pRow: TRepoField; const pViews: TArray<TDfmrGridView>): TArray<TGridPlace>;
+    procedure PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer);
+    procedure PlanGridColumn(const pRow: TRepoField; const pPlace: TGridPlace);
+    procedure PlanGridColumns;
   public
     constructor Create(pRepo: TFDConnection; pBde: TDfmwBdePolicy);
     destructor Destroy; override;
@@ -779,6 +807,8 @@ begin
   VText := FReads.Text;
   for VTable in PLAN_TABLES do
     VText := VText + THashSHA2.GetHashString(TableText(FRepo, VTable)) + #10;
+  if FGridTable then
+    VText := VText + THashSHA2.GetHashString(TableText(FRepo, REPO_TABLE_GRID_COLUMNS)) + #10;
   Result := THashSHA2.GetHashString(VText + RenderChangeSetJson(FPlan.ChangeSet)).Substring(0, PLAN_ID_LENGTH);
 end;
 
@@ -1777,6 +1807,197 @@ begin
   end;
 end;
 
+{ ---- grid columns that are not fields (Q3(1), 1.55) ---- }
+
+{ The parameters of a TcxGridColumn event: TcxGridGetDisplayTextEvent, else TcxGridTableDataCellCustomDrawEvent. }
+function GridEventSignature(const pEvent: string): string;
+begin
+  Result := if SameText(pEvent, EVENT_GET_DISPLAY_TEXT) then 'Sender: TcxCustomGridTableItem; ARecord: TcxCustomGridRecord; var AText: string'
+    else 'Sender: TcxCustomGridTableView; ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean';
+end;
+
+{ Why the unit cannot compile a declaration that needs pUnits; '' = it uses them all. }
+function TDfmWritePlanner.MissingUnit(const pUnits: TArray<string>): string;
+var
+  VUnit: string;
+begin
+  Result := '';
+  if FUnit <> nil then
+    for VUnit in pUnits do
+      if not FUnit.UsesAny([VUnit]) then
+        Exit('the interface section of the unit does not use ' + VUnit);
+end;
+
+{ The table views of the form whose data source is one of this form for the dataset. }
+function TDfmWritePlanner.GridViewsOf: TArray<TDfmrGridView>;
+var
+  VView: TDfmrGridView;
+  VPair: TDfmrPair;
+begin
+  Result := nil;
+  for VView in FForm.Views do
+    if VView.Kind = dvkTable then
+      for VPair in FForm.DataSources do
+        if SameText(VPair.Name, VView.DataSource) and SameText(VPair.Value, FDataset.Name) then
+          Result := Result + [VView];
+end;
+
+function ViewNames(const pViews: TArray<TDfmrGridView>): string;
+var
+  VView: TDfmrGridView;
+begin
+  Result := '';
+  for VView in pViews do
+    Result := Result + (if Result = '' then '' else ', ') + VView.Name;
+end;
+
+{ Where a graphical row's columns go: the DL_GRID_COLUMNS rows of this form, else the only view of the dataset. }
+function TDfmWritePlanner.GridPlaces(const pRow: TRepoField; const pViews: TArray<TDfmrGridView>): TArray<TGridPlace>;
+var
+  VQuery: TFDQuery;
+  VPlace: TGridPlace;
+  VView: TDfmrGridView;
+  VNamed, VFound: Boolean;
+  VViewName, VColumnName, VColumnIndex: TField;
+begin
+  Result := nil;
+  VNamed := False;
+  if FGridTable then
+  begin
+    VQuery := TFDQuery.Create(nil);
+    try
+      VQuery.Connection := FRepo;
+      VQuery.Open(SQL_GRID_PLACES, [FForm.FormName, pRow.TableName, pRow.FieldName]);
+      VViewName := VQuery.FieldByName('VIEW_NAME');
+      VColumnName := VQuery.FieldByName('COLUMN_NAME');
+      VColumnIndex := VQuery.FieldByName('COLUMN_INDEX');
+      while not VQuery.Eof do
+      begin
+        VNamed := True;
+        VPlace.Column := VColumnName.AsString;
+        VPlace.Index := if VColumnIndex.IsNull then -1 else VColumnIndex.AsInteger;
+        VFound := False;
+        for VView in pViews do
+          if SameText(VView.Name, VViewName.AsString) then
+          begin
+            VPlace.View := VView;
+            VFound := True;
+          end;
+        if VFound then
+          Result := Result + [VPlace]
+        else
+          FWarnings.Add(Format('%s %s: graphical column %s not written: DL_GRID_COLUMNS puts it in %s, no TcxGridDBTableView of the dataset',
+            [ExtractFileName(FForm.FileName), FDataset.Name, pRow.FieldName, VViewName.AsString]));
+        VQuery.Next;
+      end;
+    finally
+      VQuery.Free;
+    end;
+  end;
+  if VNamed then
+    Exit;
+  if Length(pViews) = 1 then
+  begin
+    VPlace.View := pViews[0];
+    VPlace.Column := pViews[0].Name + TRegEx.Replace(pRow.FieldName, '[^A-Za-z0-9_]', '');
+    VPlace.Index := -1;
+    Result := [VPlace];
+  end
+  else if Length(pViews) > 1 then
+    FWarnings.Add(Format('%s %s: graphical column %s not written: %d grid views show the dataset (%s) and DL_GRID_COLUMNS names none',
+      [ExtractFileName(FForm.FileName), FDataset.Name, pRow.FieldName, Length(pViews), ViewNames(pViews)]));
+end;
+
+{ One unchecked change per grid event the row holds code for; each needs the column. }
+procedure TDfmWritePlanner.PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer);
+var
+  VI, VIndex: Integer;
+  VEvent, VReason: string;
+  VItem: TDfmwItem;
+  VUnits: TArray<string>;
+begin
+  for VI := 0 to Min(High(FR_EVENT_COLUMNS), High(pRow.Events)) do
+  begin
+    VEvent := FR_EVENT_COLUMNS[VI].Event;
+    if not FR_EVENT_COLUMNS[VI].IsGrid or (Trim(pRow.Events[VI]) = '') then
+      Continue;
+    VItem := NewItem(dwaEvent, pColumn.Component, CLASS_GRID_COLUMN);
+    VItem.Dataset := pColumn.Dataset;
+    VItem.PropName := VEvent;
+    VItem.Literal := pColumn.Component + Copy(VEvent, Length(EVENT_PREFIX) + 1, MaxInt);
+    VItem.FieldName := pRow.FieldName;
+    VItem.MethodParams := GridEventSignature(VEvent);
+    VItem.Requires := [pColumnId];
+    if not NewHandlerRegion(HandlerFields, pColumn.Component, VEvent, pRow.Events[VI], sLineBreak, VItem.MethodBody, VReason) then
+      VItem.MethodBody := '';
+    VIndex := AddItem(VItem, fcoInsert, '', VItem.Literal);
+    FChanges.List[VIndex].Checked := False;
+    if FChanges.List[VIndex].Blocked = '' then
+      Block(VIndex, HandlerClash(VIndex));
+    VUnits := [UNIT_CX_TABLE];
+    if not SameText(VEvent, EVENT_GET_DISPLAY_TEXT) then
+      VUnits := VUnits + [UNIT_CX_GRAPHICS];
+    if FChanges.List[VIndex].Blocked = '' then
+      Block(VIndex, MissingUnit(VUnits));
+    if VItem.MethodBody = '' then
+      Block(VIndex, VReason);
+  end;
+end;
+
+{ A new TcxGridDBColumn for a graphical row, unchecked: the owner's second confirmation is its id in a --select file. }
+procedure TDfmWritePlanner.PlanGridColumn(const pRow: TRepoField; const pPlace: TGridPlace);
+var
+  VColumn: TDfmrGridColumn;
+  VItem: TDfmwItem;
+  VIndex, VAt, VI: Integer;
+  VReason: string;
+begin
+  for VColumn in pPlace.View.Columns do
+    if SameText(VColumn.FieldName, pRow.FieldName) or SameText(VColumn.Name, pPlace.Column) then
+      Exit;
+  VAt := if (pPlace.Index < 0) or (pPlace.Index > Length(pPlace.View.Columns)) then Length(pPlace.View.Columns) else pPlace.Index;
+  VItem := NewItem(dwaInsert, pPlace.Column, CLASS_GRID_COLUMN);
+  VItem.Dataset := pPlace.View.Name;
+  VItem.FieldName := pRow.FieldName;
+  VItem.Siblings := nil;
+  for VI := 0 to VAt - 1 do
+    VItem.Siblings := VItem.Siblings + [pPlace.View.Columns[VI].Name];
+  VItem.Block := ['object ' + pPlace.Column + ': ' + CLASS_GRID_COLUMN];
+  if pRow.DisplayLabel <> '' then
+    VItem.Block := VItem.Block + ['  ' + PROP_CAPTION + ' =' + DfmStringLiteral(pRow.DisplayLabel)];
+  VItem.Block := VItem.Block + ['  ' + PROP_BINDING + ' =' + DfmStringLiteral(pRow.FieldName), 'end'];
+  if pPlace.View.ObjKind <> OBJECT_KIND then
+    VReason := 'the grid view is inherited: its columns are in the ancestor''s DFM'
+  else if (FDoc.FindObject(pPlace.Column, '') >= 0) or (FNewNames.IndexOf(pPlace.Column) >= 0) then
+    VReason := 'the form has another component named ' + pPlace.Column
+  else if (FUnit <> nil) and (FUnit.Mentions(pPlace.Column) > 0) then
+    VReason := ExtractFileName(FPlan.Files[FFileIndex].PasName) + ': the unit already has ' + pPlace.Column
+  else
+    VReason := MissingUnit([UNIT_CX_DB_TABLE]);
+  FNewNames.Add(pPlace.Column);
+  VIndex := AddItem(VItem, fcoInsert, '', BlockSummary(CLASS_GRID_COLUMN + '; ' + pPlace.View.Name + ' index ' + IntToStr(VAt), VItem.Block));
+  FChanges.List[VIndex].Checked := False;
+  Block(VIndex, VReason);
+  if FChanges[VIndex].Blocked = '' then
+    PlanColumnEvents(VItem, pRow, VIndex + 1);
+end;
+
+{ Every graphical row of the dataset's table whose column the form lacks. }
+procedure TDfmWritePlanner.PlanGridColumns;
+var
+  VViews: TArray<TDfmrGridView>;
+  VRow: TRepoField;
+  VPlace: TGridPlace;
+begin
+  if FSource.TableName = '' then
+    Exit;
+  VViews := GridViewsOf;
+  for VRow in FOrder do
+    if (VRow.Kind = frkGraphical) and SameText(VRow.TableName, FSource.TableName) then
+      for VPlace in GridPlaces(VRow, VViews) do
+        PlanGridColumn(VRow, VPlace);
+end;
+
 { ---- removed fields ---- }
 
 { True when a string of the DFM names a field: the name as a word (a `;` list, an expression, a filter). In a SQL text
@@ -1982,8 +2203,6 @@ var
   VReport: TDfmrDatasetReport;
   VField: TDfmrField;
   VTable, VColumn: string;
-  VRow: TRepoField;
-  VGraphical: string;
 begin
   VReport := Default(TDfmrDatasetReport);
   VReport.DfmName := ExtractFileName(FForm.FileName);
@@ -2003,12 +2222,6 @@ begin
   if Length(FDataset.InheritedFields) > 0 then
     FWarnings.Add(Format('%s %s: %d inherited fields not written (FieldName is in the ancestor''s DFM): %s',
       [VReport.DfmName, FDataset.Name, Length(FDataset.InheritedFields), string.Join(', ', FDataset.InheritedFields)]));
-  VGraphical := '';
-  for VRow in FOrder do
-    if (VRow.Kind = frkGraphical) and SameText(VRow.TableName, FSource.TableName) then
-      VGraphical := VGraphical + ' ' + VRow.FieldName;
-  if VGraphical <> '' then
-    FWarnings.Add(Format('%s %s: graphical columns are grid columns, not written:%s', [VReport.DfmName, FDataset.Name, VGraphical]));
   FPlan.Datasets := FPlan.Datasets + [VReport];
 end;
 
@@ -2058,6 +2271,7 @@ begin
         PlanEvents(VField.CompName, VField.FieldClass, VField.Events, VRow, nil);
       end;
     end;
+  PlanGridColumns;
   if Length(pFields) = 0 then
     Exit;
   if FSource.TableName = '' then
@@ -2096,6 +2310,7 @@ begin
   if (Length(pFields) > 0) and ((pDataset = '') or (Length(pFiles) <> 1)) then
     raise EDfmWriteSelection.Create('a field selection needs one form and one dataset');
   LoadRows;
+  FGridTable := RepoSchemaVersion(FRepo) >= SCHEMA_WITH_GRID;
   for VFile in UniquePaths(pFiles) do
   begin
     OpenForm(VFile);

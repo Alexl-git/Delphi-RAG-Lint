@@ -34,19 +34,41 @@ and the handler runs (`gettext=TRUE|Q5`), a second plan has no event change (the
 `repo gen-handlers` reports the region `unchanged`; a new field selected with its event: the event `Requires` the insert
 (`--select` of the event alone exits 2), both written, the form loads; a clash with an existing name is BLOCKED.
 
-## Q3(1) NO -- grid columns that are not fields are written
+## Q3(1) NO -- grid columns that are not fields are written (lane GRIDCOL)
 
-**What changes (designed, NOT built in this lane).** A graphical row (FIELD_KIND 10) of the dataset's table becomes a
-grid column: `object <COLUMN_NAME>: TcxGridDBColumn` in the view `DL_GRID_COLUMNS` names for this form (else the only
-`TcxGridDBTableView` whose `DataController.DataSource` is a data source of the dataset), at its stored `COLUMN_INDEX`,
-declared in the unit, with `OnGetDisplayText` / `OnCustomDrawCell` handlers made as in Q1 from `GRID_DISPLAYTEXT_BODY` /
-`GRID_DRAWCELL_BODY`. Change shape: op `insert`, unchecked (the owner's "second confirmation"), each handler a further
-unchecked change that `Requires` the column.
+**What changes.** A graphical row (FIELD_KIND 10) of the dataset's table whose column the form lacks becomes a grid
+column: `object <COLUMN_NAME>: TcxGridDBColumn` in the view `DL_GRID_COLUMNS` names for this form and that table and
+field (else the only `TcxGridDBTableView` whose `DataController.DataSource` is a data source of the dataset, named
+`<View><FIELD_NAME>`, after the last column), at its stored `COLUMN_INDEX`, with `Caption = DISPLAY_LABEL` (when stored)
+and `DataBinding.FieldName = '<FIELD_NAME>'` -- the dataset has no such field, so the column is unbound, and `repo
+read-dfm` finds the row again (TABLE_NAME / FIELD_NAME of its DL_GRID_COLUMNS row, the column events stored on it).
+Declared in the unit after its neighbour (the column before it, else the view). `GRID_DISPLAYTEXT_BODY` /
+`GRID_DRAWCELL_BODY` become `OnGetDisplayText = <Column>GetDisplayText(Sender: TcxCustomGridTableItem; ARecord:
+TcxCustomGridRecord; var AText: string)` / `OnCustomDrawCell = <Column>CustomDrawCell(Sender: TcxCustomGridTableView;
+ACanvas: TcxCanvas; AViewInfo: TcxGridTableDataCellViewInfo; var ADone: Boolean)`, made as in Q1 (DLFR region `<Column>.<Event>`,
+`{{FIELD}}` = the field component).
 
-**Why not now.** It needs a view resolver, the cx event signatures and macros for column events (GRID_* bodies are
-stored, never generated yet -- rulings 2026-11-23 item 9), and a load fixture with drawn columns: more than a day. The
-1.54 warning "graphical columns are grid columns, not written" stays until then.
+**The second confirmation.** Change shape: op `insert`, target `<form>.dfm <Column>`, new value
+`TcxGridDBColumn; <View> index <n>; <the block's properties>`; each handler an `insert` of `<Column> <Event>` that
+`Requires` the column. All **unchecked**, always: `--apply` never writes them; the dry run shows them, and only their ids
+in a `--select` file (with the plan line of that dry run) write them. A handler selected without its column exits 2. No
+new flag: the select file IS the confirmation, as for Q1 handlers and Q3(2) removals. (`--select all` still selects
+them, as it selects every unblocked change.)
 
+**Not written / refused.** A column the view already has (a column bound to FIELD_NAME, or one with the planned name):
+nothing. Two views of the dataset and no DL_GRID_COLUMNS row, or a DL_GRID_COLUMNS view that is no table view of the
+dataset: a warning, nothing planned. BLOCKED: a name another component or the unit already has, an inherited view, a
+unit that does not use `cxGridDBTableView` (column), `cxGridCustomTableView` (handlers), `cxGraphics`
+(`OnCustomDrawCell`). The editor properties of an image / check-box / button column (`PropertiesClassName`, ...) are not
+in the repository and not written. Banded, card and layout views and tree lists: not written (DBTable first, Q18 A).
+The 1.54 warning "graphical columns are grid columns, not written" is gone (W1e of run_fieldrepo_dfmwrite changes by
+this ruling). The plan id covers DL_GRID_COLUMNS.
+
+**Tests.** `run_v155_GRIDCOL.ps1` G1-G7: dry run (both places, both handlers, unchecked; STATUS, whose column the form
+has, plans nothing); `--apply` leaves them out; a handler without its column exits 2; `--select` writes block,
+declarations and methods and nothing else; the form compiles and loads (`columns=4,2`, the new column at index 3, its
+OnGetDisplayText gives `P5`, colPic at index 0); a second plan is empty for them and read-dfm stores no other code;
+refusals (taken name, missing cxGraphics, two views).
 ## Q3(2) NO -- removing a field takes its grid / layout items with it
 
 **What changes.** A planned removal of field F (FieldName N) of dataset D looks for the grid and layout items bound to
