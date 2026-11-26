@@ -17,8 +17,9 @@ uses
 const
   /// <summary>Schema version a NEW repository is created with; mirrored in PRAGMA user_version and DL_META.
   /// Version 2 (1.53) adds DL_FIELDS_INFO.CALC_BODY, DL_LAYOUT_EVENTS and DL_EXCEPTIONS; version 3 (1.54) the six event
-  /// columns of DL_FIELDS_INFO and DL_GRID_COLUMNS.</summary>
-  REPO_SCHEMA_VERSION = 3;
+  /// columns of DL_FIELDS_INFO and DL_GRID_COLUMNS; version 4 (1.55) DL_RELATIONS, DL_RELATION_COLUMNS and
+  /// DL_FIELD_INPUTS (design 2026-11-26-cross-table-fields-design.md 2.2).</summary>
+  REPO_SCHEMA_VERSION = 4;
   /// <summary>Oldest schema version OpenRepository still accepts (1 = the 1.52 five-table layout).</summary>
   REPO_SCHEMA_MIN_VERSION = 1;
   /// <summary>Name of the layout event code table (schema 2): event code of non-DBTable layouts and of views (FIELD_NAME '').</summary>
@@ -35,6 +36,17 @@ const
   REPO_TABLE_CONSTRAINTS = 'DL_CONSTRAINTS';
   REPO_TABLE_CONSTRAINT_COLUMNS = 'DL_CONSTRAINT_COLUMNS';
   REPO_TABLE_GENERATORS = 'DL_GENERATORS';
+  /// <summary>Cross-table tables (schema 4): one N:1 step from a child row to ONE parent row, its column pairs,
+  /// and the input aliases of a field (`{{ALIAS.FIELD}}`) with the path each one follows.</summary>
+  REPO_TABLE_RELATIONS = 'DL_RELATIONS';
+  REPO_TABLE_RELATION_COLUMNS = 'DL_RELATION_COLUMNS';
+  REPO_TABLE_FIELD_INPUTS = 'DL_FIELD_INPUTS';
+  /// <summary>DL_RELATIONS.SOURCE values: a declared foreign key, a join found in a form and confirmed, added by hand.</summary>
+  REPO_RELATION_FK = 'FK';
+  REPO_RELATION_FORM = 'FORM';
+  REPO_RELATION_HAND = 'HAND';
+  /// <summary>Separator of the relation names in DL_FIELD_INPUTS.PATH.</summary>
+  REPO_PATH_SEPARATOR = '>';
   /// <summary>SQLite application_id of a field repository ('DLFR').</summary>
   REPO_APPLICATION_ID = $444C4652;
   /// <summary>File extension of a repository file.</summary>
@@ -166,8 +178,9 @@ function RepoTables: TArray<TRepoTable>;  // dl:ok unused-public-symbol@15fa -- 
 
 /// <summary>The table set of one schema version: v1 = the five 1.52 tables; v2 = the same order with
 /// DL_FIELDS_INFO.CALC_BODY appended as its last column, then DL_LAYOUT_EVENTS and DL_EXCEPTIONS; v3 = v2 with the six
-/// event columns appended to DL_FIELDS_INFO, then DL_GRID_COLUMNS. RepoTables is RepoTablesFor(REPO_SCHEMA_VERSION).</summary>
-/// <param name="pVersion">1, 2 or 3.</param>
+/// event columns appended to DL_FIELDS_INFO, then DL_GRID_COLUMNS; v4 = v3, then DL_RELATIONS, DL_RELATION_COLUMNS and
+/// DL_FIELD_INPUTS. RepoTables is RepoTablesFor(REPO_SCHEMA_VERSION).</summary>
+/// <param name="pVersion">1, 2, 3 or 4.</param>
 /// <returns>A fresh array of table descriptions.</returns>
 /// <exception cref="ERepoError">The version is outside REPO_SCHEMA_MIN_VERSION..REPO_SCHEMA_VERSION.</exception>
 function RepoTablesFor(pVersion: Integer): TArray<TRepoTable>;
@@ -263,7 +276,7 @@ function DefaultRepoPath(const pProjectFile: string): string;
 procedure CreateRepository(const pFileName: string; pVersion: Integer = REPO_SCHEMA_VERSION);
 
 /// <summary>Opens an existing repository and validates it against the table set of ITS OWN
-/// schema version (1, 2 or 3).</summary>
+/// schema version (1 to 4).</summary>
 /// <param name="pFileName">Repository file.</param>
 /// <param name="pReadOnly">True opens with OpenMode=ReadOnly.</param>
 /// <returns>A connected connection; the caller frees it. Its FormatOptions.StrsTrim is
@@ -363,12 +376,15 @@ function GetRepoMeta(pConnection: TFDConnection; const pKey: string): string;
 /// <returns>The counts; a step that schema does not need counts 0.</returns>
 function CountRepoRowChanges(pConnection: TFDConnection; pFrom: Integer): TRepoRowChanges;
 
-/// <summary>Brings rows of an older schema to REPO_SCHEMA_VERSION: FIELD_KIND 2 for ISCALCULATED rows (from schema 1),
-/// Field events into the event columns (from schema 2), ALIGNMENT -2 to NULL, DL_META schema_version.</summary>
-/// <param name="pConnection">Open read-write connection whose tables have the columns of REPO_SCHEMA_VERSION.</param>
-/// <param name="pFrom">Schema version the rows were written with, below REPO_SCHEMA_VERSION.</param>
+/// <summary>Brings rows of an older schema to schema pTo: FIELD_KIND 2 for ISCALCULATED rows (from schema 1),
+/// Field events into the event columns (from schema 2 or older, when pTo is 3 or later), ALIGNMENT -2 to NULL (pTo 3 or
+/// later), DL_META schema_version = pTo. Schema 4 adds tables only: no row step of its own.</summary>
+/// <param name="pConnection">Open read-write connection whose tables have the columns of schema pTo.</param>
+/// <param name="pFrom">Schema version the rows were written with, below pTo.</param>
+/// <param name="pTo">The file's schema: REPO_SCHEMA_VERSION for a migration, the target file's own schema for a restore
+/// (an old backup restored into an older, non-current file is still migrated up to that file's schema).</param>
 /// <remarks>Runs in the caller's transaction, for a migrated file and for an older text backup that is restored.</remarks>
-procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer);
+procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer; pTo: Integer = REPO_SCHEMA_VERSION);
 
 implementation
 
@@ -392,10 +408,17 @@ const
   COMPONENT_NAME_LEN = 128;
   VERSION_MODEL = 2;
   VERSION_EVENT_COLUMNS = 3;
+  VERSION_CROSS_TABLE = 4;
+  { column widths of the schema-4 tables }
+  TABLE_NAME_LEN = 68;
+  IDENT_LEN = 63;
+  SOURCE_LEN = 10;
+  BINDING_LEN = 160;
+  PATH_LEN = 1000;
   { Tables a seed or an import of the field registry never writes. }
-  SIDE_TABLES: array[0..7] of string = (REPO_META_TABLE, REPO_TABLE_LAYOUT_EVENTS, REPO_TABLE_EXCEPTIONS,
+  SIDE_TABLES: array[0..10] of string = (REPO_META_TABLE, REPO_TABLE_LAYOUT_EVENTS, REPO_TABLE_EXCEPTIONS,
     REPO_TABLE_DOMAINS, REPO_TABLE_CONSTRAINTS, REPO_TABLE_CONSTRAINT_COLUMNS, REPO_TABLE_GENERATORS,
-    REPO_TABLE_GRID_COLUMNS);
+    REPO_TABLE_GRID_COLUMNS, REPO_TABLE_RELATIONS, REPO_TABLE_RELATION_COLUMNS, REPO_TABLE_FIELD_INPUTS);
   META_SCHEMA_VERSION = 'schema_version';
   WHERE_CALC = ' WHERE "ISCALCULATED" = 1 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1)';
   WHERE_ALIGNMENT = ' WHERE "ALIGNMENT" = -2';
@@ -576,6 +599,39 @@ begin
     Str('REASON', 220, True)]);  // dl:ok large-magic-number@4ec3, magic-literal@4ec3 -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
 end;
 
+{ Design 2026-11-26-cross-table-fields 2.2: one N:1 step, child row to ONE parent row. }
+function RelationsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_RELATIONS, '', [
+    Str('RELATION_NAME', IDENT_LEN, True, 1),
+    Str('CHILD_TABLE', TABLE_NAME_LEN, True),
+    Str('PARENT_TABLE', TABLE_NAME_LEN, True),
+    Str('SOURCE', SOURCE_LEN, True),
+    Str('CONSTRAINT_NAME', TABLE_NAME_LEN),
+    Str('PARENT_KEY', TABLE_NAME_LEN, True),
+    Bool('IS_DEFAULT', '0')]);
+end;
+
+function RelationColumnsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_RELATION_COLUMNS, '', [
+    Str('RELATION_NAME', IDENT_LEN, True, 1),
+    Col('POSITION', rckInteger, 0, True, '', 2),
+    Str('CHILD_COLUMN', TABLE_NAME_LEN, True),
+    Str('PARENT_COLUMN', TABLE_NAME_LEN, True)]);
+end;
+
+function FieldInputsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_FIELD_INPUTS, '', [
+    Str('TABLE_NAME', TABLE_NAME_LEN, True, 1),
+    Str('FIELD_NAME', TABLE_NAME_LEN, True, 2),
+    Col('BINDING', rckString, BINDING_LEN, True, '''''', 3),  // dl:ok magic-literal@f8cb -- REVIEWED 2026-11-26 XTABLE: position in the primary key, named by its neighbours
+    Str('ALIAS', IDENT_LEN, True, 4),  // dl:ok magic-literal@4794 -- REVIEWED 2026-11-26 XTABLE: position in the primary key, named by its neighbours
+    Col('PATH', rckString, PATH_LEN, True, '''''', 0),
+    Str('TARGET_TABLE', TABLE_NAME_LEN, True)]);
+end;
+
 function DatasetsInfoTable: TRepoTable;
 begin
   Result := MakeTable('DL_DATASETS_INFO', 'FIB$DATASETS_INFO', [
@@ -622,6 +678,8 @@ begin
       ConstraintColumnsTable, GeneratorsTable];
   if pVersion >= VERSION_EVENT_COLUMNS then
     Result := Result + [GridColumnsTable];
+  if pVersion >= VERSION_CROSS_TABLE then
+    Result := Result + [RelationsTable, RelationColumnsTable, FieldInputsTable];
 end;
 
 function RepoTables: TArray<TRepoTable>;
@@ -935,18 +993,19 @@ begin
   Result.AlignmentRows := CountRows(pConnection, FIELDS_SQL + WHERE_ALIGNMENT);
   if pFrom < VERSION_MODEL then
     Result.CalcRows := CountRows(pConnection, FIELDS_SQL + WHERE_CALC)
-  else
+  else if pFrom < VERSION_EVENT_COLUMNS then
     Result.EventRows := CountEvents(pConnection);
 end;
 
-procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer);
+procedure MigrateRepoRows(pConnection: TFDConnection; pFrom: Integer; pTo: Integer);
 begin
   if pFrom < VERSION_MODEL then
     pConnection.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "FIELD_KIND" = 2' + WHERE_CALC)
-  else
+  else if (pFrom < VERSION_EVENT_COLUMNS) and (pTo >= VERSION_EVENT_COLUMNS) then
     MoveEvents(pConnection);
-  pConnection.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "ALIGNMENT" = NULL' + WHERE_ALIGNMENT);
-  SetRepoMeta(pConnection, META_SCHEMA_VERSION, IntToStr(REPO_SCHEMA_VERSION));
+  if pTo >= VERSION_EVENT_COLUMNS then
+    pConnection.ExecSQL('UPDATE ' + FIELDS_SQL + ' SET "ALIGNMENT" = NULL' + WHERE_ALIGNMENT);
+  SetRepoMeta(pConnection, META_SCHEMA_VERSION, IntToStr(pTo));
 end;
 
 end.

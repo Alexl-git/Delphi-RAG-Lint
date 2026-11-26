@@ -209,17 +209,18 @@ repository keeps only the `Database` value (`source_database`).
 
 (1.53) A connection string that names `OpenMode`, `CreateDatabase`, `DropDatabase`, `ConnectionDef` or `ConnectionDefName` is refused (import-fb, seed-fb, refresh-schema, fb-snapshot): `DropDatabase=Yes` used to delete the database. `refresh-schema --json` writes exactly one JSON document to stdout; a `--select` id that is not in the change set exits 2.
 
-## Field kinds, schema versions and `repo migrate` / `repo check` (1.53, 1.54)
+## Field kinds, schema versions and `repo migrate` / `repo check` (1.53, 1.54, 1.55)
 
-A repository created by 1.54 is **schema 3**; a 1.52 file (schema 1) and a 1.53 file (schema 2) still open and are handled
-as their own schema until you run `repo migrate`. Nothing is dropped or renamed.
+A repository created by 1.55 is **schema 4**; a 1.52 file (schema 1), a 1.53 file (schema 2) and a 1.54 file (schema 3) still open
+and are handled as their own schema until you run `repo migrate`. Nothing is dropped or renamed.
 
 | Schema | Adds |
 |---|---|
 | 2 (1.53) | `DL_FIELDS_INFO.CALC_BODY`, `DOMAIN_NAME`, `CHAR_LENGTH`; `DL_LAYOUT_EVENTS`, `DL_EXCEPTIONS` and the four schema-fact tables |
 | 3 (1.54) | the six event columns of `DL_FIELDS_INFO` (last, in this order): `ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY`, `GRID_DISPLAYTEXT_BODY`, `GRID_DRAWCELL_BODY`; `DL_GRID_COLUMNS` |
+| 4 (1.55) | `DL_RELATIONS`, `DL_RELATION_COLUMNS`, `DL_FIELD_INPUTS` (cross-table fields, below); no column and no row changes |
 
-`read-dfm` and `gen-handlers` need schema 3; the other verbs work on every schema.
+`read-dfm` and `gen-handlers` need schema 3 or later; the other verbs work on every schema.
 
 ### Field kinds
 
@@ -236,7 +237,7 @@ as their own schema until you run `repo migrate`. Nothing is dropped or renamed.
 
 `ISCALCULATED` must equal "kind is 2 or 4" and `ISLOOKUP` must equal "kind is 3". A calc body names
 other fields of the same table with `{{FIELD}}` macros. A macro is the field COMPONENT of the dataset and the body writes the
-member (1.54): `{{TOTAL}}.AsFloat := {{QTY}}.AsInteger * {{PRICE}}.AsFloat;` (`{{TABLE.FIELD}}` is reserved and an error; there
+member (1.54): `{{TOTAL}}.AsFloat := {{QTY}}.AsInteger * {{PRICE}}.AsFloat;` (`{{ALIAS.FIELD}}` is an error unless the field declares the alias, schema 4 below; there
 are no escapes). A body without members (`{{TOTAL}} := {{QTY}}`, the 1.53 text) still parses but generates no code that
 compiles: read it again from the form. The dependencies of a calc field are every macro except its own assignment
 target (`{{TOTAL}}.AsFloat :=`, `{{TOTAL}}.Clear`) and reads of the field behind such a statement; an internal-calc field may
@@ -266,11 +267,12 @@ and the 0-based `COLUMN_INDEX`. `repo read-dfm` writes it. Two columns of one fi
 drag-lint repo migrate (--repo <file> | --project <project file>) [--apply]
 ```
 
-Without `--apply` it prints the plan and changes no byte: `v2 -> v3: add DL_FIELDS_INFO.ONGETTEXT_BODY, ..., create
-DL_GRID_COLUMNS, ALIGNMENT -2 to NULL in N rows, move N Field events into columns, user_version 3`; from schema 1 also the
-columns and tables of schema 2 and `FIELD_KIND 2 for N ISCALCULATED rows` (kind NULL or 1). With `--apply` it first writes
-`<repo>.before-migrate-<yyyymmdd-hhnnss>.txt` (the text backup in the old schema), then runs one transaction. A schema-3
-file prints `already at schema 3` (exit 0). A `Field` event whose field has no row, or that has no column, stays where it is.
+Without `--apply` it prints the plan and changes no byte: `v3 -> v4: create DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS,
+ALIGNMENT -2 to NULL in N rows, user_version 4`; from schema 2 also `add DL_FIELDS_INFO.ONGETTEXT_BODY, ...`, `DL_GRID_COLUMNS`,
+`move N Field events into columns`; from schema 1 also the columns and tables of schema 2 and `FIELD_KIND 2 for N ISCALCULATED
+rows` (kind NULL or 1). With `--apply` it first writes
+`<repo>.before-migrate-<yyyymmdd-hhnnss>.txt` (the text backup in the old schema), then runs one transaction. A schema-4
+file prints `already at schema 4` (exit 0). A `Field` event whose field has no row, or that has no column, stays where it is.
 
 ### `repo check`
 
@@ -282,13 +284,40 @@ Read-only. Reports kind/flag mismatches, lookup wiring that is incomplete or poi
 or field (a `DESTKEY` that is not the lookup table's primary key is a warning), calc macros that name an
 unknown field, calc dependency cycles (named once, `A -> B -> A`; a read of the own field counts unless every path before it has written the field), event code (columns and layout events) whose macros are
 malformed or name an unknown field, layout-event rows for an unknown field; as warnings an `ALIGNMENT` outside NULL / 0 / 1 / 2 and
-a grid column that names a field without a row. Exit 0 when clean, 1 when there are findings.
+a grid column that names a field without a row. On schema 4 also the cross-table rules (below). Exit 0 when clean, 1 when there are findings.
+
+### Cross-table fields (1.55, schema 4)
+
+A field belongs to its own table, also when its code reads other tables (owner ruling Q5): `IPCHART.FTRNAME` reads
+`MSCLIST.DECIMALS` two steps up. Its body names such an input `{{ALIAS.FIELD}}`, and `DL_FIELD_INPUTS` declares the alias:
+
+| Table | Key | Holds |
+|---|---|---|
+| `DL_RELATIONS` | `RELATION_NAME` | one N:1 step: `CHILD_TABLE`, `PARENT_TABLE`, `SOURCE` (`FK` / `FORM` / `HAND`), `CONSTRAINT_NAME` (for FK), `PARENT_KEY` (the PK / UNIQUE constraint that makes the parent row ONE row), `IS_DEFAULT` (the stored answer when several paths exist) |
+| `DL_RELATION_COLUMNS` | `RELATION_NAME`, `POSITION` | `CHILD_COLUMN` = `PARENT_COLUMN` pairs |
+| `DL_FIELD_INPUTS` | `TABLE_NAME`, `FIELD_NAME`, `BINDING`, `ALIAS` | `PATH` (relation names, `>`-separated, from the home table), `TARGET_TABLE`; `BINDING` '' = the default, `FORM.DATASET` = an override with the same aliases |
+
+```pascal
+{{FTRNAME}}.AsString := FloatToStr({{VALUE}}.AsFloat) + IntToStr({{MSC.DECIMALS}}.AsInteger);
+```
+
+with `IPCHART | FTRNAME | '' | MSC | FK_IPCHART_INSP>FK_INSP_MSC | MSCLIST`. Selecting the field brings its inputs,
+transitively: a parent's calc field brings its own inputs with the paths joined. 1.55 stores and checks these rows;
+reading them from forms, finding paths and composing the SQL follow (design
+`docs/superpowers/specs/2026-11-26-cross-table-fields-design.md`, slices X2-X4).
+
+`repo check` on schema 4: `input-alias-undeclared`, `input-unknown-field` (the target table has no such field),
+`input-no-field-row`, `input-path-broken` (an unknown relation, or a step that does not start where the last ended),
+`input-target-mismatch`, `binding-no-default`, `binding-alias-set`, `relation-source-invalid`, `relation-no-columns`,
+`relation-two-defaults`, `relation-key-not-unique`, `relation-fk-missing`, `relation-fk-mismatch`, and as warnings
+`relation-key-unknown` / `relation-fk-gone` (the schema facts do not hold the constraint: run `repo refresh-schema`).
+A calc cycle through aliases is named with full names: `calc dependency cycle across tables: IPCHART.FTRNAME -> MSCLIST.CX -> IPCHART.FTRNAME`.
 
 ### Text backup versions
 
-A schema-3 repository writes `#DLREPO 3` (`DL_GRID_COLUMNS` last); a schema-2 file writes `#DLREPO 2` and a schema-1 file
+A schema-4 repository writes `#DLREPO 4` (`DL_FIELD_INPUTS` last); a schema-3 file writes `#DLREPO 3`, a schema-2 file `#DLREPO 2` and a schema-1 file
 `#DLREPO 1`, byte for byte as before. Restoring an older backup into a newer repository is accepted (new tables empty, new
-columns NULL); into a schema-3 file its rows get the row changes of `repo migrate` (FIELD_KIND 2, `ALIGNMENT` -2 to NULL,
+columns NULL); its rows get the row changes up to the TARGET file's schema of `repo migrate` (FIELD_KIND 2, `ALIGNMENT` -2 to NULL,
 `Field` events into the event columns) in the same transaction, so the result is the migrated file; restoring a newer backup into an older file is refused with exit 2 ("migrate first"); restoring into a missing file creates
 the file at the backup's own version.
 

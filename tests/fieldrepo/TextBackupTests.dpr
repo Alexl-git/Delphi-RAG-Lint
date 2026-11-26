@@ -477,6 +477,8 @@ var
   vCls: string;
   vNull: Boolean;
   vPath: string;
+  vLines: TStringList;
+  vI: Integer;
 begin
   vV2 := NewRepo(2);
   try
@@ -502,8 +504,8 @@ begin
     vWant := TFile.ReadAllBytes(Fixture('golden.dlrepo.txt'));
     Check('21a #DLREPO 1 restores into a v2 repository (rows present)',
       ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO"', vNull) = '6');
-    Check('21b the v2 backup of it is the v1 backup with #DLREPO 2, CALC_BODY absent and two empty trailers',
-      TEncoding.ASCII.GetString(vGot) = '#DLREPO 2' + Copy(TEncoding.ASCII.GetString(vWant), Length('#DLREPO 1') + 1, MaxInt)
+    Check('21b the v2 backup of it is the v1 backup with #DLREPO 2, schema_version 2, CALC_BODY absent and the empty trailers (rows migrated to the file''s schema 2)',
+      TEncoding.ASCII.GetString(vGot) = '#DLREPO 2' + Copy(TEncoding.ASCII.GetString(vWant), Length('#DLREPO 1') + 1, MaxInt).Replace('META_VALUE=1', 'META_VALUE=2')
         + '#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10);
     Check('21c CALC_BODY is NULL after a v1 restore',
       ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO" WHERE "CALC_BODY" IS NOT NULL', vNull) = '0');
@@ -564,9 +566,29 @@ begin
     RestoreRepository(vV2, Fixture('golden_v2.txt'), True);
     vOut := TPath.Combine(GDir, 'out-v2-in-v3.txt');
     BackupRepository(vV2, vOut);
+    { an older backup is migrated up to the TARGET file's schema, also when that is not the current one (1.55 XTABLE) }
     Check('25d #DLREPO 2 restores into a v3 repository: the v2 text with #DLREPO 3, schema_version 3 and an empty DL_GRID_COLUMNS',
       TEncoding.ASCII.GetString(TFile.ReadAllBytes(vOut)) = TEncoding.ASCII.GetString(TFile.ReadAllBytes(Fixture('golden_v2.txt'))).Replace('#DLREPO 2', '#DLREPO 3').Replace('META_VALUE=2', 'META_VALUE=3')
         + '#end DL_GRID_COLUMNS 0' + #13#10);
+    vV2.ExecSQL('UPDATE "DL_FIELDS_INFO" SET "ALIGNMENT" = -2 WHERE "FIELD_NAME" = ''AMOUNT''');
+    vV2.ExecSQL('INSERT INTO "DL_LAYOUT_EVENTS" VALUES (''ORDERS'', ''AMOUNT'', ''Field'', ''OnGetText'', ''Text := ''''X'''';'')');
+    vLines := TStringList.Create;
+    try
+      BackupRepositoryToStrings(vV2, vLines);
+      vLines[0] := '#DLREPO 2';
+      for vI := vLines.Count - 1 downto 0 do
+        if vLines[vI].StartsWith('#end DL_GRID_COLUMNS') then
+          vLines.Delete(vI);
+      vLines.Text := vLines.Text.Replace('META_VALUE=3', 'META_VALUE=2');
+      RestoreRepositoryFromStrings(vV2, vLines, True);
+    finally
+      vLines.Free;
+    end;
+    Check('25i a #DLREPO 2 Field event and ALIGNMENT -2 into a v3 file: the event moved into its column, ALIGNMENT NULL, schema_version 3, no row lost',
+      (ScalarStr(vV2, 'SELECT "ONGETTEXT_BODY" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" = ''AMOUNT''', vNull) = 'Text := ''X'';')
+      and (ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_LAYOUT_EVENTS" WHERE "LAYOUT_TYPE" = ''Field''', vNull) = '0')
+      and (ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO" WHERE "ALIGNMENT" = -2', vNull) = '0')
+      and (ScalarStr(vV2, 'SELECT "META_VALUE" FROM "DL_META" WHERE "META_KEY" = ''schema_version''', vNull) = '3'));
     RestoreRepository(vV2, Fixture('golden.dlrepo.txt'), True);
     Check('25e #DLREPO 1 restores into a v3 repository', ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO"', vNull) = '6');
   finally

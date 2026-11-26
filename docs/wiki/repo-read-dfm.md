@@ -7,7 +7,7 @@ drag-lint repo read-dfm --dfm <file.dfm>[;...] [--dataset <Name>] --direction df
 
 Reads the datasets of a form (one with `--dataset`, all without) and prints the change set that brings the repository
 in line with their persistent fields. Nothing is written without `--apply` or `--select`; the form and its unit are
-never written. The direction is required, there is no default. The repository must be schema 3 (`repo migrate --apply`).
+never written. The direction is required, there is no default. The repository must be schema 3 or later (`repo migrate --apply`).
 
 | What | Where it goes |
 |---|---|

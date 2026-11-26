@@ -191,7 +191,7 @@ begin
     and vTabs[6].FindColumn('REASON', vCol) and vCol.NotNull and (vCol.PkOrder = 0));
   Check('12f RepoTablesFor(1) keeps 40 columns without CALC_BODY (positive control against 12c)',
     (Length(RepoTablesFor(1)[1].Columns) = 40) and not RepoTablesFor(1)[1].FindColumn('CALC_BODY', vCol));
-  Check('12g RepoTablesFor(4) raises ERepoError', RaisedClass(procedure begin RepoTablesFor(4); end) = 'ERepoError');
+  Check('12g RepoTablesFor(5) raises ERepoError', RaisedClass(procedure begin RepoTablesFor(5); end) = 'ERepoError');
   Check('12h FindRepoTable finds a schema-2 table', FindRepoTable('dl_exceptions', vTab));
 
   vFile := NewPath('v2new');
@@ -218,8 +218,8 @@ begin
   finally
     vV1.Free;
   end;
-  Check('14e CreateRepository version 4 raises ERepoError',
-    RaisedClass(procedure begin CreateRepository(NewPath('v4'), 4); end) = 'ERepoError');
+  Check('14e CreateRepository version 5 raises ERepoError',
+    RaisedClass(procedure begin CreateRepository(NewPath('v5'), 5); end) = 'ERepoError');
 
   vRaw := RawConn(vFile, 'ReadWrite');
   try
@@ -273,8 +273,8 @@ var
   vFile: string;
   vConn: TFDConnection;
 begin
-  vTabs := RepoTables;
-  Check('17a REPO_SCHEMA_VERSION is 3 and RepoTables is the v3 set, DL_GRID_COLUMNS last', (REPO_SCHEMA_VERSION = 3) and (Length(vTabs) = 12)
+  vTabs := RepoTablesFor(3);
+  Check('17a RepoTablesFor(3) is the v3 set, DL_GRID_COLUMNS last (1.55: schema 4 adds three tables after it)', (Length(vTabs) = 12)
     and (vTabs[11].Name = 'DL_GRID_COLUMNS'));
   vOk := Length(vTabs[1].Columns) = 49;
   vI := 43;
@@ -291,10 +291,10 @@ begin
     and (vTabs[11].PkColumns[2].Name = 'COLUMN_NAME') and vTabs[11].FindColumn('TABLE_NAME', vCol) and (not vCol.NotNull)
     and vTabs[11].FindColumn('FIELD_NAME', vCol) and (not vCol.NotNull) and vTabs[11].FindColumn('COLUMN_INDEX', vCol) and vCol.NotNull);
   vFile := NewPath('v3new');
-  CreateRepository(vFile);
+  CreateRepository(vFile, 3);
   vConn := OpenRepository(vFile, False);
   try
-    Check('17f a new repository is version 3', RepoSchemaVersion(vConn) = 3);
+    Check('17f a repository created at schema 3 is version 3', RepoSchemaVersion(vConn) = 3);
     vConn.ExecSQL('INSERT INTO "DL_GRID_COLUMNS" VALUES (''frmA'',''view1'',''colA'',''T'',''F'',0)');
     Check('17g two columns of one field, an unbound column, another form',
       RaisedClass(procedure begin
