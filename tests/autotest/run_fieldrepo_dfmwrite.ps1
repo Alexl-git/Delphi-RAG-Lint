@@ -6,7 +6,7 @@
   PART 2  the built engine on tests\fixtures\fieldrepo\dfmwrite (data, calc, internal-calc, lookup, aggregate fields; a
           graphical DBTable column and a graphical tree-list column):
     W1  dry run: the change set, no byte written, no backup
-    W2  a selection: lookup keys added, graphical rows only reported, removals unchecked, blocked when the form needs them
+    W2  a selection: lookup keys added, graphical rows never fields, removals unchecked, blocked when the form needs them
     W3  --apply: golden bytes, everything else byte for byte, backup = the old bytes, one log line per change
     W4  round trip: read-dfm sees no difference, write-dfm plans nothing more and writes nothing
     W5  convert.exe: to binary and back gives the same text
@@ -126,7 +126,8 @@ try {
   Check 'W1b a value the repository does not hold changes nothing (a new row''s VISIBLE False included)' (($r.Out -notmatch 'memOrdersID ') -and ($r.Out -notmatch 'memOrdersOLDCOL ') -and ($r.Out -notmatch 'memTools(ID|NAME) ')) $r.Out
   Check 'W1c hiding a field is unchecked' ($r.Out -match 'memOrdersNOTE Visible: True -> False\n  \(unchecked\)') $r.Out
   Check 'W1d no byte written, no backup' (($hd -eq (Hash $dfm)) -and ($hp -eq (Hash $pas)) -and ($hr -eq (Hash $y)) -and ((Backups $forms).Count -eq 0) -and (Has $r 'dry run: nothing written')) $r.Out
-  Check 'W1e graphical rows are reported' (Has $r 'warning: uAllKinds.dfm memOrders: graphical columns are grid columns, not written: STATUS') $r.Out
+  # 1.55 Q3(1): a graphical row whose column the form lacks is written (run_v155_GRIDCOL.ps1); GridViewSTATUS is STATUS's column
+  Check 'W1e a graphical row whose column the form has: nothing planned, nothing to warn' (($r.Out -notmatch 'GridViewSTATUS') -and -not (Has $r 'graphical column')) $r.Out
   $r = Write-Dfm @('--dataset', 'memorders', '--names', 'TOTAL,SUMQ,BIG,TOOL,ID,QTY,NOTE,USEDCOL')
   Check 'W2a a lookup pulls its key in, each kind has its class' (($r.Code -eq 0) -and (Has $r "insert uAllKinds.dfm memOrdersTOOLID:  -> TIntegerField; FieldName = 'TOOLID'") -and (Has $r "memOrdersTOOL:  -> TStringField; DisplayLabel = 'Tool'; FieldKind = fkLookup; FieldName = 'TOOL'; LookupDataSet = memTools; LookupKeyFields = 'ID'; LookupResultField = 'NAME'; KeyFields = 'TOOLID'; Size = 30; Lookup = True") -and (Has $r 'memOrdersSUMQ:  -> TAggregateField;') -and (Has $r 'FieldKind = fkInternalCalc') -and (Has $r 'Calculated = True')) $r.Out
   Check 'W2b a field that is not selected: delete, unchecked' ($r.Out -match "\] delete uAllKinds\.dfm memOrdersOLDCOL: TIntegerField; FieldName = 'OLDCOL' -> \n  \(unchecked\)") $r.Out
