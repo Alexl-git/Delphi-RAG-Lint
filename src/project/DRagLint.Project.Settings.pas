@@ -174,7 +174,10 @@ const
   HEX_WIDTH         = 4;
   CRLF              = #13#10;
 
-  SETTING_CATALOG: array[0..9] of TSettingDef = (
+  BDE_POLICY_KEY = 'fieldrepo.bde';
+  BDE_POLICY_VALUES: array[0..2] of string = ('full', 'readonly', 'none');
+
+  SETTING_CATALOG: array[0..10] of TSettingDef = (
     (Key: 'ownRoots'; Description: 'Folders whose files count as this project''s own code (project folder when unset)';
      Flag: ''; DefaultJson: '[]'; Kind: skPathList; LocalAllowed: False; Settable: True),
     (Key: 'excludeRoots'; Description: 'Folders inside the project that are vendored code, not linted as your own';
@@ -194,7 +197,9 @@ const
     (Key: 'lint.profile'; Description: 'Named lint profile applied when --profile is not given';
      Flag: '--profile'; DefaultJson: '""'; Kind: skString; LocalAllowed: True; Settable: True),
     (Key: 'taint.envSource'; Description: 'false = GetEnvironmentVariable is not a taint source in this project';
-     Flag: ''; DefaultJson: 'true'; Kind: skBool; LocalAllowed: True; Settable: True)
+     Flag: ''; DefaultJson: 'true'; Kind: skBool; LocalAllowed: True; Settable: True),
+    (Key: BDE_POLICY_KEY; Description: 'repo write-dfm on BDE datasets: full, readonly or none (no BDE in this project)';
+     Flag: ''; DefaultJson: '"full"'; Kind: skString; LocalAllowed: False; Settable: True)
   );
 
   EMPTY_OWNROOTS_MSG = 'ownRoots: an empty list would make the project own nothing and report a clean project; unset it instead';
@@ -570,6 +575,8 @@ begin
     skString, skPath:
       begin
         CheckPlainText(pDef.Key, pText);
+        if (pDef.Key = BDE_POLICY_KEY) and not MatchText(pText, BDE_POLICY_VALUES) then
+          raise ESettingsError.CreateFmt('%s: expected full, readonly or none, got ''%s''', [pDef.Key, pText]);
         Exit(TJSONString.Create(pText));
       end;
     skPathList: Result:= ParsePathList(pDef.Key, pText);

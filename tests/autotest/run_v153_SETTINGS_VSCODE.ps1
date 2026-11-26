@@ -88,7 +88,7 @@ try {
   $l = Run @('settings', 'list', '--project', $script:Project, '--json')
   $env:PS_ARG = $l.Out
   $pl = (NodeEval "const ps=require(process.env.PS_LIB);process.stdout.write(JSON.stringify(ps.parseList(process.env.PS_ARG)));" $l.Out) | ConvertFrom-Json | ForEach-Object { $_ }
-  $want = 'ownRoots,excludeRoots,reportsDir,fieldRepository,backupDir,popupForms,checkInit,lint.config,lint.profile,taint.envSource'
+  $want = 'ownRoots,excludeRoots,reportsDir,fieldRepository,backupDir,popupForms,checkInit,lint.config,lint.profile,taint.envSource,fieldrepo.bde'
   $got = ($pl.rows | ForEach-Object { $_.key }) -join ','
   Check 'E5 parseList on real list --json: 10 rows in spec order' ($pl.rows.Count -eq 10 -and $got -eq $want -and $pl.error -eq '') "got=$got err=$($pl.error)"
 

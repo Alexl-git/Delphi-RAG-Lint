@@ -44,7 +44,8 @@ uses
   DRagLint.FieldRepo.DfmReadPlan,
   DRagLint.FieldRepo.DfmReadSelection,
   DRagLint.FieldRepo.DfmWrite,
-  DRagLint.FieldRepo.DfmWritePlan;
+  DRagLint.FieldRepo.DfmWritePlan,
+  DRagLint.Project.Settings;
 
 const
   EXIT_OK = 0;
@@ -222,15 +223,35 @@ begin
       Result := Result + [VChange];
 end;
 
+{ The project setting fieldrepo.bde of the form's project: --project, else the first folder at or above the first
+  --dfm that holds _D-RAG; no project = full. }
+function ProjectBdePolicy(const pOptions: TRunOptions): TDfmwBdePolicy;
+var
+  VAnchor: string;
+  VSettings: TProjectSettings;
+begin
+  VAnchor := TProjectSettings.ResolveAnchor(CommandLineValue('--project'), pOptions.Files[0], '', '');
+  if VAnchor = '' then
+    Exit(dbpFull);
+  VSettings := TProjectSettings.Create(VAnchor);
+  try
+    Result := BdePolicyOf(VSettings.AsString('fieldrepo.bde'));
+  finally
+    VSettings.Free;
+  end;
+end;
+
 function RunOnRepo(const pPath: string; const pOptions: TRunOptions): TRunResult;
 var
   VRepo: TFDConnection;
   VChosen: TArray<TFrChange>;
+  VBde: TDfmwBdePolicy;
 begin
   Result := Default(TRunResult);
+  VBde := ProjectBdePolicy(pOptions);
   VRepo := OpenRepository(pPath, True);
   try
-    Result.Plan := PlanDfmWrite(VRepo, pOptions.Files, pOptions.Dataset, pOptions.Fields);
+    Result.Plan := PlanDfmWrite(VRepo, pOptions.Files, pOptions.Dataset, pOptions.Fields, VBde);
   finally
     VRepo.Free;
   end;

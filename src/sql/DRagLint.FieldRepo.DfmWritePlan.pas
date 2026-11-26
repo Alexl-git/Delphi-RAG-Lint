@@ -24,6 +24,12 @@ type
   /// <summary>Raised for a selection that cannot be planned: no dataset, an unresolved one, an unknown field.</summary>
   EDfmWriteSelection = class(EDfmWriteError);
 
+  /// <summary>What repo write-dfm may do to a BDE dataset (TTable, TQuery, TStoredProc, TBDE*): the project setting
+  /// fieldrepo.bde.</summary>
+  /// <remarks>dbpFull: the same as any other dataset (the default). dbpReadOnly: no field insert, no new event handler,
+  /// no grid or layout item removal. dbpNone: the project allows no BDE at all; the same three are refused.</remarks>
+  TDfmwBdePolicy = (dbpFull, dbpReadOnly, dbpNone);
+
   /// <summary>What a change does to the DFM text.</summary>
   TDfmwAction = (dwaSet, dwaRemove, dwaKind, dwaInsert, dwaDelete, dwaEvent);
 
@@ -102,9 +108,17 @@ type
 /// <exception cref="ERepoError">The repository is schema 1 (run repo migrate first).</exception>
 /// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids and the same PlanId. A
 /// file given twice is planned once. A file that is open in the IDE is read from disk. An unknown field in pFields ends in
-/// the EFrSelectionError of ExpandSelection.</remarks>
+/// the EFrSelectionError of ExpandSelection. pBde (the project's fieldrepo.bde) blocks, on a BDE dataset only, the field
+/// inserts, new event handlers and grid / layout item removals: `BDE dataset: read only (project policy)` or
+/// `BDE not allowed in this project`.</remarks>
 function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
-  const pFields: TArray<string>): TDfmwPlan;
+  const pFields: TArray<string>; pBde: TDfmwBdePolicy = dbpFull): TDfmwPlan;
+
+/// <summary>The policy a fieldrepo.bde value names.</summary>
+/// <param name="pText">`full`, `readonly` or `none` (case-insensitive); '' = full.</param>
+/// <returns>The policy.</returns>
+/// <exception cref="EDfmWriteError">Any other value; the message names the key and the three values.</exception>
+function BdePolicyOf(const pText: string): TDfmwBdePolicy;
 
 /// <summary>Applies chosen changes to the plan's bytes in memory.</summary>
 /// <param name="pPlan">The plan.</param>
@@ -201,6 +215,10 @@ const
   MAX_BCD_SCALE = 4; // FireDAC maps more decimals to TFMTBCDField
   UNICODE_CHARSETS: array[0..1] of string = ('UTF8', 'UNICODE_FSS');
   BDE_CLASSES: array[0..2] of string = ('TTable', 'TQuery', 'TStoredProc');
+  BDE_CLASS_PREFIX = 'TBDE';
+  BDE_POLICY_NAMES: array[TDfmwBdePolicy] of string = ('full', 'readonly', 'none');
+  BDE_POLICY_REASONS: array[TDfmwBdePolicy] of string = ('', 'BDE dataset: read only (project policy)',
+    'BDE not allowed in this project');
   MAX_ALIGNMENT = Ord(High(TAlignment));
   KIND_NAMES: array[TFrFieldKind] of string = ('fkData', 'fkCalculated', 'fkLookup', 'fkInternalCalc', 'fkAggregate', '');
   SQL_ROWS = 'SELECT F.*, D."CHARSET" AS "DOMAIN_CHARSET" FROM "DL_FIELDS_INFO" F LEFT JOIN "DL_DOMAINS" D ' +
@@ -296,6 +314,7 @@ type
   TDfmWritePlanner = class  // dl:ok god-class@e649, high-response@e649 -- REVIEWED 2026-11-24 INT-W2: one planner over one plan; splitting it is a design change for a later release
   strict private
     FRepo: TFDConnection;
+    FBde: TDfmwBdePolicy;
     FPlan: TDfmwPlan;
     FRows: TDictionary<string, TRepoField>;
     FOrder: TList<TRepoField>;
@@ -369,8 +388,9 @@ type
       const pRequires: TArray<Integer>);
     procedure TryEvent(const pItem: TDfmwItem);
     function HandlerClash(pIndex: Integer): string;
+    function BdeBlockReason: string;
   public
-    constructor Create(pRepo: TFDConnection);
+    constructor Create(pRepo: TFDConnection; pBde: TDfmwBdePolicy);
     destructor Destroy; override;
     function Execute(const pFiles: TArray<string>; const pDataset: string; const pFields: TArray<string>): TDfmwPlan;
   end;
@@ -601,10 +621,11 @@ end;
 
 { TDfmWritePlanner }
 
-constructor TDfmWritePlanner.Create(pRepo: TFDConnection);
+constructor TDfmWritePlanner.Create(pRepo: TFDConnection; pBde: TDfmwBdePolicy);
 begin
   inherited Create;
   FRepo := pRepo;
+  FBde := pBde;
   FRows := TDictionary<string, TRepoField>.Create;
   FOrder := TList<TRepoField>.Create;
   FSamples := TObjectDictionary<string, TField>.Create([doOwnsValues]);
@@ -614,6 +635,27 @@ begin
   FPlanned := TList<TPlannedField>.Create;
   FNewNames := TStringList.Create;
   FReads := TStringList.Create(dupIgnore, True, False);
+end;
+
+function BdePolicyOf(const pText: string): TDfmwBdePolicy;
+var
+  VPolicy: TDfmwBdePolicy;
+begin
+  if Trim(pText) = '' then
+    Exit(dbpFull);
+  for VPolicy := Low(TDfmwBdePolicy) to High(TDfmwBdePolicy) do
+    if SameText(Trim(pText), BDE_POLICY_NAMES[VPolicy]) then
+      Exit(VPolicy);
+  raise EDfmWriteError.CreateFmt('project setting fieldrepo.bde: %s is not full, readonly or none', [QuotedStr(pText)]);
+end;
+
+{ THE BDE check (owner 2026-11-26): '' unless the dataset being planned is a BDE one and the project's fieldrepo.bde
+  is not full. Every BDE refusal of the planner asks here, so that a later opt-in changes one place. }
+function TDfmWritePlanner.BdeBlockReason: string;
+begin
+  Result := '';
+  if MatchText(FDataset.DatasetClass, BDE_CLASSES) or StartsText(BDE_CLASS_PREFIX, FDataset.DatasetClass) then
+    Result := BDE_POLICY_REASONS[FBde];
 end;
 
 destructor TDfmWritePlanner.Destroy;
@@ -954,7 +996,7 @@ begin
   end;
   if pRow.DisplayWidth > 0 then
     PlanValue(pField, PROP_WIDTH, if VSample = nil then '' else IntToStr(VSample.DisplayWidth), IntToStr(pRow.DisplayWidth), False);
-  if (VSize = 0) or (pField.Kind <> frkData) or (pRow.Kind <> frkData) or MatchText(FDataset.DatasetClass, BDE_CLASSES) then
+  if (VSize = 0) or (pField.Kind <> frkData) or (pRow.Kind <> frkData) or (BdeBlockReason <> '') then
     Exit;
   VLength := ColumnCharLength(FRepo, pRow.TableName, pRow.FieldName);
   if VLength > 0 then
@@ -1515,12 +1557,12 @@ begin
   Result := '';
   if not pRow.KindKnown then
     Result := 'unknown FIELD_KIND'
+  else if BdeBlockReason <> '' then
+    Result := BdeBlockReason
   else if FDataset.ObjKind <> OBJECT_KIND then
     Result := 'the dataset is inherited: its fields are in the ancestor''s DFM'
   else if FindClassByName(pClass) = nil then
     Result := 'the repository does not say which TField class it is (FIELD_TYPE / FIELD_AS_TYPE)'
-  else if (pRow.Kind = frkData) and MatchText(FDataset.DatasetClass, BDE_CLASSES) then
-    Result := 'the repository holds the Firebird type, ' + FDataset.DatasetClass + ' reads another database'
   else if (pRow.Kind = frkData) and MatchText(pClass, [CLASS_STRING, CLASS_WIDE_STRING]) and (SizeOfRow(pRow) <= 0) then
     Result := 'the repository does not know its length'
   else if (pRow.Kind = frkAggregate) and not (FDataset.DatasetClass.StartsWith('TFD') or SameText(FDataset.DatasetClass, 'TClientDataSet')) then
@@ -1727,6 +1769,7 @@ begin
       VItem.MethodBody := '';
     VIndex := AddItem(VItem, fcoInsert, '', VItem.Literal);
     FChanges.List[VIndex].Checked := False;
+    Block(VIndex, BdeBlockReason);
     if FChanges.List[VIndex].Blocked = '' then
       Block(VIndex, HandlerClash(VIndex));
     if VItem.MethodBody = '' then
@@ -1862,7 +1905,9 @@ begin
     VBound.Dataset := FDoc.Objects[FDoc.Objects[VObject].Parent].Name;
     VBound.Siblings := nil;
     try
-      VReason := ItemDeleteReason(VBound.Component);
+      VReason := BdeBlockReason;
+      if VReason = '' then
+        VReason := ItemDeleteReason(VBound.Component);
     except
       on E: EDfmWriteError do
         VReason := E.Message;
@@ -2071,13 +2116,13 @@ begin
 end;
 
 function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
-  const pFields: TArray<string>): TDfmwPlan;
+  const pFields: TArray<string>; pBde: TDfmwBdePolicy): TDfmwPlan;
 var
   VPlanner: TDfmWritePlanner;
 begin
   if RepoSchemaVersion(pRepo) < SCHEMA_WITH_BODIES then
     raise ERepoError.Create('the repository is schema 1: run repo migrate first');
-  VPlanner := TDfmWritePlanner.Create(pRepo);
+  VPlanner := TDfmWritePlanner.Create(pRepo, pBde);
   try
     Result := VPlanner.Execute(pFiles, pDataset, pFields);
   finally

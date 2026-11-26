@@ -15,6 +15,11 @@
     E8  --select of the field alone is refused (exit 2)
     E9  field + column written: DFM block and declaration of both go, the form loads with one tree column
     E10 the grid column of QTY is named by a footer summary: column and field BLOCKED
+  BDE policy per project (owner 2026-11-26, revised Q2): setting fieldrepo.bde of the form's project folder
+    B1  no setting / full: a BDE dataset is planned as any other (field insert, new handler, grid item removal)
+    B2  readonly / none: all three BLOCKED "BDE dataset: read only (project policy)" / "BDE not allowed in this project"
+    B3  positive control: readonly leaves a FireDAC dataset alone
+    B4  an unknown value is refused
   Run: pwsh -File tests\autotest\run_v155_DFMWRITE2.ps1 [-Exe <drag-lint.exe>] [-SkipForm]
 #>
 [CmdletBinding()]
@@ -184,6 +189,45 @@ try {
   }
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID,NOTE,OLDCOL,USEDCOL') (Join-Path (NewForms 'qty') 'uAllKinds.dfm')
   Check 'E10 a column another property names: column and field BLOCKED' (($r.Out -match "delete uAllKinds\.dfm GridViewQTY: [^\n]*\n  BLOCKED: used in the DFM: GridView\.") -and ($r.Out -match "delete uAllKinds\.dfm memOrdersQTY: [^\n]*\n  BLOCKED: its grid item GridViewQTY cannot be removed")) $r.Out
+
+  # ---- BDE policy per project (owner 2026-11-26, revised Q2): project setting fieldrepo.bde = full | readonly | none ----
+  # memOrders made a TTable; the project folder (the one holding _D-RAG) of the form carries the setting.
+  function NewBdeForms($name, $policy, $class = 'TTable') {
+    $p = Join-Path $work $name
+    $d = Join-Path $p 'f'
+    [IO.Directory]::CreateDirectory($d) | Out-Null
+    foreach ($f in 'uAllKinds.dfm', 'uAllKinds.pas') { Put (Join-Path $d $f) ((Text (Join-Path $src $f)).Replace('memOrders: TFDMemTable', "memOrders: $class")) }
+    [IO.Directory]::CreateDirectory((Join-Path $p '_D-RAG')) | Out-Null
+    if ($policy) { [IO.File]::WriteAllText((Join-Path $p '_D-RAG\drag-lint-project.json'), "{`"fieldrepo`": {`"bde`": `"$policy`"}}") }
+    Join-Path $d 'uAllKinds.dfm'
+  }
+  $bn = @('--dataset', 'memOrders', '--names', 'ID,QTY,OLDCOL,USEDCOL,PRICE')
+  $insPrice = 'insert uAllKinds\.dfm memOrdersPRICE:  -> TBCDField[^\n]*\n'
+  $evQty = 'insert uAllKinds\.dfm memOrdersQTY OnGetText:  -> memOrdersQTYGetText\n'
+  $delCol = "delete uAllKinds\.dfm TreeNOTE: TcxDBTreeListColumn; DataBinding\.FieldName = 'NOTE' -> \n"
+  foreach ($case in @(@('bdedefault', ''), @('bdefull', 'full'))) {
+    $bd = NewBdeForms $case[0] $case[1]
+    $r = Write-Dfm $bn $bd
+    $tag = if ($case[1]) { 'full' } else { 'no setting' }
+    Check "B1a BDE $tag : a field insert is planned as for FireDAC" (($r.Code -eq 0) -and ($r.Out -match ($insPrice + '\[')) -and ($r.Out -notmatch 'BLOCKED: BDE')) $r.Out
+    Check "B1b BDE $tag : the new handler and the grid item removal are unchecked, not blocked" (($r.Out -match ($evQty + '  \(unchecked\)')) -and ($r.Out -match ($delCol + '  \(unchecked\)'))) $r.Out
+    $ra = Write-Dfm ($bn + @('--apply')) $bd
+    Check "B1c BDE $tag : --apply writes the checked field insert (positive control of B2d)" (($ra.Code -eq 0) -and ((Text $bd).Contains('object memOrdersPRICE: TBCDField'))) $ra.Out
+  }
+  foreach ($case in @(@('readonly', 'BDE dataset: read only \(project policy\)'), @('none', 'BDE not allowed in this project'))) {
+    $bd = NewBdeForms ('bde' + $case[0]) $case[0]
+    $bOld = Text $bd
+    $r = Write-Dfm $bn $bd
+    Check "B2a BDE $($case[0]): the field insert is BLOCKED" (($r.Code -eq 0) -and ($r.Out -match ($insPrice + '  BLOCKED: ' + $case[1]))) $r.Out
+    Check "B2b BDE $($case[0]): the new handler is BLOCKED" ($r.Out -match ($evQty + '  BLOCKED: ' + $case[1])) $r.Out
+    Check "B2c BDE $($case[0]): the grid item removal is BLOCKED" ($r.Out -match ($delCol + '  BLOCKED: ' + $case[1])) $r.Out
+    $ra = Write-Dfm ($bn + @('--apply')) $bd
+    Check "B2d BDE $($case[0]): --apply writes none of them" (($ra.Code -eq 0) -and -not ((Text $bd).Contains('memOrdersPRICE')) -and -not ((Text $bd).Contains('OnGetText')) -and ((Text $bd).Contains('object TreeNOTE'))) $ra.Out
+  }
+  $r = Write-Dfm $bn (NewBdeForms 'fdreadonly' 'readonly' 'TFDMemTable')
+  Check 'B3 positive control: readonly leaves a FireDAC dataset alone' (($r.Code -eq 0) -and ($r.Out -match ($insPrice + '\[')) -and ($r.Out -notmatch 'BLOCKED: BDE')) $r.Out
+  $r = Write-Dfm $bn (NewBdeForms 'bdebad' 'readwrite')
+  Check 'B4 an unknown fieldrepo.bde value is refused (exit 1, names the key)' (($r.Code -eq 1) -and ($r.Out -match 'fieldrepo\.bde')) $r.Out
 }
 finally {
   try { [IO.Directory]::Delete($work, $true) } catch { }
