@@ -1,12 +1,13 @@
 unit DRagLint.V151.Dispatch;
 
 { Wave v151 (1.51.0-alpha) lane FRAME: the ONE place that calls the fifteen v151
-  rule-lane units, (1.52 FRAME F2) the eleven v152 and (1.54) the five v154 ones. The CLI hooks call only this unit; the catalog learns the v151
+  rule-lane units, (1.52 FRAME F2) the eleven v152, (1.54) the five v154 and (1.56) the eight v156 ones. The CLI hooks call only this unit; the catalog learns the v151
   rows through TRuleCatalog's provider list (RegisterProviderRules), filled in
   this unit's initialization. The lane order below is fixed and alphabetical:
   APP CMP DFMA DFMB DS EXC MEM OO RTLCOLL RTLSTR STY THRA THRB TXT TYP, then the
   v152 lanes APP2 ATLA ATLB DEFAULTS DOCPOL FPS PROJ2 PTW RTTI5 UNCONN XCONST, then
-  the v154 lanes DFM EXPR FLOW SCHEMA SQL.
+  the v154 lanes DFM EXPR FLOW SCHEMA SQL, then the v156 lanes FACTA MEMA MEMB OOA1 OOA2
+  OOB1 OOB2 THR.
   Owned by FRAME; a rule lane never edits it. }
 
 interface
@@ -209,6 +210,14 @@ uses
   , DRagLint.V154.FLOW
   , DRagLint.V154.SCHEMA
   , DRagLint.V154.SQL
+  , DRagLint.V156.FACTA
+  , DRagLint.V156.MEMA
+  , DRagLint.V156.MEMB
+  , DRagLint.V156.OOA1
+  , DRagLint.V156.OOA2
+  , DRagLint.V156.OOB1
+  , DRagLint.V156.OOB2
+  , DRagLint.V156.THR
   ;
 
 type
@@ -278,7 +287,16 @@ begin
     Lane('EXPR',     TV154EXPRRules.Catalog, TV154EXPRRules.CheckFile, TV154EXPRRules.CheckDfm, TV154EXPRRules.CheckRawBytes, TV154EXPRRules.CheckProject),
     Lane('FLOW',     TV154FLOWRules.Catalog, TV154FLOWRules.CheckFile, TV154FLOWRules.CheckDfm, TV154FLOWRules.CheckRawBytes, TV154FLOWRules.CheckProject),
     Lane('SCHEMA',   TV154SCHEMARules.Catalog, TV154SCHEMARules.CheckFile, TV154SCHEMARules.CheckDfm, TV154SCHEMARules.CheckRawBytes, TV154SCHEMARules.CheckProject),
-    Lane('SQL',      TV154SQLRules.Catalog, TV154SQLRules.CheckFile, TV154SQLRules.CheckDfm, TV154SQLRules.CheckRawBytes, TV154SQLRules.CheckProject)];
+    Lane('SQL',      TV154SQLRules.Catalog, TV154SQLRules.CheckFile, TV154SQLRules.CheckDfm, TV154SQLRules.CheckRawBytes, TV154SQLRules.CheckProject),
+    // v156 lanes (1.56.0-alpha): same provider mechanism, alphabetical after the v154 block. Scaffolds: no rule declared yet.
+    Lane('FACTA',  TV156FACTARules.Catalog, TV156FACTARules.CheckFile, TV156FACTARules.CheckDfm, TV156FACTARules.CheckRawBytes, TV156FACTARules.CheckProject),
+    Lane('MEMA',   TV156MEMARules.Catalog, TV156MEMARules.CheckFile, TV156MEMARules.CheckDfm, TV156MEMARules.CheckRawBytes, TV156MEMARules.CheckProject),
+    Lane('MEMB',   TV156MEMBRules.Catalog, TV156MEMBRules.CheckFile, TV156MEMBRules.CheckDfm, TV156MEMBRules.CheckRawBytes, TV156MEMBRules.CheckProject),
+    Lane('OOA1',   TV156OOA1Rules.Catalog, TV156OOA1Rules.CheckFile, TV156OOA1Rules.CheckDfm, TV156OOA1Rules.CheckRawBytes, TV156OOA1Rules.CheckProject),
+    Lane('OOA2',   TV156OOA2Rules.Catalog, TV156OOA2Rules.CheckFile, TV156OOA2Rules.CheckDfm, TV156OOA2Rules.CheckRawBytes, TV156OOA2Rules.CheckProject),
+    Lane('OOB1',   TV156OOB1Rules.Catalog, TV156OOB1Rules.CheckFile, TV156OOB1Rules.CheckDfm, TV156OOB1Rules.CheckRawBytes, TV156OOB1Rules.CheckProject),
+    Lane('OOB2',   TV156OOB2Rules.Catalog, TV156OOB2Rules.CheckFile, TV156OOB2Rules.CheckDfm, TV156OOB2Rules.CheckRawBytes, TV156OOB2Rules.CheckProject),
+    Lane('THR',    TV156THRRules.Catalog, TV156THRRules.CheckFile, TV156THRRules.CheckDfm, TV156THRRules.CheckRawBytes, TV156THRRules.CheckProject)];
 end;
 
 procedure BuildDecls;
