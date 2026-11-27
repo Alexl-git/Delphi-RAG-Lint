@@ -139,8 +139,8 @@ begin
   var Lines: TArray<string>;
   try
     Lines:= TFile.ReadAllLines(APath);
-  except
-    Exit;  // dl:ok try-except-swallowed -- REVIEWED v156 G32: an unreadable file proves nothing; the rule stays silent
+  except  // dl:ok try-except-swallowed@a25a -- REVIEWED v156 G32: an unreadable file proves nothing; the rule stays silent
+    on Exception do Exit;
   end;
   for var R: TReference in AStore.GetReferencesFromFile(AFileId) do
   begin
@@ -156,12 +156,11 @@ begin
     var Singles: Integer:= 0;
     var Provable: Boolean:= True;
     for var A: TArgText in Args do
-      case ClassifyArg(AStore, AFileId, R.StartLine, A) of
-        akSingle: Inc(Singles);
-        akFloatLiteral: ;
-      else
-        Provable:= False;
-      end;
+    begin
+      var Kind: TArgKind:= ClassifyArg(AStore, AFileId, R.StartLine, A);
+      if Kind = akSingle then Inc(Singles);
+      if (Kind <> akSingle) and (Kind <> akFloatLiteral) then Provable:= False;
+    end;
     if not Provable or (Singles = 0) then Continue;
     if not FeedsWideVariable(AStore, AFileId, R.StartLine, Line, R.StartCol) then Continue;
     var F: TLintFinding:= Default(TLintFinding);

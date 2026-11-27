@@ -64,17 +64,17 @@ begin
   Result:= TG32Checks.Check(ACtx.Store, ACtx.FileId, ACtx.Path, RULE_MATH_SINGLE_OVERLOAD);
 end;
 
-class function TV156G32Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@281c -- REVIEWED 2026-11-27 v156 G32: fixed TV151 frame hook signature; the lane has no check here
+class function TV156G32Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@c648 -- REVIEWED 2026-11-27 v156 G32: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV156G32Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@d23f -- REVIEWED 2026-11-27 v156 G32: fixed TV151 frame hook signature; the lane has no check here
+class function TV156G32Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@f639 -- REVIEWED 2026-11-27 v156 G32: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV156G32Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@d2f9 -- REVIEWED 2026-11-27 v156 G32: fixed TV151 frame hook signature; the lane has no check here
+class function TV156G32Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@b12c -- REVIEWED 2026-11-27 v156 G32: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
