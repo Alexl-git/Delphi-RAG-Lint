@@ -18,6 +18,34 @@ uses
 /// <remarks>So a database backup with a forgotten --connection never writes a text backup instead.</remarks>
 function IsRepoDbBackup(const pSub, pConnection: string): Boolean;
 
+/// <summary>The backup format of the command line: --format text (default), sql or zip.</summary>
+/// <param name="pFormat">Receives the lower-case format name; text when --format is absent.</param>
+/// <returns>'' = usable; else what is wrong (an unknown format, a missing value).</returns>
+/// <remarks>Only the CLI of `repo backup` and `repo restore` asks; text stays the default, so a command line
+/// without --format behaves as before.</remarks>
+function RepoFormatOf(out pFormat: string): string;
+
+/// <summary>True when the command line asks for a backup format other than text (--format sql or zip).</summary>
+/// <returns>False for no --format and for --format text; True for sql, zip and any bad value (so the error is raised here).</returns>
+function IsRepoFormatBackup: Boolean;
+
+/// <summary>`repo backup --format sql|zip`: writes the repository as an SQL script or a zip archive.</summary>
+/// <param name="pPath">The repository file.</param>
+/// <param name="pOutFile">--output; default the repository path plus .sql or .zip.</param>
+/// <returns>0 after printing the written path.</returns>
+/// <exception cref="ERepoError">The repository is missing, the format is unknown, or the writer failed.</exception>
+/// <remarks>Exceptions are for DRagLint.CLI.Repo.RunRepoVerb to print (a format error is exit 2).</remarks>
+function RunRepoFormatBackup(const pPath, pOutFile: string): Integer;
+
+/// <summary>`repo restore --format sql|zip --in <file>`: rebuilds the repository from an SQL script or a zip archive.</summary>
+/// <param name="pPath">The repository file; a missing one is created (and removed again when the restore fails).</param>
+/// <param name="pInFile">--in.</param>
+/// <param name="pReplace">--replace.</param>
+/// <returns>0 after printing the repository path.</returns>
+/// <exception cref="ERepoBackupFormatError">The file is malformed; the repository is unchanged.</exception>
+/// <exception cref="ERepoError">No --in, the file is missing, or the repository exists and pReplace is False.</exception>
+function RunRepoFormatRestore(const pPath, pInFile: string; pReplace: Boolean): Integer;
+
 /// <summary>Runs `repo backup --connection ...`, `repo backup list` or `repo backup purge --keep N [--apply]`.</summary>
 /// <param name="pRepo">--repo; refused, because a database backup has nothing to do with a repository file.</param>
 /// <param name="pConnection">--connection.</param>
@@ -56,13 +84,19 @@ implementation
 
 uses
   System.SysUtils,
+  System.Classes,
   System.IOUtils,
   System.StrUtils,
   System.DateUtils,
   System.JSON,
+  FireDAC.Comp.Client,
   FireDAC.ConsoleUI.Wait, // the services need a wait-cursor factory; a connection does not
   DRagLint.Core.ContextDefaults,
   DRagLint.FieldRepo.BackupManifest,  // dl:ok uses-global-census@e975 -- REVIEWED 2026-11-24 INT-W2: the state names the manifest writes are the names the verb prints
+  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.TextBackup,
+  DRagLint.FieldRepo.SqlBackup,
+  DRagLint.FieldRepo.ZipBackup,
   DRagLint.FieldRepo.FbBackup;
 
 const
@@ -86,6 +120,11 @@ const
   FLAG_APPLY = '--apply';
   FLAG_DRY_RUN = '--dry-run';
   FLAG_JSON = '--json';
+  FLAG_FORMAT = '--format';
+  FORMAT_TEXT = 'text';
+  FORMAT_SQL = 'sql';
+  FORMAT_ZIP = 'zip';
+  SQL_MAGIC_HEAD = '-- DLREPO-SQL ';
   DATE_FORMAT = 'yyyy"-"mm"-"dd hh":"nn":"ss';
 
 function CommandLineFlag(const pFlag: string): Boolean;
@@ -152,7 +191,7 @@ end;
 function IsRepoDbBackup(const pSub, pConnection: string): Boolean;
 begin
   Result := SameText(pSub, SUB_BACKUP) and ((pConnection <> '') or
-    (StrayArgument(WORD_ARG, ['--repo', '--project', '--output', '--out', '--report'], []) <> ''));
+    (StrayArgument(WORD_ARG, ['--repo', '--project', '--output', '--out', '--report', FLAG_FORMAT], []) <> ''));
 end;
 
 { What is on the command line that the verb does not take; '' = nothing. }
@@ -177,7 +216,7 @@ begin
       '(it takes --repo, --project and --output), or drop --repo for a backup of the database; nothing was written');
   if pRepo <> '' then
   begin
-    VStray := StrayArgument(WORD_ARG, ['--repo', '--project', '--output', '--out', '--report'], []);
+    VStray := StrayArgument(WORD_ARG, ['--repo', '--project', '--output', '--out', '--report', FLAG_FORMAT], []);
     if VStray = FLAG_JSON then
       Exit('--json is not supported by repo backup of a repository (only the database backup, with --connection, prints ' +
         'JSON): drop --json; nothing was written');
@@ -467,6 +506,139 @@ begin
     on E: Exception do
       Writeln(ErrOutput, 'repo backup: ', ScrubSecrets(E.Message, pConnection));
   end;
+end;
+
+function RepoFormatOf(out pFormat: string): string;
+begin
+  pFormat := FORMAT_TEXT;
+  Result := '';
+  if not CommandLineFlag(FLAG_FORMAT) then
+    Exit;
+  pFormat := CommandLineValue(FLAG_FORMAT).Trim.ToLower;
+  if not MatchText(pFormat, [FORMAT_TEXT, FORMAT_SQL, FORMAT_ZIP]) then
+    Result := Format('--format "%s" is not a backup format: use text (the default), sql or zip; nothing was written', [pFormat]);
+end;
+
+function IsRepoFormatBackup: Boolean;
+var
+  VFormat: string;
+begin
+  Result := (RepoFormatOf(VFormat) <> '') or (VFormat <> FORMAT_TEXT);
+end;
+
+{ The format of the command line, or an ERepoError saying what is wrong with it. }
+function RequiredFormat: string;
+var
+  VProblem: string;
+begin
+  VProblem := RepoFormatOf(Result);
+  if VProblem <> '' then
+    raise ERepoError.Create(VProblem);
+end;
+
+function RunRepoFormatBackup(const pPath, pOutFile: string): Integer;
+var
+  VFormat, VTarget: string;
+  VConn: TFDConnection;
+begin
+  VFormat := RequiredFormat;
+  if not TFile.Exists(pPath) then
+    raise ERepoError.Create('the repository does not exist: ' + pPath);
+  VTarget := if pOutFile <> '' then ExpandFileName(pOutFile) else pPath + '.' + VFormat;
+  if SameText(VFormat, FORMAT_ZIP) then
+    BackupRepositoryZip(pPath, VTarget)
+  else if SameText(VFormat, FORMAT_SQL) then
+  begin
+    VConn := OpenRepository(pPath, True);
+    try
+      BackupRepositorySql(VConn, VTarget);
+    finally
+      VConn.Free;
+    end;
+  end
+  else
+  begin
+    VConn := OpenRepository(pPath, True);
+    try
+      BackupRepository(VConn, VTarget);
+    finally
+      VConn.Free;
+    end;
+  end;
+  Writeln(VTarget);
+  Result := EXIT_OK;
+end;
+
+{ The schema version in the first line of an SQL script; 0 = not readable (the restore then reports the defect). }
+function SqlScriptVersion(const pFile: string): Integer;
+var
+  VHead: string;
+  VReader: TStreamReader;
+begin
+  VHead := '';
+  if TFile.Exists(pFile) then
+  begin
+    VReader := TFile.OpenText(pFile);
+    try
+      VHead := VReader.ReadLine;
+    finally
+      VReader.Free;
+    end;
+  end;
+  if not (VHead.StartsWith(SQL_MAGIC_HEAD) and TryStrToInt(Trim(Copy(VHead, Length(SQL_MAGIC_HEAD) + 1, MaxInt)), Result)) then
+    Result := 0;
+end;
+
+{ Restores an SQL script into pPath; a missing repository is built beside the target first and renamed on success. }
+procedure RestoreSqlInto(const pPath, pInFile: string; pReplace: Boolean);
+var
+  VFresh: Boolean;
+  VWork: string;
+  VConn: TFDConnection;
+  VVersion: Integer;
+begin
+  VFresh := not TFile.Exists(pPath);
+  VWork := if VFresh then pPath + '.restoring' else pPath;
+  if VFresh then
+  begin
+    if TFile.Exists(VWork) then
+      TFile.Delete(VWork);
+    VVersion := SqlScriptVersion(pInFile);
+    CreateRepository(VWork, if VVersion = 0 then REPO_SCHEMA_VERSION else VVersion);
+  end;
+  try
+    VConn := OpenRepository(VWork, False);
+    try
+      RestoreRepositorySql(VConn, pInFile, pReplace);
+    finally
+      VConn.Free;
+    end;
+  except
+    if VFresh and TFile.Exists(VWork) then
+      TFile.Delete(VWork);
+    raise;
+  end;
+  if VFresh then
+    TFile.Move(VWork, pPath);
+end;
+
+function RunRepoFormatRestore(const pPath, pInFile: string; pReplace: Boolean): Integer;
+var
+  VFormat: string;
+begin
+  VFormat := RequiredFormat;
+  if pInFile = '' then
+    raise ERepoError.Create('give --in <backup file>');
+  if not TFile.Exists(pInFile) then
+    raise ERepoError.Create('the backup file does not exist: ' + pInFile);
+  if SameText(VFormat, FORMAT_ZIP) then
+    RestoreRepositoryZip(ExpandFileName(pInFile), pPath, pReplace)
+  else if SameText(VFormat, FORMAT_SQL) then
+    RestoreSqlInto(pPath, ExpandFileName(pInFile), pReplace)
+  else
+    raise ERepoError.Create('the text format is restored by the plain repo restore');
+  Writeln(pPath);
+  Result := EXIT_OK;
 end;
 
 end.

@@ -445,6 +445,9 @@ begin
   if IsRepoHandlersSub(pSub) then Exit(RunRepoHandlersVerb(pSub, Path, pJson)); // 1.54 TT-HANDLERS
   if IsRepoWikiSub(pSub) then Exit(RunRepoWikiVerb(pSub, Path, pJson)); // 1.56 WIKIGEN
   if IsRepoGridCopySub(pSub) then Exit(RunRepoGridCopyVerb(pSub, Path, pJson)); // 1.56 GCP-C
+  { v156 BK-Z : --format sql|zip; text stays the default and goes through the case below }
+  if SameText(pSub, 'backup') and IsRepoFormatBackup then Exit(RunRepoFormatBackup(Path, pOutFile));
+  if SameText(pSub, 'restore') and IsRepoFormatBackup then Exit(RunRepoFormatRestore(Path, pInFile, pReplace));
   case IndexText(pSub, ['init', 'info', 'backup', 'restore', 'alter-table']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
