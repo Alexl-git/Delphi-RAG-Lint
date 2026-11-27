@@ -1742,6 +1742,7 @@ begin
     else if (A = '--to-column') and (i < ParamCount) then Inc(i)
     else if A = '--stats' then // repo paths (1.55): a bare switch, DRagLint.CLI.RepoPaths reads it from ParamStr
     else if A = '--safe-path' then // repo alter-table: a bare switch, DRagLint.CLI.RepoAlter reads it from ParamStr
+    { v156 WIKIGEN } else if A = '--per-field' then // repo gen-wiki: a bare switch, DRagLint.CLI.RepoWiki reads it from ParamStr
     else if (A = '--step-size') and (i < ParamCount) then Inc(i)
     else if (A = '--progress-form') and (i < ParamCount) then Inc(i)
     else if (A = '--scope') and (i < ParamCount) then
