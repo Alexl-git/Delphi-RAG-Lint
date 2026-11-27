@@ -46,15 +46,16 @@ try {
   Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + $bat + '" "' + $work + '" > "' + $blog + '" 2>&1"') -Wait -NoNewWindow
   $bl = Get-Content -LiteralPath $blog -Raw
   Check 'M0 the model tests build' (($bl -match 'MODEL_EXITCODE=0') -and ($bl -notmatch 'Error: E\d+')) (($bl -split "`n" | Select-String 'Error' | Select-Object -First 3) -join ' / ')
+  # 1.56 UI-P / UI-M added model cases (81 -> 104) and form cases (72 -> 74): exact pins move with them.
   $u = @(& { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'FieldSelectTests.exe') 2>&1 | ForEach-Object { "$_" } }); $uc = $LASTEXITCODE
   $u | Where-Object { $_ -cmatch '^(FAIL|EXCEPTION)' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
-  Check "M1 model tests ($($u | Select-Object -Last 1)), none skipped" (($uc -eq 0) -and (($u | Select-Object -Last 1) -eq 'Summary: pass=81 fail=0')) ($u | Select-Object -Last 1)
+  Check "M1 model tests ($($u | Select-Object -Last 1)), none skipped" (($uc -eq 0) -and (($u | Select-Object -Last 1) -eq 'Summary: pass=104 fail=0')) ($u | Select-Object -Last 1)
   if ($SkipForms) { Write-Host 'SKIP F0-F1 (-SkipForms)' }
   else {
     Check 'F0 the forms build without ToolsAPI' ($bl -match 'FORMS_EXITCODE=0') $blog
     $u = @(& { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'FieldSelectForms.exe') 2>&1 | ForEach-Object { "$_" } }); $uc = $LASTEXITCODE
     $u | Where-Object { $_ -cmatch '^(FAIL|EXCEPTION)' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
-    Check "F1 form tests ($($u | Select-Object -Last 1)), none skipped" (($uc -eq 0) -and (($u | Select-Object -Last 1) -eq 'Summary: pass=72 fail=0')) "exit $uc"
+    Check "F1 form tests ($($u | Select-Object -Last 1)), none skipped" (($uc -eq 0) -and (($u | Select-Object -Last 1) -eq 'Summary: pass=74 fail=0')) "exit $uc"
   }
   # ---- E ----
   $fix = Join-Path $work 'forms'
@@ -106,10 +107,11 @@ try {
   # ---- R ----
   $entry = Get-Content (Join-Path $Repo 'features\entries\field-repository-forms.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   $paths = @($entry.surfaces | Where-Object type -eq 'ide-menu' | ForEach-Object { $_.path })
-  $want = @('Read Fields from Dataset...', 'Read Fields of All Datasets of Form...', 'Select Fields of Dataset...' | ForEach-Object { "drag-lint > Field Repository > $_" })
-  Check 'R1 the entry registers exactly the three ide-menu paths' (($paths -join '|') -eq ($want -join '|')) ($paths -join '|')
+  # 1.56 FRAME-2: the entry also carries the Copy Grid Columns... row (placeholder in 1.56), so four paths, the three dialog items first.
+  $want = @('Read Fields from Dataset...', 'Read Fields of All Datasets of Form...', 'Select Fields of Dataset...', 'Copy Grid Columns...' | ForEach-Object { "drag-lint > Field Repository > $_" })
+  Check 'R1 the entry registers exactly the four ide-menu paths' (($paths -join '|') -eq ($want -join '|')) ($paths -join '|')
   $wiki = Get-Content (Join-Path $Repo "docs\wiki\$($entry.wikiPage).md") -Raw
-  Check 'R2 the wiki page names the three items' (@($want | Where-Object { -not $wiki.Contains(($_ -split ' > ')[-1].TrimEnd('.')) }).Count -eq 0)
+  Check 'R2 the wiki page names the four items' (@($want | Where-Object { -not $wiki.Contains(($_ -split ' > ')[-1].TrimEnd('.')) }).Count -eq 0)
   # ---- S ----
   $cmd = [IO.File]::ReadAllText((Join-Path $Repo 'src\delphi-plugin\DragLint.Plugin.Cmd.FieldRepo.pas'))
   foreach ($c in 'Read Fields from Dataset...', 'Read Fields of All Datasets of Form...', 'Select Fields of Dataset...') {
@@ -121,7 +123,7 @@ try {
   Check 'S6 the form is looked at again after the write' ($cmd -match '(?s)System\.SysUtils\.DeleteFile\(SelectFile\);.{0,400}?AfterWrite\(Form, pExitCode, Before\)')
   Check 'S6b AfterWrite asks for dirty, then reloads or says why not' ($cmd -match '(?s)function AfterWrite\(.*?ReloadStep\(pExitCode, Module <> nil, ModuleIsDirty\(Module\),.*?ApplyNotice\(')
   Check 'S7 a read looks for unsaved changes before it writes' ($cmd -match '(?s)if ModuleIsDirty\(OpenModuleOf\(Form\.Dfm\)\) then Form\.Show\([^\r\n]*\r\n\s+else if Newer\.Fingerprint = Plan\.Fingerprint then ApplySelection\(Form, SUB_READ_DFM')
-  Check 'S8 an exception of a step is shown, not only logged' (($cmd -match '(?s)procedure TFormContext\.Guarded\(.*?on E: Exception do\s+begin.*?DLT\(.*?Show\(') -and ([regex]::Matches($cmd, '\bForm\.Guarded\(').Count -eq 2))
+  Check 'S8 an exception of a step is shown, not only logged' (($cmd -match '(?s)procedure TFormContext\.Guarded\(.*?on E: Exception do\s+begin.*?DLT\(.*?Show\(') -and ([regex]::Matches($cmd, '\bForm\.Guarded\(').Count -eq 3))  # 1.56 UI-P: ShowFieldsWithUsage is the third guarded step
   Check 'S5 --apply is never used: only --select writes' (([regex]::Matches($cmd.Substring($cmd.IndexOf('1.54 TT-DIALOG: the form')), '--apply').Count -eq 0))
 } finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
 Write-Host "$script:Count checks"

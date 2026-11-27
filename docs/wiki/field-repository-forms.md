@@ -1,6 +1,6 @@
 # Fields of a form in the IDE
 
-The `Field Repository` submenu of the drag-lint menu has three commands for the form in the editor. The active project names the repository
+The `Field Repository` submenu of the drag-lint menu has three commands for the form in the editor, and a fourth row, Copy Grid Columns..., that is a placeholder in 1.56. The active project names the repository
 (`fieldRepository`); it must be schema 3 or later. Nothing is written before you press Apply.
 
 | Command | What it does | CLI |
@@ -8,6 +8,7 @@ The `Field Repository` submenu of the drag-lint menu has three commands for the 
 | Read Fields from Dataset... | reads one dataset into the repository | [repo read-dfm](repo-read-dfm) `--dataset` |
 | Read Fields of All Datasets of Form... | reads every dataset and grid view of the form | `repo read-dfm` |
 | Select Fields of Dataset... | adds and removes persistent fields of a dataset from the repository | `repo write-dfm --names` |
+| Copy Grid Columns... | 1.56: a placeholder row that only shows a message; the grid-copy work fills it | - |
 
 **The form.** It is read from disk: unsaved changes are saved first, after a question. The dataset is the one selected in
 the designer, or the only one of the form; otherwise a list asks.
