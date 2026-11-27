@@ -94,6 +94,7 @@ uses
   , DRagLint.Lint.MarkerHash { MarkerVerdict / ExpectedHash -- ApplyLineMarkers: versioned routine-metric markers (v1511 Y4) }
   , DRagLint.Query.SyntaxCountVerb { syntax-count verb (GAP-SYNTAXQ, 1.42) }
   , DRagLint.Query.ConceptRepo { 1.56 FRAME-1: query --concept over the field-repository copy (lane CON-Q) }
+  , DRagLint.Query.PlaceRows { v156 TS-N: place on query --name / --text and find-unit rows, repository rows, --place, notes }
   , DRagLint.CLI.UsesRecover { uses-recover verb (148 HP): own flags, read-only }
   , DRagLint.CLI.Metrics { v156 W2FRAME: metrics verb (lane MET-1): own flags }
   , DRagLint.CLI.Sbom { v156 W2FRAME: sbom verb (lane SBOM-1): own flags }
@@ -7474,7 +7475,8 @@ end;
 ///  to check, and its absence would be ambiguous between "exact" and "written by
 ///  an older engine". Additive -- existing consumers ignore it.</para></remarks>
 procedure PrintSymbols(const ASymbols: TArray<TSymbol>; AsJson: Boolean; const AFilePaths: TArray<string> = nil;
-  AFuzzy: Boolean = False; const AMatchKind: string = '');
+  AFuzzy: Boolean = False; const AMatchKind: string = ''; const APlaces: TArray<string> = nil;
+  const ARepoRows: TArray<TRepoNameRow> = nil; ARepoAt: Integer = -1);
 var
   JArr: TJSONArray ;
   JObj: TJSONObject;
@@ -7488,6 +7490,7 @@ begin
     try
       for i:= 0 to High(ASymbols) do
       begin
+        if i = ARepoAt then AppendRepoRowsJson(JArr, ARepoRows); { v156 TS-N: the repository rows sit between project and library rows }
         Sym:= ASymbols[i];
         JObj:= TJSONObject.Create;
         JObj.AddPair('id', TJSONNumber.Create(Sym.Id));
@@ -7552,8 +7555,10 @@ begin
           (`TFoo = class;` earlier in the same unit). OMITTED when there is none,
           like heritage: the field's presence IS the statement "a stub was folded". }
         if Sym.ForwardLine > 0 then JObj.AddPair('forward_line', TJSONNumber.Create(Sym.ForwardLine));
+        if (i <= High(APlaces)) and (APlaces[i] <> '') then JObj.AddPair('place', APlaces[i]); { v156 TS-N: where the entity lives }
         JArr.AddElement(JObj);
       end; // for
+      if ARepoAt >= Length(ASymbols) then AppendRepoRowsJson(JArr, ARepoRows);
       WriteStdoutDocument(JArr.Format(2) + sLineBreak); // after every stderr byte (T2i R18)
     finally
       JArr.Free;
@@ -7586,9 +7591,12 @@ begin
         Line:= Line + '  [impl-only]';
       if Sym.ForwardLine > 0 then { C2.5: the stub was folded into this row }
         Line:= Line + Format('  forward at line %d', [Sym.ForwardLine]);
+      if (i <= High(APlaces)) and (APlaces[i] <> '') then Line:= Line + ' place=' + APlaces[i]; { v156 TS-N: appended, so a reader anchored at the line start keeps working }
+      if i = ARepoAt then PrintRepoRowsText(ARepoRows);
       Writeln(Line);
     end;
-    Writeln(Format('%d match(es)', [Length(ASymbols)]));
+    if ARepoAt >= Length(ASymbols) then PrintRepoRowsText(ARepoRows);
+    Writeln(Format('%d match(es)', [Length(ASymbols) + Length(ARepoRows)]));
   end; // else
 end; // procedure
 
@@ -8893,11 +8901,21 @@ begin
   for DbPath in PathsToScan do
     if not TFile.Exists(DbPath) then begin Writeln('ERROR: database not found: ', DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
+  { v156 TS-N: --place narrows the places; each match remembers the place of its database (path|line|col key, the near filter reorders). }
+  var TextPlaces: TSearchPlaces;
+  if not ParsePlaces(AArgs.Place, TextPlaces) then
+  begin
+    Writeln(ErrOutput, PlaceUsageError);
+    Exit(2);
+  end;
+  var PlaceKeys: TArray<string>:= nil;
+  var PlaceVals: TArray<string>:= nil;
   SetLength(AllMatches, 0);
   SetLength(AllHops, 0);
   SeedFound:= False;
   for DbPath in PathsToScan do
   begin
+    if not (PlaceOfDb(DbPath) in TextPlaces) then Continue; { v156 TS-N }
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(DbPath, RoOk);
     if not RoOk then
@@ -8928,6 +8946,8 @@ begin
       begin
         SetLength(AllMatches, Length(AllMatches) + 1);
         AllMatches[High(AllMatches)]:= M;
+        PlaceKeys:= PlaceKeys + [Format('%s|%d|%d|%s', [M.FilePath, M.StartLine, M.StartCol, M.Text])]; { v156 TS-N }
+        PlaceVals:= PlaceVals + [PlaceName(PlaceOfDb(DbPath))];
         if NearOn then
         begin
           OwnerKey:= if M.OwnerName <> '' then M.OwnerName else M.EnclosingQName;
@@ -8949,8 +8969,41 @@ begin
     end;
     ApplyNearFilter(AllMatches, AllHops, Hops, AArgs.NearBoost);
   end;
+  { v156 TS-N: the repository place's rows (a --near run keeps to the code's neighbourhood, so it has none), then
+    project rows, repository rows, library rows -- today's order inside a place. }
+  var RepoMatches: TArray<TStringLitMatch>:= nil;
+  if (spRepository in TextPlaces) and not NearOn then
+    RepoMatches:= RepoTextRows(PathsToScan, AArgs.TextQuery, Mode, AArgs.TextSource, AArgs.Kind, FetchLim);
+  var MatchPlaces: TArray<string>;
+  SetLength(MatchPlaces, Length(AllMatches) + Length(RepoMatches));
+  for I:= 0 to High(AllMatches) do
+  begin
+    MatchPlaces[I]:= PlaceName(spProject);
+    for var PK:= 0 to High(PlaceKeys) do
+      if PlaceKeys[PK] = Format('%s|%d|%d|%s', [AllMatches[I].FilePath, AllMatches[I].StartLine, AllMatches[I].StartCol, AllMatches[I].Text]) then
+        MatchPlaces[I]:= PlaceVals[PK];
+  end;
+  for I:= 0 to High(RepoMatches) do MatchPlaces[Length(AllMatches) + I]:= PlaceName(spRepository);
+  AllMatches:= AllMatches + RepoMatches;
+  var TextOrder: TArray<Integer>:= PlaceSortOrder(MatchPlaces);
+  var OrderedMatches: TArray<TStringLitMatch>;
+  var OrderedPlaces: TArray<string>;
+  var OrderedHops: TArray<Integer>;
+  SetLength(OrderedMatches, Length(TextOrder));
+  SetLength(OrderedPlaces, Length(TextOrder));
+  SetLength(OrderedHops, Length(AllHops));
+  for I:= 0 to High(TextOrder) do
+  begin
+    OrderedMatches[I]:= AllMatches[TextOrder[I]];
+    OrderedPlaces[I]:= MatchPlaces[TextOrder[I]];
+    if NearOn then OrderedHops[I]:= AllHops[TextOrder[I]];
+  end;
+  AllMatches:= OrderedMatches;
+  MatchPlaces:= OrderedPlaces;
+  if NearOn then AllHops:= OrderedHops;
   Omitted:= Max(0, Length(AllMatches) - Lim);
   if Omitted > 0 then SetLength(AllMatches, Lim);
+  PrintPlaceNotes(PathsToScan, TextPlaces, AArgs.ProjectPath, Length(RepoMatches) > 0, True); { stderr first }
 
   if AArgs.AsJson then
   begin
@@ -8971,6 +9024,7 @@ begin
         if NearOn then
           if AllHops[I] >= 0 then JObj.AddPair('hop', TJSONNumber.Create(AllHops[I]))
           else JObj.AddPair('hop', TJSONNull.Create);
+        JObj.AddPair('place', MatchPlaces[I]); { v156 TS-N }
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -8986,7 +9040,7 @@ begin
       HopTag:= '';
       if NearOn and (AllHops[I] >= 0) then HopTag:= '  hop=' + IntToStr(AllHops[I]);
       EnclTag:= if M.EnclosingQName <> '' then '  -> ' + M.EnclosingQName else '';
-      Writeln(Format('%s:%d:%d  [%s/%s]  %s%s%s', [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text, EnclTag, HopTag]));
+      Writeln(Format('%s:%d:%d  [%s/%s]  %s%s%s place=%s', [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text, EnclTag, HopTag, MatchPlaces[I]])); { v156 TS-N: place appended }
     end;
     Writeln(Format('%d match(es)', [Length(AllMatches)]));
   end;
@@ -9303,6 +9357,51 @@ var
   S             : TSymbol                         ;
   LastStore     : ISymbolStore                    ;
   EffSizeGuardMB: Integer                         ;
+  Places        : TSearchPlaces                   ; { v156 TS-N: --place }
+  RepoRows      : TArray<TRepoNameRow>            ; { v156 TS-N: the repository place's rows }
+  PlaceKeys     : TArray<string>                  ; { v156 TS-N: Id|path of every symbol row ... }
+  PlaceVals     : TArray<string>                  ; { v156 TS-N: ... and the place of the database it came from }
+
+  { v156 TS-N: remembers the place of a symbol row (the row arrays are reordered by PreferFrameworkFirst, so the place travels by key). }
+  procedure NotePlace(const pSym: TSymbol; const pPath, pDb: string);
+  begin
+    PlaceKeys:= PlaceKeys + [IntToStr(pSym.Id) + '|' + pPath];
+    PlaceVals:= PlaceVals + [PlaceName(PlaceOfDb(pDb))];
+  end; // procedure
+
+  { v156 TS-N: orders the rows project, repository, library (stable) and says where the repository rows go. }
+  procedure PlaceOrderRows(var pSyms: TArray<TSymbol>; var pPaths: TArray<string>; out pRowPlaces: TArray<string>; out pRepoAt: Integer);
+  var
+    Raw, Sorted: TArray<string>;
+    SortedSyms: TArray<TSymbol>;
+    SortedPaths: TArray<string>;
+    Perm: TArray<Integer>;
+    K, J: Integer;
+  begin
+    SetLength(Raw, Length(pSyms));
+    for K:= 0 to High(pSyms) do
+    begin
+      Raw[K]:= 'project';
+      for J:= 0 to High(PlaceKeys) do
+        if PlaceKeys[J] = IntToStr(pSyms[K].Id) + '|' + pPaths[K] then Raw[K]:= PlaceVals[J];
+    end;
+    Perm:= PlaceSortOrder(Raw);
+    SetLength(Sorted, Length(Perm));
+    SetLength(SortedSyms, Length(Perm));
+    SetLength(SortedPaths, Length(Perm));
+    pRepoAt:= Length(Perm);
+    for K:= 0 to High(Perm) do
+    begin
+      Sorted[K]:= Raw[Perm[K]];
+      SortedSyms[K]:= pSyms[Perm[K]];
+      SortedPaths[K]:= pPaths[Perm[K]];
+      if (pRepoAt = Length(Perm)) and (Sorted[K] = PlaceName(spLibrary)) then pRepoAt:= K;
+    end;
+    pSyms:= SortedSyms;
+    pPaths:= SortedPaths;
+    pRowPlaces:= Sorted;
+  end; // procedure
+
 begin
   if not ExplicitDbsExist(AArgs, 'query') then Exit(2);
   // v0.57 Task 8: text-content search routes to its own handler.
@@ -9766,8 +9865,18 @@ begin
     Exit(2);
   end;
 
+  { v156 TS-N: --place <list> narrows the places; the repository place answers a --name from the copy in the project index. }
+  if not ParsePlaces(AArgs.Place, Places) then
+  begin
+    Writeln(ErrOutput, PlaceUsageError);
+    Exit(2);
+  end;
+  RepoRows:= nil;
+  if (spRepository in Places) and (AArgs.QName = '') then RepoRows:= RepoNameRows(PathsToScan, AArgs.Name, '');
+
   for DbPath in PathsToScan do
   begin
+    if not (PlaceOfDb(DbPath) in Places) then Continue; { v156 TS-N }
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(DbPath, RoOk);
     if not RoOk then
@@ -9795,6 +9904,7 @@ begin
       AllSymbols[High(AllSymbols)]:= S;
       SetLength(AllPaths, Length(AllPaths) + 1);
       AllPaths[High(AllPaths)]:= Store.GetFilePath(S.FileId);
+      NotePlace(S, AllPaths[High(AllPaths)], DbPath); { v156 TS-N }
     end;
     LastStore:= Store;
   end; // for
@@ -9804,11 +9914,12 @@ begin
     `--name TNotifyEvent` returned a local variable named `ANotifyEvent` and they
     had to filter client-side; match_kind now LABELS such a row, but a consumer
     that never wants suggestions should not have to receive and reject them. }
-  if (Length(AllSymbols) = 0) and (AArgs.Name <> '') and not AArgs.ExactOnly then
+  if (Length(AllSymbols) = 0) and (Length(RepoRows) = 0) and (AArgs.Name <> '') and not AArgs.ExactOnly then
   begin
     // Fuzzy fallback: hit each DB, accumulate, top-K overall.
     for DbPath in PathsToScan do
     begin
+      if not (PlaceOfDb(DbPath) in Places) then Continue; { v156 TS-N }
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbPath, RoOk);
       if not RoOk then
@@ -9823,12 +9934,18 @@ begin
         AllSymbols[High(AllSymbols)]:= S;
         SetLength(AllPaths, Length(AllPaths) + 1);
         AllPaths[High(AllPaths)]:= Store.GetFilePath(S.FileId);
+        NotePlace(S, AllPaths[High(AllPaths)], DbPath); { v156 TS-N }
       end;
     end;
     if Length(AllSymbols) > 0 then
     begin
       if not AArgs.AsJson then Writeln(Format('(no exact match for "%s" - closest matches:)', [AArgs.Name]));
-      PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths, {AFuzzy=}True);
+      { v156 TS-N: the notes go first (stderr before the stdout document); the fuzzy rows carry their place too }
+      var FuzzyPlaces: TArray<string>;
+      var FuzzyRepoAt: Integer;
+      PlaceOrderRows(AllSymbols, AllPaths, FuzzyPlaces, FuzzyRepoAt);
+      PrintPlaceNotes(PathsToScan, Places, AArgs.ProjectPath, False, True);
+      PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths, {AFuzzy=}True, '', FuzzyPlaces);
       Exit(0);
     end;
   end; // if
@@ -9848,10 +9965,15 @@ begin
         PreferFrameworkFirst(FwStore.GuiFrameworkInUse, AllSymbols, AllPaths);
     end;
   end;
-  PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths);
+  { v156 TS-N: every row carries its place; project rows, then repository rows, then library rows; the notes go to stderr first. }
+  var RowPlaces: TArray<string>;
+  var RepoAt: Integer;
+  PlaceOrderRows(AllSymbols, AllPaths, RowPlaces, RepoAt);
+  PrintPlaceNotes(PathsToScan, Places, AArgs.ProjectPath, Length(RepoRows) > 0, True);
+  PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths, {AFuzzy=}False, '', RowPlaces, RepoRows, RepoAt);
   if (Length(AllSymbols) > 0) and (Length(PathsToScan) > 0) then
     LogReaderUsage('query', PathsToScan[0], Length(AllSymbols) * USAGE_TOKENS_PER_ROW, AllPaths);
-  if Length(AllSymbols) = 0 then Result:= 1
+  if Length(AllSymbols) + Length(RepoRows) = 0 then Result:= 1
   else Result:= 0;
 end; // function
 
@@ -19496,6 +19618,15 @@ begin
   var AnyDb: Boolean:= False;
   var NameStore: ISymbolStore:= nil;
   var UnitStore: ISymbolStore:= nil;
+  { v156 TS-N: --place narrows the places that may DECLARE the unit (the --in file is a project fact and is found anywhere);
+    the declaring store's place is printed on the answer. }
+  var UnitPlaces: TSearchPlaces;
+  if not ParsePlaces(AArgs.Place, UnitPlaces) then
+  begin
+    Writeln(ErrOutput, PlaceUsageError);
+    Exit(2);
+  end;
+  var NameDb: string:= '';
   for var DbP in PathsToScan do
   begin
     if not TFile.Exists(DbP) then Continue;
@@ -19515,7 +19646,11 @@ begin
       if Fid <= 0 then Fid:= St.FindFileIdByPath(AArgs.InFile);
       if Fid > 0 then UnitStore:= St;
     end;
-    if (NameStore = nil) and (Length(St.FindSymbolsByExactName(AArgs.Name)) > 0) then NameStore:= St;
+    if (NameStore = nil) and (PlaceOfDb(DbP) in UnitPlaces) and (Length(St.FindSymbolsByExactName(AArgs.Name)) > 0) then
+    begin
+      NameStore:= St;
+      NameDb:= DbP; { v156 TS-N }
+    end;
     if (NameStore <> nil) and (UnitStore <> nil) then Break;
   end;
   if not AnyDb then
@@ -19524,8 +19659,10 @@ begin
     Writeln('Run "drag-lint index <path>" first.');
     Exit(2);
   end;
+  PrintPlaceNotes(PathsToScan, UnitPlaces, AArgs.ProjectPath, False, {pRepoNote=}False); { v156 TS-N: stderr; a repository declares no unit }
   if NameStore = nil then
   begin ReportNotFound(AArgs, Format('Could not resolve a unit declaring "%s".', [AArgs.Name])); Exit(1); end;
+  var UnitPlace: string:= PlaceName(PlaceOfDb(NameDb)); { v156 TS-N }
   { No index contains the target file -- exactly the single-store situation this
     verb was in before, so hand the same store to both halves and let Build
     report what it always did. }
@@ -19556,15 +19693,16 @@ begin
         O.AddPair('unit', ResolvedUnit);
         O.AddPair('line', TJSONNumber.Create(E.Line));
         O.AddPair('text', E.Text);
+        O.AddPair('place', UnitPlace); { v156 TS-N }
         Arr.AddElement(O);
       end;
       Writeln(Arr.ToJson);
     finally Arr.Free; end;
     Exit(0);
   end; // if
-  if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Edits)); Writeln(Format('Dry run: add unit "%s". Pass --apply to write.', [ResolvedUnit])); Exit(0); end;
+  if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Edits)); Writeln(Format('Dry run: add unit "%s". Pass --apply to write. place=%s', [ResolvedUnit, UnitPlace])); Exit(0); end;
   var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
-  Writeln(Format('Applied: added "%s" (%d file).', [ResolvedUnit, Touched]));
+  Writeln(Format('Applied: added "%s" (%d file). place=%s', [ResolvedUnit, Touched, UnitPlace]));
   Result:= 0;
 end; // function
 
