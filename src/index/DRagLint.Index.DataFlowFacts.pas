@@ -130,6 +130,12 @@ type
       /// <summary>True on the pass that writes rows (the passes before it only move state).</summary>
       /// <returns>False during the fixpoint iteration.</returns>
       function IsRecording: Boolean; virtual; abstract;
+      /// <summary>The identity of this walk: one number per routine walk, never used twice in a
+      /// process (FIXR-B, REV-1 #2).</summary>
+      /// <returns>A value greater than 0; every pass of the same walk returns the same one.</returns>
+      /// <remarks>What a hook keys a memo of the routine's TREE on: a tree address or a node id
+      /// can be reused by a later parse, this cannot.</remarks>
+      function WalkId: UInt64; virtual; abstract;
       /// <summary>Evaluates an expression in the state at the hook's site, exactly as the walk
       /// itself would (argument rows of calls inside it are recorded, expression hooks run).</summary>
       /// <param name="AExpr">An expression node; never the node the running expression hook was
@@ -365,6 +371,8 @@ type
 var
   GFallbacks : Integer = 0;
   GCapped    : Integer = 0;
+  { FIXR-B (REV-1 #2): the last TDataFlowSite.WalkId handed out; one per TCollector }
+  GWalkSeq   : UInt64 = 0;
   { 1.56 seam: filled from unit initializations, read by every TCollector }
   GExprHooks : TArray<TExprHookReg>;
   GWriteHooks: TArray<TDataFlowWriteHook>;
@@ -614,6 +622,7 @@ type
     FBody       : TTSNode;
     FSrc        : TBytes;
     FVars       : TRoutineVarTable;
+    FWalkId     : UInt64;
     FNSlots     : Integer;
     FSlotKind   : TArray<TVarKind>;
     FSlotScalar : TArray<Boolean>;
@@ -692,6 +701,7 @@ type
     { TDataFlowSite }
     function NodeText(const ANode: TTSNode): string; override;
     function IsRecording: Boolean; override;
+    function WalkId: UInt64; override;
     function ValueOf(const AExpr: TTSNode): TDataFlowValue; override;
     function NewSource(const AKind: string; AIndex: Integer; const APos: TTSNode; const AName, AValClass: string): TDataFlowValue; override;
     function Merge(const A, B: TDataFlowValue): TDataFlowValue; override;
@@ -959,6 +969,8 @@ var
   LType      : string;
 begin
   inherited Create;
+  Inc(GWalkSeq);
+  FWalkId   := GWalkSeq;
   FCallees  := ACallees;
   FSym      := ASym;
   FProc     := AProc;
@@ -2149,6 +2161,11 @@ end;
 function TCollector.IsRecording: Boolean;
 begin
   Result:= FRecording;
+end;
+
+function TCollector.WalkId: UInt64;
+begin
+  Result:= FWalkId;
 end;
 
 function TCollector.ValueOf(const AExpr: TTSNode): TDataFlowValue;
