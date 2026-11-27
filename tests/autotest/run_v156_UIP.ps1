@@ -15,7 +15,7 @@ $bat = Join-Path $Repo 'build\_build_plugin_fieldselect_tests_local.bat'
 $bin = Join-Path $OutDir 'FieldSelectTests.exe'
 if (-not $SkipBuild) {
   $blog = Join-Path $OutDir 'build.log'
-  $p = Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + $bat + '" "' + $OutDir + '" > "' + $blog + '" 2>&1"') -PassThru -NoNewWindow
+  $p = Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + $bat + '" "' + $OutDir + '" > "' + $blog + '" 2>&1"') -PassThru -NoNewWindow; $null = $p.Handle
   try { $p.PriorityClass = 'BelowNormal' } catch { Write-Verbose 'priority not set' }
   $p.WaitForExit()
   $bl = Get-Content -LiteralPath $blog -Raw

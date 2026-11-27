@@ -46,7 +46,7 @@ function Run($dir, [string[]]$more, [switch]$NoDfm) {
   if (-not $NoDfm) { $a += @('--dfm', (Join-Path $dir 'uCopy.dfm')) }
   $a += $more
   $o = Join-Path $work 'o.txt'; $e = Join-Path $work 'e.txt'
-  $p = Start-Process -FilePath $Exe -ArgumentList $a -Wait -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e
+  $p = Start-Process -FilePath $Exe -ArgumentList $a -Wait -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   @{ Code = $p.ExitCode; Out = (Get-Content -LiteralPath $o -Raw); Err = (Get-Content -LiteralPath $e -Raw) }
 }
 function Sum($dir) { (Get-FileHash -LiteralPath (Join-Path $dir 'uCopy.dfm') -Algorithm SHA256).Hash + (Get-FileHash -LiteralPath (Join-Path $dir 'uCopy.pas') -Algorithm SHA256).Hash }
@@ -58,7 +58,7 @@ try {
   $r = Run $d @('--list')
   Check 'L1 --list names the three views and writes nothing' (($r.Code -eq 0) -and ($r.Out -match '(?m)^view tvMain \(TcxGridDBTableView\)') -and ($r.Out -match '(?m)^view bvMain ') -and ($r.Out -match '(?m)^view cvMain ')) (Detail $r)
   $r = Run $d @('--list', '--from', 'tvMain', '--json')
-  $j = try { $r.Out | ConvertFrom-Json } catch { $null }
+  $j = try { $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   Check 'L2 --list --from V --json: views[] and events[] with component, event, handler' (($r.Code -eq 0) -and $j -and (@($j.views).Count -eq 3) -and (@($j.events | Where-Object { $_.event -eq 'OnCustomDrawCell' -and $_.handler -eq 'tvMainCustomDrawCell' -and -not $_.column }).Count -eq 1)) (Detail $r)
 
   # ---- dry run ----
@@ -66,7 +66,7 @@ try {
   $r = Run $d @('--from', 'tvMain', '--to', 'bvMain')
   Check 'D1 default is a DRY RUN: plan text, the dry-run line, exit 0, no file touched' (($r.Code -eq 0) -and ($r.Out -match '(?m)^# plan [0-9A-F]{16}\r?$') -and ($r.Out -match 'copy tvMain \(TcxGridDBTableView\) -> bvMain \(TcxGridDBBandedTableView\)') -and ($r.Out -match 'dry run: nothing written') -and ((Sum $d) -eq $before) -and ((Backups $d) -eq 0)) (Detail $r)
   $r = Run $d @('--from', 'tvMain', '--to', 'bvMain', '--json')
-  $j = try { $r.Out | ConvertFrom-Json } catch { $null }
+  $j = try { $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   Check 'D2 --json shape: plan, source, target, count, changes[], mode dry-run, applied 0, written [], backups []' (($r.Code -eq 0) -and $j -and ($j.plan -match '^[0-9A-Fa-f]{16}$') -and ($j.source -eq 'tvMain') -and ($j.target -eq 'bvMain') -and ($j.count -gt 0) -and (@($j.changes).Count -eq $j.count) -and ($j.mode -eq 'dry-run') -and ($j.applied -eq 0) -and (@($j.written).Count -eq 0) -and (@($j.backups).Count -eq 0) -and ((Sum $d) -eq $before)) (Detail $r)
   $r = Run $d @('--from', 'tvMain', '--to', 'bvMain', '--apply', '--dry-run')
   Check 'D3 --dry-run wins over --apply: nothing written' (($r.Code -eq 0) -and ($r.Out -match 'dry run: nothing written') -and ((Sum $d) -eq $before)) (Detail $r)
@@ -80,20 +80,20 @@ try {
   Check 'A2 a second copy writes nothing: only the 2 UNCHECKED changes are left, WRITTEN 0, no new backup' (($r.Code -eq 0) -and ($r.Out -match '2 changes, 0 blocked, 2 unchecked') -and ($r.Out -match '(?m)^WRITTEN 0\r?$') -and ((Sum $d) -eq $afterOne) -and ((Backups $d) -eq 2)) (Detail $r)
   $d2 = NewForm
   $r = Run $d2 @('--from', 'tvMain', '--to', 'bvMain', '--apply', '--json')
-  $j = try { $r.Out | ConvertFrom-Json } catch { $null }
+  $j = try { $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   Check 'A3 --apply --json: mode apply, applied > 0, written = 2 files, backups = 2 files that exist' (($r.Code -eq 0) -and $j -and ($j.mode -eq 'apply') -and ($j.applied -gt 0) -and (@($j.written).Count -eq 2) -and (@($j.backups).Count -eq 2) -and (@($j.backups | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 2)) (Detail $r)
 
   # ---- one event ----
   $d = NewForm; $before = Sum $d
   $r = Run $d @('--from', 'tvMain', '--to', 'bvMain', '--event', 'OnCustomDrawCell', '--json')
-  $j = try { $r.Out | ConvertFrom-Json } catch { $null }
+  $j = try { $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   Check 'E1 --event: a plan of ONE change, the view event' (($r.Code -eq 0) -and $j -and ($j.count -eq 1) -and ($j.changes[0].prop -eq 'OnCustomDrawCell') -and ($j.changes[0].new -eq 'tvMainCustomDrawCell') -and ((Sum $d) -eq $before)) (Detail $r)
   $r = Run $d @('--from', 'tvMain', '--to', 'bvMain', '--event', 'OnCustomDrawCell', '--apply')
   $dfm = Get-Content -LiteralPath (Join-Path $d 'uCopy.dfm') -Raw
   Check 'E2 --event --apply: the target view has the handler, no column was added' (($r.Code -eq 0) -and ($r.Out -match '(?m)^WRITTEN 1\r?$') -and ($dfm -match '(?s)object bvMain: TcxGridDBBandedTableView.*?OnCustomDrawCell = tvMainCustomDrawCell') -and ($dfm -notmatch 'bvMainCODE')) (Detail $r)
   $d = NewForm
   $r = Run $d @('--from', 'tvMain', '--to', 'bvMain', '--event', 'OnGetDisplayText', '--from-column', 'tvMainNAME', '--json')
-  $j = try { $r.Out | ConvertFrom-Json } catch { $null }
+  $j = try { $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   $sel = Join-Path $work 'sel3.txt'
   [IO.File]::WriteAllText($sel, "# plan $($j.plan)`r`nall`r`n")
   $r = Run $d @('--from', 'tvMain', '--to', 'bvMain', '--event', 'OnGetDisplayText', '--from-column', 'tvMainNAME', '--select', $sel)
@@ -113,7 +113,7 @@ try {
   Check 'S2 a --select file of ANOTHER plan: exit 1, nothing written' (($r.Code -eq 1) -and ((Sum $d) -eq $before)) (Detail $r)
   [IO.File]::WriteAllText($sel, "# plan $plan`r`n1`r`n")
   $r = Run $d @('--from', 'tvMain', '--to', 'bvMain', '--select', $sel, '--json')
-  $j = try { $r.Out | ConvertFrom-Json } catch { $null }
+  $j = try { $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   Check 'S3 --select with the plan line writes exactly the named id' (($r.Code -eq 0) -and $j -and ($j.mode -eq 'apply') -and ($j.applied -eq 1) -and ((Sum $d) -ne $before)) (Detail $r)
   $d = NewForm; $before = Sum $d
   [IO.File]::WriteAllText($sel, "# plan $plan`r`n9999`r`n")

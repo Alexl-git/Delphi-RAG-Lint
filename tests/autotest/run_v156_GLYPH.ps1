@@ -39,10 +39,10 @@ function VerbBlock([string]$Help, [string]$Verb) {
   return $m.Value
 }
 
-$ij = (& $Exe info --json 2>$null) -join "`n" | ConvertFrom-Json
+$ij = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null | ForEach-Object { "$_" } }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'G1 info capability glyph_stitch is true' ($ij.capabilities.glyph_stitch -eq $true) "capabilities.glyph_stitch = [$($ij.capabilities.glyph_stitch)]"
 
-$help = (& $Exe --help 2>&1 | ForEach-Object { "$_" }) -join "`n"
+$help = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
 Check 'G2 --help: convert-apply describes --glyph-stitch' (HasDescription (VerbBlock $help 'convert-apply'))
 Check 'G3 --help: convert-validate describes --glyph-stitch' (HasDescription (VerbBlock $help 'convert-validate'))
 
@@ -52,7 +52,7 @@ Check 'G4 README.md describes the flag' ($readme -match '--glyph-stitch` \(OFF b
 Check 'G5 AI-USAGE.md describes the flag' ($aiuse -match '--glyph-stitch` \(OFF by default')
 
 $entryPath = "$Repo\features\entries\convert-glyph-stitch.json"
-$entry = if (Test-Path -LiteralPath $entryPath) { Get-Content -Raw -LiteralPath $entryPath | ConvertFrom-Json } else { $null }
+$entry = if (Test-Path -LiteralPath $entryPath) { Get-Content -Raw -LiteralPath $entryPath | ConvertFrom-Json | ForEach-Object { $_ } } else { $null }
 Check 'G6 registry entry convert-glyph-stitch: exists, a workflow surface, a question names the flag' `r
   ($entry -and $entry.id -eq 'convert-glyph-stitch' -and (@($entry.surfaces | Where-Object { $_.type -eq 'workflow' }).Count -eq 1) -and (@($entry.questions | Where-Object { $_.command -match '--glyph-stitch' }).Count -ge 1))
 Check 'G7 wiki page named by the entry exists' ($entry -and (Test-Path -LiteralPath "$Repo\docs\wiki\$($entry.wikiPage).md") -and (Test-Path -LiteralPath "$Repo\$($entry.surfaces[0].doc)"))
@@ -63,7 +63,7 @@ Check 'G8 positive control: matcher rejects the usage-line-only help (the 1.55 s
 if (-not $SkipBehaviour) {
   # run_convert_glyph_strip.ps1 I1 now asserts the promotion (flipped by REDS, the GLYPH -> CONVERTER request), so no
   # [FAIL] is excused any more.
-  $out = & pwsh -NoProfile -File "$PSScriptRoot\run_convert_glyph_strip.ps1" -Exe $Exe 2>&1 | ForEach-Object { "$_" }
+  $out = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File "$PSScriptRoot\run_convert_glyph_strip.ps1" -Exe $Exe 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
   $bad = @($out | Where-Object { $_ -match '^\[FAIL\]' })
   $passN = @($out | Where-Object { $_ -match '^\[PASS\]' }).Count
   Check 'G9 behaviour control: run_convert_glyph_strip.ps1 has no [FAIL]' (($bad.Count -eq 0) -and ($passN -ge 20)) "failing: $($bad -join ' | '); passes=$passN"

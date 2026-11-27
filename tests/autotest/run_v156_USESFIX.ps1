@@ -74,10 +74,10 @@ function BuildAndRun($c) {
   $out = Join-Path $c.Dir 'out'; New-Item -ItemType Directory $out -Force | Out-Null
   $log = Join-Path $c.Dir 'dcc.log'
   $cmd = "call `"$RsVars`" && cd /d `"$($c.Dir)`" && dcc64 -B -Q -NSSystem -E`"$out`" -NU`"$out`" Shop.dpr > `"$log`" 2>&1"
-  $p = Start-Process cmd.exe -ArgumentList '/c', "`"$cmd`"" -Wait -PassThru -WindowStyle Hidden
+  $p = Start-Process cmd.exe -ArgumentList '/c', "`"$cmd`"" -Wait -PassThru -WindowStyle Hidden; $null = $p.Handle
   $exe = Join-Path $out 'Shop.exe'
   $ran = ''
-  if (($p.ExitCode -eq 0) -and (Test-Path $exe)) { $ran = (& $exe 2>&1 | Out-String) }
+  if (($p.ExitCode -eq 0) -and (Test-Path $exe)) { $ran = (& { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String) }
   return @{ Rc = $p.ExitCode; Built = (Test-Path $exe); Ran = $ran; Log = $log }
 }
 

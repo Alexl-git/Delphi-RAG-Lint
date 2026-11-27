@@ -77,7 +77,7 @@ function Lane-Sql([string]$Db, [string]$Query, [string]$With = $Exe) {
 function Lane-Cols([string]$Db, [string]$Table) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT * FROM $Table LIMIT 0" --db $Db --json 2>$null }
   if ($LASTEXITCODE -ne 0 -or -not $raw) { return '' }
-  try { $j = ($raw -join "`n") | ConvertFrom-Json } catch { return '' }
+  try { $j = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { return '' }
   return (@($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } }) -join ',')
 }
 function Lane-Count([string]$Db, [string]$From) {

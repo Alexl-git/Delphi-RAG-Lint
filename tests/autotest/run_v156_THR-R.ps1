@@ -65,7 +65,7 @@ try {
   # c0: catalog
   $rulesRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) -join "`n"
   # rules --json is {"rules":[{id, default_enabled, ...}], "summary":..}
-  $cat = @(($rulesRaw | ConvertFrom-Json).rules | Where-Object { $_.id -eq $Rule })
+  $cat = @(($rulesRaw | ConvertFrom-Json | ForEach-Object { $_ }).rules | Where-Object { $_.id -eq $Rule })
   if ($cat.Count -gt 0) { Write-Host ("  catalog row: id={0} default_enabled={1} severity={2}" -f $cat[0].id, $cat[0].default_enabled, $cat[0].default_severity) }
   Check 'c0 the rule is in the catalog and ON by default' (($cat.Count -eq 1) -and ($cat[0].default_enabled -eq $true)) ("rows " + $cat.Count)
 

@@ -49,7 +49,7 @@ function Ask([string]$q, [string]$target, [string]$db, [string]$out, [string[]]$
 function Emitter-Of([string]$out) {
   $m = Get-ChildItem $out -Recurse -Filter meta.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
   if (-not $m) { return $null }
-  (Get-Content $m.FullName -Raw | ConvertFrom-Json).emitter
+  (Get-Content $m.FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }).emitter
 }
 function Json-Of($e) { if ($e) { $e | ConvertTo-Json -Compress } else { 'no meta' } }
 function Dot-Text([string]$out) {

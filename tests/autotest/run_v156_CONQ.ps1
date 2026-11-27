@@ -53,7 +53,7 @@ function Run-Concept([string]$Db, [string]$Words, [string[]]$More = @(), [switch
   $out = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>$errFile }
   $rc = $LASTEXITCODE
   $json = $null
-  if (-not $Text) { try { $json = ($out -join "`n") | ConvertFrom-Json } catch { $json = $null } }
+  if (-not $Text) { try { $json = ($out -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { $json = $null } }
   $hits = @()
   if ($json -and $json.hits) { $hits = @($json.hits) }
   $errText = ''
@@ -81,7 +81,7 @@ $dbs = @{}
 foreach ($v in 'app', 'norepo', 'manyid', 'missing') {
   $dbs[$v] = Join-Path $work "$v.sqlite"
   Copy-Item -Force $base $dbs[$v]
-  $fill = & python -I (Join-Path $fxSrc 'fill_concept.py') $dbs[$v] $repoFile $v 2>&1
+  $fill = & { $ErrorActionPreference = 'Continue'; & python -I (Join-Path $fxSrc 'fill_concept.py') $dbs[$v] $repoFile $v 2>&1 | ForEach-Object { "$_" } }
   Check "setup: variant $v filled" ($LASTEXITCODE -eq 0) "($fill)"
 }
 $libDir = Join-Path $work 'lib'

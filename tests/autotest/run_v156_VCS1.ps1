@@ -43,7 +43,7 @@ function Check([string]$pName, [bool]$pOk, [string]$pDetail = '') {
 function Invoke-Tool([string]$pFolder, [string]$pExe, [string[]]$pArguments) {
   Push-Location -LiteralPath $pFolder
   try {
-    $out = & $pExe @pArguments 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $pExe @pArguments 2>&1 | ForEach-Object { "$_" } } | Out-String
     if ($LASTEXITCODE -ne 0) { throw "$pExe $($pArguments -join ' ') failed in ${pFolder}: $out" }
     return $out.Trim()
   } finally { Pop-Location }
@@ -54,7 +54,7 @@ function Invoke-Engine([string]$pFolder, [string[]]$pArguments) {
   $errFile = Join-Path $Work ("err-" + [Guid]::NewGuid().ToString('N') + '.txt')
   Push-Location -LiteralPath $pFolder
   try {
-    $out = & $Engine @pArguments 2> $errFile | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Engine @pArguments 2> $errFile | ForEach-Object { "$_" } } | Out-String
     $code = $LASTEXITCODE
   } finally { Pop-Location }
   $err = if (Test-Path -LiteralPath $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
@@ -64,7 +64,7 @@ function Invoke-Engine([string]$pFolder, [string[]]$pArguments) {
 # The routine names of a lint-all --json answer, sorted; '<not json>' when stdout is not the findings array.
 function Get-Routines($pRun) {
   $names = @()
-  try { $doc = $pRun.Out | ConvertFrom-Json } catch { return '<not json>' }
+  try { $doc = $pRun.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { return '<not json>' }
   foreach ($f in @($doc)) {
     if ($null -eq $f) { continue }
     if ([string]$f.message -match 'Exported routine (\w+) ') { $names += $Matches[1] } else { $names += "?$($f.message)" }

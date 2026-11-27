@@ -44,7 +44,7 @@ try {
   Check 'P0 the model runner builds' $built ((Select-String -LiteralPath (Join-Path $work 'b1.log') -Pattern 'Error' | Select-Object -First 3) -join ' | ')
   $runner = Join-Path $out1 'GridCopyCmdTests.exe'
   if ($built) {
-    $lines = & $runner 2>&1 | ForEach-Object { "$_" }
+    $lines = & { $ErrorActionPreference = 'Continue'; & $runner 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
     $sum = $lines | Where-Object { $_ -match '^Summary: pass=(\d+) fail=(\d+)' }
     $m = [regex]::Match("$sum", 'pass=(\d+) fail=(\d+)')
     Check 'P1 the model cases all pass' (($m.Success) -and ([int]$m.Groups[2].Value -eq 0) -and ([int]$m.Groups[1].Value -ge 25)) (($lines | Where-Object { $_ -match 'FAIL|EXC' }) -join ' | ')
@@ -60,22 +60,22 @@ try {
     $dfm = Join-Path $d 'uCopy.dfm'
     function Eng([string]$more) {
       $o = Join-Path $work 'o.txt'; $e = Join-Path $work 'e.txt'
-      $p = Start-Process -FilePath $Exe -ArgumentList "repo copy-grid --project `"$(Join-Path $work 'none.dproj')`" $more" -Wait -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e
+      $p = Start-Process -FilePath $Exe -ArgumentList "repo copy-grid --project `"$(Join-Path $work 'none.dproj')`" $more" -Wait -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
       @{ Code = $p.ExitCode; Out = (Get-Content -LiteralPath $o -Raw) }
     }
     # the command line the model builds, copied from the runner's own cases: `--dfm "x" --list --json`
     $r = Eng "--dfm `"$dfm`" --list --json"
     $f1 = Join-Path $work 'list.json'; [IO.File]::WriteAllText($f1, $r.Out)
-    $t = (& $runner --list $f1 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $t = (& { $ErrorActionPreference = 'Continue'; & $runner --list $f1 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
     Check 'E1 --list --json of the engine: the model reads the three views' (($r.Code -eq 0) -and ($t -match 'views: 3 ') -and ($t -match 'view tvMain TcxGridDBTableView 3') -and ($t -match 'view cvMain ')) "exit=$($r.Code) $t"
     $r = Eng "--dfm `"$dfm`" --list --from tvMain --json"
     [IO.File]::WriteAllText($f1, $r.Out)
-    $t = (& $runner --list $f1 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $t = (& { $ErrorActionPreference = 'Continue'; & $runner --list $f1 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
     Check 'E2 --list --from V --json: the model reads the events, view and column ones' (($r.Code -eq 0) -and ($t -match 'event tvMain OnCustomDrawCell tvMainCustomDrawCell False') -and ($t -match 'event \w+ OnGetDisplayText \w+ True')) "exit=$($r.Code) $t"
     $r = Eng "--dfm `"$dfm`" --from tvMain --to bvMain --dry-run --json"
     $f2 = Join-Path $work 'plan.json'; [IO.File]::WriteAllText($f2, $r.Out)
     $sel = Join-Path $work 'select.txt'
-    $t = (& $runner --plan $f2 $sel 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $t = (& { $ErrorActionPreference = 'Continue'; & $runner --plan $f2 $sel 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
     $selText = if (Test-Path -LiteralPath $sel) { Get-Content -LiteralPath $sel -Raw } else { '' }
     Check 'E3 the dry run --json of the engine: the model reads the plan and writes its --select file' (($r.Code -eq 0) -and ($t -match 'plan: [0-9A-F]{16} \d+ changes, [1-9]\d* checked') -and ($selText -match '(?m)^# plan [0-9A-F]{16}\r?$')) "exit=$($r.Code) $t sel=[$selText]"
     $before = (Get-FileHash -LiteralPath $dfm).Hash
@@ -98,12 +98,12 @@ try {
     foreach ($f in 'uCopy.dfm', 'uCopy.pas') { [IO.File]::Copy((Join-Path $fix $f), (Join-Path $d2 $f), $true) }
     $r = Eng "--dfm `"$(Join-Path $d2 'uCopy.dfm')`" --list --from tvMain --json"
     [IO.File]::WriteAllText($f1, $r.Out)
-    $col = ((& $runner --list $f1 2>&1) | Where-Object { "$_" -match '^event (\w+) OnGetDisplayText \w+ True' } | Select-Object -First 1)
+    $col = ((& { $ErrorActionPreference = 'Continue'; & $runner --list $f1 2>&1 | ForEach-Object { "$_" } }) | Where-Object { "$_" -match '^event (\w+) OnGetDisplayText \w+ True' } | Select-Object -First 1)
     $colName = if ("$col" -match '^event (\w+) ') { $Matches[1] } else { '' }
     $null = Eng "--dfm `"$(Join-Path $d2 'uCopy.dfm')`" --from tvMain --to bvMain --apply"   # the target column must exist first: the engine refuses a column event otherwise (exit 1 + message, which the command shows)
     $r = Eng "--dfm `"$(Join-Path $d2 'uCopy.dfm')`" --from tvMain --to bvMain --event OnGetDisplayText --from-column $colName --dry-run --json"
     [IO.File]::WriteAllText($f2, $r.Out)
-    $t = (& $runner --plan $f2 $sel 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $t = (& { $ErrorActionPreference = 'Continue'; & $runner --plan $f2 $sel 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
     Check 'E7 one column event (the model''s --from-column): a plan the model reads (the column already exists in the target)' (($r.Code -eq 0) -and ($colName -ne '') -and ($t -match 'plan: [0-9A-F]{16} \d+ changes')) "col=[$colName] exit=$($r.Code) $t out=[$($r.Out)]"
   }
 }

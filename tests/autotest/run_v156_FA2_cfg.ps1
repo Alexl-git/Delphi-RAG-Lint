@@ -27,7 +27,7 @@ function LineOf([string]$Marker) {
 }
 function Rows([string]$Query) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query $Query 2>$null }
-  $doc = ($raw -join "`n") | ConvertFrom-Json
+  $doc = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($doc.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in $doc.rows) {

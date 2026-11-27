@@ -52,7 +52,7 @@ function Run-Concept([string]$Db, [string]$Words, [string[]]$More = @(), [switch
   $out = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>$errFile }
   $rc = $LASTEXITCODE
   $json = $null
-  if (-not $Text) { try { $json = ($out -join "`n") | ConvertFrom-Json } catch { $json = $null } }
+  if (-not $Text) { try { $json = ($out -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { $json = $null } }
   $hits = @()
   if ($json -and $json.hits) { $hits = @($json.hits) }
   $errText = ''

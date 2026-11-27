@@ -167,7 +167,7 @@ try {
     $counts = @()
     foreach ($case in @(@('bundle, 1.55-style', $OldBundle, $chartOld), @('bundle, 1.56-style', $OldBundle, $chartNew), @('.dot file, 1.55-style', $OldDot, $chartOld))) {
       $r = Invoke-Engine @('compare','--old',$case[1],'--command',$case[2],'--db',$Db,'--format','json','--out-root',(Join-Path $Work 'bundles'))
-      $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+      $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
       # graph.nodes_added / nodes_removed / edges_added / edges_removed are ARRAYS of names
       $added = @(if ($j) { $j.graph.nodes_added })   # @( ) outside: an if-expression unrolls a one-item array
       Check "Q2-GRAPH-DIFF $($case[0]): exit 1, exactly the Reset node added, none removed" ($r.Code -eq 1 -and $added.Count -eq 1 -and $added[0] -match 'Reset' -and @($j.graph.nodes_removed).Count -eq 0) "exit=$($r.Code) out=$($r.Out) err=$($r.Err)"

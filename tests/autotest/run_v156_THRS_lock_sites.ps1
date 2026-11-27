@@ -141,7 +141,7 @@ function Invoke-Driver([string[]]$DriverArgs) {
 }
 
 function Get-Held([string]$Db, [string]$Routine, [int]$Line, [int]$Col) {
-  $doc = (Invoke-Driver @('--db', $Db, '--routine', $Routine, '--held', "${Line}:${Col}")) | ConvertFrom-Json
+  $doc = (Invoke-Driver @('--db', $Db, '--routine', $Routine, '--held', "${Line}:${Col}")) | ConvertFrom-Json | ForEach-Object { $_ }
   return (@($doc.held) -join ',')
 }
 
@@ -166,7 +166,7 @@ try {
       "-NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win " +
       "${q}$dpr${q}`r`necho BUILD_EXITCODE=%errorlevel%`r`n"
     [IO.File]::WriteAllText($bat, $batText, [Text.Encoding]::ASCII)
-    $proc = Start-Process -FilePath cmd.exe -ArgumentList ('/c ' + $q + $q + $bat + $q + ' > ' + $q + $blog + $q + ' 2>&1' + $q) -NoNewWindow -PassThru
+    $proc = Start-Process -FilePath cmd.exe -ArgumentList ('/c ' + $q + $q + $bat + $q + ' > ' + $q + $blog + $q + ' 2>&1' + $q) -NoNewWindow -PassThru; $null = $proc.Handle
     try { $proc.PriorityClass = 'BelowNormal' } catch { Write-Verbose "priority not lowered: $_" }
     $proc.WaitForExit()
     $bl = Get-Content -LiteralPath $blog -Raw
@@ -194,7 +194,7 @@ try {
 
   $rawAll = Invoke-Driver @('--db', $db)
   Check 'driver exit 0 (project)' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-  $doc = $rawAll | ConvertFrom-Json
+  $doc = $rawAll | ConvertFrom-Json | ForEach-Object { $_ }
   $sites = Get-Sites $doc
 
   foreach ($k in $Cases.Keys) {
@@ -248,9 +248,9 @@ try {
   # Selectors.
   $rawFile = Invoke-Driver @('--db', $db, '--file', 'lsLocks.pas')
   Check '--file equals the project answer (one file)' ($rawFile -ceq $rawAll)
-  $one = (Invoke-Driver @('--db', $db, '--routine', "$U.AThenB")) | ConvertFrom-Json
+  $one = (Invoke-Driver @('--db', $db, '--routine', "$U.AThenB")) | ConvertFrom-Json | ForEach-Object { $_ }
   Check '--routine AThenB: 4 sites' ((@($one.routines).Count -eq 1) -and (@($one.routines[0].sites).Count -eq 4)) "sites=$(@($one.routines[0].sites).Count)"
-  $none = (Invoke-Driver @('--db', $db, '--routine', "$U.NoLocks")) | ConvertFrom-Json
+  $none = (Invoke-Driver @('--db', $db, '--routine', "$U.NoLocks")) | ConvertFrom-Json | ForEach-Object { $_ }
   Check '--routine NoLocks: 0 sites' ((@($none.routines).Count -eq 1) -and (@($none.routines[0].sites).Count -eq 0))
 
   # Determinism and comparator control.

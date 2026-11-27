@@ -47,7 +47,7 @@ function Seed-Code([string]$Db, [string[]]$Names) {
   # then nothing is seeded and the 'code' kind is proven on REAL ds_field_accesses rows.
   $have = 0
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query 'SELECT COUNT(*) FROM ds_field_accesses' --db $Db --json 2>$null }
-  if ($LASTEXITCODE -eq 0 -and $raw) { $have = [int]((($raw -join "`n") | ConvertFrom-Json).rows[0][0]) }
+  if ($LASTEXITCODE -eq 0 -and $raw) { $have = [int]((($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]) }
   if ($have -gt 0) { Write-Host "  code rows: $have emitted by the engine (no seed)"; return }
   $py = Join-Path $OutDir 'seed.py'
   $lines = @('import sqlite3, sys', 'c = sqlite3.connect(sys.argv[1])',
@@ -83,7 +83,7 @@ $a = Run-Usage @('--fields', 'ID, QTY,CITY,NOPE', '--json', '--db', $dbA)
 Check 'A exit 0' ($a.Exit -eq 0) "exit=$($a.Exit)"
 Check 'A one line' ($a.Lines.Count -eq 1) "lines=$($a.Lines.Count)"
 $pa = $null
-try { $pa = $a.Lines[0] | ConvertFrom-Json } catch { Write-Verbose 'not json' }
+try { $pa = $a.Lines[0] | ConvertFrom-Json | ForEach-Object { $_ } } catch { Write-Verbose 'not json' }
 Check 'A parses as JSON with a usage array' ($null -ne $pa -and $null -ne $pa.PSObject.Properties['usage'])
 if ($null -ne $pa) {
   Check 'A ID = dfm,grid,code' ((Kinds $pa 'ID') -eq 'dfm,grid,code') "got $(Kinds $pa 'ID')"
@@ -95,7 +95,7 @@ if ($null -ne $pa) {
 # B: positive control -- the code use and the grid column of ID removed
 $b = Run-Usage @('--fields', 'ID,QTY,CITY', '--json', '--db', $dbB)
 $pb = $null
-try { $pb = $b.Lines[0] | ConvertFrom-Json } catch { Write-Verbose 'not json' }
+try { $pb = $b.Lines[0] | ConvertFrom-Json | ForEach-Object { $_ } } catch { Write-Verbose 'not json' }
 Check 'B parses' ($null -ne $pb)
 if ($null -ne $pb) {
   Check 'B ID = dfm only (code + grid dropped)' ((Kinds $pb 'ID') -eq 'dfm') "got $(Kinds $pb 'ID')"
@@ -104,7 +104,7 @@ if ($null -ne $pb) {
 # lower-case request and duplicates give the same answer once
 $c = Run-Usage @('--fields', 'id,ID,qty', '--json', '--db', $dbA)
 $pc = $null
-try { $pc = $c.Lines[0] | ConvertFrom-Json } catch { Write-Verbose 'not json' }
+try { $pc = $c.Lines[0] | ConvertFrom-Json | ForEach-Object { $_ } } catch { Write-Verbose 'not json' }
 Check 'case-insensitive, duplicates folded' ($null -ne $pc -and @($pc.usage).Count -eq 2)
 # nothing used -> still the shape
 $d = Run-Usage @('--fields', 'NOPE', '--json', '--db', $dbA)

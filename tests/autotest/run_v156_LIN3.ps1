@@ -76,7 +76,7 @@ try {
   $b = ReadDfm $x $dfm ($withDb + @('--select', $sel))
   Check 'G-S the derived rows are stored (setup)' (($ids.Count -eq 4) -and (Has $b.Out '(?m)^applied: 4 changes')) $b.Out
   $j = ReadDfm $x $dfm ($withDb + @('--json', '--dataset', 'tblOrders'))
-  $jo = $null; try { $jo = $j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json } catch { }
+  $jo = $null; try { $jo = $j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $tf = @(FindProp $jo 'tableFields' | ForEach-Object { $_ } | ForEach-Object { $_.field })
   Check 'G0 control: tableFields lists the plain columns of ORDERS' (($tf -contains 'QTY') -and ($tf -contains 'PRICE')) ($tf -join ',')
   Check 'G1 tableFields does NOT list a derived row (TOTAL, NET, SUMQ)' (($tf.Count -gt 0) -and -not ($tf -contains 'TOTAL') -and -not ($tf -contains 'NET') -and -not ($tf -contains 'SUMQ')) ($tf -join ',')

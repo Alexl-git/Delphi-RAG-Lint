@@ -59,7 +59,7 @@ ORDER BY e.id
 function Lane-Edges([string]$Db) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $edgeSql --db $Db --json --limit 10000 2>$null }
   if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
-  try { $j = ($raw -join "`n") | ConvertFrom-Json } catch { return $null }
+  try { $j = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { return $null }
   $out = New-Object System.Collections.Generic.List[string]
   foreach ($r in @($j.rows)) {
     $cells = @($r | ForEach-Object { "$_" })

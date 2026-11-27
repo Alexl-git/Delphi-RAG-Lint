@@ -90,7 +90,7 @@ try {
   Check 'A7 a non-derived field is unchanged: QTY (a real column code overwrites) and PRICE get no change' (-not (Has $o '(?m)^\[\d+\] \w+ \S+ ORDERS\|(QTY|PRICE)\b')) $o
   Check 'A8 the dry run writes no byte' ((Has $o 'dry run: nothing written') -and ($h0 -eq (Get-FileHash -LiteralPath $x).Hash)) $o
   $j = ReadDfm $x $dfm ($withDb + '--json')
-  $jo = $null; try { $jo = $j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json } catch { }
+  $jo = $null; try { $jo = $j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $jt = if ($jo) { @($jo.changeSet.changes | Where-Object { $_.target -eq 'DL_FIELDS_INFO ORDERS|TOTAL' }) } else { @() }
   $ji = if ($jo) { @($jo.changeSet.changes | Where-Object { $_.target -eq 'DL_FIELD_INPUTS ORDERS|TOTAL||CUSTOMERS' }) } else { @() }
   Check 'A9 --json: the derived row and its input are in the change set with checked = false' (($jt.Count -eq 1) -and ($jt[0].checked -eq $false) -and ($jt[0].op -eq 'insert') -and ($ji.Count -eq 1) -and ($ji[0].checked -eq $false)) $j.Out

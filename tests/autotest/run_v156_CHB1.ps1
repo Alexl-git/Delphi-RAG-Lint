@@ -27,7 +27,7 @@ function Check([string]$name, [bool]$ok, [string]$detail = '') {
   if ($ok) { $script:pass++; Write-Host "PASS  $name" } else { $script:fail++; Write-Host "FAIL  $name  $detail" -ForegroundColor Red }
 }
 function Run-Engine([string[]]$a) {
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
 }
 function Index-Fixture([string]$dir, [string]$db) {
@@ -41,7 +41,7 @@ function Ask([string]$q, [string]$target, [string]$db, [string]$out) {
 function Meta-Of([string]$out) {
   $m = Get-ChildItem $out -Recurse -Filter meta.json | Sort-Object LastWriteTime | Select-Object -Last 1
   if (-not $m) { return $null }
-  Get-Content $m.FullName -Raw | ConvertFrom-Json
+  Get-Content $m.FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 }
 function Dot-Of([string]$out) {
   Get-ChildItem $out -Recurse -Filter *.dot | Sort-Object LastWriteTime | Select-Object -Last 1
@@ -96,8 +96,8 @@ Check 'PC-3 unknown class is refused' ($r.Code -ne 0) $r.Text
 $o5 = Join-Path $Scratch 'sq1'
 $r = Ask 'sequence' 'ChbModel.TOwner.Run' $db $o5
 Check 'sequence exits 0' ($r.Code -eq 0) $r.Text
-$q = & $Exe sql --db $db --json --query "SELECT r.name_text FROM refs r JOIN symbols s ON s.id = r.enclosing_symbol_id WHERE s.name = 'Run' AND r.kind = 'call' ORDER BY r.id" 2>&1 | Out-String
-$j = ($q -replace '(?s)^.*?(\{)', '$1') | ConvertFrom-Json
+$q = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query "SELECT r.name_text FROM refs r JOIN symbols s ON s.id = r.enclosing_symbol_id WHERE s.name = 'Run' AND r.kind = 'call' ORDER BY r.id" 2>&1 | ForEach-Object { "$_" } } | Out-String
+$j = ($q -replace '(?s)^.*?(\{)', '$1') | ConvertFrom-Json | ForEach-Object { $_ }
 $expected = @($j.rows | ForEach-Object { $_[0] })
 $dot = Dot-Of $o5
 $labels = @()

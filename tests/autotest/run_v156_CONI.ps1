@@ -48,7 +48,7 @@ function Run([string[]]$a) {
 function Sql([string]$Db, [string]$Query) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Query --db $Db --json 2>$null }
   if ($LASTEXITCODE -ne 0 -or -not $raw) { return ,@() }
-  $j = ($raw -join "`n") | ConvertFrom-Json
+  $j = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = New-Object System.Collections.Generic.List[object]
   foreach ($r in @($j.rows)) {
@@ -199,7 +199,7 @@ con.executemany("INSERT INTO call_literal_args (file_id, ordinal, symbol_id, cal
 con.commit()
 con.close()
 '@, [Text.Encoding]::ASCII)
-    & python $py $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & python $py $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   }
   Edit (Join-Path $app 'uJoin.dfm') "Caption = 'Join'" "Caption = 'Join 2'"
   $r5 = Index $app $db

@@ -34,13 +34,13 @@ function Check([string]$name, [bool]$ok, [string]$detail = '') {
   if ($ok) { $script:pass++; Write-Host "PASS  $name" } else { $script:fail++; Write-Host "FAIL  $name  $detail" -ForegroundColor Red }
 }
 function Run-Engine([string[]]$a) {
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
 }
 function Run-Tool([string]$dir, [string]$tool, [string[]]$a) {
   Push-Location -LiteralPath $dir
   try {
-    $o = & $tool @a 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & $tool @a 2>&1 | ForEach-Object { "$_" } } | Out-String
     if ($LASTEXITCODE -ne 0) { throw "$tool $($a -join ' ') failed in ${dir}: $o" }
     $o.Trim()
   } finally { Pop-Location }
@@ -110,7 +110,7 @@ function Ask-Pairs([string]$db, [string]$out, [string[]]$extra) {
   $m = Get-ChildItem $out -Recurse -Filter meta.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
   $pairs = @()
   if ($csv) { $pairs = @(Import-Csv $csv.FullName | ForEach-Object { "{0}-{1} co={2} sA={3} sB={4} w={5}" -f $_.unit_a, $_.unit_b, $_.co_changes, $_.support_a, $_.support_b, $_.weight }) }
-  $meta = if ($m) { (Get-Content $m.FullName -Raw | ConvertFrom-Json).emitter } else { $null }
+  $meta = if ($m) { (Get-Content $m.FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }).emitter } else { $null }
   [pscustomobject]@{ Code = $r.Code; Text = $r.Text; Pairs = $pairs; Meta = $meta }
 }
 function Same-List($a, $b) { (@($a) -join ';') -ceq (@($b) -join ';') }

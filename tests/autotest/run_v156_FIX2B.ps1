@@ -32,7 +32,7 @@ function Run([string[]]$a) {
   $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
-function JsonOf($text) { try { $text.Substring($text.IndexOf('{')) | ConvertFrom-Json } catch { $null } }
+function JsonOf($text) { try { $text.Substring($text.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } }
 try {
   # ---- F3 / F4 share the LIN-2 fixture ----
   $fx = Join-Path $work 'fx'
@@ -88,7 +88,7 @@ try {
   $o1 = Join-Path $work 'risk1'
   $a1 = Run @('ask', 'risk', '--target', 'project', '--db', $rdb, '--plain', '--out-root', $o1)
   $m1 = Get-ChildItem $o1 -Recurse -Filter meta.json -ErrorAction SilentlyContinue | Select-Object -First 1
-  $e1 = if ($m1) { (Get-Content -Raw $m1.FullName | ConvertFrom-Json).emitter } else { $null }
+  $e1 = if ($m1) { (Get-Content -Raw $m1.FullName | ConvertFrom-Json | ForEach-Object { $_ }).emitter } else { $null }
   Check 'F5a no coverage: the meta says "no coverage imported -- complexity only"' (($rx.Code -eq 0) -and ($a1.Code -eq 0) -and $e1 -and ($e1.CoverageImported -eq $false) -and ($e1.Note -ceq 'no coverage imported -- complexity only')) "$($a1.Out)`n$($e1 | ConvertTo-Json -Compress)"
   $dot = Get-ChildItem $o1 -Recurse -Filter 'graph.dot' -ErrorAction SilentlyContinue | Select-Object -First 1
   $dt = if ($dot) { Get-Content -Raw $dot.FullName } else { '' }
@@ -97,13 +97,13 @@ try {
   $o2 = Join-Path $work 'risk2'
   $a2 = Run @('ask', 'risk', '--target', 'project', '--db', $rdb, '--plain', '--out-root', $o2)
   $m2 = Get-ChildItem $o2 -Recurse -Filter meta.json -ErrorAction SilentlyContinue | Select-Object -First 1
-  $e2 = if ($m2) { (Get-Content -Raw $m2.FullName | ConvertFrom-Json).emitter } else { $null }
+  $e2 = if ($m2) { (Get-Content -Raw $m2.FullName | ConvertFrom-Json | ForEach-Object { $_ }).emitter } else { $null }
   $dot2 = Get-ChildItem $o2 -Recurse -Filter 'graph.dot' -ErrorAction SilentlyContinue | Select-Object -First 1
   $dt2 = if ($dot2) { Get-Content -Raw $dot2.FullName } else { '' }
   Check 'F5c control: with coverage imported there is no note and real percentages are drawn' (($imp.Code -eq 0) -and $e2 -and ($e2.CoverageImported -eq $true) -and ([string]$e2.Note -ceq '') -and ($dt2 -cnotmatch 'no coverage imported') -and ($dt2 -match 'coverage \d')) "$($imp.Out)`n$dt2"
 
   # F7: purls
-  $cat = Get-Content -Raw -LiteralPath (Join-Path $Repo 'rules\sbom-libraries.json') | ConvertFrom-Json
+  $cat = Get-Content -Raw -LiteralPath (Join-Path $Repo 'rules\sbom-libraries.json') | ConvertFrom-Json | ForEach-Object { $_ }
   $purls = @($cat.PSObject.Properties.Value | ForEach-Object { $_ } | ForEach-Object { $_.purl } | Where-Object { $_ })
   $bad = { param($p) $p -cmatch '^pkg:(github|bitbucket)/' -and $p -cne $p.ToLowerInvariant() }
   Check 'F7a every github/bitbucket purl is lowercase' (($purls.Count -gt 0) -and (@($purls | Where-Object { & $bad $_ }).Count -eq 0)) (($purls | Where-Object { & $bad $_ }) -join ' ')

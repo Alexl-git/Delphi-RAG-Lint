@@ -80,7 +80,7 @@ function Lane-Index([string]$Name, [string]$With) {
 function Lane-Scalar([string]$Dir, [string]$Query) {
   $r = Lane-Run $Exe @('sql', '--query', $Query, '--db', (Join-Path $Dir 'fb1.sqlite'), '--json')
   if ($r.Exit -ne 0) { return '' }
-  try { $j = $r.Out | ConvertFrom-Json } catch { return '' }
+  try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { return '' }
   if (@($j.rows).Count -eq 0) { return '' }
   return "$(@($j.rows)[0][0])"
 }
@@ -96,7 +96,7 @@ function Lane-Ask([string]$Dir, [string]$Question, [string]$Target, [string[]]$M
   $r.Emitter = $null; $r.DotText = ''
   $meta = @(Get-ChildItem $out -Recurse -Filter 'meta.json' -ErrorAction SilentlyContinue)
   if ($meta.Count -gt 0) {
-    try { $r.Emitter = (Get-Content -Raw $meta[0].FullName | ConvertFrom-Json).emitter } catch { $r.Emitter = $null }
+    try { $r.Emitter = (Get-Content -Raw $meta[0].FullName | ConvertFrom-Json | ForEach-Object { $_ }).emitter } catch { $r.Emitter = $null }
     $g = Join-Path $meta[0].DirectoryName 'graph.dot'
     if (Test-Path $g) { $r.DotText = Get-Content -Raw $g }
   }

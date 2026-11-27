@@ -57,7 +57,7 @@ function Lane-Run([string[]]$EngineArgs) {
 function Lane-Sql([string]$Db, [string]$Query) {
   $r = Lane-Run @('sql', '--query', $Query, '--db', $Db, '--json', '--limit', '100000')
   if ($r.rc -ne 0 -or -not $r.out) { return ,@() }
-  $j = $r.out | ConvertFrom-Json
+  $j = $r.out | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = New-Object System.Collections.Generic.List[object]
   foreach ($row in @($j.rows)) {
@@ -79,7 +79,7 @@ Check 'VACUITY the fixture was indexed and has routine facts' ($facts.Count -eq 
 # ---- T0 the verb answers ---------------------------------------------------------------
 $r = Lane-Run @('metrics', '--db', $db, '--json')
 $m = $null
-if ($r.rc -eq 0 -and $r.out) { try { $m = $r.out | ConvertFrom-Json } catch { $m = $null } }
+if ($r.rc -eq 0 -and $r.out) { try { $m = $r.out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $m = $null } }
 Check 'T0 metrics --json answers with schema metrics/1' (($null -ne $m) -and ($m.schema -eq 'metrics/1')) "(rc $($r.rc); stderr: $(($r.err + '').Trim()))"
 if ($null -eq $m) { Finish }
 
@@ -158,7 +158,7 @@ Check 'T10 IShape (two implementors) and TMulti (two descendants) are not listed
 
 # ---- T11 flags and refusals ------------------------------------------------------------
 $r = Lane-Run @('metrics', '--db', $db, '--json', '--level', 'unit,folder')
-$lv = $r.out | ConvertFrom-Json
+$lv = $r.out | ConvertFrom-Json | ForEach-Object { $_ }
 $names = @($lv.PSObject.Properties.Name)
 Check 'T11 --level unit,folder writes those arrays only (total and sections stay)' (($names -contains 'units') -and ($names -contains 'folders') -and ($names -notcontains 'routines') -and ($names -notcontains 'classes') -and ($names -contains 'total') -and ($names -contains 'param_groups')) "($($names -join ','))"
 $r = Lane-Run @('metrics', '--db', $db, '--level', 'module')
@@ -172,7 +172,7 @@ Check 'T11 a missing index is exit 2, named, nothing on stdout' (($r.rc -eq 2) -
 
 # ---- T12 --in --------------------------------------------------------------------------
 $r = Lane-Run @('metrics', '--db', $db, '--json', '--in', (Join-Path $fx 'app'))
-$in = $r.out | ConvertFrom-Json
+$in = $r.out | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'T12 --in <folder> keeps that folder (fan still counted over the index)' ((@($in.units).Count -eq 2) -and ($in.total.units -eq 2) -and (@($in.folders).Count -eq 1) -and (@($in.routines).Count -eq 14) -and ((Row $in.units 'uMetCalc').fan_out -eq 1)) "(units $(@($in.units).Count), routines $(@($in.routines).Count))"
 
 # ---- T13 --save / --trend --------------------------------------------------------------
@@ -184,7 +184,7 @@ Check 'T13 --save with --in is refused, nothing is written' (($r.rc -eq 2) -and 
 $hashBefore = (Get-FileHash $db).Hash
 $r = Lane-Run @('metrics', '--db', $db, '--save', '--json')
 $hashAfter = (Get-FileHash $db).Hash
-Check 'T13 --save appends one snapshot line beside the index and still prints the rows' (($r.rc -eq 0) -and (Test-Path $hist) -and (@(Get-Content $hist).Count -eq 1) -and (($r.out | ConvertFrom-Json).schema -eq 'metrics/1')) "(rc $($r.rc))"
+Check 'T13 --save appends one snapshot line beside the index and still prints the rows' (($r.rc -eq 0) -and (Test-Path $hist) -and (@(Get-Content $hist).Count -eq 1) -and (($r.out | ConvertFrom-Json | ForEach-Object { $_ }).schema -eq 'metrics/1')) "(rc $($r.rc))"
 Check 'T13 --save does not write the index' ($hashBefore -eq $hashAfter) ''
 $r = Lane-Run @('metrics', '--db', $db, '--trend')
 Check 'T13 --trend with ONE save says it needs two' (($r.rc -eq 2) -and ($r.err -match 'needs two saved snapshots') -and ($r.err -match 'holds 1')) "(rc $($r.rc); $(($r.err + '').Trim()))"
@@ -196,7 +196,7 @@ $at = $src.LastIndexOf('end.')
 [IO.File]::WriteAllText($utilPath, $src.Substring(0, $at) + $add + "`r`n", [Text.Encoding]::ASCII)
 & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db *> (Join-Path $work 'index2.log') }
 $r = Lane-Run @('metrics', '--db', $db, '--save', '--trend', '--json')
-$t = $null; try { $t = $r.out | ConvertFrom-Json } catch { }
+$t = $null; try { $t = $r.out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'T13 second --save, then --trend answers (schema metrics-trend/1, 2 snapshots)' (($r.rc -eq 0) -and ($null -ne $t) -and ($t.schema -eq 'metrics-trend/1') -and ($t.snapshots -eq 2) -and (@(Get-Content $hist).Count -eq 2)) "(rc $($r.rc); $(($r.err + '').Trim()))"
 if ($null -ne $t) {
   $tu = @($t.units)

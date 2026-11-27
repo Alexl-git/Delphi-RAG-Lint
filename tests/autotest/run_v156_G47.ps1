@@ -27,7 +27,7 @@ function Check([string]$name, [bool]$ok, [string]$detail = '') {
 }
 function Run-Engine([string[]]$a) {
   $ErrorActionPreference = 'Continue'
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
 }
 function Index-Fixture([string]$dir, [string]$db) {
@@ -43,7 +43,7 @@ function Delta([string]$db, [string]$before, [string]$out, [string[]]$more = @()
 function Emitter-Of([string]$out) {
   $m = Get-ChildItem $out -Recurse -Filter meta.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
   if (-not $m) { return $null }
-  (Get-Content $m.FullName -Raw | ConvertFrom-Json).emitter
+  (Get-Content $m.FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }).emitter
 }
 function Json-Of($e) { if ($e) { $e | ConvertTo-Json -Compress } else { 'no meta' } }
 function Dot-Text([string]$out) {

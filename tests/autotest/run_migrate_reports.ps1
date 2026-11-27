@@ -45,14 +45,14 @@ function Put([string]$Path, [string]$Text) {
 }
 function Hex([string]$Path) { [BitConverter]::ToString([IO.File]::ReadAllBytes($Path)) }
 function Invoke-Verb([string[]]$ArgList) {
-  $out = & $Exe 'migrate-reports' @ArgList 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe 'migrate-reports' @ArgList 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ Code = $LASTEXITCODE; Text = (@($out) -join "`n") }
 }
 # The four lists of --json as sorted leaf names. A run that printed no JSON gives four '<no json>'
 # lists, so every list assertion fails loudly instead of comparing two empty sets.
 function Lists([string]$JsonText) {
   $res = @{ migrated = '<no json>'; current = '<no json>'; leftAlone = '<no json>'; failed = '<no json>'; obj = $null }
-  try { $o = $JsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $res }
+  try { $o = $JsonText | ConvertFrom-Json -ErrorAction Stop | ForEach-Object { $_ } } catch { return $res }
   if ($null -eq $o -or $null -eq $o.PSObject.Properties['leftAlone']) { return $res }
   foreach ($k in 'migrated','current','leftAlone','failed') {
     $res[$k] = (@($o.$k | ForEach-Object { [IO.Path]::GetFileName($_.path) } | Sort-Object) -join ',')

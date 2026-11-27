@@ -31,7 +31,7 @@ function Check([string]$name, [bool]$ok, [string]$detail = '') {
   if ($ok) { $script:pass++; Write-Host "PASS  $name" } else { $script:fail++; Write-Host "FAIL  $name  $detail" -ForegroundColor Red }
 }
 function Run-Engine([string[]]$a) {
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
 }
 function Index-Fixture([string]$dir, [string]$db) {
@@ -48,7 +48,7 @@ function Newest([string]$out, [string]$filter) {
 function Meta-Of([string]$out) {
   $m = Newest $out 'meta.json'
   if (-not $m) { return $null }
-  Get-Content $m.FullName -Raw | ConvertFrom-Json
+  Get-Content $m.FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 }
 # unit -> @{ Lines; Cc; Fill; Area } read from the .dot
 function Read-Tiles([string]$out) {

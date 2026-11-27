@@ -15,8 +15,8 @@ function Check($n, $ok) {
   if (-not $ok) { $script:Failed = $true }
 }
 function Get-SwallowMsg([string]$Name) {
-  $raw = & $Exe lint "$PSScriptRoot\fixtures\v156-rf2\$Name" --rule try-except-swallowed --json --quiet 2>$null | Out-String
-  $j = $raw.Substring($raw.IndexOf('[')) | ConvertFrom-Json
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint "$PSScriptRoot\fixtures\v156-rf2\$Name" --rule try-except-swallowed --json --quiet 2>$null | ForEach-Object { "$_" } } | Out-String
+  $j = $raw.Substring($raw.IndexOf('[')) | ConvertFrom-Json | ForEach-Object { $_ }
   return @($j | Where-Object { $_.rule_id -eq 'try-except-swallowed' -or $_.rule -eq 'try-except-swallowed' } | ForEach-Object { $_.message })
 }
 $svc = @(Get-SwallowMsg 'RF2Service.pas')

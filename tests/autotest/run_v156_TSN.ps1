@@ -42,7 +42,7 @@ function Run([string[]]$Argv) {
   $out = & { $ErrorActionPreference = 'Continue'; & $Exe @Argv 2>$errFile }
   $rc = $LASTEXITCODE
   $json = $null
-  if ($Argv -contains '--json') { try { $json = ($out -join "`n") | ConvertFrom-Json } catch { $json = $null } }
+  if ($Argv -contains '--json') { try { $json = ($out -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { $json = $null } }
   $err = ''
   if (Test-Path -LiteralPath $errFile) { $err = '' + [IO.File]::ReadAllText($errFile) }
   return @{ rc = $rc; out = @($out | ForEach-Object { "$_" }); err = $err; json = $json }

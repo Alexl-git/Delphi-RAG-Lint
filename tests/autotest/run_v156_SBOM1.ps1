@@ -154,7 +154,7 @@ if ($j) {
     Write-Host '  [NOTE] Test-Json with -SchemaFile needs pwsh 7: required-key check only in this shell' -ForegroundColor Yellow
   } else {
     $bundle = Join-Path $WorkDir 'bom-1.6.bundled.schema.json'
-    $spdx = [IO.File]::ReadAllText((Join-Path $Schema 'spdx.schema.json')) | ConvertFrom-Json
+    $spdx = [IO.File]::ReadAllText((Join-Path $Schema 'spdx.schema.json')) | ConvertFrom-Json | ForEach-Object { $_ }
     $enum = '"type": "string", "enum": ' + (ConvertTo-Json @($spdx.enum) -Compress)
     $text = [IO.File]::ReadAllText((Join-Path $Schema 'bom-1.6.schema.json'))
     $text = $text.Replace('"$ref": "spdx.schema.json"', $enum).Replace('"$ref": "jsf-0.82.schema.json#/definitions/signature"', '"type": "object"')
@@ -248,7 +248,7 @@ Write-Host '-- P6: read-only' -ForegroundColor Cyan
 Check 'P6 the project index is byte-identical after every run' ((Get-FileHash -Algorithm SHA256 $ProjDb).Hash -eq $hashBefore)
 
 Write-Host '-- P7: catalogue purls follow the purl spec' -ForegroundColor Cyan
-$cat = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\..\rules\sbom-libraries.json') | ConvertFrom-Json
+$cat = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\..\rules\sbom-libraries.json') | ConvertFrom-Json | ForEach-Object { $_ }
 $purls = @($cat.PSObject.Properties.Value | ForEach-Object { $_ } | ForEach-Object { $_.purl } | Where-Object { $_ })
 $badPurl = @($purls | Where-Object { $_ -cmatch '^pkg:(github|bitbucket)/' -and $_ -cne $_.ToLowerInvariant() })
 Check 'P7 github/bitbucket purls are lowercase (purl spec: type, namespace and name)' (($purls.Count -gt 0) -and ($badPurl.Count -eq 0)) ($badPurl -join ' ')

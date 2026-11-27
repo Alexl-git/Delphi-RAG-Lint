@@ -33,7 +33,7 @@ function Check([string]$name, [bool]$ok, [string]$detail = '') {
 }
 function Run-Engine([string[]]$a) {
   $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   $code = $LASTEXITCODE
   $ErrorActionPreference = $prev
   [pscustomobject]@{ Code = $code; Text = $out }
@@ -52,7 +52,7 @@ function Newest([string]$out, [string]$filter) {
 function Meta-Of([string]$out) {
   $m = Newest $out 'meta.json'
   if (-not $m) { return $null }
-  Get-Content $m.FullName -Raw | ConvertFrom-Json
+  Get-Content $m.FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 }
 function Read-Risk([string]$out) {
   $csv = Newest $out 'risk.csv'
@@ -90,12 +90,12 @@ Check 'import: the canonical --in spelling works as --file does' ($r.Code -eq 0)
 $r = Run-Engine @('import-coverage', '--file', $xml, '--db', $db, '--json')
 Check 'import exits 0' ($r.Code -eq 0) $r.Text
 $j = $null
-try { $j = ($r.Text -replace '(?s)^.*?(\{)', '$1') | ConvertFrom-Json } catch { }
+try { $j = ($r.Text -replace '(?s)^.*?(\{)', '$1') | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'import counts: 5 records, 3 matched, 2 unmatched records, 1 indexed routine without a record' ($j -and $j.records -eq 5 -and $j.matched -eq 3 -and $j.unmatched_records -eq 2 -and $j.indexed_routines_without_record -eq 1) $r.Text
 Check 'unmatched file is named: Ghost.pas' ($j -and (@($j.unmatched_files) -contains 'Ghost.pas')) $r.Text
 Check 'unmatched records are named (TCalc.Removed, TGhost.Boo)' ($j -and ((@($j.unmatched_routines) -join ';') -match 'TCalc\.Removed') -and ((@($j.unmatched_routines) -join ';') -match 'TGhost\.Boo')) $r.Text
 $side = "$db.coverage.json"
-$sj = if (Test-Path $side) { Get-Content $side -Raw | ConvertFrom-Json } else { $null }
+$sj = if (Test-Path $side) { Get-Content $side -Raw | ConvertFrom-Json | ForEach-Object { $_ } } else { $null }
 Check 'sidecar keeps all 5 records (nothing dropped)' ($sj -and $sj.schema -eq 'coverage/1' -and @($sj.routines).Count -eq 5)
 $t = Run-Engine @('import-coverage', '--file', $xml, '--db', $db)
 Check 'text output lists the unmatched file and record' (($t.Text -match 'file Ghost\.pas') -and ($t.Text -match 'record Calc\.pas: TCalc\.Removed')) $t.Text
