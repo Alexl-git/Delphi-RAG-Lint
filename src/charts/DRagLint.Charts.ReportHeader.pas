@@ -167,7 +167,7 @@ type
 /// COMMAND line is XML-unescaped before parsing. A COMMAND line that does not parse
 /// leaves Command empty and is not counted in HeaderLines. Pure; thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), DRagLint.Charts.Remarks.RemarksBlockIsReport (DRagLint.Charts.Remarks.pas)</para>
+/// <para>Called from: DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), DRagLint.Charts.Remarks.RemarksBlockIsReport (DRagLint.Charts.Remarks.pas), DRagLint.CLI.MigrateReports.MigrateReportText (DRagLint.CLI.MigrateReports.pas)</para>
 /// <para>Calls: Default, DRagLint.Charts.ReportHeader.BodyAt, DRagLint.Charts.ReportHeader.IsContinuation, DRagLint.Charts.ReportHeader.LeadingSpaces, DRagLint.Charts.ReportHeader.ParseCommandLine, DRagLint.Charts.ReportHeader.StripDocPrefix, DRagLint.Charts.ReportHeader.XmlUnescape</para>
 /// <para>Returns: False; True</para>
 /// <para>Complexity: 21 (cyclomatic, outer body), 55 lines (full implementation)</para>
@@ -197,14 +197,15 @@ function ParseReportHeader(const pLines: TArray<string>; out pHeader: TReportHea
 /// value, and '-3' is a value. A repeated name (in any spelling) keeps its first position
 /// and takes the last value; a value with no name before it is ignored.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.Compare.CompareBuildCommand (DRagLint.CLI.Compare.pas)</para>
-/// <para>Calls: Default, DRagLint.Charts.ReportHeader.ArgIndex, DRagLint.Charts.ReportHeader.IsName, DRagLint.Charts.ReportHeader.Tokenise</para>
+/// <para>Called from: DRagLint.Charts.Compare.CliFlag (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.Compare.CompareBuildCommand (DRagLint.CLI.Compare.pas), DRagLint.CLI.MigrateReports.BuildNewCommand (DRagLint.CLI.MigrateReports.pas), DRagLint.CLI.MigrateReports.SameCommand (DRagLint.CLI.MigrateReports.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.ReportHeader.ArgIndex, DRagLint.Charts.ReportHeader.CommandTokens, DRagLint.Charts.ReportHeader.DisplayName, DRagLint.Charts.ReportHeader.IsName, DRagLint.Charts.ReportHeader.NameMarks</para>
 /// <para>Returns: False; True</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 43 lines (full implementation)</para>
 /// <para>Mutates: pCmd (out)</para>
 /// <seealso cref="DRagLint.Charts.ReportHeader.ArgIndex"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.CommandTokens"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.DisplayName"/>
 /// <seealso cref="DRagLint.Charts.ReportHeader.IsName"/>
-/// <seealso cref="DRagLint.Charts.ReportHeader.Tokenise"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.NameMarks"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParseCommandLine(const pText: string; out pCmd: TReportCommand): Boolean;

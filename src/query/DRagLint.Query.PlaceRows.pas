@@ -40,21 +40,23 @@ type
 function ParsePlaces(const pList: string; out pPlaces: TSearchPlaces): Boolean;
 
 /// <summary>The usage line of an unknown --place value (design 1.3).</summary>
+/// <returns>The one-line ERROR text; the caller prints it and exits 2.</returns>
 function PlaceUsageError: string;
 
 /// <summary>The place a resolved database answers for: library-*.sqlite is the library, any other is the project.</summary>
+/// <param name="pDb">Path or file name of a resolved database.</param>
+/// <returns>spLibrary for a library-*.sqlite file name, else spProject.</returns>
 function PlaceOfDb(const pDb: string): TSearchPlace;
 
 /// <summary>The text of a place: project, repository or library.</summary>
+/// <param name="pPlace">The place.</param>
+/// <returns>The lower-case word printed after place= and accepted by --place.</returns>
 function PlaceName(pPlace: TSearchPlace): string;
 
 /// <summary>A stable print order for rows: project, repository, library, today's order inside a place.</summary>
 /// <param name="pPlaces">The place name of every row, in today's order.</param>
 /// <returns>The indexes of pPlaces in print order.</returns>
 function PlaceSortOrder(const pPlaces: TArray<string>): TArray<Integer>;
-
-/// <summary>The databases of pDbs whose place is in pPlaces, order kept.</summary>
-function FilterDbsByPlaces(const pDbs: TArray<string>; pPlaces: TSearchPlaces): TArray<string>;
 
 /// <summary>Repository rows of `query --name`: a table named pName (repo-table) or fields named pName (repo-field), exact, case-insensitive; a dotted name is TABLE.FIELD.</summary>
 /// <param name="pDbs">The resolved databases; the first project one answers.</param>
@@ -75,16 +77,22 @@ function RepoNameRows(const pDbs: TArray<string>; const pName, pKinds: string): 
 function RepoTextRows(const pDbs: TArray<string>; const pPhrase, pMode, pSource, pKinds: string; pLimit: Integer): TArray<TStringLitMatch>;
 
 /// <summary>The JSON object of a repository `--name` row (same keys as a symbol row, id 0, start_line 0).</summary>
+/// <param name="pRow">One repository row.</param>
 /// <returns>A new object; the caller owns it.</returns>
-function RepoNameRowJson(const pRow: TRepoNameRow): TJSONObject;
+function RepoNameRowJson(const pRow: TRepoNameRow): TJSONObject; // dl:ok unused-public-symbol@1790 -- LINTFIX-A: the documented row renderer, kept public beside AppendRepoRowsJson / PrintRepoRowsText; callers outside this unit use those two
 
 /// <summary>The text line of a repository `--name` row, without the place token.</summary>
-function RepoNameRowText(const pRow: TRepoNameRow): string;
+/// <param name="pRow">One repository row.</param>
+/// <returns>The row as one text line.</returns>
+function RepoNameRowText(const pRow: TRepoNameRow): string; // dl:ok unused-public-symbol@0c31 -- LINTFIX-A: the documented row renderer, kept public beside AppendRepoRowsJson / PrintRepoRowsText; callers outside this unit use those two
 
 /// <summary>Appends the JSON objects of repository `--name` rows to a result array.</summary>
+/// <param name="pArr">The result array; the objects are added to it and it owns them.</param>
+/// <param name="pRows">The rows to append.</param>
 procedure AppendRepoRowsJson(pArr: TJSONArray; const pRows: TArray<TRepoNameRow>);
 
 /// <summary>Prints repository `--name` rows as text lines, each ending in the token place=repository.</summary>
+/// <param name="pRows">The rows to print.</param>
 procedure PrintRepoRowsText(const pRows: TArray<TRepoNameRow>);
 
 /// <summary>Prints the note lines of a name / text / find-unit run to STDERR (design 1.6): the one repository line and `library: not configured`.</summary>
@@ -149,8 +157,7 @@ end; // function
 
 function PlaceOfDb(const pDb: string): TSearchPlace;
 begin
-  if StartsText(LIBRARY_DB_PREFIX, ExtractFileName(pDb)) then Result:= spLibrary
-  else Result:= spProject;
+  Result:= if StartsText(LIBRARY_DB_PREFIX, ExtractFileName(pDb)) then spLibrary else spProject;
 end; // function
 
 function PlaceName(pPlace: TSearchPlace): string;
@@ -167,15 +174,6 @@ begin
   for P:= Low(TSearchPlace) to High(TSearchPlace) do
     for I:= 0 to High(pPlaces) do
       if SameText(pPlaces[I], PLACE_TEXTS[P]) then Result:= Result + [I];
-end; // function
-
-function FilterDbsByPlaces(const pDbs: TArray<string>; pPlaces: TSearchPlaces): TArray<string>;
-var
-  Db: string;
-begin
-  Result:= nil;
-  for Db in pDbs do
-    if PlaceOfDb(Db) in pPlaces then Result:= Result + [Db];
 end; // function
 
 { The first project database of the list that exists; '' when none. }
@@ -307,11 +305,16 @@ function EscapeLike(const pText: string): string;
 var
   C: Char;
 begin
-  Result:= '';
-  for C in pText do
-  begin
-    if Pos(C, SQL_WILDCARDS) > 0 then Result:= Result + '\';
-    Result:= Result + C;
+  var VBuilder:= TStringBuilder.Create;
+  try
+    for C in pText do
+    begin
+      if SQL_WILDCARDS.IndexOf(C) >= 0 then VBuilder.Append('\');
+      VBuilder.Append(C);
+    end;
+    Result:= VBuilder.ToString;
+  finally
+    VBuilder.Free;
   end;
 end; // function
 
@@ -334,16 +337,17 @@ begin
       Q: TFDQuery;
       M: TStringLitMatch;
       Path, Sql: string;
-      Words: TArray<string>;
+      Words, Conds: TArray<string>;
       I: Integer;
       ColKind, ColTable, ColField, ColText: TField;
     begin
       Path:= RepoPathOf(pConn);
-      if SameText(pMode, 'anyorder') then Words:= Needle.Split([' ', #9], TStringSplitOptions.ExcludeEmpty)
-      else Words:= [Needle];
-      Sql:= 'SELECT text_kind, table_name, field_name, text FROM concept_texts WHERE place = ''repository''';
-      for I:= 0 to High(Words) do Sql:= Sql + Format(' AND text LIKE :w%d ESCAPE ''\''', [I]);
-      Sql:= Sql + ' ORDER BY table_name, field_name, text_kind, text';
+      Words:= [Needle];
+      if SameText(pMode, 'anyorder') then Words:= Needle.Split([' ', #9], TStringSplitOptions.ExcludeEmpty);
+      SetLength(Conds, Length(Words));
+      for I:= 0 to High(Words) do Conds[I]:= Format(' AND text LIKE :w%d ESCAPE ''\''', [I]);
+      Sql:= 'SELECT text_kind, table_name, field_name, text FROM concept_texts WHERE place = ''repository''' +
+        string.Join('', Conds) + ' ORDER BY table_name, field_name, text_kind, text';
       Q:= TFDQuery.Create(nil);
       try
         Q.Connection:= pConn;
@@ -466,7 +470,7 @@ begin
   ProjectText:= if pProjectFile = '' then '<X.dproj>' else pProjectFile;
   Refresh:= Format('drag-lint index --project %s --db %s', [ProjectText, Db]);
   When:= FormatDateTime('yyyy-mm-dd hh:nn', UnixToDateTime(CopiedAt, False));
-  if (State = STATE_NOT_COPIED_YET) and DirScan then
+  if (State = STATE_NOT_COPIED_YET) and DirScan then  // dl:ok duplicate-code@ab3f -- LINTFIX-A: the design-1.6 repository note wording is built here from locals and in ConceptRepo from run fields and both must print the same text; one shared note builder over a copy-state record is the follow-up, not done in a lint lane because it reshapes ConceptRepo's run state
     Result:= 'repository: not copied (this index was made by a directory scan and has no project file); ' +
       'repository hits need a project index: drag-lint index --project ' + ProjectText
   else if State = STATE_NOT_COPIED_YET then

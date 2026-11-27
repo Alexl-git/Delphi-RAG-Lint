@@ -437,6 +437,7 @@
         <DCCReference Include="..\query\DRagLint.Query.Metrics.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Vcs.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.HappensBefore.Verb.pas"/>
+        <DCCReference Include="..\query\DRagLint.Query.HappensBefore.Judge.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.CycloneDx.pas"/>
         <DCCReference Include="..\report\DRagLint.Report.MapFile.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.Lineage.pas"/>

@@ -266,6 +266,7 @@ uses
   DRagLint.Query.Metrics in '..\query\DRagLint.Query.Metrics.pas',
   DRagLint.Query.Vcs in '..\query\DRagLint.Query.Vcs.pas',
   DRagLint.Query.HappensBefore.Verb in '..\query\DRagLint.Query.HappensBefore.Verb.pas',
+  DRagLint.Query.HappensBefore.Judge in '..\query\DRagLint.Query.HappensBefore.Judge.pas',
   DRagLint.Report.CycloneDx in '..\report\DRagLint.Report.CycloneDx.pas',
   DRagLint.Report.MapFile in '..\report\DRagLint.Report.MapFile.pas',
   DRagLint.FieldRepo.Lineage in '..\sql\DRagLint.FieldRepo.Lineage.pas',

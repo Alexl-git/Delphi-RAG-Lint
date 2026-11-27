@@ -16,7 +16,7 @@ unit DRagLint.Charts.Q.ValueFlow;
   THE TWO ROW SETS. The index holds two disjoint sets in one table: val_class = '' (the set every
   extractor since 1.26 writes) and val_class <> '' (the value rows only a 1.56 extractor writes). This
   unit names the set in every count: ValueRows counts val_class <> '' and nothing else, FlowRows counts
-  val_class = '' and nothing else (VALUE_ROW / FLOW_ROW below are the ONE place the test is written).
+  val_class = '' and nothing else (VALUE_ROW below is the ONE place the test is written; the flow set is its complement).
   An index with no value row at all says so on the focus: numeric values are NOT tracked there, and a
   chart that shows no numeric source is silence, not proof.
 
@@ -66,7 +66,6 @@ const
   K_PROCEDURE = 'procedure';
   { the two disjoint row sets of data_flows; %s is the val_class expression of this index }
   VALUE_ROW = '%s <> ''''';
-  FLOW_ROW = '%s = ''''';
   { an index written before 1.56 has no val_class column: every row reads as the pre-1.56 set }
   NO_VAL_CLASS_EXPR = '''''';
   VAL_CLASS_EXPR = 'd.val_class';

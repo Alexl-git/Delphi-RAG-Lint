@@ -18,13 +18,6 @@ uses
 /// <remarks>So a database backup with a forgotten --connection never writes a text backup instead.</remarks>
 function IsRepoDbBackup(const pSub, pConnection: string): Boolean;
 
-/// <summary>The backup format of the command line: --format text (default), sql or zip.</summary>
-/// <param name="pFormat">Receives the lower-case format name; text when --format is absent.</param>
-/// <returns>'' = usable; else what is wrong (an unknown format, a missing value).</returns>
-/// <remarks>Only the CLI of `repo backup` and `repo restore` asks; text stays the default, so a command line
-/// without --format behaves as before.</remarks>
-function RepoFormatOf(out pFormat: string): string;
-
 /// <summary>True when the command line asks for a backup format other than text (--format sql or zip).</summary>
 /// <returns>False for no --format and for --format text; True for sql, zip and any bad value (so the error is raised here).</returns>
 function IsRepoFormatBackup: Boolean;
@@ -93,7 +86,7 @@ uses
   FireDAC.ConsoleUI.Wait, // the services need a wait-cursor factory; a connection does not
   DRagLint.Core.ContextDefaults,
   DRagLint.FieldRepo.BackupManifest,  // dl:ok uses-global-census@e975 -- REVIEWED 2026-11-24 INT-W2: the state names the manifest writes are the names the verb prints
-  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.Schema, // dl:unit DRagLint.FieldRepo.Schema accepted -- repo_schema_version is the schema version the backup stamps into the file it writes; the schema unit owns it
   DRagLint.FieldRepo.TextBackup,
   DRagLint.FieldRepo.SqlBackup,
   DRagLint.FieldRepo.ZipBackup,
@@ -508,6 +501,11 @@ begin
   end;
 end;
 
+/// <summary>The backup format of the command line: --format text (default), sql or zip.</summary>
+/// <param name="pFormat">Receives the lower-case format name; text when --format is absent.</param>
+/// <returns>'' = usable; else what is wrong (an unknown format, a missing value).</returns>
+/// <remarks>Only the CLI of `repo backup` and `repo restore` asks; text stays the default, so a command line
+/// without --format behaves as before.</remarks>
 function RepoFormatOf(out pFormat: string): string;
 begin
   pFormat := FORMAT_TEXT;
@@ -602,7 +600,7 @@ begin
   if VFresh then
   begin
     if TFile.Exists(VWork) then
-      TFile.Delete(VWork);
+      TFile.Delete(VWork);  // dl:ok stat-gated-destructive@af2f -- LINTFIX-A: VWork is our own `.restoring` scratch file; a failed stat only skips the delete, and the create that follows reports the real error
     VVersion := SqlScriptVersion(pInFile);
     CreateRepository(VWork, if VVersion = 0 then REPO_SCHEMA_VERSION else VVersion);
   end;
@@ -615,7 +613,7 @@ begin
     end;
   except
     if VFresh and TFile.Exists(VWork) then
-      TFile.Delete(VWork);
+      TFile.Delete(VWork);  // dl:ok stat-gated-destructive@af2f -- LINTFIX-A: VWork is our own `.restoring` scratch file, removed on a failed restore; a failed stat only leaves it for the next restore, which deletes it first
     raise;
   end;
   if VFresh then

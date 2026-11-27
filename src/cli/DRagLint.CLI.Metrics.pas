@@ -25,7 +25,9 @@ implementation
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.DateUtils, System.Math,
   System.Generics.Collections, System.Generics.Defaults,
-  DRagLint.Core.CliError, DRagLint.CLI.HelpText, DRagLint.Query.Metrics;
+  DRagLint.Core.CliError, // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
+  DRagLint.CLI.HelpText,
+  DRagLint.Query.Metrics; // dl:unit DRagLint.Query.Metrics accepted -- metric_not_measured and the two param-group thresholds are what the verb prints and passes on; the metrics unit owns them
 
 const
   CVerb = 'metrics';

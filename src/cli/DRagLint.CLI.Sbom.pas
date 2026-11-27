@@ -33,9 +33,13 @@ implementation
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.Hash, System.DateUtils,
   System.Generics.Collections, System.RegularExpressions, FireDAC.Comp.Client,
-  DRagLint.Core.CliError, DRagLint.Core.Model, DRagLint.Storage.SQLite,
+  DRagLint.Core.CliError, // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
+  DRagLint.Core.Model, // dl:unit DRagLint.Core.Model accepted -- draglint_version is the tool version the SBOM metadata names as its creator; the model unit owns that constant
+  DRagLint.Storage.SQLite,
   DRagLint.Storage.Schema, DRagLint.Index.Manifest, DRagLint.CLI.Common, DRagLint.CLI.HelpText,
-  DRagLint.CLI.LibraryReady, DRagLint.Report.CycloneDx, DRagLint.Report.MapFile; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
+  DRagLint.CLI.LibraryReady,
+  DRagLint.Report.CycloneDx, // dl:unit DRagLint.Report.CycloneDx accepted -- sbom_spec_version / sbom_unknown_supplier are the document-format values the renderer owns; the verb checks and prints the same values
+  DRagLint.Report.MapFile;
 
 const
   CVerb = 'sbom';
@@ -46,7 +50,6 @@ const
   CFirstArg = 2; // ParamStr(1) is the verb
   CProjectDb = 0; // index of the project index in TSbomRun.FIndexes
   CNoFile = 0; // a NULL target_file_id
-  CNoUnit = -1;
   CNoLibrary = 'none';
   CCatalogueFile = 'rules\sbom-libraries.json';
   CJsonIndent = 2;
@@ -758,7 +761,7 @@ begin
       LDbs:= [LDefault];
   end;
   for LDb in LDbs do
-    if not pRun.LoadIndex(LDb, pError) then
+    if not pRun.LoadIndex(LDb, pError) then  // dl:ok query-in-loop@ecb4 -- LINTFIX-A: one iteration per --library-db (a handful); each LoadIndex opens a DIFFERENT database, so the schema check cannot be batched
       Exit(False);
   pRun.Model.LibraryIndexUsed:= Length(LDbs) > 0;
   if Length(LDbs) = 0 then

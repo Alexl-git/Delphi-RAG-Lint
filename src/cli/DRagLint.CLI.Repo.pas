@@ -75,9 +75,9 @@ uses
   DRagLint.CLI.RepoFib,  // dl:ok uses-global-census@00d5 -- REVIEWED 2026-11-24 INT-W2: the sub-verb list of the unit that runs them
   DRagLint.CLI.RepoAlter,
   DRagLint.CLI.RepoBackup,
-  DRagLint.CLI.RepoWiki,
-  DRagLint.CLI.RepoGridCopy,
-  DRagLint.CLI.RepoFieldUsage { v156 FUSAGE }
+  DRagLint.CLI.RepoWiki, // dl:unit DRagLint.CLI.RepoWiki accepted -- repo_wiki_subs is the sub-verb list of that verb; the dispatcher routes exactly those names
+  DRagLint.CLI.RepoGridCopy, // dl:unit DRagLint.CLI.RepoGridCopy accepted -- repo_gridcopy_subs is the sub-verb list of that verb; the dispatcher routes exactly those names
+  DRagLint.CLI.RepoFieldUsage { v156 FUSAGE } // dl:unit DRagLint.CLI.RepoFieldUsage accepted -- repo_fieldusage_subs is the sub-verb list of that verb; the dispatcher routes exactly those names
   ;
 
 const

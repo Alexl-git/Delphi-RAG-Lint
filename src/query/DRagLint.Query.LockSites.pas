@@ -154,34 +154,19 @@ function LockSitesOfProject(const pStore: ISymbolStore): TArray<TRoutineLockSite
 /// <param name="pFileId">files.id.</param>
 /// <returns>One entry per routine of the file that has at least one site, by first site.</returns>
 /// <remarks>Read-only.</remarks>
-function LockSitesOfFile(const pStore: ISymbolStore; pFileId: Int64): TArray<TRoutineLockSites>;
+function LockSitesOfFile(const pStore: ISymbolStore; pFileId: Int64): TArray<TRoutineLockSites>;  // dl:ok unused-public-symbol@47c9 -- LINTFIX-A: the documented lock-site API; called by the THRS driver (tests\fixtures\lock-sites), not by the verbs
 
 /// <summary>The lock sites of one routine.</summary>
 /// <param name="pStore">An open project index; nil answers an empty record.</param>
 /// <param name="pRoutineId">symbols.id of the routine (the id call_edges.target_symbol_id names).</param>
 /// <returns>The routine's sites and regions; Sites = nil when it has none. RoutineId is always pRoutineId.</returns>
 /// <remarks>Read-only.</remarks>
-function LockSitesOfRoutine(const pStore: ISymbolStore; pRoutineId: Int64): TRoutineLockSites;
+function LockSitesOfRoutine(const pStore: ISymbolStore; pRoutineId: Int64): TRoutineLockSites;  // dl:ok unused-public-symbol@e413 -- LINTFIX-A: the documented lock-site API; called by the THRS driver (tests\fixtures\lock-sites), not by the verbs
 
 /// <summary>Renders lock sites as one JSON document: {"routines":[{routine, file, sites[], regions[]}]}.</summary>
 /// <param name="pRoutines">Any result of the three queries.</param>
 /// <returns>Compact JSON; enum values as lower-case words (LockSiteKindName and the others).</returns>
-function LockSitesJson(const pRoutines: TArray<TRoutineLockSites>): string;
-
-/// <summary>The word a lock kind is printed as: critical-section, monitor, winapi-cs, read-write, mutex, spin-lock, thread-list.</summary>
-/// <param name="pKind">The kind.</param>
-/// <returns>A lower-case word.</returns>
-function LockSiteKindName(pKind: TLockSiteKind): string;
-
-/// <summary>The word a site operation is printed as: enter, try-enter, leave.</summary>
-/// <param name="pOp">The operation.</param>
-/// <returns>A lower-case word.</returns>
-function LockSiteOpName(pOp: TLockSiteOp): string;
-
-/// <summary>The word an identity is printed as: self-field, global, self, other-field, local, param, property, expression.</summary>
-/// <param name="pIdentity">The identity.</param>
-/// <returns>A lower-case word.</returns>
-function LockIdentityName(pIdentity: TLockIdentity): string;
+function LockSitesJson(const pRoutines: TArray<TRoutineLockSites>): string;  // dl:ok unused-public-symbol@7da1 -- LINTFIX-A: the documented lock-site API; called by the THRS driver and run_v156_THRS_lock_sites.ps1, not by the verbs
 
 implementation
 
@@ -373,16 +358,25 @@ type
     function Load(const pScope: string): TArray<TRoutineLockSites>;
   end;
 
+/// <summary>The word a lock kind is printed as: critical-section, monitor, winapi-cs, read-write, mutex, spin-lock, thread-list.</summary>
+/// <param name="pKind">The kind.</param>
+/// <returns>A lower-case word.</returns>
 function LockSiteKindName(pKind: TLockSiteKind): string;
 begin
   Result:= KIND_NAMES[pKind];
 end;
 
+/// <summary>The word a site operation is printed as: enter, try-enter, leave.</summary>
+/// <param name="pOp">The operation.</param>
+/// <returns>A lower-case word.</returns>
 function LockSiteOpName(pOp: TLockSiteOp): string;
 begin
   Result:= OP_NAMES[pOp];
 end;
 
+/// <summary>The word an identity is printed as: self-field, global, self, other-field, local, param, property, expression.</summary>
+/// <param name="pIdentity">The identity.</param>
+/// <returns>A lower-case word.</returns>
 function LockIdentityName(pIdentity: TLockIdentity): string;
 begin
   Result:= IDENTITY_NAMES[pIdentity];

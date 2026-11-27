@@ -19,13 +19,6 @@ type
     Depth    : Integer;
   end;
 
-/// <summary>Pairs the {$REGION} / {$ENDREGION} directives of one unit's source.</summary>
-/// <param name="ASource">The unit text; any line-ending style.</param>
-/// <returns>One row per {$REGION} in the order the regions OPEN; a region never closed has EndLine 0;
-///  a stray {$ENDREGION} is ignored.</returns>
-/// <remarks>Pure function. A directive on a // comment line is ignored. Not thread-shared state.</remarks>
-function FindRegions(const ASource: string): TArray<TRegionSpan>;
-
 /// <summary>FindRegions over a file on disk.</summary>
 /// <param name="AFileName">Path of the unit; an unreadable or missing file gives no rows.</param>
 /// <returns>See FindRegions.</returns>
@@ -54,6 +47,11 @@ begin
   if (Length(AArg) >= 2) and (AArg[1] = '''') and (AArg[Length(AArg)] = '''') then AArg:= Copy(AArg, 2, Length(AArg) - 2);
 end;
 
+/// <summary>Pairs the {$REGION} / {$ENDREGION} directives of one unit's source.</summary>
+/// <param name="ASource">The unit text; any line-ending style.</param>
+/// <returns>One row per {$REGION} in the order the regions OPEN; a region never closed has EndLine 0;
+///  a stray {$ENDREGION} is ignored.</returns>
+/// <remarks>Pure function. A directive on a // comment line is ignored. Not thread-shared state.</remarks>
 function FindRegions(const ASource: string): TArray<TRegionSpan>;
 begin
   Result:= nil;
