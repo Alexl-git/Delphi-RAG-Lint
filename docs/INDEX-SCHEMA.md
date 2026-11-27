@@ -6,7 +6,7 @@ uses-clauses, type ancestry, DI bindings, and more). It is written for anyone
 building a tool OTHER than drag-lint itself that wants to read this database
 directly.
 
-Current schema version at time of writing: **27** (`SCHEMA_VERSION` in
+Current schema version at time of writing: **28** (`SCHEMA_VERSION` in
 `src/storage/DRagLint.Storage.Schema.pas`, verified 2026-11-16 against the
 constant; v25 tables as built by `run_file_facts_v25_tables.ps1`).
 Recent additive changes:
