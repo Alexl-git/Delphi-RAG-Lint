@@ -49,6 +49,7 @@ implementation
 uses
   System.IOUtils
   , System.RegularExpressions
+  , System.StrUtils
   ;
 
 const
@@ -59,6 +60,38 @@ function IsPrivateField(const ASym: TSymbol): Boolean;
 begin
   var Mods: string:= Trim(LowerCase(ASym.Modifiers));
   Result:= (ASym.Kind = skField) and ((Mods = 'private') or (Mods = 'strict private'));
+end;
+
+{ True when the write at (ALine, ACol) is a statement of the routine body itself: at begin-depth 1 and not behind then / else /
+  do / of / a case label. A conditional write proves nothing about the next call, so the field may be state (v156 FP-1). }
+function WriteIsUnconditional(const APath: string; AFromLine, ALine, ACol: Integer): Boolean;
+begin
+  Result:= False;
+  if not TFile.Exists(APath) then Exit;
+  try
+    var Lines: TArray<string>:= TFile.ReadAllLines(APath);
+    var Body: TStringBuilder:= TStringBuilder.Create;
+    try
+      for var I: Integer:= AFromLine to ALine do
+        if (I >= 1) and (I <= Length(Lines)) then
+          if I = ALine then Body.Append(Copy(Lines[I - 1], 1, ACol - 1)) else Body.AppendLine(Lines[I - 1]);
+      var Text: string:= TRegEx.Replace(Body.ToString, '//[^\r\n]*|\{[^}]*\}|\(\*.*?\*\)|''[^''\r\n]*''', ' ', [roSingleLine]);
+      var Depth: Integer:= 0;
+      var Prefix: string:= '';
+      for var M: TMatch in TRegEx.Matches(Text, '\b(begin|try|case|asm|end|finally|except|repeat|else|then|do|of)\b|;', [roIgnoreCase]) do
+      begin
+        var Tok: string:= LowerCase(M.Value);
+        if (Tok = 'begin') or (Tok = 'try') or (Tok = 'case') or (Tok = 'asm') then Inc(Depth)
+        else if Tok = 'end' then Dec(Depth);
+        Prefix:= if MatchText(Tok, [';', 'begin', 'try', 'end', 'finally', 'except', 'repeat', 'case']) then '' else Prefix + ' ' + Tok;
+      end;
+      Result:= (Depth = 1) and (Prefix = '');
+    finally
+      Body.Free;
+    end;
+  except
+    Result:= False;  // dl:ok try-except-swallowed -- REVIEWED v156 FP-1: an unreadable file proves nothing; the rule stays silent
+  end;
 end;
 
 function RoutineHasAnonymous(const APath: string; AFromLine, AToLine: Integer): Boolean;
@@ -95,7 +128,7 @@ begin
     if AStore.HasAttributes then
       for var A: TAttributeRow in AStore.GetAttributes(AFileId) do Attr.AddOrSetValue(A.SymbolId, True);
     for var R: TReference in Refs do
-      if (R.ReceiverText <> '') and not ById.ContainsKey(R.SymbolId) then
+      if not ById.ContainsKey(R.SymbolId) then
         Elsewhere.AddOrSetValue(LowerCase(R.NameText), True);
     for var Fld: TSymbol in Syms do
     begin
@@ -108,11 +141,13 @@ begin
       var FirstCol: Integer:= MaxInt;
       var FirstKind: string:= '';
       var Count: Integer:= 0;
+      var ReadCount: Integer:= 0;
       var Ok: Boolean:= True;
       for var R: TReference in Refs do
       begin
         if R.SymbolId <> Fld.Id then Continue;
         Inc(Count);
+        if R.Kind <> 'write' then Inc(ReadCount);
         if (R.EnclosingSymbolId = 0) or ((Routine <> 0) and (R.EnclosingSymbolId <> Routine)) then
         begin
           Ok:= False;
@@ -126,12 +161,18 @@ begin
           FirstKind:= R.Kind;
         end;
       end;
-      if not Ok or (Count = 0) or (FirstKind <> 'write') then Continue;
+      { a field that is never read is a write-only field, not a local-in-waiting (v156 FP-1) }
+      if not Ok or (Count = 0) or (ReadCount = 0) or (FirstKind <> 'write') then Continue;
       var Rtn: TSymbol;
       if not ById.TryGetValue(Routine, Rtn) then Continue;
       var ToLine: Integer:= Rtn.ImplEndLine;
       if ToLine < Rtn.ImplStartLine then ToLine:= Rtn.EndLine;
       if RoutineHasAnonymous(APath, Rtn.ImplStartLine, ToLine) then Continue;
+      { X := X + 1 reads before it writes; a conditional first write may leave state from an earlier call (v156 FP-1) }
+      var ReadsOnFirstLine: Boolean:= False;
+      for var R: TReference in Refs do
+        if (R.SymbolId = Fld.Id) and (R.Kind <> 'write') and (R.StartLine = FirstLine) then ReadsOnFirstLine:= True;
+      if ReadsOnFirstLine or not WriteIsUnconditional(APath, Rtn.ImplStartLine, FirstLine, FirstCol) then Continue;
       var F: TLintFinding:= Default(TLintFinding);
       F.RuleId    := ARuleId;
       F.Severity  := 'hint';
