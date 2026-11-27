@@ -45,6 +45,21 @@ unit DRagLint.Query.HappensBefore;
   (case-insensitive) or, when the key has no dot, the last part of a qualified call; a dotted key never
   matches a call that spells less than it (the callee is unresolved, so a qualifier cannot be checked).
 
+  1.56 PHASE 3 (lane FB-2, spec sec. 8): the solver reads the index's indirect-call edges (table
+  indirect_edges, DRagLint.Query.HappensBefore.Handlers.THbIndirectFacts).
+    * A call through a procedural slot (method pointer, event, callback parameter) is a CALL SITE of
+      every routine it can run: a query position and a caller, never a mark -- which binding is live
+      is not known, so such a call proves no write (hop reason indirect-call).
+    * A routine that is named as a value was an escaped root with entry False. It is no root when
+      THbIndirectFacts.OnlyThroughSlots holds (every naming is the binding of an edge, the slot is
+      closed, every call through the slot has an edge): its entry state is then the AND over the calls
+      through the slot and its direct callers, like any called routine. A SET that used this carries
+      the reason relied-on-indirect-edges and names routine, slot and call site; when it does not
+      hold, the root's why-text says which condition failed.
+    * An index written before 1.56 has no such table: every answer is the 1.55 one.
+  The stored must-write facts (symbol_facts.must_writes) list Result, var / out parameters and OWN
+  fields only, so they serve the instance-field solvers (Fields, Receiver), not this one.
+
   Read-only; nothing is persisted (no extractor change). Every doubt answers MAY-BE-UNSET: a wrong
   SET costs more than a hundred MAY answers. }
 
@@ -139,6 +154,12 @@ type
     Col: Integer;
     /// <summary>confidence = certain and the ref is a call (or names a function): may carry MustA.</summary>
     Certain: Boolean;
+    /// <summary>1.56 phase 3: a call through a procedural slot that CAN run CalleeId (indirect_edges);
+    /// never Certain.</summary>
+    Indirect: Boolean;
+    /// <summary>1.56 phase 3: the edge names CalleeId as a value (a callback edge, or a procedure on a
+    /// non-call ref): no call happens here.</summary>
+    Naming: Boolean;
   end;
 
   /// <summary>What the solver needs to know about one routine symbol.</summary>
@@ -180,6 +201,9 @@ type
     Why: string;
     /// <summary>For a Done use: the HbReliedText of every ordered handler root it relied on (ruling HB5).</summary>
     Relied: string;
+    /// <summary>1.56 phase 3: for a Done use, the routines on its paths that were taken to run only
+    /// through the calls of indirect_edges (THbIndirectFacts.OnlyThroughSlots), as a sentence.</summary>
+    ReliedIndirect: string;
     /// <summary>v152 HOVERCAP: the wall-clock cap ran out inside the walk; nothing else in the record holds.</summary>
     Stopped: Boolean;
   end;
@@ -210,6 +234,11 @@ type
     FMustFinal: Boolean;
     FHandlers: THbHandlerOrderer;
     FRunSites: TDictionary<Int64, THbSite>;
+    FIndirect: THbIndirectFacts;
+    function SlotOnly(pId: Int64): Boolean;
+    function IndirectCallSites(const pSites: TArray<THbIndirectSite>): TArray<TCallSite>;
+    function ReliedIndirectOf(const pUse: THbSite; const pIds: TArray<Int64>; const pRoots: THashSet<Int64>;
+      const pEntry: TDictionary<Int64, Boolean>): string;
     function HandlerOrder(const pProg: TProgramView; pId: Int64; out pOrder: THbHandlerOrder): Boolean;
     function PrefixDone(const pProg: TProgramView): Boolean;
     function Rows(const pSql: string): TObjectList<TIndexRow>;
@@ -254,6 +283,7 @@ const
   KIND_PROGRAM = 'program';
   KIND_LIBRARY = 'library';
   CONF_CERTAIN = 'certain';
+  CONF_CALLBACK = 'callback';
   REF_CALL = 'call';
   DIRECTIVE_ABSTRACT = 'abstract';
   CALLEE_LOOKBACK_LINES = 10;
@@ -503,6 +533,7 @@ begin
   FClassifier.StopCheck:= function: Boolean begin Result:= HbTimeUp; end;
   FHandlers:= THbHandlerOrderer.Create(pIndex);
   FRunSites:= TDictionary<Int64, THbSite>.Create;
+  FIndirect:= THbIndirectFacts.Create(pIndex);
   for var W in FEvents.Writers do
     if W.Counts and (W.Site.RoutineId <> 0) then
     begin
@@ -521,6 +552,7 @@ end;
 
 destructor TSolver.Destroy;
 begin
+  FIndirect.Free;
   FRunSites.Free;
   FHandlers.Free;
   FClassifier.Free;
@@ -612,6 +644,7 @@ begin
       S.Line:= Row.I('start_line');
       S.Col:= Row.I('start_col');
       S.Certain:= (Row.S('confidence') = CONF_CERTAIN) and ((Row.S('rk') = REF_CALL) or FInfo[S.CalleeId].IsFunction);
+      S.Naming:= (Row.S('confidence') = CONF_CALLBACK) or not ((Row.S('rk') = REF_CALL) or FInfo[S.CalleeId].IsFunction);
       Result:= Result + [S];
     end;
   finally
@@ -629,7 +662,38 @@ begin
     Format('(r.enclosing_symbol_id = %d OR (r.enclosing_symbol_id IS NULL AND r.file_id = %d))', [pId, I.FileId])
   else
     Format('r.enclosing_symbol_id = %d', [pId]));
+  { 1.56 phase 3: the calls through procedural slots in pId, one site per routine each can run }
+  Result:= Result + IndirectCallSites(FIndirect.SitesIn(pId));
   FCallsIn.Add(pId, Result);
+end;
+
+{ 1.56 phase 3: True when pId is named as a value somewhere and runs only through the calls the
+  index's indirect_edges list (THbIndirectFacts.OnlyThroughSlots). Such a routine is no escaped root:
+  its entry state is the AND over those calls and its direct callers. }
+function TSolver.SlotOnly(pId: Int64): Boolean;
+var
+  Why: string;
+begin
+  Result:= FIndirect.OnlyThroughSlots(pId, Why);
+end;
+
+{ The indirect_edges rows that have a call site, as call sites of the solver: never Certain, so such a
+  call is a query position and a caller, never a mark. }
+function TSolver.IndirectCallSites(const pSites: TArray<THbIndirectSite>): TArray<TCallSite>;
+begin
+  Result:= nil;
+  for var E in pSites do
+  begin
+    if (E.RefId = 0) or (E.CallerId = 0) then Continue;
+    var S:= Default(TCallSite);
+    S.CallerId:= E.CallerId;
+    S.CalleeId:= E.TargetId;
+    S.FilePath:= E.FilePath;
+    S.Line:= E.Line;
+    S.Col:= E.Col;
+    S.Indirect:= True;
+    Result:= Result + [S];
+  end;
 end;
 
 { The transitive closure of one dispatch_edges direction from pId, sorted, pId left out. pSqlFmt selects
@@ -684,7 +748,14 @@ end;
 function TSolver.CallersOf(pId: Int64): TArray<TCallSite>;
 begin
   if FCallersOf.TryGetValue(pId, Result) then Exit;
-  Result:= ReadSites('c.target_symbol_id IN (' + IdList([pId] + BasesOf(pId)) + ')');
+  Result:= nil;
+  { 1.56 phase 3: where a slot-only routine is merely NAMED (its binding) nothing is called; the calls
+    through the slot are its callers instead. Every other routine keeps its 1.55 callers and gains the
+    calls through slots that can run it (they reach it, they never prove anything). }
+  for var C in ReadSites('c.target_symbol_id IN (' + IdList([pId] + BasesOf(pId)) + ')') do
+    if not (C.Naming and SlotOnly(C.CalleeId)) then Result:= Result + [C];
+  for var T in [pId] + BasesOf(pId) do
+    Result:= Result + IndirectCallSites(FIndirect.SitesOf(T));
   FCallersOf.Add(pId, Result);
 end;
 
@@ -725,6 +796,12 @@ begin
   Result:= nil;
   for var C in CallsIn(pId) do
   begin
+    { one call through a slot gives one site per routine it can run: one query position }
+    var Dup:= False;
+    if C.Indirect then
+      for var X in Result do
+        if (X.Line = C.Line) and (X.Col = C.Col) then Dup:= True;
+    if Dup then Continue;
     var S:= Default(THbSite);
     S.FileName:= C.FilePath;
     S.Line:= C.Line;
@@ -927,6 +1004,8 @@ begin
     Exit(True);
   end;
   var C:= FClassifier.ClassOf(pId);
+  { 1.56 phase 3: a routine named as a value that runs only through indexed slot calls is no root }
+  if (C = hecAddressTaken) and SlotOnly(pId) then Exit(False);
   Result:= C <> hecNone;
   if Result then pNote:= 'escaped root (' + EscapeClassCode(C) + ')';
   var O: THbHandlerOrder;
@@ -1015,6 +1094,9 @@ begin
     AddReason(Result, hrUnorderedRoot);
   end;
   pWhy:= Format('root "%s" can run at any time (escaped: %s)', [I.QName, EscapeClassCode(C)]);
+  var WhyNot: string;
+  if (C = hecAddressTaken) and FIndirect.Available and not FIndirect.OnlyThroughSlots(pRootId, WhyNot) then
+    pWhy:= pWhy + ': ' + WhyNot;
 end;
 
 { Reasons a routine on the witness contributes, judged at its query position pLine:pCol. }
@@ -1046,12 +1128,73 @@ begin
       Continue;
     end;
     if not Before then Continue;
+    if C.Indirect then
+    begin
+      { a call through a procedural slot can run a writer; it proves nothing }
+      AddReason(Result, hrIndirectCall);
+      Continue;
+    end;
     var Members:= CalleeSet(C.CalleeId);
     var SomeMust:= False;
     for var M in Members do
       if FMustA.Contains(M) then SomeMust:= True;
     if (Length(Members) > 1) and SomeMust then AddReason(Result, hrVirtualFanout)
     else AddReason(Result, hrCalleeNotMust);
+  end;
+end;
+
+{ 1.56 phase 3: what a SET says when it took pRoutine for one that runs only through slot calls. }
+function IndirectReliedText(const pRoutine: string; const pSites: TArray<THbIndirectSite>): string;
+begin
+  var Via:= '';
+  for var S in pSites do
+  begin
+    var One:= Format('%s (%s:%d)', [S.SlotName, ExtractFileName(S.FilePath), S.Line]);
+    if not Via.Contains(One) then Via:= if Via = '' then One else Via + ', ' + One;
+  end;
+  Result:= Format('relied on the index''s indirect-call edges: %s runs only through %s', [pRoutine, Via]);
+end;
+
+{ 1.56 phase 3: for a Done use, names every routine among pIds (the use's routine and its ancestors,
+  roots left out) that was taken to run only through slot calls and was entered with the target
+  proven set (pEntry). '' when there is none, and when the use is proven inside its own routine with
+  entry False: that proof used no caller at all. }
+function TSolver.ReliedIndirectOf(const pUse: THbSite; const pIds: TArray<Int64>; const pRoots: THashSet<Int64>;
+  const pEntry: TDictionary<Int64, Boolean>): string;
+var
+  Q: THbQueryState;
+  Entered: Boolean;
+begin
+  Result:= '';
+  if StateAt(Solve(pUse.RoutineId, False), pUse.Line, pUse.Col, Q) and Q.Done then Exit;
+  for var R in pIds do
+    if (not pRoots.Contains(R)) and pEntry.TryGetValue(R, Entered) and Entered and
+      (FClassifier.ClassOf(R) = hecAddressTaken) and SlotOnly(R) then
+      Result:= (if Result = '' then '' else Result + '; ') + IndirectReliedText(Info(R).QName, FIndirect.SitesOf(R));
+end;
+
+{ What the SET of one use relied on, from the programs that judged it (ruling HB5 and 1.56 phase 3). }
+procedure NoteRelied(const pUse: TUseInProgram; var pRelied, pReliedIndirect: string);
+begin
+  if not pUse.Done then Exit;
+  if pUse.Relied <> '' then pRelied:= if pRelied = '' then pUse.Relied else pRelied + '; ' + pUse.Relied;
+  if (pUse.ReliedIndirect <> '') and not pReliedIndirect.Contains(pUse.ReliedIndirect) then
+    pReliedIndirect:= if pReliedIndirect = '' then pUse.ReliedIndirect else pReliedIndirect + '; ' + pUse.ReliedIndirect;
+end;
+
+{ A SET that used the handler order (ruling HB5) or the indirect-call edges (1.56 phase 3) says so: the
+  reason code on the use, the text in its Why. }
+procedure ApplyRelied(var pUse: THbUseAnswer; const pRelied, pReliedIndirect: string);
+begin
+  if pRelied <> '' then
+  begin
+    AddReason(pUse.Reasons, hrReliedOnHandlerOrder);
+    pUse.Why:= pRelied;
+  end;
+  if pReliedIndirect <> '' then
+  begin
+    AddReason(pUse.Reasons, hrReliedOnIndirectEdges);
+    pUse.Why:= if pUse.Why = '' then pReliedIndirect else pUse.Why + '; ' + pReliedIndirect;
   end;
 end;
 
@@ -1062,7 +1205,7 @@ begin
   Result.Stopped:= True;
 end;
 
-function TSolver.JudgeUse(const pProg: TProgramView; const pUse: THbSite): TUseInProgram;  // dl:ok cyclomatic-complexity@536f, cognitive-complexity@f84f, too-many-exit-points@cc5b -- REVIEWED 2026-11-18 v152 HOVERCAP (re-stamped after the wall-clock checks inside the three walks, 64 / 88, 6 exits): one walk of spec 5.4 per use (root, hop, budget, closure cases); split pieces would share every local, so kept whole; the three new exits are the same one-line cap check (Exit(StoppedUse)); covered by the verdict + HBFIX + HOVERCAP runners
+function TSolver.JudgeUse(const pProg: TProgramView; const pUse: THbSite): TUseInProgram;  // dl:ok cyclomatic-complexity@09fe, cognitive-complexity@f84f, too-many-exit-points@cc5b -- REVIEWED 2026-11-27 v156 FB-2 (cyclomatic re-stamped 64 -> 65: one more label in the why-text case, hrIndirectCall; the phase-3 logic itself lives in ReliedIndirectOf / IsRoot / CallersOf) after 2026-11-18 v152 HOVERCAP (64 / 88, 6 exits): one walk of spec 5.4 per use (root, hop, budget, closure cases); split pieces would share every local, so kept whole; the three cap exits are the same one-line check (Exit(StoppedUse)); covered by the verdict + HBFIX + HOVERCAP + v156 FB2 runners
 var
   Entry: Boolean;
   Note: string;
@@ -1157,6 +1300,7 @@ begin
         if ED[R] and (FClassifier.ClassOf(R) = hecDfmEvent) and HandlerOrder(pProg, R, O) then
           Result.Relied:= if Result.Relied = '' then HbReliedText(O) else Result.Relied + '; ' + HbReliedText(O);
       end;
+      Result.ReliedIndirect:= ReliedIndirectOf(pUse, Ids, RootSet, ED);
       Exit;
     end;
     { witness: BFS from U over callers whose call state is False, to the nearest unproven root }
@@ -1262,6 +1406,7 @@ begin
               hrWriterConditional: Why:= 'a writer before the use does not run on every path';
               hrWriterAfterUseSameRoutine: Why:= 'a writer runs only after the use';
               hrCalleeNotMust: Why:= 'a routine called before the use does not write it on every path';
+              hrIndirectCall: Why:= 'a call through a procedural value before the use can run a writer, which proves nothing';
               hrVirtualFanout: Why:= 'a virtual call before the use can dispatch to an override that does not write it';
               hrCfgSkipped: Why:= 'a routine on the path holds goto / label / asm (not analysed)';
             end;
@@ -1321,6 +1466,7 @@ begin
       var HaveBad:= False;
       var Count:= 0;
       var Relied:= '';
+      var ReliedIndirect:= '';
       var Stopped:= False;
       for var P in FPrograms do
       begin
@@ -1344,7 +1490,7 @@ begin
         Judged:= True;
         Inc(Count);
         JudgedPrograms.Add(P.Name);
-        if J.Done and (J.Relied <> '') then Relied:= if Relied = '' then J.Relied else Relied + '; ' + J.Relied;
+        NoteRelied(J, Relied, ReliedIndirect);
         if (not J.Done) and not HaveBad then
         begin
           Bad:= J;
@@ -1371,13 +1517,10 @@ begin
         A.Why:= WHY_PREFIX + Bad.Why;
         if Count > 1 then AddReason(A.Reasons, hrMultiProgram);
       end
-      else if Relied <> '' then
-      begin
-        { ruling HB5: a SET that used the handler order says so and names the handler }
-        AddReason(A.Reasons, hrReliedOnHandlerOrder);
-        A.Why:= Relied;
-      end;
-      if TArray.Contains<THbReason>(A.Reasons, hrReliedOnHandlerOrder) then AddReason(pAnswer.Reasons, hrReliedOnHandlerOrder);
+      else
+        ApplyRelied(A, Relied, ReliedIndirect);
+      for var Told in [hrReliedOnHandlerOrder, hrReliedOnIndirectEdges] do
+        if TArray.Contains<THbReason>(A.Reasons, Told) then AddReason(pAnswer.Reasons, Told);
       if FExhausted and (A.Verdict <> hvSet) then AddReason(A.Reasons, hrBudget);
       if FExhausted and (A.Verdict = hvSet) then
       begin
@@ -1735,6 +1878,8 @@ begin
         else '(not proven)';
       if TArray.Contains<THbReason>(Result.Reasons, hrReliedOnHandlerOrder) then
         Result.Summary:= Result.Summary + ' -- uses with relied-on-handler-order rely on event-handler order (ruling HB5, name heuristic)';
+      if TArray.Contains<THbReason>(Result.Reasons, hrReliedOnIndirectEdges) then
+        Result.Summary:= Result.Summary + ' -- uses with relied-on-indirect-edges rely on the index''s indirect-call edges (1.56)';
     end;
     if Warnings <> nil then
     begin

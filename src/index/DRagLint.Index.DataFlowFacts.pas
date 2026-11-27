@@ -1,4 +1,4 @@
-unit DRagLint.Index.DataFlowFacts;
+unit DRagLint.Index.DataFlowFacts;  // dl:ok unit-too-large@5e9c -- REVIEWED 1.56 EXT-B1 2026-11-26: the B3 value classes and the EXT-B2 / EXT-B3 hook seam live with the one walker they extend; a split adds a unit to drag-lint.dproj / .dpr (lane INT's files) and is requested there
 
 /// <summary>Index-time data-flow facts: for one routine, which SOURCE (a declared
 /// parameter, a field, a unit global, a feeding ref, the var/out slot of an earlier
@@ -22,6 +22,16 @@ unit DRagLint.Index.DataFlowFacts;
 /// always walked that way with the state at the lambda. `with` bodies (opaque CFG
 /// items) emit nothing. Rows are deduplicated on (destination, source) -- ViaLocal
 /// and Cond are AND-merged -- and capped at DF_ROW_CAP per routine (a stderr note).
+/// 1.56 B3 (lane EXT-B1): values of numeric / Boolean / date-time type flow too. Every
+/// source token carries a value class (TDataFlowRow.ValClass, DF_VAL_*): '' for the
+/// pre-1.56 flows, which are emitted exactly as before, and a class for a flow the
+/// pre-1.56 walk dropped -- a scalar-typed parameter / local, an arithmetic or comparison
+/// operator, a numeric member (`L.Count`), a numeric RTL result (`Length`, `StrToInt`).
+/// The class is the scalar class the value had where it FIRST became a scalar; a later
+/// conversion (`IntToStr`) does not change it. Rows with ValClass '' are therefore the
+/// pre-1.56 row set, and value rows are additions with their own DF_ROW_CAP budget.
+/// Lanes EXT-B2 / EXT-B3 extend the walk through TDataFlowFacts.RegisterExprHook /
+/// RegisterWriteHook / RegisterStmtHook (TDataFlowSite).
 /// This unit is under src\index, so the extractor version guard hashes it: any change
 /// to it is an extractor change. All .pas source: strict 7-bit ASCII, CRLF, no BOM.
 /// </remarks>
@@ -55,6 +65,88 @@ type
   /// </remarks>
   TDataFlowCallees = TDictionary<string, TArray<Boolean>>;
 
+  /// <summary>1.56: the value of one expression as the data-flow walk sees it: the sources
+  /// that may / must reach it and its inferred scalar class.</summary>
+  /// <remarks>Opaque to a hook: build one with TDataFlowSite.ValueOf / NewSource / Merge and
+  /// hand it back unchanged. May = sorted encoded source elements, Must = sorted source ids
+  /// (both private to the walk of ONE routine; never keep a value across routines).
+  /// Cls = one of DF_VAL_* when the expression's type is known to be that scalar class,
+  /// else ''.</remarks>
+  TDataFlowValue = record
+    /// <summary>Sources reaching on at least one path (encoded; opaque).</summary>
+    May : TArray<Integer>;
+    /// <summary>Sources reaching on every path (opaque).</summary>
+    Must: TArray<Integer>;
+    /// <summary>Inferred scalar class of the expression (DF_VAL_*), '' = unknown or not a scalar.</summary>
+    Cls : string;
+  end;
+
+  /// <summary>1.56 seam (lanes EXT-B2, EXT-B3): what a registered hook may ask of the
+  /// data-flow walk of the routine it is called for.</summary>
+  /// <remarks>Valid only during the hook call; owned by the walk. Not thread-safe. A hook is
+  /// called on EVERY pass of the fixpoint, not once per site: it must be deterministic and
+  /// keep no state of its own; EmitRow writes only on the recording pass. A hook may ADD
+  /// sources and rows of the 1.56 kinds (DF_SRC_DSFIELD, DF_SRC_EXCEPT, DF_DST_DSFIELD,
+  /// DF_DST_RAISE); it must not create a source of a pre-1.56 kind with an empty value
+  /// class, because rows of the old kinds with ValClass '' are the pre-1.56 row set.</remarks>
+  TDataFlowSite = class abstract
+    public
+      /// <summary>The source text of a node.</summary>
+      /// <param name="ANode">Any node of the routine's tree; a null node gives ''.</param>
+      /// <returns>The text, as written.</returns>
+      function NodeText(const ANode: TTSNode): string; virtual; abstract;
+      /// <summary>True on the pass that writes rows (the passes before it only move state).</summary>
+      /// <returns>False during the fixpoint iteration.</returns>
+      function IsRecording: Boolean; virtual; abstract;
+      /// <summary>Evaluates an expression in the state at the hook's site, exactly as the walk
+      /// itself would (argument rows of calls inside it are recorded, expression hooks run).</summary>
+      /// <param name="AExpr">An expression node; never the node the running expression hook was
+      /// called for (that recurses without end).</param>
+      /// <returns>Its value; empty for a null node.</returns>
+      function ValueOf(const AExpr: TTSNode): TDataFlowValue; virtual; abstract;
+      /// <summary>A value made of ONE new source.</summary>
+      /// <param name="AKind">The row's src_kind: a 1.56 DF_SRC_* constant.</param>
+      /// <param name="AIndex">The row's src_index (-1 = unused).</param>
+      /// <param name="APos">The node whose start gives src_line / src_col; null = 0 / 0.</param>
+      /// <param name="AName">The row's src_name.</param>
+      /// <param name="AValClass">The value class of the source (DF_VAL_* or '').</param>
+      /// <returns>The value; the same arguments give the same source on every pass.</returns>
+      function NewSource(const AKind: string; AIndex: Integer; const APos: TTSNode; const AName, AValClass: string): TDataFlowValue; virtual; abstract;
+      /// <summary>The union of two values (a value fed by both).</summary>
+      /// <param name="A">The first value; its Cls is kept.</param>
+      /// <param name="B">The second value.</param>
+      /// <returns>The sources of both.</returns>
+      function Merge(const A, B: TDataFlowValue): TDataFlowValue; virtual; abstract;
+      /// <summary>Records one data_flows row per source of AValue (deduplicated like the walk's
+      /// own rows). Does nothing before the recording pass.</summary>
+      /// <param name="ADstKind">The row's dst_kind: a 1.56 DF_DST_* constant.</param>
+      /// <param name="APos">The node whose start gives dst_line / dst_col; null = no row.</param>
+      /// <param name="AIndex">The row's dst_index (-1 = unused).</param>
+      /// <param name="AName">The row's dst_name.</param>
+      /// <param name="AReceiver">The row's dst_receiver.</param>
+      /// <param name="AValue">The value reaching the destination.</param>
+      procedure EmitRow(const ADstKind: string; const APos: TTSNode; AIndex: Integer; const AName, AReceiver: string;
+                        const AValue: TDataFlowValue); virtual; abstract;
+  end;
+
+  /// <summary>1.56 seam: called after the walk evaluated an expression node of the registered
+  /// node type; the hook may add sources to its value (B14-3: a dataset-field read).</summary>
+  /// <param name="ASite">The walk; valid during the call only.</param>
+  /// <param name="ANode">The evaluated expression node.</param>
+  /// <param name="AValue">Its value; replace it with ASite.Merge(AValue, ASite.NewSource(..)) to add a source.</param>
+  TDataFlowExprHook = procedure(ASite: TDataFlowSite; const ANode: TTSNode; var AValue: TDataFlowValue);
+  /// <summary>1.56 seam: called at every assignment, before the walk's own handling of the
+  /// left side (B14-2: a dataset-field write that has no 'write' row).</summary>
+  /// <param name="ASite">The walk; valid during the call only.</param>
+  /// <param name="ALhs">The assignment's left-side node (any shape).</param>
+  /// <param name="AValue">The value of the right side.</param>
+  TDataFlowWriteHook = procedure(ASite: TDataFlowSite; const ALhs: TTSNode; const AValue: TDataFlowValue);
+  /// <summary>1.56 seam: called when the walk reaches a statement node of the registered node
+  /// type, before its own handling of it (B4: `raise`).</summary>
+  /// <param name="ASite">The walk; valid during the call only.</param>
+  /// <param name="ANode">The statement node.</param>
+  TDataFlowStmtHook = procedure(ASite: TDataFlowSite; const ANode: TTSNode);
+
   /// <summary>Computes the data_flows rows of one routine from its tree-sitter
   /// subtree. Stateless apart from two process-wide counters; NOT thread-safe
   /// (the indexer's per-file loop is single-threaded).</summary>
@@ -86,8 +178,11 @@ type
       /// Never raises: an exception inside the walk (a malformed tree) is
       /// caught, a one-line stderr note names the routine, and nil is returned --
       /// silence over a wrong claim, and the file tx is not rolled back for it.
-      /// Literals, nil, and values of numeric/boolean declared type emit nothing;
-      /// identifiers the var table cannot classify are refs (by position).
+      /// Literals and nil emit nothing; a value of numeric / Boolean / date-time type
+      /// emits VALUE rows (ValClass = a DF_VAL_* class; 1.56 B3); every other row keeps
+      /// ValClass '' and is the row the pre-1.56 walk emitted. At most DF_ROW_CAP value
+      /// (and hook) rows are added on top of the DF_ROW_CAP pre-1.56 rows.
+      /// Identifiers the var table cannot classify are refs (by position).
       /// An argument variable gets an 'argout' source (the callee may write it) only
       /// when the callee may have a var / out parameter at that position: a callee
       /// in ACallees decides by its mask (a position past every same-unit overload
@@ -192,6 +287,23 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CappedCount: Integer; static;
+      /// <summary>1.56 seam: registers an expression hook for one tree-sitter node type
+      /// ('exprDot', 'exprCall', 'exprSubscript', 'identifier', ...).</summary>
+      /// <param name="ANodeType">The node type, as the grammar spells it.</param>
+      /// <param name="AHook">The hook; nil is ignored.</param>
+      /// <remarks>Call from a unit's initialization (process-wide, never removed, not
+      /// thread-safe). Hooks of one node type run in registration order. Registering a hook
+      /// is extraction: an extractor change.</remarks>
+      class procedure RegisterExprHook(const ANodeType: string; AHook: TDataFlowExprHook); static;
+      /// <summary>1.56 seam: registers a hook called at every assignment.</summary>
+      /// <param name="AHook">The hook; nil is ignored.</param>
+      /// <remarks>As RegisterExprHook.</remarks>
+      class procedure RegisterWriteHook(AHook: TDataFlowWriteHook); static;
+      /// <summary>1.56 seam: registers a statement hook for one node type ('raise', ...).</summary>
+      /// <param name="ANodeType">The node type, as the grammar spells it.</param>
+      /// <param name="AHook">The hook; nil is ignored.</param>
+      /// <remarks>As RegisterExprHook. A statement nested in a `with` body is not walked.</remarks>
+      class procedure RegisterStmtHook(const ANodeType: string; AHook: TDataFlowStmtHook); static;
   end;
 
 implementation
@@ -203,9 +315,24 @@ uses
   , DRagLint.Analysis.Flow.Lattices
   ;
 
+type
+  TExprHookReg = record
+    NodeType: string;
+    Hook    : TDataFlowExprHook;
+  end;
+
+  TStmtHookReg = record
+    NodeType: string;
+    Hook    : TDataFlowStmtHook;
+  end;
+
 var
-  GFallbacks: Integer = 0;
-  GCapped   : Integer = 0;
+  GFallbacks : Integer = 0;
+  GCapped    : Integer = 0;
+  { 1.56 seam: filled from unit initializations, read by every TCollector }
+  GExprHooks : TArray<TExprHookReg>;
+  GWriteHooks: TArray<TDataFlowWriteHook>;
+  GStmtHooks : TArray<TStmtHookReg>;
 
 const
   { Engine knowledge (plan section 2). Growing any list is safe -- it only adds
@@ -252,6 +379,40 @@ const
   DF_FLAT_PASSES = 8;
   { BaseIdent descends at most this many receiver levels (a malformed-tree guard, not a semantic limit) }
   DF_RECEIVER_DEPTH = 32;
+  { ---- 1.56 B3: value classes. Each list refines TAINT_SCALAR_TYPES / TAINT_NOFLOW_RESULT; a name
+    in neither sub-list is DF_VAL_INT. Growing a list is extraction (an extractor change). }
+  DF_BOOL_TYPES: array[0..3] of string = ('boolean', 'bytebool', 'wordbool', 'longbool');
+  DF_FLOAT_TYPES: array[0..3] of string = ('double', 'single', 'extended', 'real');
+  DF_CURRENCY_TYPE = 'currency';
+  DF_DATETIME_TYPE = 'tdatetime';
+  { TAINT_NOFLOW_RESULT members with a Boolean result }
+  DF_NOFLOW_BOOL: array[0..3] of string = ('assigned', 'sametext', 'samestr', 'odd');
+  { TAINT_NOFLOW_RESULT members with NO result (procedures) }
+  DF_NOFLOW_PROC: array[0..3] of string = ('inc', 'dec', 'setlength', 'freeandnil');
+  { Inc(X, D) / Dec(X, D): X receives D }
+  DF_STEP_PROCS: array[0..1] of string = ('inc', 'dec');
+  DF_STEP_ARGS = 2;
+  { the one TAINT_NOFLOW_RESULT member whose RESULT is a string (its argument is the integer) }
+  DF_INTTOSTR = 'inttostr';
+  { field accessors whose member name states the value class }
+  DF_ACC_INT: array[0..6] of string = ('asinteger', 'aslargeint', 'asint64', 'aslongword', 'assmallint', 'asword', 'asbyte');
+  DF_ACC_FLOAT: array[0..2] of string = ('asfloat', 'asextended', 'assingle');
+  DF_ACC_CURRENCY: array[0..1] of string = ('ascurrency', 'asbcd');
+  DF_ACC_DATETIME: array[0..2] of string = ('asdatetime', 'asdate', 'astime');
+  DF_ACC_BOOL: array[0..0] of string = ('asboolean');
+  { binary operators (lower-case source text) }
+  DF_COMPARE_OPS: array[0..6] of string = ('=', '<>', '<', '>', '<=', '>=', 'in');
+  DF_LOGIC_OPS: array[0..2] of string = ('and', 'or', 'xor');
+  DF_INT_OPS: array[0..3] of string = ('div', 'mod', 'shl', 'shr');
+  DF_OP_IS = 'is';
+  DF_OP_FDIV = '/';
+  { the pre-1.56 kinds: a row of these with an empty value class counts against the pre-1.56 cap }
+  DF_OLD_DST_KINDS: array[0..5] of string = (DF_DST_ARG, DF_DST_WRITE, DF_DST_RESULT, DF_DST_FIELD, DF_DST_GLOBAL, DF_DST_OUTPARAM);
+  DF_OLD_SRC_KINDS: array[0..4] of string = (DF_SRC_PARAM, DF_SRC_REF, DF_SRC_FIELD, DF_SRC_GLOBAL, DF_SRC_ARGOUT);
+  { test seam: with this environment variable set the unit registers its three self-test hooks
+    (tests\autotest\run_v156_EXTB1_valclass.ps1, V5); never set in production }
+  DF_TEST_HOOK_ENV = 'DRAGLINT_TEST_V156_DFHOOK';
+  DF_TEST_ACCESSOR = 'AsFloat';
 
 function InList(const AName: string; const AList: array of string): Boolean;
 var
@@ -377,10 +538,8 @@ type
     Must   : TArray<TIntSet>;
   end;
 
-  TExprVal = record
-    May : TIntSet;   { encoded elements }
-    Must: TIntSet;   { token ids }
-  end;
+  { May = encoded elements, Must = token ids, Cls = inferred scalar class (1.56: the public record) }
+  TExprVal = TDataFlowValue;
 
   TSrcTok = record
     Kind : string;
@@ -388,7 +547,10 @@ type
     Line : Integer;
     Col  : Integer;
     Name : string;
+    Cls  : string;   { 1.56 B3: DF_VAL_* of the value this source carries; '' = a pre-1.56 flow }
   end;
+
+  PTaintVal = ^TTaintVal;
 
   TCollector = class;
 
@@ -405,8 +567,12 @@ type
     function Equals(const A, B: TTaintVal): Boolean; reintroduce;
   end;
 
-  TCollector = class  // dl:ok god-class@dfb5, high-response@dfb5 -- one private per-routine walker: the lattice ops, the expression evaluator and the row sink share one state by design (taint T1)
+  TCollector = class(TDataFlowSite)  // dl:ok god-class@3c0e, high-response@3c0e -- one private per-routine walker: the lattice ops, the expression evaluator and the row sink share one state by design (taint T1)
   strict private
+    FSlotCls    : TArray<string>;   { 1.56 B3: DF_VAL_* of a scalar-typed slot, '' otherwise }
+    FValRows    : Integer;          { rows outside the pre-1.56 set (value rows, hook rows) }
+    FValCapped  : Boolean;
+    FCur        : PTaintVal;        { the state at the running hook's site; nil outside a hook }
     FSym        : TSymbol;
     FProc       : TTSNode;
     FBody       : TTSNode;
@@ -434,7 +600,7 @@ type
     FInsensitive: Boolean;
     FCapped     : Boolean;
     function Text(const N: TTSNode): string;
-    function Tok(const AKind: string; AIndex, ALine, ACol: Integer; const AName: string): Integer;
+    function Tok(const AKind: string; AIndex, ALine, ACol: Integer; const AName: string; const ACls: string = ''): Integer;
     function TokVal(ATok: Integer): TExprVal;
     function SlotOf(const N: TTSNode): Integer;
     function BaseIdent(const N: TTSNode): TTSNode;
@@ -461,6 +627,15 @@ type
     procedure RunInsensitive;
     procedure RunCfg(const ACfg: TCfg);
     procedure ScanBody(const N: TTSNode);
+    function Reclass(const AV: TExprVal; const ACls: string): TExprVal;
+    function EvalNode(var St: TTaintVal; const N: TTSNode): TExprVal;
+    function EvalBinary(var St: TTaintVal; const N: TTSNode): TExprVal;
+    function EvalUnary(var St: TTaintVal; const N: TTSNode): TExprVal;
+    function EvalNoFlowCall(var St: TTaintVal; const ACallee: string; const AArgs: TTSNode;
+                            const AArgVals: TArray<TExprVal>; ABare: Boolean): TExprVal;
+    procedure RunExprHooks(var St: TTaintVal; const N: TTSNode; var AV: TExprVal);
+    procedure RunWriteHooks(var St: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
+    procedure RunStmtHooks(var St: TTaintVal; const N: TTSNode);
   public
     constructor Create(const ASym: TSymbol; const AProc, ABody: TTSNode; const ASrc: TBytes;
                        const AOwnerFields, AGlobals: TArray<string>; const ACallees: TDataFlowCallees);
@@ -472,18 +647,88 @@ type
     function Same(const A, B: TTaintVal): Boolean;
     procedure Run;
     function Rows: TArray<TDataFlowRow>;
+    { TDataFlowSite }
+    function NodeText(const ANode: TTSNode): string; override;
+    function IsRecording: Boolean; override;
+    function ValueOf(const AExpr: TTSNode): TDataFlowValue; override;
+    function NewSource(const AKind: string; AIndex: Integer; const APos: TTSNode; const AName, AValClass: string): TDataFlowValue; override;
+    function Merge(const A, B: TDataFlowValue): TDataFlowValue; override;
+    procedure EmitRow(const ADstKind: string; const APos: TTSNode; AIndex: Integer; const AName, AReceiver: string;
+                      const AValue: TDataFlowValue); override;
   end;
 
 function ExprUnion(const A, B: TExprVal): TExprVal;
 begin
   Result.May := SetUnion(A.May, B.May);
   Result.Must:= SetUnion(A.Must, B.Must);
+  Result.Cls := '';
 end;
 
 function ExprEmpty: TExprVal;
 begin
   Result.May := nil;
   Result.Must:= nil;
+  Result.Cls := '';
+end;
+
+{ ---- 1.56 B3: value classes ---------------------------------------------- }
+
+{ The DF_VAL_* class of a declared type (lower case); '' when it is no TAINT_SCALAR_TYPES member. }
+function ScalarClass(const ALowerType: string): string;
+begin
+  if not InList(ALowerType, TAINT_SCALAR_TYPES) then Exit('');
+  if InList(ALowerType, DF_BOOL_TYPES) then Exit(DF_VAL_BOOL);
+  if InList(ALowerType, DF_FLOAT_TYPES) then Exit(DF_VAL_FLOAT);
+  if ALowerType = DF_CURRENCY_TYPE then Exit(DF_VAL_CURRENCY);
+  if ALowerType = DF_DATETIME_TYPE then Exit(DF_VAL_DATETIME);
+  Result:= DF_VAL_INT;
+end;
+
+{ The class of a TAINT_NOFLOW_RESULT call's result; '' for the procedures among them. }
+function NoFlowClass(const ACallee: string): string;
+begin
+  if InList(ACallee, DF_NOFLOW_PROC) then Exit('');
+  Result:= if InList(ACallee, DF_NOFLOW_BOOL) then DF_VAL_BOOL else DF_VAL_INT;
+end;
+
+{ The class a field accessor's name states (`AsFloat`); '' for any other member. }
+function AccessorClass(const AMember: string): string;
+begin
+  Result:= '';
+  if AMember = '' then Exit;
+  if InList(AMember, DF_ACC_INT) then Exit(DF_VAL_INT);
+  if InList(AMember, DF_ACC_FLOAT) then Exit(DF_VAL_FLOAT);
+  if InList(AMember, DF_ACC_CURRENCY) then Exit(DF_VAL_CURRENCY);
+  if InList(AMember, DF_ACC_DATETIME) then Exit(DF_VAL_DATETIME);
+  if InList(AMember, DF_ACC_BOOL) then Result:= DF_VAL_BOOL;
+end;
+
+{ A numeric literal: hexadecimal and plain digits are integers, a fraction or an exponent is a float. }
+function NumberClass(const AText: string): string;
+begin
+  if AText.StartsWith('$') then Exit(DF_VAL_INT);
+  Result:= if AText.Contains('.') or AText.ToLower.Contains('e') then DF_VAL_FLOAT else DF_VAL_INT;
+end;
+
+{ The class of `A <op> B` for an arithmetic / logical operator (lower-case text) from its operands'
+  classes ('' = unknown). Never '': with nothing known the result is DF_VAL_FLOAT ("a number") for
+  an arithmetic operator and DF_VAL_BOOL for and / or / xor. }
+function ArithClass(const AOp, A, B: string): string;
+var
+  AnyInt: Boolean;
+begin
+  AnyInt:= (A = DF_VAL_INT) or (B = DF_VAL_INT);
+  if InList(AOp, DF_INT_OPS) then Result:= DF_VAL_INT
+  else if InList(AOp, DF_LOGIC_OPS) then Result:= if AnyInt then DF_VAL_INT else DF_VAL_BOOL
+  else if (A = DF_VAL_CURRENCY) or (B = DF_VAL_CURRENCY) then Result:= DF_VAL_CURRENCY
+  else if (A = DF_VAL_DATETIME) or (B = DF_VAL_DATETIME) then Result:= DF_VAL_DATETIME
+  else if (AOp = DF_OP_FDIV) or (A = DF_VAL_FLOAT) or (B = DF_VAL_FLOAT) then Result:= DF_VAL_FLOAT
+  else Result:= if AnyInt then DF_VAL_INT else DF_VAL_FLOAT;
+end;
+
+function IsOldRowKind(const ADstKind, ASrcKind: string): Boolean;
+begin
+  Result:= InList(ADstKind, DF_OLD_DST_KINDS) and InList(ASrcKind, DF_OLD_SRC_KINDS);
 end;
 
 function IsDottedIdentChain(const N: TTSNode): Boolean;
@@ -634,6 +879,7 @@ begin
   FNSlots:= FVars.Count;
   SetLength(FSlotKind, FNSlots);
   SetLength(FSlotScalar, FNSlots);
+  SetLength(FSlotCls, FNSlots);
   SetLength(FSlotString, FNSlots);
   SetLength(FSlotPIdx, FNSlots);
   SetLength(FSlotPTok, FNSlots);
@@ -646,7 +892,8 @@ begin
     RV:= FVars.Get(I);
     LType:= LowerCase(Trim(RV.TypeText));
     FSlotKind[I]  := RV.Kind;
-    FSlotScalar[I]:= InList(LType, TAINT_SCALAR_TYPES);
+    FSlotCls[I]   := ScalarClass(LType);
+    FSlotScalar[I]:= FSlotCls[I] <> '';
     FSlotString[I]:= InList(LType, TAINT_STRING_TYPES);
     FSlotName[I]  := RV.Display;
     FSlotPIdx[I]  := -1;
@@ -655,7 +902,8 @@ begin
     begin
       FSlotPIdx[I]:= PCounter;
       Inc(PCounter);
-      if not FSlotScalar[I] then FSlotPTok[I]:= Tok(DF_SRC_PARAM, FSlotPIdx[I], 0, 0, RV.Display);
+      { 1.56 B3: a scalar parameter is a source too; its token carries the class }
+      FSlotPTok[I]:= Tok(DF_SRC_PARAM, FSlotPIdx[I], 0, 0, RV.Display, FSlotCls[I]);
     end;
   end;
   FResultSlot:= FVars.IndexOf('result');
@@ -740,18 +988,20 @@ begin
   Result:= TEncoding.UTF8.GetString(FSrc, S, E - S);
 end;
 
-function TCollector.Tok(const AKind: string; AIndex, ALine, ACol: Integer; const AName: string): Integer;
+function TCollector.Tok(const AKind: string; AIndex, ALine, ACol: Integer; const AName: string; const ACls: string): Integer;
 var
   Key: string;
   T  : TSrcTok;
 begin
-  Key:= AKind + '|' + IntToStr(AIndex) + '|' + IntToStr(ALine) + '|' + IntToStr(ACol) + '|' + LowerCase(AName);
+  Key:= AKind + '|' + IntToStr(AIndex) + '|' + IntToStr(ALine) + '|' + IntToStr(ACol) + '|' + LowerCase(AName)
+        + '|' + ACls;
   if FTokIdx.TryGetValue(Key, Result) then Exit;
   T.Kind := AKind;
   T.Index:= AIndex;
   T.Line := ALine;
   T.Col  := ACol;
   T.Name := AName;
+  T.Cls  := ACls;
   Result:= FToks.Add(T);
   FTokIdx.Add(Key, Result);
 end;
@@ -760,6 +1010,43 @@ function TCollector.TokVal(ATok: Integer): TExprVal;
 begin
   Result.May := [ATok * 2];
   Result.Must:= [ATok];
+  Result.Cls := '';
+end;
+
+{ 1.56 B3: AV as a value of scalar class ACls. Every source that still has no class (a pre-1.56
+  flow that the old walk dropped at this point) becomes the same source WITH the class; a source
+  that already has one keeps it (the class is the FIRST scalar the value became). The result
+  never holds a class-less source, so no pre-1.56 row can come out of it. }
+function TCollector.Reclass(const AV: TExprVal; const ACls: string): TExprVal;
+var
+  I, T: Integer;
+  K   : TSrcTok;
+begin
+  Result.Cls:= ACls;
+  if ACls = '' then
+  begin
+    Result.May := AV.May;
+    Result.Must:= AV.Must;
+    Exit;
+  end;
+  SetLength(Result.May, Length(AV.May));
+  for I:= 0 to High(AV.May) do
+  begin
+    T:= AV.May[I] shr 1;
+    K:= FToks[T];
+    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ACls);
+    Result.May[I]:= T * 2 + (AV.May[I] and 1);
+  end;
+  SetLength(Result.Must, Length(AV.Must));
+  for I:= 0 to High(AV.Must) do
+  begin
+    T:= AV.Must[I];
+    K:= FToks[T];
+    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ACls);
+    Result.Must[I]:= T;
+  end;
+  Result.May := SetNorm(Result.May);
+  Result.Must:= SetNorm(Result.Must);
 end;
 
 function TCollector.SlotOf(const N: TTSNode): Integer;
@@ -852,10 +1139,11 @@ end;
 procedure TCollector.AddRow(const AKind: string; ALine, ACol, AIndex: Integer; const AName, ARecv: string;  // dl:ok too-many-parameters@254c -- one argument per data_flows column; a record would only restate TDataFlowRow
                             ATok: Integer; AVia, ACond: Boolean);
 var
-  Key: string;
-  Idx: Integer;
-  R  : TDataFlowRow;
-  T  : TSrcTok;
+  Key  : string;
+  Idx  : Integer;
+  R    : TDataFlowRow;
+  T    : TSrcTok;
+  Added: Boolean;
 begin
   Key:= AKind + '|' + IntToStr(ALine) + '|' + IntToStr(ACol) + '|' + IntToStr(AIndex) + '|' + LowerCase(AName)
         + '|' + IntToStr(ATok);
@@ -867,7 +1155,24 @@ begin
     FRows[Idx]:= R;
     Exit;
   end;
-  if FRows.Count >= DF_ROW_CAP then
+  T:= FToks[ATok];
+  { 1.56 B3: two budgets, so a value / hook row can never push a pre-1.56 row out }
+  Added:= (T.Cls <> '') or not IsOldRowKind(AKind, T.Kind);
+  if Added then
+  begin
+    if FValRows >= DF_ROW_CAP then
+    begin
+      if not FValCapped then
+      begin
+        FValCapped:= True;
+        Writeln(ErrOutput, Format('data_flows: value-row cap %d reached in %s (line %d); later value rows dropped',
+          [DF_ROW_CAP, FSym.Name, FSym.ImplStartLine]));
+      end;
+      Exit;
+    end;
+    Inc(FValRows);
+  end
+  else if FRows.Count - FValRows >= DF_ROW_CAP then
   begin
     if not FCapped then
     begin
@@ -878,7 +1183,6 @@ begin
     end;
     Exit;
   end;
-  T:= FToks[ATok];
   R:= Default(TDataFlowRow);
   R.SymbolId   := FSym.Id;
   R.OwnerId    := if FSym.ParentId > 0 then FSym.ParentId else 0;
@@ -895,6 +1199,7 @@ begin
   R.SrcName    := T.Name;
   R.ViaLocal   := AVia;
   R.Cond       := ACond;
+  R.ValClass   := T.Cls;
   FRowIdx.Add(Key, FRows.Add(R));
 end;
 
@@ -916,23 +1221,20 @@ procedure TCollector.AssignSlot(var St: TTaintVal; ASlot: Integer; const AV: TEx
                                 const ASite: TTSNode);
 var
   L, C: Integer;
+  V   : TExprVal;
 begin
   if (ASlot < 0) or (ASlot >= FNSlots) then Exit;
-  if FSlotScalar[ASlot] then
-  begin
-    St.May[ASlot] := nil;
-    St.Must[ASlot]:= nil;
-    Exit;
-  end;
+  { 1.56 B3: a scalar slot holds value sources only (pre-1.56 it held nothing) }
+  V:= if FSlotScalar[ASlot] then Reclass(AV, FSlotCls[ASlot]) else AV;
   if AKill and not FInsensitive then
   begin
-    St.May[ASlot] := AV.May;
-    St.Must[ASlot]:= AV.Must;
+    St.May[ASlot] := V.May;
+    St.Must[ASlot]:= V.Must;
   end
   else
   begin
-    St.May[ASlot] := SetUnion(St.May[ASlot], AV.May);
-    St.Must[ASlot]:= SetUnion(St.Must[ASlot], AV.Must);
+    St.May[ASlot] := SetUnion(St.May[ASlot], V.May);
+    St.Must[ASlot]:= SetUnion(St.Must[ASlot], V.Must);
   end;
   if FRecording and (not ASite.IsNull) then
   begin
@@ -970,7 +1272,8 @@ var
   I, E: Integer;
 begin
   Result:= ExprEmpty;
-  if (ASlot < 0) or (ASlot >= FNSlots) or FSlotScalar[ASlot] then Exit;
+  if (ASlot < 0) or (ASlot >= FNSlots) then Exit;
+  Result.Cls:= FSlotCls[ASlot];
   SetLength(Result.May, Length(St.May[ASlot]));
   for I:= 0 to High(St.May[ASlot]) do
   begin
@@ -998,7 +1301,7 @@ begin
   Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(N.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, N.StartByte, N.StartPoint.Column) + 1, Text(N)));
 end;
 
-function TCollector.EvalDot(var St: TTaintVal; const N: TTSNode): TExprVal;  // dl:ok too-many-exit-points@49b8 -- one early Exit per receiver shape (Self, local, member ref)
+function TCollector.EvalDot(var St: TTaintVal; const N: TTSNode): TExprVal;
 var
   L, R, Base: TTSNode;
   LV        : TExprVal;
@@ -1016,17 +1319,19 @@ begin
   Member:= '';
   if (not R.IsNull) and (R.NodeType = 'identifier') then Member:= LowerCase(Text(R));
   Base:= BaseIdent(L);
-  if InList(Member, TAINT_NUMERIC_MEMBERS) then Exit(ExprEmpty);
   { a member of a local / param reads that variable }
-  if SlotOf(Base) >= 0 then Exit(LV);
-  if (Member <> '') and RefShapeOk(L, SameText(Text(L), 'Self')) then
+  if SlotOf(Base) >= 0 then Result:= LV
+  else if (Member <> '') and RefShapeOk(L, SameText(Text(L), 'Self')) then
   begin
     Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R)));
     BN:= LowerCase(Text(Base));
     if ((BN <> '') and (FFields.ContainsKey(BN) or FGlobals.ContainsKey(BN))) or IsHardCastRooted(L) then Result:= ExprUnion(Result, LV); { a cast keeps its operand's taint }
-    Exit;
-  end;
-  Result:= LV;
+  end
+  else Result:= LV;
+  { 1.56 B3: a numeric member (`L.Count`) was no flow at all; now it is an integer derived from its
+    receiver. An accessor (`F.AsFloat`) keeps its pre-1.56 sources and only states its class. }
+  if InList(Member, TAINT_NUMERIC_MEMBERS) then Result:= Reclass(Result, DF_VAL_INT)
+  else Result.Cls:= AccessorClass(Member);
 end;
 
 function TCollector.EvalCall(var St: TTaintVal; const N: TTSNode): TExprVal;
@@ -1085,16 +1390,83 @@ begin
     begin
       Arg:= Args.NamedChild(I);
       Slot:= SlotOf(Arg);
-      if (Slot < 0) or FSlotScalar[Slot] or not ArgMayBeWritten(Callee, I) then Continue;
-      T:= Tok(DF_SRC_ARGOUT, I, CallLine, CallCol, Text(NameN));
+      if (Slot < 0) or not ArgMayBeWritten(Callee, I) then Continue;
+      { 1.56 B3: a scalar variable gets the argout source too, as a value source of its class }
+      T:= Tok(DF_SRC_ARGOUT, I, CallLine, CallCol, Text(NameN), FSlotCls[Slot]);
       St.May[Slot] := SetUnion(St.May[Slot], [T * 2]);
       St.Must[Slot]:= SetUnion(St.Must[Slot], [T]);
     end;
-  if InList(Callee, TAINT_NOFLOW_RESULT) then Exit;
+  if InList(Callee, TAINT_NOFLOW_RESULT) then Exit(EvalNoFlowCall(St, Callee, Args, ArgVals, Recv.IsNull));
   Result:= TokVal(Tok(DF_SRC_REF, -1, CallLine, CallCol, Text(NameN)));
   { a method of a string-typed local/param (`S.Trim`, `S.Substring(1)`) derives from it }
   Slot:= SlotOf(BaseIdent(Recv));
   if (Slot >= 0) and FSlotString[Slot] then Result:= ExprUnion(Result, RecvVal);
+end;
+
+{ 1.56 B3: the value of a TAINT_NOFLOW_RESULT call (pre-1.56: nothing flowed out of these). The
+  result is a scalar derived from the arguments (`Length(S)`, `StrToInt(S)`, `Round(X)`);
+  IntToStr's result is a string that keeps its integer sources; Inc(X, D) / Dec(X, D) with a
+  scalar variable X feed D into X and have no result. }
+function TCollector.EvalNoFlowCall(var St: TTaintVal; const ACallee: string; const AArgs: TTSNode;
+                                   const AArgVals: TArray<TExprVal>; ABare: Boolean): TExprVal;
+var
+  I, Slot: Integer;
+  All    : TExprVal;
+begin
+  Result:= ExprEmpty;
+  if NoFlowClass(ACallee) <> '' then
+  begin
+    All:= ExprEmpty;
+    for I:= 0 to High(AArgVals) do All:= ExprUnion(All, AArgVals[I]);
+    Result:= Reclass(All, NoFlowClass(ACallee));
+    if ACallee = DF_INTTOSTR then Result.Cls:= '';
+  end
+  else if InList(ACallee, DF_STEP_PROCS) and ABare and (Length(AArgVals) = DF_STEP_ARGS) then
+  begin
+    Slot:= SlotOf(AArgs.NamedChild(0));
+    if (Slot >= 0) and FSlotScalar[Slot] then AssignSlot(St, Slot, AArgVals[1], False, AArgs.NamedChild(0));
+  end;
+end;
+
+{ 1.56 B3: `A <op> B`. `+` unions as before (its class is known only when both sides' are); `as`
+  is its left side; every other operator yields a scalar, which pre-1.56 was no flow: `X is T`
+  derives from X only, a comparison is a Boolean derived from both sides, the rest is arithmetic
+  or logic (ArithClass). }
+function TCollector.EvalBinary(var St: TTaintVal; const N: TTSNode): TExprVal;
+var
+  Op, OpT: string;
+  A, B   : TExprVal;
+  OpN    : TTSNode;
+begin
+  OpN:= N.ChildByField('operator');
+  Op := if OpN.IsNull then '' else OpN.NodeType;
+  A:= Eval(St, N.ChildByField('lhs'));
+  B:= Eval(St, N.ChildByField('rhs'));
+  OpT:= LowerCase(Trim(Text(OpN)));
+  if Op = 'kAdd' then
+  begin
+    Result:= ExprUnion(A, B);
+    if (A.Cls <> '') and (B.Cls <> '') then Result.Cls:= ArithClass('', A.Cls, B.Cls);
+  end
+  else if Op = 'kAs' then Result:= A
+  else if OpT = DF_OP_IS then Result:= Reclass(A, DF_VAL_BOOL)
+  else if InList(OpT, DF_COMPARE_OPS) then Result:= Reclass(ExprUnion(A, B), DF_VAL_BOOL)
+  else Result:= Reclass(ExprUnion(A, B), ArithClass(OpT, A.Cls, B.Cls));
+end;
+
+{ 1.56 B3: `@X` and `X^` are X (as before); `not X` is Boolean unless X is an integer; a sign
+  keeps the operand's class (a number of unknown type: DF_VAL_FLOAT). }
+function TCollector.EvalUnary(var St: TTaintVal; const N: TTSNode): TExprVal;
+var
+  Op : string;
+  OpN: TTSNode;
+begin
+  OpN:= N.ChildByField('operator');
+  Op := if OpN.IsNull then '' else OpN.NodeType;
+  Result:= Eval(St, N.ChildByField('operand'));
+  if (Op = 'kAt') or (Op = 'kHat') then Exit;
+  Result:= Reclass(Result, if Op = 'kNot' then (if Result.Cls = DF_VAL_INT then DF_VAL_INT else DF_VAL_BOOL)
+                           else (if Result.Cls <> '' then Result.Cls else DF_VAL_FLOAT));
 end;
 
 { May the callee ACallee (lower case) write argument AIndex? A same-unit callee
@@ -1154,16 +1526,32 @@ begin
   end;
 end;
 
-function TCollector.Eval(var St: TTaintVal; const N: TTSNode): TExprVal;  // dl:ok too-many-exit-points@ea9b -- node-type dispatcher: one Exit per grammar node kind
+function TCollector.Eval(var St: TTaintVal; const N: TTSNode): TExprVal;
+begin
+  Result:= EvalNode(St, N);
+  if (GExprHooks <> nil) and not N.IsNull then RunExprHooks(St, N, Result);
+end;
+
+function TCollector.EvalNode(var St: TTaintVal; const N: TTSNode): TExprVal;  // dl:ok too-many-exit-points@1d4a -- node-type dispatcher: one Exit per grammar node kind
 var
-  NT, Op: string;
-  I     : Integer;
-  A, B  : TExprVal;
-  OpN   : TTSNode;
+  NT  : string;
+  I   : Integer;
+  A, B: TExprVal;
 begin
   Result:= ExprEmpty;
   if N.IsNull then Exit;
   NT:= N.NodeType;
+  { 1.56 B3: a literal still carries no source, but its class types the expression around it }
+  if NT = 'literalNumber' then
+  begin
+    Result.Cls:= NumberClass(Text(N));
+    Exit;
+  end;
+  if (NT = 'kTrue') or (NT = 'kFalse') then
+  begin
+    Result.Cls:= DF_VAL_BOOL;
+    Exit;
+  end;
   if InList(NT, TAINT_INERT_NODES) then Exit;
   if NT = 'identifier' then Exit(EvalIdent(St, N));
   if NT = 'exprDot' then Exit(EvalDot(St, N));
@@ -1183,24 +1571,8 @@ begin
     Eval(St, N.ChildByField('args'));
     Exit(Eval(St, N.ChildByField('entity')));
   end;
-  if NT = 'exprBinary' then
-  begin
-    OpN:= N.ChildByField('operator');
-    Op := if OpN.IsNull then '' else OpN.NodeType;
-    A:= Eval(St, N.ChildByField('lhs'));
-    B:= Eval(St, N.ChildByField('rhs'));
-    if Op = 'kAdd' then Exit(ExprUnion(A, B));
-    if Op = 'kAs' then Exit(A);
-    Exit;
-  end;
-  if NT = 'exprUnary' then
-  begin
-    OpN:= N.ChildByField('operator');
-    Op := if OpN.IsNull then '' else OpN.NodeType;
-    A:= Eval(St, N.ChildByField('operand'));
-    if (Op = 'kAt') or (Op = 'kHat') then Exit(A);
-    Exit;
-  end;
+  if NT = 'exprBinary' then Exit(EvalBinary(St, N));
+  if NT = 'exprUnary' then Exit(EvalUnary(St, N));
   if NT = 'exprIf' then
   begin
     Eval(St, N.ChildByField('condition'));
@@ -1208,9 +1580,11 @@ begin
     B:= Eval(St, N.ChildByField('else'));
     Result.May := SetUnion(A.May, B.May);
     Result.Must:= SetInter(A.Must, B.Must);
+    if A.Cls = B.Cls then Result.Cls:= A.Cls;
     Exit;
   end;
   { exprParens, exprBrackets (`[A, B]`: an open array is one value), exprArgs, anything else }
+  if N.NamedChildCount = 1 then Exit(Eval(St, N.NamedChild(0))); { `(X)` keeps X's class }
   for I:= 0 to N.NamedChildCount - 1 do Result:= ExprUnion(Result, Eval(St, N.NamedChild(I)));
 end;
 
@@ -1263,6 +1637,7 @@ begin
   V  := Eval(St, N.ChildByField('rhs'));
   Kill:= OpN.IsNull or (OpN.NodeType = 'kAssign');
   if Lhs.IsNull then Exit;
+  if GWriteHooks <> nil then RunWriteHooks(St, Lhs, V);
   if Lhs.NodeType = 'varAssignDef' then
   begin
     IdN:= Lhs.ChildByField('name');
@@ -1323,6 +1698,12 @@ var
   NT: string;
 begin
   NT:= N.NodeType;
+  if GStmtHooks <> nil then
+  begin
+    RunStmtHooks(St, N);
+    if NT = 'statement' then
+      for I:= 0 to N.NamedChildCount - 1 do RunStmtHooks(St, N.NamedChild(I));
+  end;
   if NT = 'assignment' then ApplyAssignment(St, N)
   else if NT = 'statement' then
     for I:= 0 to N.NamedChildCount - 1 do ApplyStmtExpr(St, N.NamedChild(I))
@@ -1437,7 +1818,7 @@ begin
   if not St.Reached then Exit;
   for S:= 0 to FNSlots - 1 do
   begin
-    if FSlotScalar[S] then Continue;
+    { 1.56 B3: a scalar Result / var / out slot emits its value rows (it holds no other source) }
     if S = FResultSlot then
     begin
       Kind:= DF_DST_RESULT;
@@ -1531,6 +1912,153 @@ begin
   Result:= FRows.ToArray;
 end;
 
+{ ---- 1.56 seam: the registered hooks and what they may ask (TDataFlowSite) ---- }
+
+procedure TCollector.RunExprHooks(var St: TTaintVal; const N: TTSNode; var AV: TExprVal);
+var
+  Save: PTaintVal;
+  NT  : string;
+  I   : Integer;
+begin
+  NT:= N.NodeType;
+  Save:= FCur;
+  FCur:= @St;
+  try
+    for I:= 0 to High(GExprHooks) do
+      if GExprHooks[I].NodeType = NT then GExprHooks[I].Hook(Self, N, AV);
+  finally
+    FCur:= Save;
+  end;
+end;
+
+procedure TCollector.RunWriteHooks(var St: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
+var
+  Save: PTaintVal;
+  I   : Integer;
+begin
+  Save:= FCur;
+  FCur:= @St;
+  try
+    for I:= 0 to High(GWriteHooks) do GWriteHooks[I](Self, ALhs, AV);
+  finally
+    FCur:= Save;
+  end;
+end;
+
+procedure TCollector.RunStmtHooks(var St: TTaintVal; const N: TTSNode);
+var
+  Save: PTaintVal;
+  NT  : string;
+  I   : Integer;
+begin
+  if N.IsNull then Exit;
+  NT:= N.NodeType;
+  Save:= FCur;
+  FCur:= @St;
+  try
+    for I:= 0 to High(GStmtHooks) do
+      if GStmtHooks[I].NodeType = NT then GStmtHooks[I].Hook(Self, N);
+  finally
+    FCur:= Save;
+  end;
+end;
+
+function TCollector.NodeText(const ANode: TTSNode): string;
+begin
+  Result:= Text(ANode);
+end;
+
+function TCollector.IsRecording: Boolean;
+begin
+  Result:= FRecording;
+end;
+
+function TCollector.ValueOf(const AExpr: TTSNode): TDataFlowValue;
+begin
+  if (FCur = nil) or AExpr.IsNull then Exit(ExprEmpty);
+  Result:= Eval(FCur^, AExpr);
+end;
+
+function TCollector.NewSource(const AKind: string; AIndex: Integer; const APos: TTSNode;
+                              const AName, AValClass: string): TDataFlowValue;
+var
+  L, C: Integer;
+begin
+  L:= 0;
+  C:= 0;
+  if not APos.IsNull then
+  begin
+    L:= Integer(APos.StartPoint.Row) + 1;
+    C:= Utf8ByteColToCharCol(FSrc, APos.StartByte, APos.StartPoint.Column) + 1;
+  end;
+  Result:= TokVal(Tok(AKind, AIndex, L, C, AName, AValClass));
+  Result.Cls:= AValClass;
+end;
+
+function TCollector.Merge(const A, B: TDataFlowValue): TDataFlowValue;
+begin
+  Result:= ExprUnion(A, B);
+  Result.Cls:= A.Cls;
+end;
+
+procedure TCollector.EmitRow(const ADstKind: string; const APos: TTSNode; AIndex: Integer;
+                             const AName, AReceiver: string; const AValue: TDataFlowValue);
+begin
+  RecordDst(ADstKind, APos, AIndex, AName, AReceiver, AValue);
+end;
+
+{ ---- self-test hooks (DF_TEST_HOOK_ENV only): one of each kind, the shapes EXT-B2 / EXT-B3 need ---- }
+
+function FirstCall(const N: TTSNode): TTSNode;
+var
+  I: Integer;
+begin
+  Result:= Default(TTSNode);
+  if N.IsNull then Exit;
+  if N.NodeType = 'exprCall' then Exit(N);
+  for I:= 0 to N.NamedChildCount - 1 do
+  begin
+    Result:= FirstCall(N.NamedChild(I));
+    if not Result.IsNull then Exit;
+  end;
+end;
+
+{ `<x>.AsFloat` read: adds a positioned dsfield source }
+procedure SelfTestExprHook(ASite: TDataFlowSite; const ANode: TTSNode; var AValue: TDataFlowValue);
+var
+  R: TTSNode;
+begin
+  R:= ANode.ChildByField('rhs');
+  if SameText(ASite.NodeText(R), DF_TEST_ACCESSOR) then
+    AValue:= ASite.Merge(AValue, ASite.NewSource(DF_SRC_DSFIELD, -1, R, DF_TEST_ACCESSOR, DF_VAL_FLOAT));
+end;
+
+{ `<x>.AsFloat := e`: a dsfield destination row }
+procedure SelfTestWriteHook(ASite: TDataFlowSite; const ALhs: TTSNode; const AValue: TDataFlowValue);
+var
+  R: TTSNode;
+begin
+  if ALhs.NodeType <> 'exprDot' then Exit;
+  R:= ALhs.ChildByField('rhs');
+  if SameText(ASite.NodeText(R), DF_TEST_ACCESSOR) then
+    ASite.EmitRow(DF_DST_DSFIELD, R, -1, DF_TEST_ACCESSOR, Trim(ASite.NodeText(ALhs.ChildByField('lhs'))), AValue);
+end;
+
+{ `raise E.Create(a, b)`: one raise row per constructor argument }
+procedure SelfTestStmtHook(ASite: TDataFlowSite; const ANode: TTSNode);
+var
+  Call, Ent, Args: TTSNode;
+  I              : Integer;
+begin
+  Call:= FirstCall(ANode);
+  if Call.IsNull then Exit;
+  Ent := Call.ChildByField('entity');
+  Args:= Call.ChildByField('args');
+  if Ent.IsNull or (Ent.NodeType <> 'exprDot') or Args.IsNull then Exit;
+  for I:= 0 to Args.NamedChildCount - 1 do
+    ASite.EmitRow(DF_DST_RAISE, ANode, I, Trim(ASite.NodeText(Ent.ChildByField('lhs'))), '', ASite.ValueOf(Args.NamedChild(I)));
+end;
+
 { ---- TDataFlowFacts ----------------------------------------------------- }
 
 class function TDataFlowFacts.Collect(const ASym: TSymbol; const AProc, ABody: TTSNode; const ASrc: TBytes;
@@ -1621,5 +2149,40 @@ class function TDataFlowFacts.CappedCount: Integer;
 begin
   Result:= GCapped;
 end;
+
+class procedure TDataFlowFacts.RegisterExprHook(const ANodeType: string; AHook: TDataFlowExprHook);
+var
+  R: TExprHookReg;
+begin
+  if not Assigned(AHook) then Exit;
+  R.NodeType:= ANodeType;
+  R.Hook    := AHook;
+  GExprHooks:= GExprHooks + [R];
+end;
+
+class procedure TDataFlowFacts.RegisterWriteHook(AHook: TDataFlowWriteHook);
+begin
+  if not Assigned(AHook) then Exit;
+  SetLength(GWriteHooks, Length(GWriteHooks) + 1);
+  GWriteHooks[High(GWriteHooks)]:= AHook;
+end;
+
+class procedure TDataFlowFacts.RegisterStmtHook(const ANodeType: string; AHook: TDataFlowStmtHook);
+var
+  R: TStmtHookReg;
+begin
+  if not Assigned(AHook) then Exit;
+  R.NodeType:= ANodeType;
+  R.Hook    := AHook;
+  GStmtHooks:= GStmtHooks + [R];
+end;
+
+initialization
+  if GetEnvironmentVariable(DF_TEST_HOOK_ENV) <> '' then
+  begin
+    TDataFlowFacts.RegisterExprHook('exprDot', SelfTestExprHook);
+    TDataFlowFacts.RegisterWriteHook(SelfTestWriteHook);
+    TDataFlowFacts.RegisterStmtHook('raise', SelfTestStmtHook);
+  end;
 
 end.
