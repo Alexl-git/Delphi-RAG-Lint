@@ -44,3 +44,7 @@ the ancestor is not indexed, for an overloaded name, and for a class in a `dl:sh
 `on EMine do` where no code in the project raises, builds or otherwise mentions EMine or a descendant. Reported at the handled type.
 Silent when any reference to the type or a descendant is neither a handler nor a declaration (a `raise`, a constructor call, a factory,
 a variable, a cast and a class reference all count), and for a type in a `dl:shared` unit. Library exception types are not judged.
+
+## When ambiguous-unit-reference stays silent (1.56 FP-1)
+
+Two used units that declare the same name are not ambiguous when both declarations mean the same thing: a constant with the same type and value in both, a redirect `X = OtherUnit.X`, or the same `external` export declared in two units. Two functions with the same signature and different bodies are still reported.

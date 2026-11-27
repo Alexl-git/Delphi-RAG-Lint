@@ -41,3 +41,14 @@ Silent without an index. Reports three things on a class carrying `[TestFixture]
 No index needed. Reports an assignment inside a for, for-in, while or repeat loop whose right side does `+ - * / div mod`
 on a direct operand declared Variant or OleVariant (late-bound calls). Parameters, locals, inline vars and the function
 Result count. Fields and globals are not proven, so they stay silent.
+
+## When field-could-be-local stays silent (1.56 FP-1)
+
+Measured on three real projects, the first version reported fields that are state, not temporaries. The rule is now silent when:
+
+* the field is never read at all (a write-only field: a generated name holder, an interface kept alive) -- `could be a local` says nothing useful there;
+* its first write in the method is conditional (inside `if` / a loop / `case`, or a `begin..end` of one): the field keeps a value across calls;
+* the first write reads the field on the same line (`F := F + [X]`: an accumulator);
+* the file holds a same-name reference the index could not bind (it may be a use elsewhere).
+
+The cost is recall: a field first written inside a loop or `try` block that really is a temporary is no longer reported.
