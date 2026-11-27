@@ -15,7 +15,7 @@
     G2 convert-apply --help describes --glyph-stitch   G3 convert-validate --help describes it
     G4 README.md   G5 docs\AI-USAGE.md   G6 registry entry   G7 wiki page
     G8 POSITIVE CONTROL: the description matcher REJECTS a usage-line-only text (the pre-1.56 help)
-    G9 behaviour control: run_convert_glyph_strip.ps1 is green on this exe (bar its I1, which asserts the old OFF state)
+    G9 behaviour control: run_convert_glyph_strip.ps1 is green on this exe (its I1 asserts the promotion)
   Run: pwsh -File tests\autotest\run_v156_GLYPH.ps1 [-Exe <drag-lint.exe>] [-SkipBehaviour]
 #>
 [CmdletBinding()]
@@ -61,11 +61,11 @@ $usageOnly = '  drag-lint convert-apply --unit <F.pas> --rules <file> [--glyph-s
 Check 'G8 positive control: matcher rejects the usage-line-only help (the 1.55 shape)' (-not (HasDescription $usageOnly))
 
 if (-not $SkipBehaviour) {
-  # run_convert_glyph_strip.ps1 I1 asserts "info does NOT advertise glyph_stitch" -- the very thing this lane
-  # flips (request GLYPH -> CONVERTER). That ONE assertion is expected to fail; any other [FAIL] is a regression.
+  # run_convert_glyph_strip.ps1 I1 now asserts the promotion (flipped by REDS, the GLYPH -> CONVERTER request), so no
+  # [FAIL] is excused any more.
   $out = & pwsh -NoProfile -File "$PSScriptRoot\run_convert_glyph_strip.ps1" -Exe $Exe 2>&1 | ForEach-Object { "$_" }
-  $bad = @($out | Where-Object { $_ -match '^\[FAIL\]' -and $_ -notmatch '^\[FAIL\] I1 ' })
+  $bad = @($out | Where-Object { $_ -match '^\[FAIL\]' })
   $passN = @($out | Where-Object { $_ -match '^\[PASS\]' }).Count
-  Check 'G9 behaviour control: run_convert_glyph_strip.ps1 has no [FAIL] except the superseded I1' (($bad.Count -eq 0) -and ($passN -ge 20)) "failing: $($bad -join ' | '); passes=$passN"
+  Check 'G9 behaviour control: run_convert_glyph_strip.ps1 has no [FAIL]' (($bad.Count -eq 0) -and ($passN -ge 20)) "failing: $($bad -join ' | '); passes=$passN"
 }Write-Host ("v156 GLYPH: {0}" -f (@('GREEN', "RED ($script:fail failing)")[[int]($script:fail -gt 0)]))
 exit ([int]($script:fail -gt 0))

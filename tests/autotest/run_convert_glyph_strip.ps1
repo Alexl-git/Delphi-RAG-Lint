@@ -319,8 +319,9 @@ $off = Run $app $dbApp $rules @('--castlib', $cast)
 Check 'O1 without the switch a G-link book is still REFUSED (exit 1, not yet realised)' `
       (($off.Exit -eq 1) -and ($off.Raw -match 'not yet realised')) $off.Raw
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json --db $dbApp 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-Check 'I1 info --json does not advertise glyph_stitch while the switch is OFF' `
-      (($info -match 'lazy_validate') -and ($info -notmatch 'glyph_stitch')) $info
+# 1.56 GLYPH promoted --glyph-stitch (still OFF by default per run): info --json now advertises the capability.
+Check 'I1 info --json advertises glyph_stitch (1.56 GLYPH promotion; the switch stays OFF by default per run)' `
+      (($info -match 'lazy_validate') -and ($info -match '"glyph_stitch"\s*:\s*true')) $info
 
 # ---- A: the ruled 3.4 table on glyphs[] --------------------------------------
 $dry = Run $app $dbApp $rules @('--glyph-stitch', '--castlib', $cast, '--format', 'json')

@@ -332,7 +332,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..98] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..101] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -358,6 +358,7 @@ const
     (Name: 'DRAGLINT_HOVER_SETBY_MAX_SECONDS';         Purpose: 'hover Set by: wall-clock cap in seconds, a number > 0 (overrides the built-in HOVER_SETBY_MAX_SECONDS)'),
     (Name: 'DRAGLINT_HOVER_TIMING';                    Purpose: 'LSP: 1 writes one ''hover-timing <section> <ms>'' line per hover section to stderr'),
     (Name: 'DRAGLINT_INDEX_TEST_FAIL_FILE';           Purpose: 'test hook: index fails on the named file'),
+    (Name: 'DRAGLINT_INDIRECT_LOG';                   Purpose: 'index: 1 prints the indirect-call edges counters line to stdout'),
     (Name: 'DRAGLINT_LAYOUT';                         Purpose: 'installed-layout switch (unset = the default layout)'),
     (Name: 'DRAGLINT_LIBRARY_EFFECTS';                Purpose: 'purity stage: 0 = no library effect summaries for the run; a path = that library DB (measurements); unset = the first opening external_stores library'),
     (Name: 'DRAGLINT_LIBRARY_EFFECTS_TRUST';          Purpose: 'purity stage: 1 = trust library summaries unsoundly (measurement-only arm)'),
@@ -421,6 +422,8 @@ const
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
     (Name: 'DRAGLINT_TEST_SCOPE_NO_NAMES';            Purpose: 'test hook: the scoped resolve pass re-resolves the changed files only (a wrong scope)'),
     (Name: 'DRAGLINT_TEST_STREAM_COUNT_DELAY_MS';     Purpose: 'test hook: delay in the stream count'),
+    (Name: 'DRAGLINT_TEST_V156_DFHOOK';               Purpose: 'test hook: the data-flow facts unit registers its three self-test hooks'),
+    (Name: 'DRAGLINT_TEST_V156_STORE';                Purpose: 'test hook: 1 seeds one row per 1.56 fact and reads it back (store self-check)'),
     (Name: 'DRAGLINT_TEST_SYMID_NO_FP';               Purpose: 'test hook: every claimed symbol reads as unchanged (positive control of run_v153_GH18_SYMID)'),
     (Name: 'DRAGLINT_TEST_WARM_DELAY_MS';             Purpose: 'test hook: delay in the rule-cache warm'),
     (Name: 'DRAGLINT_TEST_WARM_HOLD_MS';              Purpose: 'test hook: hold in the rule-cache warm'),
