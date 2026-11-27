@@ -116,8 +116,8 @@ uses
   System.Classes,
   System.Generics.Collections,
   System.Generics.Defaults,
-  Data.DB,  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
-  DRagLint.FieldRepo.Schema;
+  Data.DB,
+  DRagLint.FieldRepo.Schema;  // dl:ok uses-global-census@7cd7 -- the named constants are the whole contract this unit draws; the unit pair travels together
 
 const
   CRLF = #13#10;
