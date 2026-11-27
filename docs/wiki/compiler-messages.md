@@ -40,7 +40,7 @@ the detection is the same, the table says so.
 
 | Candidate | Verdict |
 |---|---|
-| `implicit-package-import` | Refused as a rule: exactly dcc W1033, and it needs the unit list of binary .dcp packages that no source index has. Covered by the pass-through. |
+| `implicit-package-import` | Built in 1.52 (lane ATLA), default ON: a source-only check of a `.dpk` `contains` unit against sources found beside the package; it does not need the .dcp unit lists, so the earlier refusal no longer holds. See [v152-atla-rules](v152-atla-rules). The compiler's W1033 stays covered by the pass-through for cases the source check cannot see. |
 | `component-create-without-override` | Refused as a new id: exactly dcc W1010 and already `hides-ancestor-virtual`; the component lane adds a fixture that proves the existing rule covers `constructor Create(AOwner: TComponent)` without override. |
 | `debug-display-placeholder` | Not a compiler message (dcc never checks a DebuggerDisplay template). Built in 1.52 (lane BK-ATTRRULES) on the attributes index fact, default OFF: [v152-attrrules](v152-attrrules). |
 | `noreturn-returns` (W1080, lane OO) | Conditional: the lane compiles its RED fixture with dcc first; if dcc already reports the construct (W1080), it is a compiler message and is not added as a rule. |
