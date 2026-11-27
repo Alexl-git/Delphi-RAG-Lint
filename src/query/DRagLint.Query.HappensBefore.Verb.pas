@@ -1649,7 +1649,7 @@ begin
     { a lock: every routine that mentions it; a variable: every routine that may free or write it }
     var Seeds: TArray<Int64>:= nil;
     for var Ref in FStRefs do
-      if FStHeld or not (Ref.Cls in [rcUse, rcRead, rcEnter, rcLeave]) then Seeds:= Seeds + [Ref.Site.RoutineId];
+      if FStHeld or (Ref.Cls not in [rcUse, rcRead, rcEnter, rcLeave]) then Seeds:= Seeds + [Ref.Site.RoutineId];
     TArray.Sort<Int64>(Seeds);
     var Tops: TArray<THbSite>:= nil;
     FStHoldersState:= if UpClosure(Seeds, FStHolders, Tops) then HOLDERS_BUILT else HOLDERS_STOOD_DOWN;
@@ -1709,7 +1709,7 @@ begin
         var Esc:= FClassifier.ClassOf(Id);
         if SymKind(Id) = KIND_DESTRUCTOR then
           pRow.Why:= Format('%s is a destructor: an object can be destroyed during or after the unit finalizations', [RoutineName(Id)])
-        else if not (Esc in [hecNone, hecZeroCallers]) then
+        else if Esc not in [hecNone, hecZeroCallers] then
           pRow.Why:= Format('%s can run without a call the index sees (%s), so also after the free', [RoutineName(Id), EscapeClassCode(Esc)]);
         if pRow.Why <> '' then Exit;
       end;

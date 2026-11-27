@@ -435,8 +435,7 @@ end;
 
 function TIntraSolver.Step(pBlock, pItem: Integer; pState: Boolean): Boolean;
 begin
-  if FInForce and FCleared[pBlock][pItem] then Result:= False
-  else Result:= pState or FMarked[pBlock][pItem];
+  Result:= not (FInForce and FCleared[pBlock][pItem]) and (pState or FMarked[pBlock][pItem]);
 end;
 
 procedure TIntraSolver.CollectExceptBodies(const pNode: TTSNode; pList: TList<TTSNode>);
@@ -652,8 +651,9 @@ begin
   Result:= FindDefProc(PF.Tree.RootNode, Sym);
 end;
 
-function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;
-  pEntryDone: Boolean): THbRoutineState;
+{ The two public solves: pInForce = the in-force solve with pClears (entry False). }
+function SolveShared(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pClears, pQueries: TArray<THbSite>;
+  pEntryDone, pInForce: Boolean): THbRoutineState;
 begin
   Result:= Default(THbRoutineState);
   Result.RoutineId:= pRoutineId;
@@ -672,6 +672,8 @@ begin
     end;
     var Solver:= TIntraSolver.Create(Cfg, pEntryDone);
     try
+      Solver.Clears:= pClears;
+      Solver.InForce:= pInForce;
       Solver.Run(pMarks, Result);
     finally
       Solver.Free;
@@ -681,35 +683,16 @@ begin
   end;
 end;
 
+function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;
+  pEntryDone: Boolean): THbRoutineState;
+begin
+  Result:= SolveShared(pStore, pRoutineId, pMarks, nil, pQueries, pEntryDone, {pInForce=}False);
+end;
+
 function SolveRoutineInForce(const pStore: ISymbolStore; pRoutineId: Int64;
   const pMarks, pClears, pQueries: TArray<THbSite>): THbRoutineState;
 begin
-  Result:= Default(THbRoutineState);
-  Result.RoutineId:= pRoutineId;
-  SetLength(Result.Queries, Length(pQueries));
-  for var I:= 0 to High(pQueries) do Result.Queries[I].Site:= pQueries[I];
-  var Src: TBytes;
-  var Proc:= LocateDefProc(pStore, pRoutineId, Src);
-  if Proc.IsNull then Exit;
-  Result.Found:= True;
-  var Cfg:= TCfgBuilder.Build(Proc, Src, {APruneConstLoops=}True);
-  try
-    if Cfg.Skipped then
-    begin
-      Result.CfgSkipped:= True;
-      Exit;
-    end;
-    var Solver:= TIntraSolver.Create(Cfg, {pEntryDone=}False);
-    try
-      Solver.Clears:= pClears;
-      Solver.InForce:= True;
-      Solver.Run(pMarks, Result);
-    finally
-      Solver.Free;
-    end;
-  finally
-    Cfg.Free;
-  end;
+  Result:= SolveShared(pStore, pRoutineId, pMarks, pClears, pQueries, {pEntryDone=}False, {pInForce=}True);
 end;
 
 function HbFactMustWrites(const pStore: ISymbolStore; pRoutineId: Int64; const pName: string): Boolean;
