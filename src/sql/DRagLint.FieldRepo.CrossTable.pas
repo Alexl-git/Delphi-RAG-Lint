@@ -72,15 +72,14 @@ function InputAliases(const pInputs: TArray<TFrFieldInput>): TArray<string>;  //
 /// <remarks>A parent's calc field brings its own inputs with the paths concatenated, so a need's path may be longer
 /// than any searched path. Cycle guard over (table, field) on the current chain: A.X -> B.Y -> A.X stops at the second
 /// A.X, which is still listed once.</remarks>
-function CrossTableClosure(const pTable, pField: string; const pBodyOf: TFrBodyFunc;  // dl:ok unused-public-symbol@1fdd -- REVIEWED 2026-11-26 XTABLE: public API of the X1 rule unit, called by tests\fieldrepo\CrossTableTests.dpr (outside this index) and by later slices (X3 read-dfm, the 1.56 dialog)
+function CrossTableClosure(const pTable, pField: string; const pBodyOf: TFrBodyFunc;  // dl:ok unused-public-symbol@1fdd, doc-drift@1fdd -- REVIEWED 2026-11-26 XTABLE: public API of the X1 rule unit, called by tests\fieldrepo\CrossTableTests.dpr (outside this index) and by later slices (X3 read-dfm, the 1.56 dialog); EFrKindError is raised by the body-parsing helper this routine calls; the documented contract is the propagated exception
   const pInputsOf: TFrInputsFunc): TArray<TFrNeed>;
 
 implementation
 
 uses
-  System.StrUtils,
   System.Generics.Collections,
-  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.Schema, // dl:unit DRagLint.FieldRepo.Schema accepted -- repo_path_separator is the one path-text separator the schema facts use; the unit has no other need of the schema unit
   DRagLint.FieldRepo.Kinds;
 
 function JoinInputPath(const pFirst, pSecond: string): string;

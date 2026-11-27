@@ -361,6 +361,8 @@ var
   vItem: TFrPurgeItem;
   vRead: TArray<TFrBackupEntry>;
   vFiles: Integer;
+  vOwn: string;
+  vDropped: Boolean;
 begin
   Check('Q1 a remote server with the restore test is refused before anything is opened, naming --verify quick',
     RemoteVerifyProblem(REMOTE, fvmFull).Contains('--verify quick') and RemoteVerifyProblem(REMOTE, fvmFull).Contains('srv.invalid'), RemoteVerifyProblem(REMOTE, fvmFull));
@@ -370,6 +372,40 @@ begin
   Check('Q2 server paths: Windows, Unix, with a folder', (ServerBackupFile('C:\db\A.FDB', '', 'x.fbk') = 'C:\db\x.fbk') and (ServerBackupFile('/srv/db/a.fdb', '', 'x.fbk') = '/srv/db/x.fbk') and
     (ServerBackupFile('C:\db\A.FDB', 'D:\bk\', 'x.fbk') = 'D:\bk\x.fbk') and (ServerBackupFile('/srv/db/a.fdb', '/bk', 'x.fbk') = '/bk/x.fbk'),
     ServerBackupFile('C:\db\A.FDB', '', 'x.fbk') + ' ' + ServerBackupFile('/srv/db/a.fdb', '', 'x.fbk'));
+  { REVFIX (1.55 review): Q16 A against a live server, the remote name, the project folder }
+  Check('R0 this computer has an IPv4 address of its own (else R1 proves nothing)', Length(OwnAddresses) > 0);
+  vText := '';
+  for vOwn in OwnAddresses do
+    if (RemoteAttachmentHost(vOwn, 'TCPv4|' + vOwn + '/4711') <> '') or (RemoteFbHost('Server=' + vOwn + ';Database=C:\x.fdb;User_Name=SYSDBA') <> '') then
+      vText := vText + vOwn + ' ';
+  Check('R1 Server=<own IPv4>: the server reports that address as the peer and the attachment check passes', vText = '', vText);
+  Check('R1b the own name passes too, whatever the peer', RemoteAttachmentHost(GetEnvironmentVariable('COMPUTERNAME'), 'TCPv4|192.0.2.7/4711') = '');
+  Check('R1c control: through localhost (a forwarded port) a non-loopback peer is still refused, an own address included',
+    (RemoteAttachmentHost('localhost', 'TCPv4|192.0.2.7/4711') = '192.0.2.7') and (RemoteAttachmentHost('', 'TCPv4|192.0.2.7/4711') = '192.0.2.7') and
+    (Length(OwnAddresses) > 0) and (RemoteAttachmentHost('localhost', 'TCPv4|' + OwnAddresses[0] + '/1') = OwnAddresses[0]) and
+    (RemoteAttachmentHost('localhost', 'TCPv4|127.0.0.1/4711') = '') and (RemoteAttachmentHost('192.0.2.7', 'TCPv4|192.0.2.7/4711') = '192.0.2.7'));
+  vText := RemoteBackupFile('C:\db\A.FDB', '', EncodeDateTime(2026, 11, 26, 9, 8, 7, 5));
+  Check('R2 two remote backups of one second get different names, both automatic ones', (vText = 'C:\db\DLFR_BACKUP_A_20261126_090807_1005.fbk') and
+    (RemoteBackupFile('C:\db\A.FDB', '', EncodeDateTime(2026, 11, 26, 9, 8, 7, 6)) <> vText) and
+    (RemoteBackupFile('/srv/a.fdb', '/bk', EncodeDateTime(2026, 11, 26, 9, 8, 7, 0)) = '/bk/DLFR_BACKUP_a_20261126_090807_1000.fbk'), vText);
+  vRemote := Default(TFrBackupEntry);
+  vRemote.FileName := TPath.Combine(GDir, 'DLFR_BACKUP_A_20261126_090807_1005.fbk');
+  vRemote.Database := 'C:\db\A.FDB';
+  vRemote.CreatedUtc := EncodeDate(2020, 1, 1);
+  vRemote.Verified := fbvQuick;
+  TFile.WriteAllText(vRemote.FileName, 'x');
+  vRemote.Size := 1;
+  vRemote.ModifiedUtc := TFile.GetLastWriteTimeUtc(vRemote.FileName);
+  vText := '(none)';
+  for vItem in PlanBackupPurge([MakeEntry('r-keep', 'C:\db\A.FDB', 1, fbvFull), vRemote], 1) do
+    if vItem.Entry.FileName = vRemote.FileName then
+      vText := PURGE_ACTION_NAMES[vItem.Action] + ' ' + vItem.Reason;
+  Check('R2b the purge takes a name of that form for an automatic one (deletes it)', vText.StartsWith('delete'), vText);
+  TFile.Delete(vRemote.FileName);
+  Check('R3 the project''s backup folder is not sent to another machine', (EffectiveBackupDir(REMOTE, '', 'C:\proj\bk', vDropped) = '') and vDropped);
+  Check('R3b control: it is used on this machine; --backup-dir wins on both and nothing is dropped', (EffectiveBackupDir(LOCAL, '', 'C:\proj\bk', vDropped) = 'C:\proj\bk') and not vDropped and
+    (EffectiveBackupDir(REMOTE, 'D:\srv', 'C:\proj\bk', vDropped) = 'D:\srv') and not vDropped and (EffectiveBackupDir(LOCAL, 'D:\x', 'C:\proj\bk', vDropped) = 'D:\x') and
+    (EffectiveBackupDir(REMOTE, '', '', vDropped) = '') and not vDropped);
   Check('Q1c --backup-name with a remote server is refused, naming the host and the automatic name; local and no name are not', RemoteNameProblem(REMOTE, 'mine').Contains('srv.invalid') and
     RemoteNameProblem(REMOTE, 'mine').Contains('automatic') and (RemoteNameProblem(REMOTE, '') = '') and (RemoteNameProblem(LOCAL, 'mine') = ''), RemoteNameProblem(REMOTE, 'mine'));
   Check('Q1d a remote backup is a state of its own, not quick, named not verified', (fbvRemote <> fbvQuick) and VERIFIED_NAMES[fbvRemote].Contains('not verified') and (RenderBackupText(MakeAlterBackup(VERIFIED_NAMES[fbvRemote]))[0].Contains('NOT verified')) and

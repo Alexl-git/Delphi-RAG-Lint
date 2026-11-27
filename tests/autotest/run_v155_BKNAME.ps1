@@ -11,6 +11,9 @@
     B3  purge --apply: an old-form entry, a default-named one and the chosen-name one are all deleted, the newest stays
     B4  alter-table --apply --backup-name <name> makes <name>.fbk
     B5  Q10 = B: a remote server is allowed with --verify quick (a restore test needs the server on this machine)
+  B6  Q16 A: the own name / IPv4 addresses are not refused before connecting. ABSENCE only (no server answers): the positive
+      control, the attachment check of an opened connection, is BackupTests.dpr R1-R1c (run_fieldrepo_backup.ps1)
+  Exit: 0 PASS, 1 FAIL, 77 SKIP (B2-B4 need Firebird 4; without it nothing of them ran)
   Run: pwsh -File tests\autotest\run_v155_BKNAME.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
@@ -77,8 +80,10 @@ try {
   $r = Run @('repo', 'alter-table', '--repo', $repo, '--table', 'T', '--direction', 'repo-to-db', '--connection', $far, '--apply')
   Check 'B5c alter-table --apply on a remote server without --verify quick -> exit 1 before anything is opened' (($r.Code -eq 1) -and ($r.Out -match '--verify quick') -and ($r.Out -notmatch $pw)) $r.Out
   $r = Run @('repo', 'backup', 'list')
-  Check 'B5d list works with no remote entries' ($r.Code -eq 0) $r.Out  $embed = New-FirebirdEmbed (Join-Path $work 'fb')
-  if (-not $embed) { Write-Host 'SKIP B2-B4 no Firebird 4 on this machine'; if ($script:Failed) { exit 1 } else { exit 0 } }
+  Check 'B5d list works with no remote entries' ($r.Code -eq 0) $r.Out
+  $embed = New-FirebirdEmbed (Join-Path $work 'fb')
+  # exit 77 = the battery's SKIP (tests\run_battery.ps1): B2-B4 did not run, which is not a PASS
+  if (-not $embed) { Write-Host 'SKIP: B2-B4 no Firebird 4 on this machine'; if ($script:Failed) { exit 1 } else { exit 77 } }
   $env:FIREBIRD = $embed
   Get-ChildItem -LiteralPath (Split-Path $Exe) -File | Where-Object { $_.Extension -eq '.dll' -or $_.Name -eq 'drag-lint.exe' } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $embed }
   $script:Bin = Join-Path $embed 'drag-lint.exe'
@@ -106,7 +111,7 @@ COMMIT;
   $size = (Get-Item -LiteralPath (Join-Path $dbDir 'mine.fbk')).Length
   $r = Run @('repo', 'backup', '--connection', $cs, '--verify', 'quick', '--backup-name', 'MINE.FBK')
   Check 'B2c the same name again -> exit 1, the file is untouched, nothing more recorded' (($r.Code -eq 1) -and ($r.Out -match 'exists already') -and ((Get-Item -LiteralPath (Join-Path $dbDir 'mine.fbk')).Length -eq $size) -and
-    (@((Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json).backups).Count -eq 2)) $r.Out
+    (@((Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json | ForEach-Object { $_ }).backups).Count -eq 2)) $r.Out
   $other = Join-Path $work 'elsewhere'
   $r = Run @('repo', 'backup', '--connection', $cs, '--verify', 'quick', '--backup-name', 'in-dir.fbk', '--backup-dir', $other)
   Check 'B2d --backup-dir still picks the folder' (($r.Code -eq 0) -and (Test-Path -LiteralPath (Join-Path $other 'in-dir.fbk'))) $r.Out
@@ -114,9 +119,9 @@ COMMIT;
   $old = Join-Path $dbDir 'scratch-20200101-000000000.fbk'
   Copy-Item -LiteralPath $j1.file -Destination $old
   (Get-Item -LiteralPath $old).LastWriteTimeUtc = (Get-Item -LiteralPath $j1.file).LastWriteTimeUtc
-  $m = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+  $m = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   $e = $m.backups | Where-Object { $_.file -eq $j1.file } | Select-Object -First 1
-  $copy = $e | ConvertTo-Json | ConvertFrom-Json
+  $copy = $e | ConvertTo-Json | ConvertFrom-Json | ForEach-Object { $_ }
   $copy.file = $old
   $copy.created_utc = '2020-01-01T00:00:00.000Z'
   $m.backups = @($m.backups) + @($copy)

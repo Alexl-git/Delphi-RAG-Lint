@@ -27,8 +27,10 @@ type
 /// <param name="pServerDir">--server-dir ('' = not given).</param>
 /// <param name="pClientDir">--client-dir ('' = not given).</param>
 /// <param name="pRun">The generator; nil = RunOrmGenVerb.</param>
-/// <returns>The lines to print: a summary with the count and one line per unit that is new or would change; or a "warning:"
-/// line when the dry run failed (a missing --code-dir included). nil when there is no follow-up.</returns>
+/// <returns>The lines to print: a summary with the count and one line per unit that is new or would change; a unit the
+/// generator REFUSED (a hand-edited region, markers that cannot be trusted) is counted in the summary and named too, so that
+/// "0 unit(s) would change" never hides one; or a "warning:" line when the dry run failed (a missing --code-dir included).
+/// nil when there is no follow-up.</returns>
 /// <remarks>Never writes: Apply is forced to False. A failure only warns; the caller's result and exit code stay as the apply
 /// left them. Never raises.</remarks>
 function MicroniteOrmFollowUp(const pHook: string; pApplied: Boolean; const pRepo, pTable, pCodeDir, pServerDir, pClientDir: string;
@@ -42,6 +44,7 @@ uses
 
 const
   REGISTRY_PREFIX = 'FIB$';
+  REFUSED_MARK = ': REFUSED'; // DRagLint.FieldRepo.OrmGen: a unit or a region the generator leaves as it is
 
 type
   TFrSchemaHookMicronite = class(TFrSchemaHook)
@@ -78,7 +81,7 @@ var
   VOptions: TOrmVerbOptions;
   VLines: TStringList;
   VLine, VUnits: string;
-  VCount: Integer;
+  VCount, VRefused: Integer;
 begin
   Result := nil;
   if not SameText(pHook, HOOK_MICRONITE) or not pApplied then
@@ -108,14 +111,21 @@ begin
       end;
     end;
     VCount := 0;
+    VRefused := 0;
     VUnits := '';
     for VLine in VLines do
       if VLine.StartsWith('changed ') or VLine.StartsWith('new ') then
       begin
         Inc(VCount);
         VUnits := VUnits + 'orm unit: ' + VLine + sLineBreak;
+      end
+      else if VLine.StartsWith('skipped ') and VLine.Contains(REFUSED_MARK) then
+      begin
+        Inc(VRefused);
+        VUnits := VUnits + 'orm unit: ' + VLine + sLineBreak;
       end;
-    Result := [Format('orm follow-up (repo update-orm --table %s, dry run, nothing written): %d unit(s) would change', [pTable, VCount])];
+    Result := [Format('orm follow-up (repo update-orm --table %s, dry run, nothing written): %d unit(s) would change%s', [pTable, VCount,
+      if VRefused > 0 then Format(', %d REFUSED (not regenerated until its region is settled)', [VRefused]) else ''])];
     for VLine in VUnits.Split([sLineBreak], TStringSplitOptions.ExcludeEmpty) do
       Result := Result + [VLine];
     if VCount > 0 then

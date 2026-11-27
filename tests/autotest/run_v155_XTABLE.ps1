@@ -80,7 +80,7 @@ try {
   $r = Run @('repo', 'check', '--repo', $y)
   Check 'B6 the planted copy: exit 1, input-path-broken and input-alias-undeclared named' (($r.Code -eq 1) -and ($r.Out -match 'ERROR input-path-broken input IPCHART\.FTRNAME MSC') -and ($r.Out -match 'ERROR input-alias-undeclared IPCHART\.FTRNAME')) "exit=$($r.Code)`n$($r.Out)"
   $r = Run @('repo', 'check', '--repo', $y, '--json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'B7 repo check --json lists both codes' (($r.Code -eq 1) -and $j -and (@($j.findings | Where-Object { $_.code -eq 'input-path-broken' }).Count -eq 1) -and (@($j.findings | Where-Object { $_.code -eq 'input-alias-undeclared' }).Count -eq 1)) "exit=$($r.Code)"
 
   # schema 3 -> 5
@@ -127,7 +127,7 @@ try {
   $r = Run @('repo', 'paths', '--repo', $p, '--from', 'IPCHART', '--to', 'MSCLIST', '--depth', '1')
   Check 'D6 depth limit: --depth 1 finds no 2-step path' (($r.Code -eq 1) -and ($r.Out -match '\(depth 1\): 0 path\(s\)')) "exit=$($r.Code) $($r.Out)"
   $r = Run @('repo', 'paths', '--repo', $p, '--from', 'IPCHART', '--to', 'MSCLIST', '--json')
-  $j = $null; try { $j = ($r.Out -split "`n" | Where-Object { $_.StartsWith('{') }) | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = ($r.Out -split "`n" | Where-Object { $_.StartsWith('{') }) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'D7 --json: paths with alias, path and steps; choice ambiguous, chosen 0' (($r.Code -eq 0) -and $j -and (@($j.paths).Count -eq 2) -and ($j.paths[1].alias -eq 'MSCLIST_2') -and ($j.paths[1].path -eq 'FK_IPCHART_INSP>FK_INSP_MSC') -and ($j.paths[1].steps[0].parent_key -eq 'PK_INSPRSLT') -and ($j.choice -eq 'ambiguous') -and ($j.chosen -eq 0)) $r.Out
   $r = Run @('repo', 'paths', '--repo', $p, '--stats')
   Check 'D8 --stats on the fixture: 7 edges, 2 not edges, depth 2 = 7 pairs / 2 ambiguous' (($r.Code -eq 0) -and ($r.Out -match 'relations=7 not-edges=2') -and ($r.Out -match 'depth 2: pairs 7, more than one path 2')) $r.Out
@@ -172,7 +172,7 @@ try {
   Check 'E19 two different sources for one target: reported, never picked' (Ch 'memK \(TFDMemTable\) -> UNRESOLVED \(linked to 2 sources: CopyDataSet tblChart \(uXMem\.pas:56\), CopyDataSet qryJ \(uXMem\.pas:57\)\)') $o
   Check 'E20 links summary line per source kind' (Ch '(?m)^links: 9 datasets got a source: AttachedTo 2, AttachTable 1, CloneCursor 2, CopyDataSet 1, CopyData 1, AppendData 1, Data 1; 3 unresolved') $o
   $j = X3 @('--json')
-  $jo = $null; try { $jo = $j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json } catch { }
+  $jo = $null; try { $jo = $j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $jm = if ($jo) { @($jo.datasets | Where-Object { $_.dataset -eq 'memB' })[0] } else { $null }
   Check 'E21 --json: via of a dataset, totals.crossTable and totals.links' (($null -ne $jm) -and ($jm.via -eq 'AttachedTo memA > AttachedTo tblChart') -and ($jo.totals.crossTable.placed -eq 4) -and ($jo.totals.crossTable.inputs -eq 4) -and ($jo.totals.links.AttachedTo -eq 2) -and ($jo.totals.links.unresolved -eq 3)) $j.Out
   # apply, check, idempotent

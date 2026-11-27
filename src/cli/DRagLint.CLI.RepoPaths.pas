@@ -31,7 +31,7 @@ uses
   FireDAC.Comp.Client,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.SchemaFacts,
-  DRagLint.FieldRepo.RelationGraph,
+  DRagLint.FieldRepo.RelationGraph, // dl:unit DRagLint.FieldRepo.RelationGraph accepted -- path_depth_default is the default of --depth and travels with the path finder that applies it
   DRagLint.FieldRepo.RelationRepo;
 
 const

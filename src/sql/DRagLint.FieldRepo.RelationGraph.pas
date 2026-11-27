@@ -155,7 +155,7 @@ implementation
 
 uses
   System.Generics.Defaults,
-  DRagLint.FieldRepo.Schema;
+  DRagLint.FieldRepo.Schema; // dl:unit DRagLint.FieldRepo.Schema accepted -- repo_path_separator is the one path-text separator the schema facts use; the unit has no other need of the schema unit
 
 const
   NO_CHOICE = -1;

@@ -1260,6 +1260,27 @@ begin
   Check('O4b an exception of the generator only warns too', vText.StartsWith('warning:') and vText.Contains('boom'), vText);
   vText := string.Join('|', MicroniteOrmFollowUp('MICRONITE', True, 'r', 'T', 'c', '', '', function(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer begin Result := 0 end));
   Check('O5 no unit would change: a count of 0 and no apply advice', vText.Contains('0 unit(s) would change') and not vText.Contains('apply them'), vText);
+  { REVFIX (1.55 review): a REFUSED unit is not "0 units would change" }
+  vText := string.Join('|', MicroniteOrmFollowUp('micronite', True, 'r', 'T', 'c', '', '',
+    function(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer
+    begin
+      pOut.Add('changed C:\orm\iT.pas');
+      pOut.Add('skipped C:\orm\uT.pas: REFUSED region 2, hand-edited (its body does not match the hash of its start marker)');
+      pOut.Add('skipped C:\orm\xT.pas: no table');
+      Result := 0;
+    end));
+  Check('O6 a refused unit is counted and named beside the changed one; another skipped line is not', vText.Contains('1 unit(s) would change') and vText.Contains('1 REFUSED') and
+    vText.Contains('uT.pas: REFUSED region 2') and not vText.Contains('xT.pas') and vText.Contains('apply them'), vText);
+  vText := string.Join('|', MicroniteOrmFollowUp('micronite', True, 'r', 'T', 'c', '', '',
+    function(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer
+    begin
+      pOut.Add('skipped C:\orm\uT.pas: REFUSED, the unit is left unchanged: a start marker without an end marker');
+      Result := 0;
+    end));
+  Check('O6b only a refused unit: not a bare "0 would change"; the refusal is named, no apply advice', vText.Contains('0 unit(s) would change') and vText.Contains('1 REFUSED') and
+    vText.Contains('uT.pas: REFUSED, the unit is left unchanged') and not vText.Contains('apply them'), vText);
+  vText := string.Join('|', MicroniteOrmFollowUp('micronite', True, 'C:\r.dlrepo', 'T', 'C:\orm', '', '', vOk));
+  Check('O6c control: nothing refused, the summary does not speak of it', vText.Contains('2 unit(s) would change') and not vText.Contains('REFUSED'), vText);
 end;
 procedure TestReport;
 var

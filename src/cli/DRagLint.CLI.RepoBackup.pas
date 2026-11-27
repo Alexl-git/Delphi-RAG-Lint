@@ -252,12 +252,17 @@ begin
   end;
 end;
 
-{ The folder of the command line, else of the project, else '' = beside the database. }
-function BackupDir: string;
+{ The folder of the command line, else of the project (a folder of this machine: not for a server on another one), else '' = beside the database. }
+function BackupDir(const pConnection: string): string;
+var
+  VProject: string;
+  VDropped: Boolean;
 begin
-  Result := CommandLineValue('--backup-dir');
-  if Result = '' then
-    Result := SettingBackupDir;
+  VProject := SettingBackupDir;
+  Result := EffectiveBackupDir(pConnection, CommandLineValue('--backup-dir'), VProject, VDropped);
+  if VDropped then
+    Writeln(ErrOutput, 'note: the project''s backupDir (', VProject, ') is a folder of this machine and the server is another one: ',
+      'the backup is written beside the database on the server; --backup-dir names a folder there');
 end;
 
 function RemoteBackupProblem(const pConnection: string): string;
@@ -272,7 +277,7 @@ var
 begin
   VRequest := Default(TFrBackupRequest);
   VRequest.Connection := pConnection;
-  VRequest.BackupDir := BackupDir;
+  VRequest.BackupDir := BackupDir(pConnection);
   VRequest.BackupName := CommandLineValue('--backup-name');
   VRequest.TableName := pTable;
   VRequest.Identity := pIdentity;

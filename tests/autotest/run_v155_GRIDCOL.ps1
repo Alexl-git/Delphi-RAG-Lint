@@ -161,6 +161,26 @@ try {
   Put (Join-Path $vf 'uAllKinds.pas') ((Text (Join-Path $vf 'uAllKinds.pas')).Replace("    GridLevel: TcxGridLevel;", "    GridView2: TcxGridDBTableView;`n    GridLevel: TcxGridLevel;"))
   $r = Write-Dfm @() $vdfm
   Check 'G7d two views and no DL_GRID_COLUMNS row: not written, said why; the named place still is' (($r.Out -notmatch 'insert uAllKinds\.dfm GridView2?IMG') -and ($r.Out -match 'warning: uAllKinds\.dfm memOrders: graphical column IMG not written: 2 grid views show the dataset \(GridView, GridView2\) and DL_GRID_COLUMNS names none') -and ($r.Out -match 'insert uAllKinds\.dfm colPic:')) $r.Out
+  # ---- REVFIX (1.55 final review #4): a new grid column of a view on a BDE dataset obeys fieldrepo.bde ----
+  foreach ($case in @(@('g8full', 'full', '\(unchecked\)'), @('g8ro', 'readonly', 'BLOCKED: BDE dataset: read only \(project policy\)'), @('g8none', 'none', 'BLOCKED: BDE not allowed in this project'))) {
+    $gp = Join-Path $work $case[0]
+    $gd = Join-Path $gp 'f'
+    [IO.Directory]::CreateDirectory($gd) | Out-Null
+    foreach ($f in 'uAllKinds.dfm', 'uAllKinds.pas') { Put (Join-Path $gd $f) ((Text (Join-Path $src $f)).Replace('memOrders: TFDMemTable', 'memOrders: TTable')) }
+    [IO.Directory]::CreateDirectory((Join-Path $gp '_D-RAG')) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $gp '_D-RAG\drag-lint-project.json'), "{`"fieldrepo`": {`"bde`": `"$($case[1])`"}}")
+    $r = Write-Dfm @() (Join-Path $gd 'uAllKinds.dfm')
+    Check "G8 BDE $($case[1]): the new grid column is $($case[2])" (($r.Code -eq 0) -and ($r.Out -match ("insert uAllKinds\.dfm GridViewIMG:  -> TcxGridDBColumn; [^\n]*\n  " + $case[2]))) $r.Out
+    if ($case[1] -ne 'full') {
+      Check "G8b BDE $($case[1]): its handlers are not offered" ($r.Out -notmatch 'GridViewIMG On\w+:') $r.Out
+      $gOld = Text (Join-Path $gd 'uAllKinds.dfm')
+      PutSel (Join-Path $work 'g8.sel') $r @(IdOf $r 'insert uAllKinds\.dfm GridViewIMG:')
+      $rs = Write-Dfm @('--select', (Join-Path $work 'g8.sel')) (Join-Path $gd 'uAllKinds.dfm')
+      Check "G8c BDE $($case[1]): selecting it is refused, the DFM stays" (($rs.Code -eq 2) -and ($rs.Out -match 'is blocked: BDE') -and ((Text (Join-Path $gd 'uAllKinds.dfm')) -ceq $gOld)) $rs.Out
+    } else {
+      Check 'G8b control (full): its handlers are offered' ($r.Out -match 'GridViewIMG OnGetDisplayText:') $r.Out
+    }
+  }
 }
 finally {
   try { [IO.Directory]::Delete($work, $true) } catch { }
