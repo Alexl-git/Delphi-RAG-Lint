@@ -2523,7 +2523,7 @@ begin
   pQuery.Close;
   for VStep in SplitInputPath(ItemValue(pItem, COL_PATH)) do
   begin
-    pQuery.Open(SQL_RELATION_ROW, [VStep]);
+    pQuery.Open(SQL_RELATION_ROW, [VStep]);  // dl:ok query-in-loop@1321 -- REVIEWED 2026-11-26 loop runs over the few steps of one relation path
     if pQuery.Eof then
       raise ERepoError.CreateFmt('change %d: %s needs the relation %s in DL_RELATIONS (select its insert too)',
         [pChange.Id, pChange.Target, VStep]);
