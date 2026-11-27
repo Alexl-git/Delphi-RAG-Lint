@@ -780,7 +780,7 @@
 #   2026-11-23 v153 INT-SWEEP: GH18-SYMID (cd56cd923, GitHub #18, symbol-id reuse on an incremental index) moves Storage.SQLite, Core.Indexer and DRagLint.CLI; it changes HOW an incremental run writes a re-parsed file (kept rows, scoped call pass), not what extraction emits: a fresh index is byte-identical (lane A/B: reuse = fresh on all 26 edits, run_v153_GH18_SYMID). The 1.53 extractor bump 1.43.0 already forces a full re-parse of every DB, so no resolver bump either (controller ruling). Hash-only re-pin.
 # superseded (hash-only): 1.31.0-alpha|f5d24a4c107a7edac8fbec6dc720dc2a6a267dd76ac5ec4a0c5fe7c2a9be3b31
 #   2026-11-23 v153 IDXFP-PREP: comment-only -- 16 trailing dl:ok index-possibly-out-of-range markers removed from Analysis.PurityStage (they suppress nothing since SLZ-IDXFP); no resolve logic touched, no version bump.
-1.31.0-alpha|a87ed057403a14537a922b00793ee81298e47474c14cd3483e87aa1cc5cb5785
+1.56.0-alpha|7b8f1dbb6b8ffd9d57da60d249ec237a7ba8299ff9a842aa32fb2d1dce777cab
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.

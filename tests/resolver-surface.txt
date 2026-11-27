@@ -30,6 +30,7 @@ src/index/DRagLint.Index.CallResolver.pas::*
 src/storage/DRagLint.Storage.SQLite.pas::ResolveUnitUseTargets
 src/storage/DRagLint.Storage.SQLite.pas::ResolveAncestry
 src/storage/DRagLint.Storage.SQLite.pas::ResolveHelpers
+src/storage/DRagLint.Storage.SQLite.pas::ResolveAttributeRefs
 src/storage/DRagLint.Storage.SQLite.pas::ResolveCallTargets
 src/storage/DRagLint.Storage.SQLite.pas::ResetResolveScope
 src/storage/DRagLint.Storage.SQLite.pas::ResolveDispatch

@@ -1290,4 +1290,4 @@
 #   2026-11-22 v153 GRAMMAR bump 1.42.0 -> 1.43.0 (ONE bump for 1.53): grammar tree-sitter-delphi13 v1.4.15 (2d7ed53, subrange bound = constant expression); Parser.Delphi13 reads a subrange-typed global's bound and the consts / element / index types of a classic local's array / set / subrange / string[N] type.
 # superseded (hash-only): 1.43.0-alpha|bfdba28306b375673e1912552c95998496ee14328f7daaeac26bc1f771a54d44
 #   2026-11-23 v153 INT-SWEEP: GH18-SYMID (cd56cd923, GitHub #18, symbol-id reuse on an incremental index) moves Storage.SQLite, Core.Indexer and DRagLint.CLI; it changes HOW an incremental run writes a re-parsed file (kept rows, scoped call pass), not what extraction emits: a fresh index is byte-identical (lane A/B: reuse = fresh on all 26 edits, run_v153_GH18_SYMID). The 1.53 extractor bump 1.43.0 already forces a full re-parse of every DB, so no resolver bump either (controller ruling). Hash-only re-pin.
-1.43.0-alpha|08fc36e7983c89ffc3d4b2a9253cee811e72a0aa3f001d406e55e405bf207b62
+1.56.0-alpha|406930b102eabe1818dc764686e5fb5d47fb5ea20d6058b654e7400aedf1877f
