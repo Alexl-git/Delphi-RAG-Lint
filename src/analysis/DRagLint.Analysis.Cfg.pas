@@ -767,6 +767,12 @@ type
     destructor Destroy; override;
     function EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;
     function EmitList(ACur: Integer; const AContainer: TTSNode): Integer;
+    /// <summary>Emits the ELSE part of an except block, node (exceptionElse kElse &lt;statement&gt;*):
+    /// its statements in order, the kElse keyword node skipped.</summary>
+    /// <param name="ACur">The handler block the first statement is emitted into.</param>
+    /// <param name="AElse">The exceptionElse node.</param>
+    /// <returns>The block control falls out of, or -1 when the else part diverts.</returns>
+    function EmitExceptElse(ACur: Integer; const AElse: TTSNode): Integer;
     /// <summary>The block a divert should jump to, running every enclosing
     /// finally on the way.</summary>
     function DivertVia(ATarget, AFromDepth: Integer): Integer;
@@ -1018,7 +1024,20 @@ begin
   Result := Cur;
 end;
 
-function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;  // dl:ok too-many-locals@5324, method-too-long@a77f, deep-nesting@ab51, too-many-exit-points@563f, cyclomatic-complexity@23c3, cognitive-complexity@ecb3 -- too-many-locals: measured 26 locals (max 25), method-too-long: measured 572 lines (max 250), deep-nesting: measured 6 deep (max 5), too-many-exit-points: measured 20 Exits (max 5), cyclomatic-complexity: measured 123 (max 30), cognitive-complexity: measured 239 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22; re-measured 2026-11-26 v156 FA-1 (the noreturn-call arm)
+function TBuilderState.EmitExceptElse(ACur: Integer; const AElse: TTSNode): Integer;
+var
+  I: Integer;
+begin
+  Result := ACur;
+  for I := 0 to AElse.NamedChildCount - 1 do
+  begin
+    if AElse.NamedChild(I).NodeType = 'kElse' then Continue;
+    if Result < 0 then Break; { unreachable tail -- same rule as EmitList }
+    Result := EmitStmt(Result, AElse.NamedChild(I));
+  end;
+end;
+
+function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;  // dl:ok too-many-locals@5324, method-too-long@c98a, deep-nesting@ab51, too-many-exit-points@9b84, cyclomatic-complexity@c8f2, cognitive-complexity@c672 -- too-many-locals: measured 26 locals (max 25), method-too-long: measured 571 lines (max 250), deep-nesting: measured 6 deep (max 5), too-many-exit-points: measured 19 Exits (max 5), cyclomatic-complexity: measured 121 (max 30), cognitive-complexity: measured 236 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22; re-measured 2026-11-27 (v156 FA-2: the except-else arm, +8 lines, same review)
 var
   K, EntTxt: string;
   Cond, ThenN, ElseN, StartN, EntityN, IterN, LhsN: TTSNode;
@@ -1449,7 +1468,13 @@ begin
           SeenExcept := True;
           Continue;
         end;
+        { v156 FA-2: the ELSE part of an except block is a handler too. Its node is
+          (exceptionElse kElse <statement>*), neither an exceptionHandler nor a
+          'statements' list, so it got no block at all: nothing in it was analysed and
+          the data-flow walk emitted no row from it (repro: Sink(P) after `else` in
+          tests/fixtures/v156-fa2-cfg/uExceptElse.pas). }
         if SeenExcept and ((ANode.NamedChild(I).NodeType = 'exceptionHandler')
+                           or (ANode.NamedChild(I).NodeType = 'exceptionElse')
                            or (ANode.NamedChild(I).NodeType = 'statements')) then
         begin
           HdrIdx := Cfg.NewBlock.Index;
@@ -1498,7 +1523,9 @@ begin
           for var BIdx := BodyFirst to BodyLast do
             if not DivertBlocks.ContainsKey(BIdx) then
               Cfg.Blocks[BIdx].AddSucc(HdrIdx);
-          ExcAfter := if ANode.NamedChild(I).NodeType = 'exceptionHandler' then EmitStmt(HdrIdx, ANode.NamedChild(I).ChildByField('body')) else EmitStmt(HdrIdx, ANode.NamedChild(I));
+          ExcAfter := if ANode.NamedChild(I).NodeType = 'exceptionElse' then EmitExceptElse(HdrIdx, ANode.NamedChild(I))
+                      else if ANode.NamedChild(I).NodeType = 'exceptionHandler' then EmitStmt(HdrIdx, ANode.NamedChild(I).ChildByField('body'))
+                      else EmitStmt(HdrIdx, ANode.NamedChild(I));
           { A handler that DIVERTS (exit / raise / break / continue -> EmitStmt
             returns -1) has no fallthrough, and wiring its ENTRY to the follow
             block anyway re-created the very path that cannot happen: the
