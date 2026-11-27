@@ -29,6 +29,9 @@ type
     Source: string;
     /// <summary>1-based line in the unit; 0 for the DFM property.</summary>
     Line: Integer;
+    /// <summary>The DFM whose unit holds the code line (an ancestor's when the receiver is inherited); '' for the DFM
+    /// property or when the reader did not say.</summary>
+    UnitFile: string;
   end;
 
 /// <summary>The name a link kind has in reports: AttachedTo, AttachTable, CloneCursor, CopyDataSet, CopyData,

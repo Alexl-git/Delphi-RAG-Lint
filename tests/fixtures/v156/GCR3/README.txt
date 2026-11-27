@@ -1,0 +1,1 @@
+Fixture of lane GCR-3 (drag-lint 1.56). app\ is the project; common\ and macrodir\ lie OUTSIDE it: the runner copies both beside each other and writes app\App.dproj with an absolute DCC_UnitSearchPath that names common\ (and a $(Macro) entry for macrodir\).

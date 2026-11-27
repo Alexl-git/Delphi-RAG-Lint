@@ -473,6 +473,7 @@ type
     procedure LoadRows;
     procedure LoadCrossTable;
     function UnitText(const pFile: string): string;
+    function FormChain(const pForm: TDfmrForm): TArray<string>;
     function CodeLinksTo(const pForm: TDfmrForm; const pDataset: TDfmrDataset): TArray<TDfmrLink>;
     function LinkedSource(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pChain, pNames: TArray<string>): TDatasetSource;
     function KeyOfTable(const pTable: string; const pColumns: TArray<string>): string;
@@ -775,8 +776,8 @@ begin
   FInputs := TList<TPlannedInput>.Create;
   FUnitTexts := TDictionary<string, string>.Create;
   FUnitLinks := TDictionary<string, TArray<TDfmrLink>>.Create;
-  FAncestry := NewDfmrAncestry(Form);
   FModules := NewDfmrModuleFinder;
+  FAncestry := NewDfmrAncestry(Form, FModules);
   FUnchecked := TDictionary<string, string>.Create;
 end;
 
@@ -906,25 +907,49 @@ begin
   FUnitTexts.Add(VPas, Result);
 end;
 
-{ The literal links of the form's unit whose receiver is the dataset (`X`, `Self.X`). }
-function TDfmRead.CodeLinksTo(const pForm: TDfmrForm; const pDataset: TDfmrDataset): TArray<TDfmrLink>;
+{ The DFM of the form, then of each ancestor form it inherits from, nearest first (the units of these DFMs hold the code
+  a descendant runs: an inherited component's links, field writes and calc bodies are in the ancestor's unit). }
+function TDfmRead.FormChain(const pForm: TDfmrForm): TArray<string>;
 var
-  VKey: string;
-  VAll: TArray<TDfmrLink>;
-  VLink: TDfmrLink;
+  VFile: string;
+  VLevel: Integer;
 begin
-  VKey := LowerCase(pForm.FileName);
-  if not FUnitLinks.TryGetValue(VKey, VAll) then
+  Result := [pForm.FileName];
+  VFile := pForm.FileName;
+  for VLevel := 1 to CHAIN_LEVELS do
   begin
-    VAll := ReadCodeLinks(UnitText(pForm.FileName));
-    FUnitLinks.Add(VKey, VAll);
+    VFile := FAncestry.AncestorFile(VFile);
+    if (VFile = '') or MatchText(VFile, Result) then
+      Exit;
+    Result := Result + [VFile];
   end;
-  Result := nil;
-  for VLink in VAll do
-    if SameText(VLink.Target, pDataset.Name) then
-      Result := Result + [VLink];
 end;
 
+{ The literal links whose receiver is the dataset (`X`, `Self.X`) in the form's unit and in the units of its ancestors. }
+function TDfmRead.CodeLinksTo(const pForm: TDfmrForm; const pDataset: TDfmrDataset): TArray<TDfmrLink>;
+var
+  VKey, VFile: string;
+  VAll: TArray<TDfmrLink>;
+  VLink, VCopy: TDfmrLink;
+begin
+  Result := nil;
+  for VFile in FormChain(pForm) do
+  begin
+    VKey := LowerCase(VFile);
+    if not FUnitLinks.TryGetValue(VKey, VAll) then
+    begin
+      VAll := ReadCodeLinks(UnitText(VFile));
+      FUnitLinks.Add(VKey, VAll);
+    end;
+    for VLink in VAll do
+      if SameText(VLink.Target, pDataset.Name) then
+      begin
+        VCopy := VLink;
+        VCopy.UnitFile := VFile;
+        Result := Result + [VCopy];
+      end;
+  end;
+end;
 { The source of a dataset, through AttachedTo and the literal link calls of its unit when it has no table and no SQL
   (design 3.1). pChain holds `file|dataset` of the datasets already on the way (cycle guard), pNames their names. }
 function TDfmRead.LinkedSource(const pForm: TDfmrForm; const pDataset: TDfmrDataset;  // dl:ok too-many-exit-points@edb2 -- REVIEWED 2026-11-26 XTABLE X3: each Exit is one reason a link gives no source (none, two sources, no dataset, cycle, source without table, not a copy); guard clauses read in rule order
@@ -936,7 +961,7 @@ var
   VOwner: TDfmrForm;
   VSource: TDfmrDataset;
   VSub: TDatasetSource;
-  VLocal, VKey, VKind, VPas: string;
+  VLocal, VKey, VKind, VFile: string;
   VFound: Boolean;
   VFields, VWrites: TArray<TDfmrPair>;
   VField: TDfmrField;
@@ -946,7 +971,6 @@ begin
   if (Result.TableName <> '') or Result.HasSql then
     Exit;
   VLinks := CodeLinksTo(pForm, pDataset);
-  VPas := ExtractFileName(ChangeFileExt(pForm.FileName, '.pas'));
   if pDataset.AttachedTo <> '' then
   begin
     VLink.Kind := dlkAttachedTo;
@@ -965,7 +989,7 @@ begin
     begin
       VSources := VSources + [VLink.Source];
       VWhere := VWhere + [DfmrLinkKindName(VLink.Kind) + ' ' + VLink.Source + ' (' + (if VLink.Line = 0
-        then ExtractFileName(pForm.FileName) else VPas + ':' + IntToStr(VLink.Line)) + ')'];
+        then ExtractFileName(pForm.FileName) else ExtractFileName(ChangeFileExt(VLink.UnitFile, '.pas')) + ':' + IntToStr(VLink.Line)) + ')'];
     end;
   if Length(VSources) > 1 then
   begin
@@ -1007,9 +1031,12 @@ begin
   for VField in pDataset.Fields do
     if VField.Kind = frkData then
       VFields := VFields + [MakePair(VField.CompName, VField.FieldName)];
-  VWrites := ReadFieldWrites(UnitText(pForm.FileName), pDataset.Name, VFields);
-  for VPair in VWrites do
-    Result.Written := Result.Written + [MakePair(VPair.Name, VPas + ':' + VPair.Value)];
+  for VFile in FormChain(pForm) do
+  begin
+    VWrites := ReadFieldWrites(UnitText(VFile), pDataset.Name, VFields);
+    for VPair in VWrites do
+      Result.Written := Result.Written + [MakePair(VPair.Name, ExtractFileName(ChangeFileExt(VFile, '.pas')) + ':' + VPair.Value)];
+  end;
 end;
 
 { The PK / UNIQUE constraint of pTable on exactly pColumns (any order); '' = none. }
@@ -1735,7 +1762,7 @@ begin
           VOrigin := LookupOrigin(pDataset, pSource, VField);
         frkCalc, frkInternalCalc:
           begin
-            pBodies.AddOrSetValue(VKey, CalcBodyOf(pForm, pDataset, pContext, VField));
+            pBodies.AddOrSetValue(VKey, CalcBodyOf(CodeForm(pForm, pDataset.Name, VField.CompName), pDataset, pContext, VField));
             Continue;
           end;
       else
