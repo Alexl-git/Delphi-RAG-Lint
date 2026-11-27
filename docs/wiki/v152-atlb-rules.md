@@ -35,3 +35,22 @@ prove it fires on that shape (positive control: the rule disabled).
 ## debug-display-placeholder: implemented in 1.52 BK-ATTRRULES
 
 It landed on the attributes index fact; see [v152-attrrules](v152-attrrules).
+
+## Tighter visibilities (1.56 G24R, gap G-24)
+
+The same rule id and the same switch (`--rule member-could-be-private`, default OFF) now also
+proposes the next tighter visibility, judged on the references that name the member:
+
+| Declared | Proposal | Fires when |
+|---|---|---|
+| `private` | `strict private` | every reference sits in a routine of the member's own class (no other class of the unit, no descendant, no DFM) |
+| `protected` | `strict private` | same, and the member is `protected` |
+| `protected` | `strict protected` | every reference sits in the class or in a descendant the project index places, reaching the member bare or through `Self` |
+| `public` | `protected` | every reference sits in the class or its descendants (bare / `Self`), and at least one descendant is in another file (a public member used only in its own file stays the `could be private` finding) |
+
+A reference outside a routine body, from an unrelated class, through another receiver (`Other.Member`: Delphi
+refuses it for a protected member from another unit), or from a DFM keeps the member silent. The
+exemptions of the rule above apply unchanged: published and the unlabelled section, `virtual` / `override` /
+`message` / ..., names an implemented interface declares, attributed members, units several projects compile,
+names spelled in an inactive conditional branch. The existing `Public member ... could be private` finding is
+unchanged; a member never gets both.
