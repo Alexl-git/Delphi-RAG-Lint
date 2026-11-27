@@ -211,6 +211,7 @@ uses
   , DRagLint.V154.SCHEMA
   , DRagLint.V154.SQL
   , DRagLint.V156.FACTA
+  , DRagLint.V156.G32
   , DRagLint.V156.MEMA
   , DRagLint.V156.MEMB
   , DRagLint.V156.OOA1
@@ -290,6 +291,7 @@ begin
     Lane('SQL',      TV154SQLRules.Catalog, TV154SQLRules.CheckFile, TV154SQLRules.CheckDfm, TV154SQLRules.CheckRawBytes, TV154SQLRules.CheckProject),
     // v156 lanes (1.56.0-alpha): same provider mechanism, alphabetical after the v154 block. Scaffolds: no rule declared yet.
     Lane('FACTA',  TV156FACTARules.Catalog, TV156FACTARules.CheckFile, TV156FACTARules.CheckDfm, TV156FACTARules.CheckRawBytes, TV156FACTARules.CheckProject),
+    Lane('G32',    TV156G32Rules.Catalog, TV156G32Rules.CheckFile, TV156G32Rules.CheckDfm, TV156G32Rules.CheckRawBytes, TV156G32Rules.CheckProject),
     Lane('MEMA',   TV156MEMARules.Catalog, TV156MEMARules.CheckFile, TV156MEMARules.CheckDfm, TV156MEMARules.CheckRawBytes, TV156MEMARules.CheckProject),
     Lane('MEMB',   TV156MEMBRules.Catalog, TV156MEMBRules.CheckFile, TV156MEMBRules.CheckDfm, TV156MEMBRules.CheckRawBytes, TV156MEMBRules.CheckProject),
     Lane('OOA1',   TV156OOA1Rules.Catalog, TV156OOA1Rules.CheckFile, TV156OOA1Rules.CheckDfm, TV156OOA1Rules.CheckRawBytes, TV156OOA1Rules.CheckProject),

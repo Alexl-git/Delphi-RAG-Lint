@@ -225,6 +225,8 @@ uses
   DRagLint.V154.SQL in '..\lint\v154\DRagLint.V154.SQL.pas',
   DRagLint.V156.FACTA.Support in '..\lint\v156\DRagLint.V156.FACTA.Support.pas',
   DRagLint.V156.FACTA in '..\lint\v156\DRagLint.V156.FACTA.pas',
+  DRagLint.V156.G32.Support in '..\lint\v156\DRagLint.V156.G32.Support.pas',
+  DRagLint.V156.G32 in '..\lint\v156\DRagLint.V156.G32.pas',
   DRagLint.V156.MEMA.Support in '..\lint\v156\DRagLint.V156.MEMA.Support.pas',
   DRagLint.V156.MEMA in '..\lint\v156\DRagLint.V156.MEMA.pas',
   DRagLint.V156.MEMB.Support in '..\lint\v156\DRagLint.V156.MEMB.Support.pas',

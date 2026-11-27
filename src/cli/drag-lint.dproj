@@ -396,6 +396,8 @@
         <DCCReference Include="..\lint\v154\DRagLint.V154.SQL.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.FACTA.Support.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.FACTA.pas"/>
+        <DCCReference Include="..\lint\v156\DRagLint.V156.G32.Support.pas"/>
+        <DCCReference Include="..\lint\v156\DRagLint.V156.G32.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.MEMA.Support.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.MEMA.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.MEMB.Support.pas"/>
