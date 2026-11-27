@@ -595,6 +595,27 @@ begin
       [if pNode.Kind = nkField then DF_SRC_FIELD else DF_SRC_GLOBAL, TChartsIndex.SqlText(pNode.Name), pNode.Id]) + HOP_ORDER];
 end;
 
+{ v156 INT (request EXT-B1F -> FB-1): since EXT-B1F a flow of a typed scalar is stored twice -- the kept
+  pre-1.56 row (val_class '') and its classed twin, same routine, line and far end. The chart shows the
+  classed row only; a '' row with no twin stays (string, object or unclassed). }
+function DropFlowTwins(const pHops: TArray<THop>): TArray<THop>;
+const
+  TWIN_KEY = '%s|%s|%s|%d';
+begin
+  Result:= [];
+  var Classed:= TDictionary<string, Integer>.Create;
+  try
+    for var H in pHops do
+      if H.ValClass <> '' then
+        Classed.AddOrSetValue(Format(TWIN_KEY, [H.Node.Key, H.Node.Caption, H.Routine, H.Line]), 0);
+    for var H in pHops do
+      if (H.ValClass <> '') or not Classed.ContainsKey(Format(TWIN_KEY, [H.Node.Key, H.Node.Caption, H.Routine, H.Line])) then
+        Result:= Result + [H];
+  finally
+    Classed.Free;
+  end;
+end;
+
 /// <summary>Every row of one node, identical rows merged, far ends resolved.</summary>
 /// <param name="pNode">A followed node.</param>
 /// <param name="pParent">The hop the rows explain; FOCUS_PARENT for the selection.</param>
@@ -639,6 +660,7 @@ begin
   finally
     Seen.Free;
   end;
+  Result:= DropFlowTwins(Result);
 end;
 
 procedure TValueWalk.Run;
