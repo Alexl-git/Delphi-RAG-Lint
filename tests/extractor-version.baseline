@@ -4,7 +4,10 @@
 #
 # The extraction surface is src\parser, src\preprocess, src\index and
 # DRagLint.Core.Indexer.pas -- the code that decides WHAT gets extracted from a
-# byte sequence. Change any of it and the guard fails until
+# byte sequence -- PLUS the row-writing units outside those roots, listed in the
+# guard itself: Doc.SymbolFacts, Analysis.Cfg / DataFlow / Flow.Lattices,
+# Storage.FileMembership and the emit routines of Storage.SQLite (REV-1 #4:
+# the guard's own test is run_v156_FIXRA.ps1 F4). Change any of it and the guard fails until
 # DRAGLINT_EXTRACTOR_VERSION is bumped, because every existing index would
 # otherwise keep its old parses silently.
 #

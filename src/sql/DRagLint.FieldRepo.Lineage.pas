@@ -551,6 +551,10 @@ var
   Key: Int64;
   Rows: TList<TFlow>;
 begin
+  { Reads BOTH data_flows row sets (the pre-1.56 rows and the 1.56 value rows; see TDataFlowRow.ValClass): a write
+    from a scalar parameter / unit variable / call result exists only as a value row and is a lineage
+    "unknown" reason. A numeric flow's '' row and its classed twin collapse in BuildWrite: inputs are keyed
+    by field, reasons and via texts are sets. }
   { positioned sources first: the unpositioned 'field' twin of a component read is judged after its 'ref' }
   Q := OpenQuery(FConn,
     'SELECT dst_line, dst_col, src_kind, src_line, src_col, src_name, via_local FROM data_flows ' +
