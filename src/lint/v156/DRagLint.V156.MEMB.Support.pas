@@ -643,14 +643,10 @@ var
   Created: string;
 begin
   Created:= FreshClass(AArg);
-  if Created <> '' then
-  begin
-    if (AParam.Mode = pmConst) and ReferenceCounted(Created) then
-      Emit(RULE_CLASS_PASSED_AS_INTERFACE, SEVERITY_WARNING, Format('%s is created in the argument of the const interface parameter "%s" of %s: ' +
-        'the call takes no reference, so the object leaks, or is freed early when the callee takes one', [Trim(Text(AArg)), AParam.Name,
-        Trim(Text(CalleeName(ACall)))]), AArg);
-    Exit;
-  end;
+  { v156 FP-1: a fresh instance of a reference-counted class in a const interface argument is the safe idiom -- the compiler
+    holds a temporary interface reference for the call, so the object is released after it and a callee that stores the
+    interface keeps its own reference. 4 of 4 hits on real code were this idiom; only the variable form below is a hazard. }
+  if Created <> '' then Exit;
   Created:= VariableClass(AArg, ACall);
   if Created <> '' then
     Emit(RULE_CLASS_PASSED_AS_INTERFACE, SEVERITY_WARNING, Format('%s is an object reference of the reference-counted class %s, passed to the interface ' +

@@ -47,7 +47,7 @@ end;
 
 procedure FreshToConst;
 begin
-  UseBar(TBar.Create); // FIRE class-passed-as-interface
+  UseBar(TBar.Create); // safe idiom (v156 FP-1): temporary interface reference, silent
   TakeBar(TBar.Create);
 end;
 

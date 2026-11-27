@@ -124,6 +124,7 @@ begin
   var AllAlias   : Boolean:= True;
   var SameSig    : Boolean:= True;
   var AllConst   : Boolean:= True;
+  var AllExtern  : Boolean:= True;
   for var I: Integer:= 0 to High(AGroup) do
   begin
     var S: TSymbol:= AGroup[I].Sym;
@@ -131,12 +132,15 @@ begin
     if S.Directives.ToLower.Contains(OVERLOAD_WORD) or S.Modifiers.ToLower.Contains(OVERLOAD_WORD) then AnyOverload:= True;
     if S.Kind <> skTypeAlias then AllAlias:= False;
     if S.Kind <> skConstDecl then AllConst:= False;
+    if not IsRoutineKind(S.Kind) or not S.Directives.ToLower.Contains('external')
+      or not SameText(S.Directives, AGroup[0].Sym.Directives) then AllExtern:= False;
     if not SameText(S.Signature, AGroup[0].Sym.Signature) then SameSig:= False;
   end;
   if AllRoutines and AnyOverload and not SameSig then Exit(True);
   if AllAlias and SameSig then Exit(True);
   { v156 FP-1: identical constants (same type and value) and X = Unit.X redirects cannot change what a reference means }
   if AllConst and SameSig and (AGroup[0].Sym.Signature <> '') then Exit(True);
+  if AllExtern and SameSig then Exit(True);  { the same DLL export declared twice }
   for var T: Integer:= 0 to High(AGroup) do
     if AllAliasOfTarget(AGroup, T) then Exit(True);
 end;
