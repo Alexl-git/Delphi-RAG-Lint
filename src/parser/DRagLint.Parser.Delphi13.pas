@@ -387,8 +387,17 @@ type
       walked (nested routines set their own); -1 outside any routine body. The
       on E: T do handler variable is emitted as a local_var parented to it. }
     CurrentRoutineIdx: Integer;
+    { 1.56 EXT-A1: the symbol_extras rows of the file (B1 noreturn, B2 variant part, B8 parameter
+      mode); SymbolIdx indexes Symbols. Sparse: see AddExtra. }
+    Extras     : TList<TSymbolExtraRow>;
+    { 1.56 EXT-A1 (SPEC-SEARCH C-1): "this literal is argument k of that call", in source order.
+      CLA_KIND_CONST rows are CANDIDATES until FilterConstCandidates has run. }
+    LiteralArgs: TList<TCallLiteralArgRow>;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
+    { 1.56 EXT-A1: one symbol_extras row for Symbols[ASymbolIdx]. A second call for the same
+      symbol adds a second row (the store keeps the last), so each emit site calls it once. }
+    procedure AddExtra(ASymbolIdx, ANoReturn, AVariantPart: Integer; AVariantTag: Boolean; const AParamMode: string; AParamIndex: Integer);
     { X4: True when the last SCOPEDENUMS switch before byte AOffset is ON;
       False with no switch before it (the compiler default is OFF). }
     function ScopedEnumsAt(AOffset: Integer): Boolean;
@@ -420,10 +429,29 @@ begin
   References := TList<TReference   >.Create;
   UsesEntries:= TList<TUnitUse     >.Create;
   DiBindings := TList<TDiBindingRow>.Create;
+  Extras     := TList<TSymbolExtraRow   >.Create;
+  LiteralArgs:= TList<TCallLiteralArgRow>.Create;
+end;
+
+procedure TWalkState.AddExtra(ASymbolIdx, ANoReturn, AVariantPart: Integer; AVariantTag: Boolean; const AParamMode: string; AParamIndex: Integer);
+var
+  Row: TSymbolExtraRow;
+begin
+  if (ASymbolIdx < 0) or (ASymbolIdx >= Symbols.Count) then Exit;
+  Row:= Default(TSymbolExtraRow);
+  Row.SymbolIdx  := ASymbolIdx;
+  Row.NoReturn   := ANoReturn;
+  Row.VariantPart:= AVariantPart;
+  Row.VariantTag := AVariantTag;
+  Row.ParamMode  := AParamMode;
+  Row.ParamIndex := AParamIndex;
+  Extras.Add(Row);
 end;
 
 destructor TWalkState.Destroy;
 begin
+  Extras.Free;
+  LiteralArgs.Free;
   Symbols.Free;
   References.Free;
   UsesEntries.Free;
@@ -2864,6 +2892,35 @@ end; // function
 // AParentQualifiedName is the routine's own qualified name (e.g.
 // 'params.TThing.Handle'); ARoutineIdx is the routine symbol's index in
 // AState.Symbols (its parent).
+{ 1.56 EXT-A1 (B8): the passing mode of one declArg, as a PARAM_MODE_* value. The mode keyword is
+  a direct named child (kConst / kVar / kOut / kConstref); `[Ref] const X` and `const [Ref] X`
+  carry the attribute as an rttiAttributes child and read as PARAM_MODE_CONSTREF. A `[Ref]`
+  with no `const` stays by value: the attribute alone does not name a mode. }
+function ParamModeOf(const ADeclArg: TTSNode; const ASource: TBytes): string;
+const
+  REF_ATTRIBUTE = '[ref]';
+var
+  I     : Integer;
+  Child : TTSNode;
+  Kind  : string ;
+  HasRef: Boolean;
+begin
+  Result:= PARAM_MODE_VALUE;
+  HasRef:= False;
+  for I:= 0 to ADeclArg.NamedChildCount - 1 do
+  begin
+    Child:= ADeclArg.NamedChild(I);
+    Kind := Child.NodeType;
+    if Kind = 'kConst' then Result:= PARAM_MODE_CONST
+    else if Kind = 'kVar' then Result:= PARAM_MODE_VAR
+    else if Kind = 'kOut' then Result:= PARAM_MODE_OUT
+    else if Kind = 'kConstref' then Result:= PARAM_MODE_CONSTREF
+    else if Kind = 'rttiAttributes' then
+      HasRef:= HasRef or SameText(StringReplace(NodeText(Child, ASource), ' ', '', [rfReplaceAll]), REF_ATTRIBUTE);
+  end;
+  if HasRef and (Result = PARAM_MODE_CONST) then Result:= PARAM_MODE_CONSTREF;
+end;
+
 procedure EmitRoutineParams(const ARoutineNode: TTSNode; const AState: TWalkState; ARoutineIdx: Integer; const ARoutineQualifiedName: string);
 var
   ArgsNode : TTSNode;
@@ -2872,15 +2929,19 @@ var
   TypeText : string ;
   ParamName: string ;
   ParamQN  : string ;
+  ParamMode: string ;
+  ParamPos : Integer;
   i, j     : Integer;
 begin
   if ARoutineIdx < 0 then Exit;
   ArgsNode:= ARoutineNode.ChildByField('args');
   if ArgsNode.IsNull then Exit;
+  ParamPos:= 0;
   for i:= 0 to ArgsNode.NamedChildCount - 1 do
   begin
     DeclArg:= ArgsNode.NamedChild(i);
     if DeclArg.NodeType <> 'declArg' then Continue;
+    ParamMode:= ParamModeOf(DeclArg, AState.Source);
     // One shared type for every name in this declArg (grouped params). Empty
     // when the param is untyped (e.g. an untyped 'var').
     TypeText:= TypeTextOf(DeclArg, AState.Source);
@@ -2897,7 +2958,9 @@ begin
       else ParamQN:= ParamName;
       // Range = the param-name identifier; parent = the routine; Signature =
       // the declared type text (empty when untyped).
-      AState.Emit(skParam, ParamName, ParamQN, ARoutineIdx, Child, TypeText);
+      { 1.56 EXT-A1 (B8): every parameter gets its mode and 0-based declared position. }
+      AState.AddExtra(AState.Emit(skParam, ParamName, ParamQN, ARoutineIdx, Child, TypeText), NORETURN_NONE, 0, False, ParamMode, ParamPos);
+      Inc(ParamPos);
     end;
   end;
 end; // procedure
@@ -3584,6 +3647,256 @@ begin
   end; // case
 end; // begin
 
+{ 1.56 EXT-A1 (B2): the number of variant BRANCHES (declVariantClause) under ANode that start at
+  or before byte AStopByte, nested variant parts included. A nested branch starts after the
+  branch holding it, so this count is the 1-based source-order ordinal of the branch that
+  starts at AStopByte. }
+function VariantClauseCount(const ANode: TTSNode; AStopByte: UInt32): Integer;
+var
+  I    : Integer;
+  Child: TTSNode;
+begin
+  Result:= 0;
+  for I:= 0 to ANode.NamedChildCount - 1 do
+  begin
+    Child:= ANode.NamedChild(I);
+    if Child.NodeType = 'declVariant' then Inc(Result, VariantClauseCount(Child, AStopByte))
+    else if (Child.NodeType = 'declVariantClause') and (Child.StartByte <= AStopByte) then
+      Inc(Result, 1 + VariantClauseCount(Child, AStopByte));
+  end;
+end;
+
+{ 1.56 EXT-A1 (B2): symbol_extras.variant_part of a field (or nested tag) node: 0 when its parent
+  is not a variant branch, else the 1-based ordinal of that branch over the whole record --
+  counted from the OUTERMOST variant part, so two fields with different non-zero values may
+  share storage. Grammar: (declVariant kCase [name: identifier] type: typeref kOf
+  (declVariantClause caseLabel (declField ..)* [declVariant])*); a variant field arrives as
+  declField (alias of declVariantField). Pinned by tests\autotest\run_v156_EXTA1_facts.ps1. }
+function VariantBranchOf(const ANode: TTSNode): Integer;
+var
+  Clause: TTSNode;
+  Top   : TTSNode;
+  Up    : TTSNode;
+begin
+  Result:= 0;
+  Clause:= ANode.Parent;
+  if Clause.IsNull or (Clause.NodeType <> 'declVariantClause') then Exit;
+  Top:= Clause.Parent;
+  if Top.IsNull then Exit;
+  Up:= Top.Parent;
+  while (not Up.IsNull) and (Up.NodeType = 'declVariantClause') and (not Up.Parent.IsNull) do
+  begin
+    Top:= Up.Parent;
+    Up := Top.Parent;
+  end;
+  Result:= VariantClauseCount(Top, Clause.StartByte);
+end;
+
+{ 1.56 EXT-A1 (B2): the tag of `case Tag: T of` is a real field of the record and had no symbol
+  row. Emits it as skField (range = the tag identifier, signature = the tag type) with
+  variant_tag = 1; a tagless part (`case Integer of`) emits nothing. The caller still recurses,
+  so the refs of the subtree are what they were. }
+procedure EmitVariantTag(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string);
+var
+  TagNode: TTSNode;
+  TagName: string ;
+  TagQN  : string ;
+begin
+  TagNode:= ANode.ChildByField('name');
+  if TagNode.IsNull or (TagNode.NodeType <> 'identifier') then Exit;
+  TagName:= NodeText(TagNode, AState.Source);
+  if TagName = '' then Exit;
+  TagQN:= if AParentQualifiedName <> '' then AParentQualifiedName + '.' + TagName else TagName;
+  AState.AddExtra(
+    AState.Emit(skField, TagName, TagQN, AParentSymbolIdx, TagNode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility,
+                '', False, False, '', '', AState.CurrentVisExplicit),
+    NORETURN_NONE, VariantBranchOf(ANode), True, PARAM_MODE_VALUE, -1);
+end;
+
+{ 1.56 EXT-A1 (SPEC-SEARCH C-1): the kind and value of one call argument when it is a literal.
+    'TEXT'            -> CLA_KIND_STRING, decoded like string_literals.text (outer quotes off,
+                         doubled quotes single)
+    12 / $FF / 1.5    -> CLA_KIND_NUMBER, as written; a leading sign is kept (`-1`)
+    Name / A.B.Name   -> CLA_KIND_CONST CANDIDATE, whitespace removed; FilterConstCandidates
+                         drops the ones this file declares as something else
+  False for every other expression. The value is cut at CLA_VALUE_MAX. }
+function LiteralArgValue(const AArg: TTSNode; const ASource: TBytes; out AKind, AValue: string): Boolean;
+const
+  QUOTE        = '''';
+  DOUBLED_QUOTE= '''''';
+  QUOTE_COUNT  = 2;
+var
+  Raw: string;
+begin
+  Result:= True;
+  AKind := '';
+  AValue:= '';
+  if AArg.NodeType = 'literalString' then
+  begin
+    Raw:= NodeText(AArg, ASource);
+    if (Length(Raw) >= QUOTE_COUNT) and (Raw[1] = QUOTE) and (Raw[Length(Raw)] = QUOTE) then
+      Raw:= Copy(Raw, QUOTE_COUNT, Length(Raw) - QUOTE_COUNT);
+    AKind := CLA_KIND_STRING;
+    AValue:= StringReplace(Raw, DOUBLED_QUOTE, QUOTE, [rfReplaceAll]);
+  end
+  else if AArg.NodeType = 'literalNumber' then
+  begin
+    AKind := CLA_KIND_NUMBER;
+    AValue:= NodeText(AArg, ASource);
+  end
+  else if (AArg.NodeType = 'exprUnary') and (AArg.NamedChildCount > 0)
+          and (AArg.NamedChild(AArg.NamedChildCount - 1).NodeType = 'literalNumber') then
+  begin
+    Raw:= StringReplace(Trim(NodeText(AArg, ASource)), ' ', '', [rfReplaceAll]);
+    if (Raw = '') or not CharInSet(Raw[1], ['-', '+']) then Exit(False);
+    AKind := CLA_KIND_NUMBER;
+    AValue:= Raw;
+  end
+  else if IsDottedIdentChain(AArg) then
+  begin
+    AKind := CLA_KIND_CONST;
+    AValue:= NormaliseReceiverText(NodeText(AArg, ASource));
+  end
+  else Exit(False);
+  if Length(AValue) > CLA_VALUE_MAX then AValue:= Copy(AValue, 1, CLA_VALUE_MAX);
+end;
+
+{ 1.56 EXT-A1 (SPEC-SEARCH C-1): one call_literal_args row per literal argument of the call or
+  subscript ANode. ARef is the ref the caller JUST emitted for it (the `call` ref of an exprCall,
+  the `index-access` ref of an exprSubscript): its start is the row's call_line / call_col, so
+  a reader joins refs on (file_id, call_line, call_col) and always finds the ref. arg_count
+  counts every argument, literal or not. A subscript gets string and constant rows only (a
+  numeric index, `A[0]`, names nothing). Entities that are neither `Name` nor `X.Name` are
+  skipped, like EmitCallReference. Pinned by tests\autotest\run_v156_EXTA1_facts.ps1. }
+procedure EmitCallLiteralArgs(const ANode: TTSNode; const AState: TWalkState; const ARef: TReference; AIsSubscript: Boolean);
+var
+  Entity  : TTSNode;
+  NameNode: TTSNode;
+  Args    : TTSNode;
+  Arg     : TTSNode;
+  ArgNodes: TArray<TTSNode>;
+  Receiver: string ;
+  Kind    : string ;
+  Value   : string ;
+  Row     : TCallLiteralArgRow;
+  I       : Integer;
+begin
+  Entity:= ANode.ChildByField('entity');
+  if Entity.IsNull then Exit;
+  Receiver:= '';
+  if Entity.NodeType = 'identifier' then NameNode:= Entity
+  else if Entity.NodeType = 'exprDot' then
+  begin
+    NameNode:= Entity.ChildByField('rhs');
+    if NameNode.IsNull then Exit;
+    Receiver:= ReceiverTextOf(Entity, AState.Source);
+  end
+  else Exit;
+  Args:= FindNamedChildOfType(ANode, 'exprArgs');
+  if Args.IsNull then Exit;
+  ArgNodes:= nil;
+  for I:= 0 to Args.NamedChildCount - 1 do
+  begin
+    Arg:= Args.NamedChild(I);
+    if Arg.IsExtra or (Arg.NodeType = 'legacyFormat') then Continue;
+    ArgNodes:= ArgNodes + [Arg];
+  end;
+  for I:= 0 to High(ArgNodes) do
+  begin
+    if not LiteralArgValue(ArgNodes[I], AState.Source, Kind, Value) then Continue;
+    if AIsSubscript and (Kind = CLA_KIND_NUMBER) then Continue;
+    Row:= Default(TCallLiteralArgRow);
+    Row.CallLine    := ARef.StartLine;
+    Row.CallCol     := ARef.StartCol;
+    Row.CalleeName  := NodeText(NameNode, AState.Source);
+    Row.ReceiverText:= Receiver;
+    Row.ArgIndex    := I;
+    Row.ArgCount    := Length(ArgNodes);
+    Row.LitLine     := Integer(ArgNodes[I].StartPoint.row) + 1;
+    Row.LitCol      := NodeStartCharCol(ArgNodes[I], AState.Source);
+    Row.LitKind     := Kind;
+    Row.Value       := Value;
+    AState.LiteralArgs.Add(Row);
+  end;
+end;
+
+{ 1.56 EXT-A1 (SPEC-SEARCH C-1): the parser cannot know that an identifier argument names a
+  constant declared in ANOTHER unit, so LiteralArgValue takes every `Name` / `A.B.Name` argument
+  as a candidate and this pass, run once after the walk, drops the ones that are certainly not:
+  the root name is declared in THIS file as a parameter, local, variable, field, property,
+  component or routine (by name, any scope -- the conservative direction is to drop), or is
+  Self / Result / nil. What is left is "an identifier this file does not declare as a
+  variable": a reader confirms the constant through the read ref at (lit_line, lit_col). }
+function FilterConstCandidates(const AState: TWalkState): TArray<TCallLiteralArgRow>;
+const
+  NOT_CONSTANT_KINDS = [skParam, skLocalVar, skVarDecl, skField, skProperty, skComponent, skForm,
+                        skProcedure, skFunction, skMethod, skConstructor, skDestructor];
+  NOT_CONSTANT_WORDS: array[0..2] of string = ('self', 'result', 'nil');
+var
+  Declared: TDictionary<string, Boolean>;
+  Sym     : TSymbol;
+  Row     : TCallLiteralArgRow;
+  Root    : string ;
+  Word    : string ;
+  Kept    : TList<TCallLiteralArgRow>;
+begin
+  Declared:= TDictionary<string, Boolean>.Create;
+  Kept    := TList<TCallLiteralArgRow>.Create;
+  try
+    for Word in NOT_CONSTANT_WORDS do Declared.AddOrSetValue(Word, True);
+    for Sym in AState.Symbols do
+      if Sym.Kind in NOT_CONSTANT_KINDS then Declared.AddOrSetValue(LowerCase(Sym.Name), True);
+    for Row in AState.LiteralArgs do
+    begin
+      if Row.LitKind = CLA_KIND_CONST then
+      begin
+        Root:= LowerCase(Row.Value);
+        if Root.Contains('.') then Root:= Copy(Root, 1, Root.IndexOf('.'));
+        if Declared.ContainsKey(Root) then Continue;
+      end;
+      Kept.Add(Row);
+    end;
+    Result:= Kept.ToArray;
+  finally
+    Kept.Free;
+    Declared.Free;
+  end;
+end;
+
+{ 1.56 EXT-A1 (B1): symbol_extras.noreturn for the routines of the file, run once after the walk.
+    NORETURN_DIRECTIVE  the declaration carries `noreturn` (Directives already holds the token:
+                        the grammar's kNoreturn procAttribute)
+    NORETURN_KNOWN      no directive, but a FREE routine the RTL documents as never returning,
+                        matched by its unit-qualified name -- the library-DB fact: the row lands
+                        when the library DB indexes System / SysUtils / Windows. `Halt` and
+                        `RunError` are compiler intrinsics with no declaration to carry a row;
+                        their System._Halt / _Halt0 / _RunError workers are listed instead.
+  Methods are never NORETURN_KNOWN (a same-named method of another class may return). }
+procedure EmitNoReturnExtras(const AState: TWalkState);
+const
+  NO_RETURN_TOKEN = 'noreturn';
+  KNOWN_NORETURN: array[0..15] of string = (
+    'system.halt', 'system.runerror', 'system._halt', 'system._halt0', 'system._runerror', 'system.error',
+    'system.sysutils.abort', 'sysutils.abort',
+    'system.sysutils.raiselastoserror', 'sysutils.raiselastoserror',
+    'system.sysutils.raiselastwin32error', 'sysutils.raiselastwin32error',
+    'system.sysutils.outofmemoryerror', 'sysutils.outofmemoryerror',
+    'winapi.windows.exitprocess', 'windows.exitprocess');
+var
+  I  : Integer;
+  Sym: TSymbol;
+begin
+  for I:= 0 to AState.Symbols.Count - 1 do
+  begin
+    Sym:= AState.Symbols[I];
+    if Sym.Kind not in [skProcedure, skFunction, skMethod] then Continue;
+    if MatchText(NO_RETURN_TOKEN, SplitString(Sym.Directives, ' ')) then
+      AState.AddExtra(I, NORETURN_DIRECTIVE, 0, False, PARAM_MODE_VALUE, -1)
+    else if (Sym.Kind <> skMethod) and MatchStr(LowerCase(Sym.QualifiedName), KNOWN_NORETURN) then
+      AState.AddExtra(I, NORETURN_KNOWN, 0, False, PARAM_MODE_VALUE, -1);
+  end;
+end;
+
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string);
 var
   NodeType : string ;
@@ -3830,8 +4143,13 @@ begin
     always had (single-name fields are byte-identical); names 2..n start at
     their own identifier and share the declaration's end and type text.
     Pinned by tests\autotest\run_multiname_fields.ps1. }
+  { 1.56 EXT-A1 (B2): the tag field of a variant part; no Exit, the default recursion below
+    still walks the part. }
+  if NodeType = 'declVariant' then EmitVariantTag(ANode, AState, AParentSymbolIdx, AParentQualifiedName);
+
   if (NodeType = 'declField') or (NodeType = 'declFieldNoSemi') then
   begin
+    var FVariantPart:= VariantBranchOf(ANode); { 1.56 EXT-A1 (B2): 0 outside a variant part }
     var FTypeNode:= ANode.ChildByField('type');
     var FTypeText:= TypeTextOf(ANode, AState.Source);
     var FFirst:= True;
@@ -3854,6 +4172,7 @@ begin
         said True. }
       var FIdx:= AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode, FTypeText, AState.CurrentVisibility,
                              '', False, False, '', '', AState.CurrentVisExplicit);
+      if FVariantPart > 0 then AState.AddExtra(FIdx, NORETURN_NONE, FVariantPart, False, PARAM_MODE_VALUE, -1);
       if not FFirst then
       begin
         var FSym:= AState.Symbols[FIdx];
@@ -4239,7 +4558,10 @@ begin
   // nested calls.
   if NodeType = 'exprCall' then
   begin
+    var CallRefCount:= AState.References.Count;
     EmitCallReference(ANode, AState);
+    { 1.56 EXT-A1 (C-1): literal arguments, keyed by the call ref just emitted. }
+    if AState.References.Count > CallRefCount then EmitCallLiteralArgs(ANode, AState, AState.References.Last, False);
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
   end;
@@ -4331,7 +4653,13 @@ begin
   begin
     { E-RENAME-RESIDUE (1.52): every subscript gets its index-access ref; no Exit, the arms below and the
       default recursion still see the node. }
-    if NodeType = 'exprSubscript' then EmitIndexAccessRef(ANode, AState);
+    if NodeType = 'exprSubscript' then
+    begin
+      var SubRefCount:= AState.References.Count;
+      EmitIndexAccessRef(ANode, AState);
+      { 1.56 EXT-A1 (C-1): `DS.FieldValues['X']` -- keyed by the index-access ref just emitted. }
+      if AState.References.Count > SubRefCount then EmitCallLiteralArgs(ANode, AState, AState.References.Last, True);
+    end;
     // Member access `obj.Member` -> the BASE identifier is a usage of `obj`
     // (the dxDBGrid1 case). The member itself is captured as call/type_use
     // elsewhere; we don't re-emit it here.
@@ -4995,6 +5323,10 @@ begin
     Root:= Tree.RootNode;
     if Root.HasError then CollectParseErrors(Root, AFilePath, Result.Diagnostics, 10, 0);
     Walk(Root, State, -1, '');
+    { 1.56 EXT-A1: B1 rows and the C-1 constant filter read the finished symbol list. }
+    EmitNoReturnExtras(State);
+    Result.SymbolExtras   := State.Extras.ToArray;
+    Result.CallLiteralArgs:= FilterConstCandidates(State);
     Result.Symbols    := State.Symbols    .ToArray;
     Result.References := State.References .ToArray;
     Result.UsesEntries:= State.UsesEntries.ToArray;

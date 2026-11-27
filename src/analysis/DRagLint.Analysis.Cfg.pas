@@ -69,7 +69,9 @@ type
     Pred     : TList<Integer>;  // dl:ok public-field@4792 -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
     /// <summary>True when this block ends in a statement that never returns
     /// to the caller normally -- <c>raise</c> (including a bare re-raise),
-    /// the RTL <c>Halt</c> or the RTL <c>Abort</c>.</summary>
+    /// the RTL <c>Halt</c>, the RTL <c>Abort</c>, or (1.56, only when the caller
+    /// of TCfgBuilder.Build passes a TCfgNoReturnCall oracle) a call to a routine
+    /// the index stores as <c>noreturn</c>.</summary>
     /// <remarks>Such a block still carries its edge to the synthetic Exit
     /// block (the leak and liveness analyses rely on it), so an analysis
     /// asking "what does the CALLER see on return" -- function-result-not-set,
@@ -242,6 +244,14 @@ type
     procedure ComputePreds;
   end;
 
+  /// <summary>Oracle of <see cref="TCfgBuilder.Build"/>: True when the call statement AStatement
+  /// never returns to its caller (its callee is a <c>noreturn</c> routine).</summary>
+  /// <remarks>AStatement is the node the builder stores as the block item: a <c>statement</c>,
+  /// <c>exprCall</c>, <c>exprDot</c> or <c>identifier</c> node in statement position. Must answer
+  /// False when it does not know the callee: a wrong True cuts a real path out of the graph.
+  /// Called on the building thread only.</remarks>
+  TCfgNoReturnCall = reference to function(const AStatement: TTSNode): Boolean;
+
   /// <summary>Builds a <see cref="TCfg"/> from a `defProc` node.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -258,6 +268,8 @@ type
     /// <param name="ASrc">The unit's source bytes (for identifier text).</param>
     /// <param name="APruneConstLoops">True: while-True / until-False loops get no test-exit edge
     /// (see TCfg.PruneConstLoops). False (default) keeps the historic shape (refactorings).</param>
+    /// <param name="ANoReturnCall">Optional oracle for calls that never return (the stored
+    /// noreturn fact of the index, see DRagLint.V156.FACTA.Support.TNoReturnFacts); nil = none.</param>
     /// <returns><!-- drag-lint:auto -->TCfg -- Observed: TCfg.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -271,8 +283,16 @@ type
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Create"/>
     /// <!-- drag-lint:auto END -->
+    /// <para>1.56 FA-1 (G-13): with ANoReturnCall given, a call statement the oracle answers
+    /// True for ends its block like a <c>raise</c>: an edge to Exit marked
+    /// <see cref="TCfgBlock.NoReturn"/> (not marked inside a try whose except handler is empty),
+    /// and the statements after it in the same list get no block. The oracle is asked once per
+    /// REACHABLE call statement, in source order, never for exit / break / continue, raise, or
+    /// the RTL Halt / Abort the builder already knows. Without an oracle the graph is the
+    /// historic one, bit for bit -- the index-time callers must stay on that.</para>
     /// </remarks>
-    class function Build(const AProc: TTSNode; const ASrc: TBytes; APruneConstLoops: Boolean = False): TCfg;
+    class function Build(const AProc: TTSNode; const ASrc: TBytes; APruneConstLoops: Boolean = False;
+      const ANoReturnCall: TCfgNoReturnCall = nil): TCfg;
   end;
 
 /// <summary>Collect every `defProc` node anywhere under ARoot.</summary>
@@ -739,6 +759,9 @@ type
       and the answer walks the whole unit): 0 = not yet, 1 = RTL, 2 = maybe user. }
     BareAbortKind: Integer; // dl:ok public-field@b4cf -- TBuilderState is implementation-private; every field is public builder state, like Cfg/Loops/DivertBlocks
     BareHaltKind : Integer; // dl:ok public-field@f42b -- TBuilderState is implementation-private; every field is public builder state, like Cfg/Loops/DivertBlocks
+    { 1.56 FA-1 (G-13): the caller's oracle for calls to noreturn routines, nil = none.
+      See TCfgNoReturnCall. }
+    NoReturnCall : TCfgNoReturnCall; // dl:ok public-field@8af5 -- TBuilderState is implementation-private; every field is public builder state, like Cfg/Loops/DivertBlocks
     function BareIsRtl(const AName: string): Boolean;
     constructor Create(ACfg: TCfg);
     destructor Destroy; override;
@@ -995,7 +1018,7 @@ begin
   Result := Cur;
 end;
 
-function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;  // dl:ok too-many-locals@5324, method-too-long@8c24, deep-nesting@ab51, too-many-exit-points@9b84, cyclomatic-complexity@4bf1, cognitive-complexity@e841 -- too-many-locals: measured 26 locals (max 25), method-too-long: measured 563 lines (max 250), deep-nesting: measured 6 deep (max 5), too-many-exit-points: measured 19 Exits (max 5), cyclomatic-complexity: measured 119 (max 30), cognitive-complexity: measured 234 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
+function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;  // dl:ok too-many-locals@5324, method-too-long@a77f, deep-nesting@ab51, too-many-exit-points@563f, cyclomatic-complexity@23c3, cognitive-complexity@ecb3 -- too-many-locals: measured 26 locals (max 25), method-too-long: measured 572 lines (max 250), deep-nesting: measured 6 deep (max 5), too-many-exit-points: measured 20 Exits (max 5), cyclomatic-complexity: measured 123 (max 30), cognitive-complexity: measured 239 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22; re-measured 2026-11-26 v156 FA-1 (the noreturn-call arm)
 var
   K, EntTxt: string;
   Cond, ThenN, ElseN, StartN, EntityN, IterN, LhsN: TTSNode;
@@ -1556,6 +1579,15 @@ begin
       Cfg.Blocks[ACur].EndsProcess := IsHalt;
       Exit(-1);
     end;
+    { 1.56 FA-1 (G-13). A call the caller's oracle knows as never returning (the
+      stored noreturn fact) is modelled like Abort: it may raise, so an empty
+      handler swallows it. break / continue are words of the language, not calls. }
+    if Assigned(NoReturnCall) and (EntTxt <> 'break') and (EntTxt <> 'continue') and NoReturnCall(ANode) then
+    begin
+      Cfg.Blocks[ACur].AddSucc(Cfg.ExitIdx);
+      Cfg.Blocks[ACur].NoReturn := SwallowDepth = 0;
+      Exit(-1);
+    end;
     if (EntTxt = 'break') and (Loops.Count > 0) then
     begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.BreakIdx, Loops.Peek.FinallyDepth));
     Exit(-1); end;
@@ -1572,7 +1604,8 @@ end;
 
 { TCfgBuilder }
 
-class function TCfgBuilder.Build(const AProc: TTSNode; const ASrc: TBytes; APruneConstLoops: Boolean): TCfg;
+class function TCfgBuilder.Build(const AProc: TTSNode; const ASrc: TBytes; APruneConstLoops: Boolean;
+  const ANoReturnCall: TCfgNoReturnCall): TCfg;
 var
   St: TBuilderState;
   Body: TTSNode;
@@ -1596,6 +1629,7 @@ begin
   Result.ExitIdx  := Result.NewBlock.Index; { 1 = Exit }
   St := TBuilderState.Create(Result);
   try
+    St.NoReturnCall := ANoReturnCall;
     First := Result.NewBlock.Index;
     Result.Blocks[Result.EntryIdx].AddSucc(First);
     Last := St.EmitStmt(First, Body);
