@@ -226,9 +226,9 @@ try {
   Check 'Plain (no dataset code): no access row, no dsfield flow (positive control: Direct has both)' ((A 'Plain').Count -eq 0 -and (Cnt (F 'Plain') { $_.dst_kind -eq 'dsfield' -or $_.src_kind -eq 'dsfield' }) -eq 0 -and (A 'Direct').Count -gt 0 -and (F 'Plain').Count -gt 0)
   Check 'access ordinals are 0..n-1 in file order' ($acc.Count -gt 0 -and (@($acc | ForEach-Object { [int]$_.ordinal }) -join ',') -eq ((0..($acc.Count - 1)) -join ','))
   $dupe = @($acc | Group-Object { "$($_.line)|$($_.col)|$($_.mode)" } | Where-Object { $_.Count -gt 1 })
-  Check 'no two access rows share a position and mode' ($dupe.Count -eq 0) "dupes=$($dupe.Count)"
+  Check 'no two access rows share a position and mode' ($acc.Count -gt 0 -and $dupe.Count -eq 0) "dupes=$($dupe.Count)"
   $both = @($flows | Group-Object { "$($_.routine)|$($_.dst_line)|$($_.dst_col)" } | Where-Object { @($_.Group | ForEach-Object { $_.dst_kind } | Where-Object { $_ -in @('write', 'dsfield') } | Sort-Object -Unique).Count -gt 1 })
-  Check 'never a write row and a dsfield row at one position' ($both.Count -eq 0) "sites=$($both.Count)"
+  Check 'never a write row and a dsfield row at one position (there are rows of both kinds)' ((Cnt $flows { $_.dst_kind -eq 'dsfield' }) -gt 0 -and (Cnt $flows { $_.dst_kind -eq 'write' }) -gt 0 -and $both.Count -eq 0) "sites=$($both.Count)"
 
   if ($BaseExe -ne '') {
     Write-Host 'T13 unchanged rows / T14 reader safety (against the base engine)' -ForegroundColor Cyan
@@ -263,7 +263,7 @@ try {
   $loopF = Lane-Rows $dbF $loopSql
   Check 'T16 reindex exits 0, the new write is there' ($rc -eq 0 -and $rcF -eq 0 -and (Has $acc2 { $_.field_name -eq 'EXTRA' -and $_.mode -eq 'write' }))
   Check 'T16 one more access row than before, ordinals still 0..n-1' ($acc.Count -gt 0 -and $acc2.Count -eq $acc.Count + 1 -and (@($acc2 | ForEach-Object { [int]$_.ordinal }) -join ',') -eq ((0..($acc2.Count - 1)) -join ','))
-  Check 'T16 counts equal a fresh index' ($acc2.Count -eq $accF.Count -and $loop2.Count -eq $loopF.Count -and $loop2.Count -eq $loops.Count) "acc=$($acc2.Count)/$($accF.Count) loops=$($loop2.Count)/$($loopF.Count)"
+  Check 'T16 counts equal a fresh index' ($acc2.Count -gt 0 -and $acc2.Count -eq $accF.Count -and $loop2.Count -eq $loopF.Count -and $loop2.Count -eq $loops.Count) "acc=$($acc2.Count)/$($accF.Count) loops=$($loop2.Count)/$($loopF.Count)"
 }
 finally {
   if (-not $KeepScratch) { try { [IO.Directory]::Delete($work, $true) } catch { } } else { Write-Host "scratch kept: $work" }
