@@ -399,7 +399,8 @@ function PortedQuestionIds: TArray<string>;
 
 /// <summary>The phrase of the header sentence for a question id.</summary>
 /// <param name="pId">The question id.</param>
-/// <returns>Its menu caption without the trailing dots, or 'Report' for an unknown id.</returns>
+/// <returns>Its menu caption without the trailing dots, or 'Report' for an unknown id; a 1.56 question
+/// without a registered emitter is an unknown id.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.AskVerb.FormatAskAnswer (DRagLint.Charts.AskVerb.pas)</para>
@@ -410,7 +411,9 @@ function QuestionPhrase(const pId: string): string;
 
 /// <summary>Every question id the chart pipeline accepts (New-DiagramArtifact.ps1's
 /// ValidateSet), in the menu-caption order of the header-phrase table.</summary>
-/// <returns>The 27 ids, lower case (implementors is Delphi-only: no Emit-*.ps1).</returns>
+/// <returns>The 27 ids, lower case (implementors is Delphi-only: no Emit-*.ps1), then each 1.56 question
+/// (class-diagram, sequence, control-flow, sent-not-handled, dependency-matrix, main-sequence) whose Q unit
+/// has registered its emitter; a 1.56 question without an emitter is not an id.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.AskVerb.AskUsage (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.NormaliseAskQuestion (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas)</para>
@@ -423,7 +426,8 @@ function QuestionIds: TArray<string>;
 /// <param name="pId">The question id.</param>
 /// <param name="pLeft">The first label, e.g. 'tables read'.</param>
 /// <param name="pRight">The second label, e.g. 'tables written'.</param>
-/// <returns>False for an unknown id (both labels '').</returns>
+/// <returns>False for an unknown id (both labels ''); a 1.56 question without a registered emitter is an
+/// unknown id.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
@@ -572,6 +576,22 @@ const
     ('lands-where', 'server DataService rows', 'triggers touching the column'),
     ('round-trip', 'steps', 'unresolved'),
     ('path', 'shortest paths', 'calls on each path'));
+  { 1.56 tranche 2 (W2FRAME): the questions of lanes CHB-1, CHB-2 and CHA-1 -- id, menu caption, the two count
+    labels -- listed after the 27 in this order. A row is a question (QuestionIds, the ask verb's list,
+    QuestionPhrase, QuestionVocab) only once its Q unit has registered an emitter; until then the id is
+    unknown, as before 1.56, so a lane that is cut leaves nothing on the surface. }
+  V156_ID = 0;
+  V156_CAPTION = 1;
+  V156_LEFT = 2;
+  V156_RIGHT = 3;
+  V156_QUESTIONS: array[0..5] of array[V156_ID..V156_RIGHT] of string = (
+    ('class-diagram', 'Class diagram of this type...', 'classes', 'relations'),
+    ('sequence', 'Sequence of calls in this routine...', 'calls', 'participants'),
+    ('control-flow', 'Control flow of this routine...', 'nodes', 'edges'),
+    ('sent-not-handled', 'Commands sent but never handled...', 'commands sent', 'never handled'),
+    ('dependency-matrix', 'Unit dependency matrix...', 'units', 'uses edges'),
+    ('main-sequence', 'Abstractness and instability (main sequence)...', 'units', 'off the main sequence'));
+  NO_ROW = -1;
 
 var
   GRegistry: TDictionary<string, TChartEmitter>;
@@ -735,17 +755,28 @@ begin
   TArray.Sort<string>(Result, TStringComparer.Ordinal);
 end;
 
+{ The V156_QUESTIONS row of a 1.56 question whose Q unit registered its emitter; NO_ROW for every other id. }
+function LiveV156Row(const pId: string): Integer;
+begin
+  Result:= NO_ROW;
+  if GRegistry = nil then
+    Exit;
+  for var K:= Low(V156_QUESTIONS) to High(V156_QUESTIONS) do
+    if SameText(V156_QUESTIONS[K, V156_ID], pId) and GRegistry.ContainsKey(V156_QUESTIONS[K, V156_ID]) then
+      Exit(K);
+end;
+
 function QuestionPhrase(const pId: string): string;
 begin
+  Result:= UNKNOWN_PHRASE;
+  var Row:= LiveV156Row(pId);
+  if Row <> NO_ROW then
+    Result:= V156_QUESTIONS[Row, V156_CAPTION];
   for var K:= Low(QUESTION_CAPTIONS) to High(QUESTION_CAPTIONS) do
     if SameText(QUESTION_CAPTIONS[K, 0], pId) then
-    begin
       Result:= QUESTION_CAPTIONS[K, 1];
-      while Result.EndsWith('.') do
-        Result:= Result.Substring(0, Result.Length - 1);
-      Exit;
-    end;
-  Result:= UNKNOWN_PHRASE;
+  while Result.EndsWith('.') do
+    Result:= Result.Substring(0, Result.Length - 1);
 end;
 
 function QuestionIds: TArray<string>;
@@ -753,6 +784,9 @@ begin
   SetLength(Result, Length(QUESTION_CAPTIONS));
   for var K:= Low(QUESTION_CAPTIONS) to High(QUESTION_CAPTIONS) do
     Result[K]:= QUESTION_CAPTIONS[K, 0];
+  for var K:= Low(V156_QUESTIONS) to High(V156_QUESTIONS) do
+    if LiveV156Row(V156_QUESTIONS[K, V156_ID]) <> NO_ROW then
+      Result:= Result + [V156_QUESTIONS[K, V156_ID]];
 end;
 
 function QuestionVocab(const pId: string; out pLeft, pRight: string): Boolean;
@@ -764,6 +798,13 @@ begin
       pRight:= QUESTION_VOCAB[K, 2];
       Exit(True);
     end;
+  var Row:= LiveV156Row(pId);
+  if Row <> NO_ROW then
+  begin
+    pLeft:= V156_QUESTIONS[Row, V156_LEFT];
+    pRight:= V156_QUESTIONS[Row, V156_RIGHT];
+    Exit(True);
+  end;
   pLeft:= '';
   pRight:= '';
   Result:= False;
