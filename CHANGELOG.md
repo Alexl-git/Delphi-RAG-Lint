@@ -59,7 +59,12 @@ breaking changes** until v2.0.
 - INDEX (FIXR-A): taint field / global writer lookups skip value-class rows (`ValClass` set) so numeric value rows no longer reach string sinks; the `ValClass` doc-comment is rewritten; the extractor-version guard already hashes the Cfg / DataFlow / Flow.Lattices / SymbolFacts units (comment only).
 - INDEX (FIXR-B, extractor bump needed): `data_flows` value rows take the class of the declaring owner (`TDataFlowCallees.DeclaredClass(group, scope, name)`; 60-unit A/B: 25 value rows removed, 1 added, class-less rows identical); the except-context memo is keyed on a per-site `WalkId`; `idx_refs_file_line` is built in `SetIndexerFingerprint` (2.3 s on a 382 MB copy). Rejected for 1.56: deleting the unresolved `Exit` / `Continue` / `Break` / `Halt` call refs (the trace charts read them).
 - HAPPENS-BEFORE / LOCKS (FIX2-A): happens-before init-proves answers MAY (-site-uncertain) when any A site is not definite; the lock-order graph takes all held keys, so a try-enter or inexact-key gate silences the pair.
-- FIELD REPOSITORY (FIX2-B): epo read-dfm --db on a schema-4 repository skips the lineage with one stated line (run epo migrate --apply) instead of reading a missing column; epo gen-wiki no longer overwrites a page it did not generate (first-line marker; listed as efused page: <name>, --json efused, exit 0).
+- FIELD REPOSITORY (FIX2-B): 
+epo read-dfm --db on a schema-4 repository skips the lineage with one stated line (run 
+epo migrate --apply) instead of reading a missing column; 
+epo gen-wiki no longer overwrites a page it did not generate (first-line marker; listed as 
+efused page: <name>, --json 
+efused, exit 0).
 - ASK / SBOM (FIX2-B): sk risk without imported coverage states 
 o coverage imported -- complexity only in the chart and meta and draws n/a instead of 0 percent; sbom catalogue github/bitbucket purls are lowercase (purl spec).
 - INTERNAL (FRAME-1/2/3, W2FRAME, W1BASE, TST-V, SPEC-LIN, SPEC-SEARCH, PROBE, THR-S, FIX-FLOW, FIX-TAINT, FP-S, GCP-M, LIN-1): lint frame and per-lane catalogue scaffold; lock-site model `DRagLint.Query.LockSites` (S6, read-time only, no CLI surface, feeds `lock-order-inversion`); read-only lineage model `DRagLint.FieldRepo.Lineage`; grid-copy model `DRagLint.FieldRepo.GridCopy`; four vacuous test sites fixed (TST-V); fixes: flow graph built with the noreturn oracle, RTL value records not leaked objects, foreach iterable by field (FIX-FLOW); taint rows with a value class dropped, an `external` import no longer treated as project code so an untyped sink resolves (FIX-TAINT); `pchar-arithmetic` no longer fires on `PByte` and `concat-in-loop` drops `Variant` / `OleVariant` (FP-S).
