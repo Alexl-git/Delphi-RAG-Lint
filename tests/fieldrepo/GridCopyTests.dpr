@@ -138,7 +138,7 @@ begin
     Result := 'no exception';
   except
     on E: Exception do
-      Result := if (E.ClassType = pClass) and ((pPart = '') or E.Message.Contains(pPart)) then ''
+      Result := if (E.ClassType = pClass) and (pPart <> '') and E.Message.Contains(pPart) then ''
         else E.ClassName + ': ' + E.Message;
   end;
 end;
@@ -322,7 +322,7 @@ begin
   CheckRaises('R11 a binary DFM', procedure
     begin
       PlanGridCopy(TextForm('TPF0'#4'TFrm'#0#0), TGridCopyRequest.OneEvent('a', 'b', 'OnX'));
-    end, EDfmWriteError, '');
+    end, EDfmWriteError, 'a binary DFM is not written');
   VPlan := PlanGridCopy(TextForm(UNBOUND), TGridCopyRequest.OneEvent('uv', 'dv', 'DataController.OnAfterPost'));
   Check('R12 an event of the unbound data controller only is blocked on a data-bound view', (Length(VPlan.Changes) = 1)
     and (VPlan.Changes[0].Blocked = 'TcxGridDBTableView has no event DataController.OnAfterPost'), Describe(VPlan));
@@ -710,7 +710,7 @@ begin
   CheckRaises('T9 a selection of another plan', procedure begin SelectGridCopy(VPlan, ['# plan 0123456789abcdef', '1']); end,
     EGridCopyError, 'the selection is of plan 0123456789abcdef');
   Check('T10 `all` leaves a blocked change out', Length(SelectGridCopy(VOther, ['all'])) = 0);
-  CheckRaises('T11 a blocked change named by id', procedure begin SelectGridCopy(VOther, ['1']); end, EFrChangeSetError, '');
+  CheckRaises('T11 a blocked change named by id', procedure begin SelectGridCopy(VOther, ['1']); end, EFrChangeSetError, 'change 1 is blocked');
   VOther := One('OnGetDisplayText', 'bvMain', 'tvMainNAME');
   VIds := SelectGridCopy(VOther, ['all']);
   Check('T12 `all` takes an unchecked change', (Length(VIds) = 1) and (VIds[0] = 1));
