@@ -47,6 +47,11 @@
     {"id": "inifile-readstring-ini", "name": "System.IniFiles.TIniFile.ReadString", "kind": "call", "confidence": "weak"},
     {"id": "inifile-readstring-mem", "name": "System.IniFiles.TMemIniFile.ReadString", "kind": "call", "confidence": "weak"},
     {"id": "db-field-asstring", "name": "Data.DB.TField.AsString", "kind": "read", "confidence": "weak", "enabled": false, "note": "second-order injection; on via second_order"},
-    {"id": "db-field-value", "name": "Data.DB.TField.Value", "kind": "read", "confidence": "weak", "enabled": false, "note": "second-order injection; on via second_order"}
+    {"id": "db-field-value", "name": "Data.DB.TField.Value", "kind": "read", "confidence": "weak", "enabled": false, "note": "second-order injection; on via second_order"},
+    {"id": "web-request-cookiefields", "name": "Web.HTTPApp.TWebRequest.CookieFields", "kind": "read", "confidence": "certain"},
+    {"id": "web-request-cookie", "name": "Web.HTTPApp.TWebRequest.Cookie", "kind": "read", "confidence": "certain"},
+    {"id": "indy-request-params", "name": "IdCustomHTTPServer.TIdHTTPRequestInfo.Params", "kind": "read", "confidence": "certain"},
+    {"id": "indy-request-unparsedparams", "name": "IdCustomHTTPServer.TIdHTTPRequestInfo.UnparsedParams", "kind": "read", "confidence": "certain"},
+    {"id": "indy-request-document", "name": "IdCustomHTTPServer.TIdHTTPRequestInfo.Document", "kind": "read", "confidence": "certain"}
   ]
 }

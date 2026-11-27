@@ -47,7 +47,14 @@
     {"name": "System.SysUtils.TStringBuilder.Append", "args": [0], "to": "receiver"},
     {"name": "StrCopy", "args": [1], "to": "outparam", "out": 0},
     {"name": "StrLCopy", "args": [1], "to": "outparam", "out": 0},
-    {"name": "StrCat", "args": [1], "to": "outparam", "out": 0}
+    {"name": "StrCat", "args": [1], "to": "outparam", "out": 0},
+    {"name": "System.NetEncoding.THTMLEncoding.Encode", "args": [0]},
+    {"name": "HTMLEscape", "args": [0]},
+    {"name": "HTTPEncode", "args": [0]},
+    {"name": "Web.HTTPApp.HTTPEncode", "args": [0]},
+    {"name": "System.NetEncoding.TURLEncoding.Encode", "args": [0]},
+    {"name": "System.Classes.TStringStream.Create", "args": [0]},
+    {"name": "System.Classes.TBytesStream.Create", "args": [0]}
   ],
   "sanitizers": [
     {"name": "QuotedStr", "sanitizes": ["sql"]},
@@ -64,6 +71,11 @@
     {"name": "StrToDateTime", "sanitizes": ["all"]},
     {"name": "StrToTime", "sanitizes": ["all"]},
     {"name": "ExtractFileName", "sanitizes": ["path"]},
-    {"name": "System.IOUtils.TPath.GetFileName", "sanitizes": ["path"]}
+    {"name": "System.IOUtils.TPath.GetFileName", "sanitizes": ["path"]},
+    {"name": "System.NetEncoding.THTMLEncoding.Encode", "sanitizes": ["html"]},
+    {"name": "HTMLEscape", "sanitizes": ["html"]},
+    {"name": "HTTPEncode", "sanitizes": ["html", "log"]},
+    {"name": "Web.HTTPApp.HTTPEncode", "sanitizes": ["html", "log"]},
+    {"name": "System.NetEncoding.TURLEncoding.Encode", "sanitizes": ["html", "log"]}
   ]
 }
