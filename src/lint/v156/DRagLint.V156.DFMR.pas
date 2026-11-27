@@ -59,7 +59,6 @@ implementation
 
 uses
   System.IOUtils
-  , System.StrUtils
   , DRagLint.Lint.Config
   , DRagLint.Lint.RuleCatalog
   , DRagLint.V151.DFMB.Support
@@ -99,7 +98,7 @@ begin
   ADecls.Add(V151Rule(RULE_DFM_CONTROL_OVERLAP, CAT_BUGS, SEV_INFO, TITLE_OVERLAP, False));
 end;
 
-class function TV156DFMRRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV156DFMRRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@e719 -- REVIEWED 2026-11-27 v156 DFM-R: signature fixed by the TV151 lane interface; this lane has no per-file source check
 begin
   Result:= nil;
 end;
@@ -135,9 +134,9 @@ begin
           Line:= O.Obj.Props[I].Line;
           Col := O.Obj.Props[I].Col;
         end;
+        var More: string:= if O.Covered > 1 then Format(' and %d more', [O.Covered - 1]) else '';
         AddFinding(Found, ACtx, RULE_DFM_CONTROL_OVERLAP, SEV_INFO, Line, Col,
-          Format('%s covers %s%s in the same parent -- one of them is partly hidden',
-            [O.Obj.ObjName, O.Other.ObjName, IfThen(O.Covered > 1, Format(' and %d more', [O.Covered - 1]), '')]));
+          Format('%s covers %s%s in the same parent -- one of them is partly hidden', [O.Obj.ObjName, O.Other.ObjName, More]));
       end;
     Result:= Found.ToArray;
   finally
@@ -146,12 +145,12 @@ begin
   end;
 end;
 
-class function TV156DFMRRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@aa3f -- REVIEWED 2026-11-27 v156 DFM-R: signature fixed by the TV151 lane interface; this lane has no raw-byte check
+class function TV156DFMRRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@2138 -- REVIEWED 2026-11-27 v156 DFM-R: signature fixed by the TV151 lane interface; this lane has no raw-byte check
 begin
   Result:= nil;
 end;
 
-class function TV156DFMRRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@2af0 -- REVIEWED 2026-11-27 v156 DFM-R: signature fixed by the TV151 lane interface; this lane has no project-wide check
+class function TV156DFMRRules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@a57e -- REVIEWED 2026-11-27 v156 DFM-R: signature fixed by the TV151 lane interface; this lane has no project-wide check
 begin
   Result:= nil;
 end;

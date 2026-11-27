@@ -107,6 +107,12 @@ uses
   ;
 
 type
+  /// <summary>Running count of the bindings of one handler: the first binding plus the event kinds seen, '|'-delimited.</summary>
+  TTally = record
+    Head : TGodHandler;
+    Kinds: string;
+  end;
+
   /// <summary>Fixed rectangle of one sibling, edges exclusive on the right and bottom.</summary>
   TBox = record
     Obj: TDfmObj;
@@ -130,24 +136,27 @@ begin
     if not (C.IsLetterOrDigit or (C = '_')) then Exit(False);
 end;
 
+function IsEventName(const AName: string): Boolean;
+begin
+  Result:= (Length(AName) > 2) and AName.StartsWith('On') and AName[3].IsUpper;
+end;
+
 function IsEventBinding(const AProp: TDfmProp; out AEvent: string): Boolean;
 begin
   AEvent:= AProp.Name;
   var Dot: Integer:= LastDelimiter('.', AEvent);
   if Dot > 0 then AEvent:= Copy(AEvent, Dot + 1, MaxInt);
-  Result:= (Length(AEvent) > 2) and (AEvent[1] = 'O') and (AEvent[2] = 'n') and AEvent[3].IsUpper
-    and IsIdent(Trim(AProp.Value)) and not MatchText(Trim(AProp.Value), ['True', 'False', 'nil']);
+  var Value: string:= Trim(AProp.Value);
+  Result:= IsEventName(AEvent) and IsIdent(Value) and not MatchText(Value, ['True', 'False', 'nil']);
   if not Result then AEvent:= '';
 end;
 
 function FindGodHandlers(const AModel: TDfmModel; AThreshold: Integer): TArray<TGodHandler>;
 begin
   var Floor: Integer:= Max(AThreshold, 2);
-  var Counts: TDictionary<string, Integer>:= TDictionary<string, Integer>.Create;
-  var Kinds : TDictionary<string, string>:= TDictionary<string, string>.Create;
-  var First : TDictionary<string, TGodHandler>:= TDictionary<string, TGodHandler>.Create;
-  var Order : TList<string>:= TList<string>.Create;
-  var Found : TList<TGodHandler>:= TList<TGodHandler>.Create;
+  var Tally: TDictionary<string, TTally>:= TDictionary<string, TTally>.Create;
+  var Order: TList<string>:= TList<string>.Create;
+  var Found: TList<TGodHandler>:= TList<TGodHandler>.Create;
   try
     for var O: TDfmObj in AModel.All do
       for var P: TDfmProp in O.Props do
@@ -155,41 +164,38 @@ begin
         var Event: string;
         if not IsEventBinding(P, Event) then Continue;
         var Key: string:= LowerCase(Trim(P.Value));
-        if Counts.ContainsKey(Key) then
+        var T: TTally;
+        if Tally.TryGetValue(Key, T) then
         begin
-          Counts[Key]:= Counts[Key] + 1;
-          if Pos('|' + Event + '|', Kinds[Key]) = 0 then Kinds[Key]:= Kinds[Key] + Event + '|';
+          Inc(T.Head.Bindings);
+          if not T.Kinds.Contains('|' + Event + '|') then T.Kinds:= T.Kinds + Event + '|';
         end
         else
         begin
-          Counts.Add(Key, 1);
-          Kinds.Add(Key, '|' + Event + '|');
+          T:= Default(TTally);
+          T.Head.Handler  := Trim(P.Value);
+          T.Head.Bindings := 1;
+          T.Head.Obj      := O;
+          T.Head.Line     := P.Line;
+          T.Head.Col      := P.Col;
+          T.Kinds         := '|' + Event + '|';
           Order.Add(Key);
-          var G: TGodHandler:= Default(TGodHandler);
-          G.Handler:= Trim(P.Value);
-          G.Obj    := O;
-          G.Line   := P.Line;
-          G.Col    := P.Col;
-          First.Add(Key, G);
         end;
+        Tally.AddOrSetValue(Key, T);
       end;
     for var Key: string in Order do
     begin
-      var G: TGodHandler:= First[Key];
-      G.Bindings  := Counts[Key];
-      G.EventKinds:= Length(Kinds[Key].Split(['|'], TStringSplitOptions.ExcludeEmpty));
-      if (G.Bindings >= Floor) and (G.EventKinds >= 2) then Found.Add(G);
+      var T: TTally:= Tally[Key];
+      T.Head.EventKinds:= Length(T.Kinds.Split(['|'], TStringSplitOptions.ExcludeEmpty));
+      if (T.Head.Bindings >= Floor) and (T.Head.EventKinds >= 2) then Found.Add(T.Head);
     end;
     Result:= Found.ToArray;
   finally
     Found.Free;
     Order.Free;
-    First.Free;
-    Kinds.Free;
-    Counts.Free;
+    Tally.Free;
   end;
 end;
-
 function IsStackingParent(const AClass: string): Boolean;
 begin
   var Leaf: string:= ClassLeaf(AClass);
@@ -207,31 +213,39 @@ begin
     if ContainsText(Leaf, Part) then Exit(True);
 end;
 
+function IsPositionedByStoredRect(const AObj: TDfmObj): Boolean;
+begin
+  var Align: string:= Trim(AObj.Val('Align'));
+  var Anchors: string:= AObj.Val('Anchors');
+  var Stretches: Boolean:= ContainsText(Anchors, 'akRight') or ContainsText(Anchors, 'akBottom');
+  var Aligned: Boolean:= (Align <> '') and not SameText(Align, 'alNone');
+  var Shown: Boolean:= not BoolPropIs(AObj, 'Visible', False);
+  var HasSize: Boolean:= AObj.Has('Width') and AObj.Has('Height');
+  var IsSplitter: Boolean:= ContainsText(ClassLeaf(AObj.ClsName), 'Splitter');
+  Result:= HasSize and Shown and not Aligned and not Stretches and not IsSplitter;
+end;
+
 function FixedRect(const AObj: TDfmObj; out ALeft, ATop, ARight, ABottom: Integer): Boolean;
 begin
-  Result:= False;
   ALeft:= 0;
   ATop:= 0;
   ARight:= 0;
   ABottom:= 0;
-  if not (AObj.Has('Width') and AObj.Has('Height')) then Exit;
-  if BoolPropIs(AObj, 'Visible', False) then Exit;
-  if ContainsText(ClassLeaf(AObj.ClsName), 'Splitter') then Exit;
-  var Align: string:= Trim(AObj.Val('Align'));
-  if (Align <> '') and not SameText(Align, 'alNone') then Exit;
-  var Anchors: string:= AObj.Val('Anchors');
-  if ContainsText(Anchors, 'akRight') or ContainsText(Anchors, 'akBottom') then Exit;
+  Result:= IsPositionedByStoredRect(AObj);
+  if not Result then Exit;
   var OkL, OkT, OkW, OkH: Boolean;
   ALeft:= IntProp(AObj, 'Left', 0, OkL);
   ATop := IntProp(AObj, 'Top', 0, OkT);
   var W: Integer:= IntProp(AObj, 'Width', 0, OkW);
   var H: Integer:= IntProp(AObj, 'Height', 0, OkH);
-  if not (OkL and OkT and OkW and OkH) or (W <= 0) or (H <= 0) then Exit;
-  ARight := ALeft + W;
-  ABottom:= ATop + H;
-  Result:= True;
+  Result:= OkL and OkT and OkW and OkH;
+  Result:= Result and (W > 0) and (H > 0);
+  if Result then
+  begin
+    ARight := ALeft + W;
+    ABottom:= ATop + H;
+  end;
 end;
-
 function Contains(const AOuter, AInner: TBox): Boolean;
 begin
   Result:= (AOuter.L <= AInner.L) and (AOuter.T <= AInner.T) and (AOuter.R >= AInner.R) and (AOuter.B >= AInner.B);
