@@ -7315,6 +7315,7 @@ begin
       This is the site that reproduces: under --watch the loop below does NOT
       break, so without this the connection stays open indefinitely and a copy
       of the .sqlite alone is empty of everything this run just did. }
+    if (not AArgs.ResolveOnly) and IsProjectScopedTarget and (IdxDproj <> '') then TIndexPassHooks.RunRepoCopy(Store, ExpandFileName(IdxDproj)); { v156 CON-I: field repository copy + caption concepts, after the resolve stages }
     Store.Checkpoint;
     Elapsed:= StartTime.Elapsed.TotalSeconds;
     { F1 (deep review 2026-10-25): a file whose store phase raised was rolled
