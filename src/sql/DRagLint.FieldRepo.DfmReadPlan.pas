@@ -14,7 +14,18 @@ unit DRagLint.FieldRepo.DfmReadPlan;
 
   1.56 GC-R (GRIDCOL2): a DL_GRID_COLUMNS row also holds the column's in-place editor, PROPERTIES_CLASS_NAME and
   PROPERTIES (TDfmrGridColumn.PropertiesClassName / Properties), in a repository of schema 5; an older repository is
-  read as before, with one warning that counts the columns whose editor was left out. *)
+  read as before, with one warning that counts the columns whose editor was left out.
+
+  1.56 GCR-2: (1) a module the form names (`dmX.tblY`) that is not in the form's folder is found through the units the
+  form's unit uses (IDfmrModuleFinder); (2) an `inherited` dataset of an inherited form or module is read as the form
+  has it at run time, completed from the ancestor DFM (IDfmrAncestry.FindDataset): its calc bodies come from the unit
+  of the form whose DFM states OnCalcFields, the events of a field from the unit of the form whose DFM declares the
+  field; (3) TDatasetSource / SourceOf / FieldSource are public: the index (DRagLint.Index.RepoCopy) resolves a
+  dataset field to its table column with the SAME routines (one resolver, two callers); (4) a planner extension
+  (RegisterDfmrPlanExtension) is called once per plan after the planner's own changes -- the registrant is lane LIN-2
+  (DRagLint.FieldRepo.DfmReadDerived: derived fields and their DL_FIELD_INPUTS rows).
+  Limits of (2): a property an inherited field overrides is not applied; the calc bodies of an inherited JOIN dataset
+  and the link calls (CopyDataSet ...) are read from the descendant's unit only. *)
 
 interface
 
@@ -23,6 +34,7 @@ uses
   DRagLint.FieldRepo.Kinds,  // dl:ok uses-global-census@5f7a -- REVIEWED 2026-11-24 INT-W2: FR_EVENT_COLUMNS is the one list of event columns
   DRagLint.FieldRepo.ChangeSet,
   DRagLint.FieldRepo.DfmReadSelection,
+  DRagLint.FieldRepo.DfmReadSql,
   DRagLint.FieldRepo.DfmRead;
 
 type
@@ -46,6 +58,8 @@ type
   TDfmrDatasetReport = record
     /// <summary>DFM file name without folder.</summary>
     DfmName: string;
+    /// <summary>The DFM as given to the read (path included).</summary>
+    DfmFile: string;
     /// <summary>Dataset component and its class.</summary>
     Dataset: string;
     DatasetClass: string;
@@ -124,6 +138,117 @@ type
     CrossTable: TDfmrCrossTotals;
   end;
 
+  /// <summary>Where the fields of a dataset come from (SourceOf).</summary>
+  TDatasetSource = record
+    /// <summary>Table of the calc / lookup fields, and of the data fields without a SELECT; '' = none (Reason says
+    /// why, or IsJoin).</summary>
+    TableName: string;
+    /// <summary>The SELECT, when HasSql.</summary>
+    Sql: TDfmrSqlSource;
+    /// <summary>The dataset has SQL and no TableName.</summary>
+    HasSql: Boolean;
+    /// <summary>Why the dataset has no table; '' when it has one.</summary>
+    Reason: string;
+    /// <summary>A SELECT over several tables: every field has its own table.</summary>
+    IsJoin: Boolean;
+    /// <summary>Schema facts for unqualified columns; nil = none.</summary>
+    Columns: TDfmrColumnCheck;
+    /// <summary>Links followed to the source: `AttachedTo memA > CopyDataSet tblX`; '' = none.</summary>
+    Via: string;
+    /// <summary>Kind of the first link; '' = none.</summary>
+    LinkKind: string;
+    /// <summary>The dataset has a link (followed or not).</summary>
+    Linked: Boolean;
+    /// <summary>Copied data fields the unit writes: Name = upper FieldName, Value = `Unit.pas:line`.</summary>
+    Written: TArray<TDfmrPair>;
+  end;
+
+  /// <summary>What a planner extension sees of a read, and how it adds to the plan (1.56 GCR-2).</summary>
+  /// <remarks>Valid only during the call of the extension; not thread-safe. The host owns everything it returns; the
+  /// repository connection is the plan's: an extension only SELECTs.</remarks>
+  TDfmrPlanHost = class abstract
+  public
+    /// <summary>The open repository connection of the plan.</summary>
+    /// <returns>The connection; never nil.</returns>
+    function Repo: TFDConnection; virtual; abstract;
+    /// <summary>The DFM files of the read, as given.</summary>
+    /// <returns>The files.</returns>
+    function Files: TArray<string>; virtual; abstract;
+    /// <summary>The parsed DFM of a file (cached for the read).</summary>
+    /// <param name="pFile">Path of a DFM.</param>
+    /// <returns>The form.</returns>
+    /// <exception cref="EDfmReadError">The file cannot be read.</exception>
+    function FormOf(const pFile: string): TDfmrForm; virtual; abstract;
+    /// <summary>One report per dataset read so far, in DFM order (DfmFile, Dataset, each field's table and
+    /// column).</summary>
+    /// <returns>The reports.</returns>
+    function Datasets: TArray<TDfmrDatasetReport>; virtual; abstract;
+    /// <summary>The changes planned so far, the planner's own included; Items[i] belongs to Changes[i].</summary>
+    /// <returns>The changes.</returns>
+    function Changes: TArray<TFrChange>; virtual; abstract;
+    /// <summary>What the changes planned so far write.</summary>
+    /// <returns>The items, parallel to Changes.</returns>
+    function Items: TArray<TDfmrChangeItem>; virtual; abstract;
+    /// <summary>Adds a change of a DL_FIELDS_INFO row.</summary>
+    /// <param name="pOp">fcoInsert = a new row (the applier refuses it when the row exists), fcoUpdate = columns of
+    /// an existing row (or of a row an earlier chosen change inserts).</param>
+    /// <param name="pTable">TABLE_NAME of the row.</param>
+    /// <param name="pField">FIELD_NAME of the row.</param>
+    /// <param name="pProp">Column the change shows; '' for a whole-row insert.</param>
+    /// <param name="pOld">Value shown as the old one.</param>
+    /// <param name="pNew">Value shown as the new one.</param>
+    /// <param name="pColumns">Columns to write (Name = column, Value = text, '' = NULL); nil = pProp with pNew.</param>
+    /// <param name="pChecked">The change's default mark.</param>
+    /// <returns>The 0-based index of the change in Changes; its id is the index + 1.</returns>
+    function AddFieldChange(pOp: TFrChangeOp; const pTable, pField, pProp, pOld, pNew: string;
+      const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer; virtual; abstract;
+    /// <summary>Adds a change of a DL_FIELD_INPUTS or DL_RELATIONS row, as the planner's own cross-table changes
+    /// are.</summary>
+    /// <param name="pOp">fcoInsert.</param>
+    /// <param name="pRowTable">REPO_TABLE_FIELD_INPUTS or REPO_TABLE_RELATIONS.</param>
+    /// <param name="pKey">Key text of the row for the change's target (`TABLE|FIELD|ALIAS`, relation name).</param>
+    /// <param name="pProp">Column the change shows; '' for a whole-row insert.</param>
+    /// <param name="pOld">Value shown as the old one.</param>
+    /// <param name="pNew">Value shown as the new one.</param>
+    /// <param name="pColumns">The columns of the row, as ApplyDfmRead reads them for that table.</param>
+    /// <param name="pChecked">The change's default mark.</param>
+    /// <returns>The 0-based index of the change in Changes; its id is the index + 1.</returns>
+    function AddRowChange(pOp: TFrChangeOp; const pRowTable, pKey, pProp, pOld, pNew: string;
+      const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer; virtual; abstract;
+    /// <summary>Adds a warning line of the plan (no line twice).</summary>
+    /// <param name="pText">The line.</param>
+    procedure Warn(const pText: string); virtual; abstract;
+  end;
+
+  /// <summary>A planner extension: called once per PlanDfmRead, after the planner's own changes are planned.</summary>
+  /// <remarks>An exception it raises ends the plan with that exception.</remarks>
+  TDfmrPlanExtension = reference to procedure(pHost: TDfmrPlanHost);
+
+/// <summary>Where the fields of a dataset come from, from what its DFM object states: UpdateOptions.UpdateTableName,
+/// then TableName, then a SELECT over one table; a SELECT over several tables is a join.</summary>
+/// <param name="pDataset">The dataset as read (links are NOT followed here).</param>
+/// <param name="pColumns">Schema facts for unqualified columns of a join; nil = none.</param>
+/// <returns>The source; TableName '' with a Reason when the DFM states no table.</returns>
+/// <remarks>The one resolver of read-dfm and of the index's repository copy (1.56 GCR-2).</remarks>
+function SourceOf(const pDataset: TDfmrDataset; const pColumns: TDfmrColumnCheck = nil): TDatasetSource;
+
+/// <summary>The table and column of a persistent field of a dataset.</summary>
+/// <param name="pSource">The dataset's source (SourceOf).</param>
+/// <param name="pField">The field: FieldName, Kind and Origin are read.</param>
+/// <param name="pTable">Receives the table; '' = none.</param>
+/// <param name="pColumn">Receives the column, upper case.</param>
+/// <param name="pReason">Receives why there is no table ('' when found).</param>
+/// <returns>True when the DFM states the table column: a data field of a SELECT through the select list or its
+/// Origin, every other field through the dataset's table. A copied data field the unit writes has none.</returns>
+function FieldSource(const pSource: TDatasetSource; const pField: TDfmrField; out pTable, pColumn, pReason: string): Boolean;
+
+/// <summary>Sets the planner extension (1.56 GCR-2: the call line lane LIN-2 registers into).</summary>
+/// <param name="pExtension">The extension; nil = none. One at a time: a second registration replaces the
+/// first.</param>
+/// <remarks>Call from a unit's initialization or from a test, on the main thread; PlanDfmRead reads it without a
+/// lock.</remarks>
+procedure RegisterDfmrPlanExtension(const pExtension: TDfmrPlanExtension);  // dl:ok unused-public-symbol@27a9 -- REVIEWED 2026-11-27 GCR-2: the registrant is lane LIN-2's DRagLint.FieldRepo.DfmReadDerived (not merged here yet); called by tests/fieldrepo/DfmReadGcr2Tests.dpr (H1-H7), outside this project index
+
 /// <summary>Reads DFMs and plans the changes that bring the repository in line with them.</summary>
 /// <param name="pRepo">Open repository connection, schema 4; only SELECTs run.</param>
 /// <param name="pFiles">DFM files; the unit of the same name is read for handler code when it exists.</param>
@@ -177,7 +302,6 @@ uses
   FireDAC.DApt,
   DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census@9edb -- REVIEWED 2026-11-23 TT-DFMREAD: the unit is used for its record types and functions; one table-name constant is what it needs
   DRagLint.FieldRepo.SchemaFacts,
-  DRagLint.FieldRepo.DfmReadSql,
   DRagLint.FieldRepo.DfmReadCalc,
   DRagLint.FieldRepo.DfmReadLinks,
   DRagLint.FieldRepo.DfmReadInherit,
@@ -186,6 +310,8 @@ uses
   DRagLint.FieldRepo.CrossTable;
 
 const
+  KIND_INHERITED = 'inherited'; // TDfmrDataset.ObjKind of a dataset the ancestor DFM declares
+  CHAIN_LEVELS = 32;            // ancestor forms followed for handler code; more is a cycle
   FIELDS_TABLE = 'DL_FIELDS_INFO';
   SCHEMA_WITH_INPUTS = 4; // X3 writes DL_FIELD_INPUTS / DL_RELATIONS rows (design 2.3)
   SCHEMA_WITH_EDITORS = 5; // DL_GRID_COLUMNS has PROPERTIES_CLASS_NAME / PROPERTIES (1.56 GC-R)
@@ -268,20 +394,6 @@ type
     function Text: string;
   end;
 
-  { Where a dataset's fields come from. }
-  TDatasetSource = record
-    TableName: string;  // table of calc / lookup fields, and of data fields without a SELECT
-    Sql: TDfmrSqlSource;
-    HasSql: Boolean;
-    Reason: string;
-    IsJoin: Boolean;              // a SELECT over several tables: every field has its own table
-    Columns: TDfmrColumnCheck;    // schema facts for unqualified columns; nil = none
-    Via: string;                  // links followed to the source: `AttachedTo memA > CopyDataSet tblX`; '' = none
-    LinkKind: string;             // kind of the first link; '' = none
-    Linked: Boolean;              // the dataset has a link (followed or not)
-    Written: TArray<TDfmrPair>;   // copied data fields the unit writes: upper FieldName -> `Unit.pas:line`
-  end;
-
   { A DL_FIELD_INPUTS row a placed cross-table calc field needs (design 2.2, default binding). }
   TPlannedInput = record
     TableName: string;
@@ -313,7 +425,7 @@ type
     Context: TDfmrCodeContext;
   end;
 
-  TDfmRead = class  // dl:ok high-response@c61e -- REVIEWED 2026-11-23 TT-DFMREAD: one read = collect facts + compare; private to the unit, its response set is FireDAC, dictionary and string calls
+  TDfmRead = class(TDfmrPlanHost)  // dl:ok high-response@327f -- REVIEWED 2026-11-23 TT-DFMREAD (2026-11-27 GCR-2: re-read with the nine one-line TDfmrPlanHost overrides): one read = collect facts + compare; private to the unit, its response set is FireDAC, dictionary and string calls
   strict private
     FRepo: TFDConnection;
     FPlan: TDfmrPlan;
@@ -343,6 +455,8 @@ type
     FUnitTexts: TDictionary<string, string>;       // lower-case .pas path -> source ('' = none)
     FUnitLinks: TDictionary<string, TArray<TDfmrLink>>;
     FAncestry: IDfmrAncestry; // 1.56 ANCDFM: datasets of an inherited form or module, completed from the ancestor DFM
+    FModules: IDfmrModuleFinder; // 1.56 GCR-2: a module that is not in the folder of the form
+    FFiles: TArray<string>;      // the files of the read (TDfmrPlanHost.Files)
     FCross: TDfmrCrossTotals;
     FUnchecked: TDictionary<string, string>;      // KeyOf(table, field) of a placed field whose input needs an offer -> why
     procedure LoadRows;
@@ -358,8 +472,6 @@ type
       pGraph: TFrRelationGraph; const pFormRelations: TArray<string>; out pWhy: string): Boolean;
     procedure PlaceAllSeveral(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource;
       const pContext: TDfmrCodeContext; pOrigins: TOrigins; pBodies: TDictionary<string, TDfmrBody>; pSeveral: TList<string>);
-    function AddRowChange(pOp: TFrChangeOp; const pTable, pKey, pProp, pOld, pNew: string;
-      const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer;
     procedure PlanRelations;
     procedure PlanInputs;
     procedure UncheckOffered;
@@ -371,9 +483,10 @@ type
     function Form(const pFile: string): TDfmrForm;
     function UnitOf(const pFile: string): TDfmrUnit;
     function SiblingForm(const pFile, pRoot: string): string;
+    function CodeForm(const pForm: TDfmrForm; const pDataset, pField: string): TDfmrForm;
     function FactsOf(const pTable, pField: string): TFieldFacts;
     function LookupTarget(const pForm: TDfmrForm; const pName: string; out pDataset: TDfmrDataset): Boolean;
-    procedure ReadDataset(const pForm: TDfmrForm; const pDataset: TDfmrDataset);
+    procedure ReadDataset(const pForm: TDfmrForm; const pOwn: TDfmrDataset);
     procedure ReadField(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pOwnerSource: TDatasetSource;
       const pField: TDfmrField; const pTable, pColumn: string);
     procedure ReadLookup(const pForm: TDfmrForm; const pOwner: TDfmrDataset; const pOwnerSource: TDatasetSource;
@@ -406,7 +519,27 @@ type
     constructor Create(pRepo: TFDConnection);
     destructor Destroy; override;
     function Execute(const pFiles: TArray<string>; const pDataset: string): TDfmrPlan;
+    function Repo: TFDConnection; override;
+    function Files: TArray<string>; override;
+    function FormOf(const pFile: string): TDfmrForm; override;
+    function Datasets: TArray<TDfmrDatasetReport>; override;
+    function Changes: TArray<TFrChange>; override;
+    function Items: TArray<TDfmrChangeItem>; override;
+    function AddFieldChange(pOp: TFrChangeOp; const pTable, pField, pProp, pOld, pNew: string;
+      const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer; override;
+    function AddRowChange(pOp: TFrChangeOp; const pRowTable, pKey, pProp, pOld, pNew: string;
+      const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer; override;
+    procedure Warn(const pText: string); override;
   end;
+
+var
+  { The planner extension (RegisterDfmrPlanExtension); nil = none. }
+  GPlanExtension: TDfmrPlanExtension;
+
+procedure RegisterDfmrPlanExtension(const pExtension: TDfmrPlanExtension);
+begin
+  GPlanExtension := pExtension;
+end;
 
 function KeyOf(const pTable, pField: string): string;
 begin
@@ -631,6 +764,7 @@ begin
   FUnitTexts := TDictionary<string, string>.Create;
   FUnitLinks := TDictionary<string, TArray<TDfmrLink>>.Create;
   FAncestry := NewDfmrAncestry(Form);
+  FModules := NewDfmrModuleFinder;
   FUnchecked := TDictionary<string, string>.Create;
 end;
 
@@ -1262,7 +1396,8 @@ begin
     end;
 end;
 
-{ The one DFM of the same folder whose root object is pRoot; '' = none or more than one. }
+{ The one DFM of the same folder whose root object is pRoot ('' = more than one). When the folder has none: the DFM of a
+  unit the form's unit uses, anywhere in the project folder (1.56 GCR-2, IDfmrModuleFinder); '' = none or two. }
 function TDfmRead.SiblingForm(const pFile, pRoot: string): string;
 var
   VFolder: string;
@@ -1271,7 +1406,38 @@ begin
   if FRoots.TryAdd(LowerCase(VFolder) + '|', '') then
     ListRoots(VFolder);
   if not FRoots.TryGetValue(LowerCase(VFolder + '|' + pRoot), Result) then
-    Result := '';
+    Result := FModules.ModuleFile(pFile, pRoot);
+end;
+
+{ The form whose unit holds the code of an inherited dataset: pForm, or the nearest ancestor of it whose own DFM declares
+  the persistent field pField of the dataset (pField '' = states the dataset's OnCalcFields). pForm when no form of the
+  chain does. }
+function TDfmRead.CodeForm(const pForm: TDfmrForm; const pDataset, pField: string): TDfmrForm;
+var
+  VForm: TDfmrForm;
+  VDataset: TDfmrDataset;
+  VField: TDfmrField;
+  VFile: string;
+  VLevel: Integer;
+begin
+  Result := pForm;
+  VForm := pForm;
+  for VLevel := 0 to CHAIN_LEVELS do
+  begin
+    for VDataset in VForm.Datasets do
+      if SameText(VDataset.Name, pDataset) then
+      begin
+        if (pField = '') and (VDataset.OnCalcFields <> '') then
+          Exit(VForm);
+        for VField in VDataset.Fields do
+          if (pField <> '') and SameText(VField.CompName, pField) then
+            Exit(VForm);
+      end;
+    VFile := FAncestry.AncestorFile(VForm.FileName);
+    if VFile = '' then
+      Exit;
+    VForm := Form(VFile);
+  end;
 end;
 
 function TDfmRead.FactsOf(const pTable, pField: string): TFieldFacts;
@@ -1639,11 +1805,16 @@ begin
   end;
 end;
 
-procedure TDfmRead.ReadDataset(const pForm: TDfmrForm; const pDataset: TDfmrDataset);
+{ pOwn is the dataset as the DFM of pForm states it. An `inherited` one is read as the form has it at run time: completed
+  from the ancestor DFM (1.56 GCR-2); when no ancestor is found it is read as stated, and is unresolved. }
+procedure TDfmRead.ReadDataset(const pForm: TDfmrForm; const pOwn: TDfmrDataset);
 var
   VReport: TDfmrDatasetReport;
   VSource, VHome: TDatasetSource;
   VContext: TDfmrCodeContext;
+  VFull: TDfmrDataset;
+  VCalcForm, VFieldForm: TDfmrForm;
+  VInherited: Boolean;
   VField: TDfmrField;
   VRef: TDfmrFieldRef;
   VSqlTable: TDfmrSqlTable;
@@ -1654,12 +1825,17 @@ var
   VBodies: TDictionary<string, TDfmrBody>;
   VBody: TDfmrBody;
 begin
-  VSource := LinkedSource(pForm, pDataset, [LowerCase(pForm.FileName + '|' + pDataset.Name)], [pDataset.Name]);
-  VContext := CodeContext(pForm, pDataset, VSource);
+  VFull := pOwn;
+  VInherited := SameText(pOwn.ObjKind, KIND_INHERITED) and FAncestry.FindDataset(pForm, pOwn.Name, VFull)
+    and (FAncestry.AncestorFile(pForm.FileName) <> '');
+  VCalcForm := if VInherited then CodeForm(pForm, VFull.Name, '') else pForm;
+  VSource := LinkedSource(pForm, VFull, [LowerCase(pForm.FileName + '|' + VFull.Name)], [VFull.Name]);
+  VContext := CodeContext(pForm, VFull, VSource);
   VReport := Default(TDfmrDatasetReport);
   VReport.DfmName := ExtractFileName(pForm.FileName);
-  VReport.Dataset := pDataset.Name;
-  VReport.DatasetClass := pDataset.DatasetClass;
+  VReport.DfmFile := pForm.FileName;
+  VReport.Dataset := VFull.Name;
+  VReport.DatasetClass := VFull.DatasetClass;
   VReport.TableName := VSource.TableName;
   VReport.Via := VSource.Via;
   VReport.LinkKind := VSource.LinkKind;
@@ -1669,7 +1845,7 @@ begin
       if not MatchText(VSqlTable.Name, VReport.JoinTables) then
         VReport.JoinTables := VReport.JoinTables + [VSqlTable.Name];
   if (VSource.TableName = '') and (not VSource.IsJoin) then
-    VReport.Unresolved := VSource.Reason + (if pDataset.ObjKind = 'object' then '' else ' (' + pDataset.ObjKind
+    VReport.Unresolved := VSource.Reason + (if VFull.ObjKind = 'object' then '' else ' (' + VFull.ObjKind
       + ': its own properties are in the ancestor''s DFM)');
   VOrigins := nil;
   VBodies := nil;
@@ -1680,8 +1856,8 @@ begin
   end;
   try
     if VSource.IsJoin then
-      JoinOrigins(pForm, pDataset, VSource, VContext, VOrigins, VBodies);
-    for VField in pDataset.Fields do
+      JoinOrigins(pForm, VFull, VSource, VContext, VOrigins, VBodies);
+    for VField in VFull.Fields do
     begin
       Inc(VReport.Counts[VField.Kind]);
       VRef := Default(TDfmrFieldRef);
@@ -1703,9 +1879,9 @@ begin
       begin
         VFound := FieldSource(VSource, VField, VTable, VColumn, VReason);
         if (not VFound) and VReason.StartsWith('conflict') then
-          FWarnings.Add(Format('%s %s %s: %s', [VReport.DfmName, pDataset.Name, VField.FieldName, VReason]))
+          FWarnings.Add(Format('%s %s %s: %s', [VReport.DfmName, VFull.Name, VField.FieldName, VReason]))
         else if (not VFound) and VReason.StartsWith('written in code') then
-          FWarnings.Add(Format('%s %s %s: no table: %s', [VReport.DfmName, pDataset.Name, VField.FieldName, VReason]));
+          FWarnings.Add(Format('%s %s %s: no table: %s', [VReport.DfmName, VFull.Name, VField.FieldName, VReason]));
       end;
       if VFound then
       begin
@@ -1720,22 +1896,24 @@ begin
       end;
       VHome := VSource;
       VHome.TableName := VTable;
-      ReadField(pForm, pDataset, VHome, VField, VTable, VColumn);
+      ReadField(pForm, VFull, VHome, VField, VTable, VColumn);
       if VField.Kind in [frkCalc, frkInternalCalc] then
       begin
         if (VBodies = nil) or (not VBodies.TryGetValue(LowerCase(VField.CompName), VBody)) then
-          VBody := CalcBodyOf(pForm, pDataset, VContext, VField);
-        ReadCalc(pForm, pDataset, VBody, VField, FactsOf(VTable, VColumn), VReport);
+          VBody := CalcBodyOf(VCalcForm, VFull, CodeContext(VCalcForm, VFull, VSource), VField);
+        ReadCalc(VCalcForm, VFull, VBody, VField, FactsOf(VTable, VColumn), VReport);
       end;
-      ReadEvents(pForm, VContext, VField.Events, VField.CompName, FactsOf(VTable, VColumn), VOrigins);
+      VFieldForm := if VInherited then CodeForm(pForm, VFull.Name, VField.CompName) else pForm;
+      ReadEvents(VFieldForm, if VInherited then CodeContext(VFieldForm, VFull, VSource) else VContext, VField.Events,
+        VField.CompName, FactsOf(VTable, VColumn), VOrigins);
     end;
   finally
     VBodies.Free;
     VOrigins.Free;
   end;
-  if Length(pDataset.InheritedFields) > 0 then
+  if Length(VFull.InheritedFields) > 0 then
     FWarnings.Add(Format('%s %s: %d inherited fields not read (FieldName is in the ancestor''s DFM): %s', [VReport.DfmName,
-      pDataset.Name, Length(pDataset.InheritedFields), string.Join(', ', pDataset.InheritedFields)]));
+      VFull.Name, Length(VFull.InheritedFields), string.Join(', ', VFull.InheritedFields)]));
   FPlan.Datasets := FPlan.Datasets + [VReport];
 end;
 
@@ -2169,7 +2347,7 @@ begin
   PlanInputs;
 end;
 
-function TDfmRead.AddRowChange(pOp: TFrChangeOp; const pTable, pKey, pProp, pOld, pNew: string;  // dl:ok too-many-parameters@e000 -- REVIEWED 2026-11-26 XTABLE X3: private: one change = op, table, key, prop, old, new, columns, checked, as TFrChange and TDfmrChangeItem hold them
+function TDfmRead.AddRowChange(pOp: TFrChangeOp; const pRowTable, pKey, pProp, pOld, pNew: string;  // dl:ok too-many-parameters@d7a5 -- REVIEWED 2026-11-26 XTABLE X3 (2026-11-27 GCR-2: now the override of TDfmrPlanHost.AddRowChange, same parameters): one change = op, table, key, prop, old, new, columns, checked, as TFrChange and TDfmrChangeItem hold them
   const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer;
 var
   VChange: TFrChange;
@@ -2179,16 +2357,71 @@ begin
   VChange := Default(TFrChange);
   VChange.Id := Result + 1;
   VChange.Op := pOp;
-  VChange.Target := pTable + ' ' + pKey;
+  VChange.Target := pRowTable + ' ' + pKey;
   VChange.Prop := pProp;
   VChange.OldValue := pOld;
   VChange.NewValue := pNew;
   VChange.Checked := pChecked;
   VItem := Default(TDfmrChangeItem);
-  VItem.RowTable := pTable;
+  VItem.RowTable := pRowTable;
   VItem.Columns := pColumns;
   FChanges.Add(VChange);
   FItems.Add(VItem);
+end;
+
+{ ---- TDfmrPlanHost ---- }
+
+function TDfmRead.Repo: TFDConnection;
+begin
+  Result := FRepo;
+end;
+
+function TDfmRead.Files: TArray<string>;
+begin
+  Result := FFiles;
+end;
+
+function TDfmRead.FormOf(const pFile: string): TDfmrForm;
+begin
+  Result := Form(pFile);
+end;
+
+function TDfmRead.Datasets: TArray<TDfmrDatasetReport>;
+begin
+  Result := FPlan.Datasets;
+end;
+
+function TDfmRead.Changes: TArray<TFrChange>;
+begin
+  Result := FChanges.ToArray;
+end;
+
+function TDfmRead.Items: TArray<TDfmrChangeItem>;
+begin
+  Result := FItems.ToArray;
+end;
+
+function TDfmRead.AddFieldChange(pOp: TFrChangeOp; const pTable, pField, pProp, pOld, pNew: string;  // dl:ok too-many-parameters@f223 -- REVIEWED 2026-11-27 GCR-2: one change = op, row key, prop, old, new, columns, checked, as TFrChange and TDfmrChangeItem hold them (the shape of AddRowChange)
+  const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer;
+var
+  VFacts: TFieldFacts;
+begin
+  VFacts := TFieldFacts.Create;
+  try
+    VFacts.TableName := pTable;
+    VFacts.FieldName := pField;
+    Result := AddChange(pOp, VFacts, pProp, pOld, pNew);
+  finally
+    VFacts.Free;
+  end;
+  FChanges.List[Result].Checked := pChecked;
+  if Length(pColumns) > 0 then
+    FItems.List[Result].Columns := pColumns;
+end;
+
+procedure TDfmRead.Warn(const pText: string);
+begin
+  FWarnings.Add(pText);
 end;
 
 { A placed field whose input goes through an offered FORM relation is stored only together with that relation and the
@@ -2335,6 +2568,7 @@ var
 begin
   FPlan := Default(TDfmrPlan);
   FPlan.ChangeSet.Direction := fdDfmToRepo;
+  FFiles := pFiles;
   LoadRows;
   LoadCrossTable;
   for VFile in pFiles do
@@ -2353,8 +2587,11 @@ begin
   if (pDataset <> '') and (Length(FPlan.Datasets) = 0) then
     raise EDfmReadError.CreateFmt('no dataset %s in the DFM', [pDataset]);
   PlanAll(pFiles, pDataset = '');
+  if Assigned(GPlanExtension) then
+    GPlanExtension(Self); { v156 GCR-2: the LIN-2 call line (DRagLint.FieldRepo.DfmReadDerived registers) }
   UncheckOffered;
   FWarnings.AddStrings(FAncestry.Notes);
+  FWarnings.AddStrings(FModules.Notes);
   FPlan.ChangeSet.Changes := FChanges.ToArray;
   FPlan.Items := FItems.ToArray;
   FPlan.Warnings := FWarnings.ToStringArray;
