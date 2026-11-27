@@ -23,6 +23,10 @@ type
     procedure Release;
   end;
 
+  /// <summary>A lock by descent.</summary>
+  TMyLock = class(TCriticalSection)
+  end;
+
   TBank = class
   private
     FLockA: TCriticalSection;
@@ -34,6 +38,9 @@ type
     FItems: TThreadList;
     FName: string;
     FFake: TFake;
+    FMine: TMyLock;
+    FSpin: TSpinLock;
+    FGuards: TArray<TObject>;
   public
     procedure AThenB;
     procedure BThenA;
@@ -51,6 +58,12 @@ type
     procedure OtherObject(pOther: TBank);
     procedure NoLocks;
     procedure NotLocks;
+    procedure DescendantSite;
+    procedure MonitorSelf;
+    procedure MonitorTimeout;
+    procedure MonitorIndexed;
+    procedure MonitorOther(pOther: TBank);
+    procedure SpinSite;
   end;
 
 var
@@ -231,6 +244,66 @@ begin
     S.EndUpdate;
   finally
     S.Free;
+  end;
+end;
+
+procedure TBank.DescendantSite;
+begin
+  FMine.Enter; // SITE-DESC-ENTER
+  try
+    FName:= 'mine';
+  finally
+    FMine.Leave; // SITE-DESC-LEAVE
+  end;
+end;
+
+procedure TBank.MonitorSelf;
+begin
+  TMonitor.Enter(Self); // SITE-MONSELF-ENTER
+  try
+    FName:= 'monitor self';
+  finally
+    TMonitor.Exit(Self); // SITE-MONSELF-EXIT
+  end;
+end;
+
+procedure TBank.MonitorTimeout;
+begin
+  if TMonitor.Enter(FGuard, 100) then // SITE-MONTIME-ENTER
+    try
+      FName:= 'monitor timeout';
+    finally
+      TMonitor.Exit(FGuard); // SITE-MONTIME-EXIT
+    end;
+end;
+
+procedure TBank.MonitorIndexed;
+begin
+  TMonitor.Enter(FGuards[0]); // SITE-MONIDX-ENTER
+  try
+    FName:= 'monitor indexed';
+  finally
+    TMonitor.Exit(FGuards[0]); // SITE-MONIDX-EXIT
+  end;
+end;
+
+procedure TBank.MonitorOther(pOther: TBank);
+begin
+  TMonitor.Enter(pOther.FGuard); // SITE-MONOTHER-ENTER
+  try
+    FName:= 'monitor other';
+  finally
+    TMonitor.Exit(pOther.FGuard); // SITE-MONOTHER-EXIT
+  end;
+end;
+
+procedure TBank.SpinSite;
+begin
+  FSpin.Enter; // SITE-SPIN-ENTER
+  try
+    FName:= 'spin';
+  finally
+    FSpin.Exit; // SITE-SPIN-EXIT
   end;
 end;
 

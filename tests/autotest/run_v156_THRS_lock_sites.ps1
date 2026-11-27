@@ -8,7 +8,8 @@
   EXACTLY: the routine, op, kind, identity, exact, the lock (qualified name when the index resolves it,
   else the text as written) and the marker of the paired site ('-' = no partner).
   Further: the number of sites equals the number of cases (a call that is not a lock -- BeginUpdate on a
-  string list, Enter / Release on a class that is no lock -- adds a site and fails this); the regions
+  string list, Enter / Release on a class that is no lock -- adds a site and fails this); the shared side of a
+  read-write lock; by-argument locks (TMonitor.Enter(X), EnterCriticalSection(X)); a lock class by descent; the regions
   (nested, open); HeldAt at three positions; the selectors --file and --routine; two runs byte-identical;
   comparator control (a changed expectation is reported).
 
@@ -63,6 +64,30 @@ $Cases = [ordered]@{
   'OTHER-LEAVE'   = "$U.OtherObject|leave|$CS|other-field|False|$U.FLockA|OTHER-ENTER"
   'TRY-ENTER'     = "$U.TrySite|try-enter|$CS|self-field|True|$U.FLockA|TRY-LEAVE"
   'TRY-LEAVE'     = "$U.TrySite|leave|$CS|self-field|True|$U.FLockA|TRY-ENTER"
+  'MON-ENTER'       = "$U.MonitorSite|enter|monitor|self-field|True|$U.FGuard|MON-EXIT"
+  'MON-EXIT'        = "$U.MonitorSite|leave|monitor|self-field|True|$U.FGuard|MON-ENTER"
+  'WIN-ENTER'       = "$U.WinapiSite|enter|winapi-cs|self-field|True|$U.FRtl|WIN-LEAVE"
+  'WIN-LEAVE'       = "$U.WinapiSite|leave|winapi-cs|self-field|True|$U.FRtl|WIN-ENTER"
+  'RW-BEGINREAD'    = "$U.RwSite|enter|read-write|self-field|True|$U.FRw|RW-ENDREAD"
+  'RW-ENDREAD'      = "$U.RwSite|leave|read-write|self-field|True|$U.FRw|RW-BEGINREAD"
+  'RW-BEGINWRITE'   = "$U.RwSite|enter|read-write|self-field|True|$U.FRw|RW-ENDWRITE"
+  'RW-ENDWRITE'     = "$U.RwSite|leave|read-write|self-field|True|$U.FRw|RW-BEGINWRITE"
+  'MUTEX-ACQUIRE'   = "$U.MutexSite|enter|mutex|self-field|True|$U.FMutex|MUTEX-RELEASE"
+  'MUTEX-RELEASE'   = "$U.MutexSite|leave|mutex|self-field|True|$U.FMutex|MUTEX-ACQUIRE"
+  'LIST-LOCK'       = "$U.ListSite|enter|thread-list|self-field|True|$U.FItems|LIST-UNLOCK"
+  'LIST-UNLOCK'     = "$U.ListSite|leave|thread-list|self-field|True|$U.FItems|LIST-LOCK"
+  'DESC-ENTER'      = "$U.DescendantSite|enter|$CS|self-field|True|$U.FMine|DESC-LEAVE"
+  'DESC-LEAVE'      = "$U.DescendantSite|leave|$CS|self-field|True|$U.FMine|DESC-ENTER"
+  'MONSELF-ENTER'   = "$U.MonitorSelf|enter|monitor|self|True|Self|MONSELF-EXIT"
+  'MONSELF-EXIT'    = "$U.MonitorSelf|leave|monitor|self|True|Self|MONSELF-ENTER"
+  'MONTIME-ENTER'   = "$U.MonitorTimeout|try-enter|monitor|self-field|True|$U.FGuard|MONTIME-EXIT"
+  'MONTIME-EXIT'    = "$U.MonitorTimeout|leave|monitor|self-field|True|$U.FGuard|MONTIME-ENTER"
+  'MONIDX-ENTER'    = "$U.MonitorIndexed|enter|monitor|expression|False|FGuards[0]|MONIDX-EXIT"
+  'MONIDX-EXIT'     = "$U.MonitorIndexed|leave|monitor|expression|False|FGuards[0]|MONIDX-ENTER"
+  'MONOTHER-ENTER'  = "$U.MonitorOther|enter|monitor|other-field|False|$U.FGuard|MONOTHER-EXIT"
+  'MONOTHER-EXIT'   = "$U.MonitorOther|leave|monitor|other-field|False|$U.FGuard|MONOTHER-ENTER"
+  'SPIN-ENTER'      = "$U.SpinSite|enter|spin-lock|self-field|True|$U.FSpin|SPIN-EXIT"
+  'SPIN-EXIT'       = "$U.SpinSite|leave|spin-lock|self-field|True|$U.FSpin|SPIN-ENTER"
 }
 
 function Get-Markers([string]$Path) {
@@ -84,7 +109,7 @@ function Get-Sites($Doc) {
       $mateLine = if ($s.mate -ge 0) { $sites[$s.mate].line } else { 0 }
       $lock = if ($s.lockSymbol) { $s.lockSymbol } else { $s.lock }
       $out += [pscustomobject]@{ Routine = $r.routine; Line = $s.line; Op = $s.op; Kind = $s.kind; Identity = $s.identity
-        Exact = [string]$s.exact; Lock = $lock; MateLine = $mateLine; Key = $s.key }
+        Exact = [string]$s.exact; Lock = $lock; MateLine = $mateLine; Key = $s.key; Shared = [string]$s.shared }
     }
   }
   return ,$out
@@ -187,6 +212,20 @@ try {
   Check 'FLockA: one key in AThenB and BThenA' (($keyA -ne '') -and ($keyA -ceq $keyBA)) "$keyA / $keyBA"
   Check 'FLockB: another key than FLockA' (($keyB -ne '') -and ($keyB -cne $keyA)) "$keyB"
   Check 'pOther.FLockA: another key than FLockA' (($keyO -ne '') -and ($keyO -cne $keyA)) "$keyO"
+
+  # Read-write lock: the reader side is shared, the writer side is not; one key for both.
+  $rw = @{}
+  foreach ($m in 'RW-BEGINREAD', 'RW-ENDREAD', 'RW-BEGINWRITE', 'RW-ENDWRITE') {
+    $rw[$m] = @($sites | Where-Object { $_.Line -eq $markers["SITE-$m"] })
+  }
+  $rwOk = (@($rw.Values | Where-Object { $_.Count -ne 1 }).Count -eq 0)
+  Check 'read-write: BeginRead / EndRead shared, BeginWrite / EndWrite not' ($rwOk -and ($rw['RW-BEGINREAD'][0].Shared -eq 'True') -and ($rw['RW-ENDREAD'][0].Shared -eq 'True') -and ($rw['RW-BEGINWRITE'][0].Shared -eq 'False') -and ($rw['RW-ENDWRITE'][0].Shared -eq 'False'))
+  Check 'read-write: one key for both sides' ($rwOk -and ($rw['RW-BEGINREAD'][0].Key -ceq $rw['RW-BEGINWRITE'][0].Key))
+  # By-argument locks: the same field through TMonitor in two routines is one key; Self is the class.
+  $keyMon = Get-Key $sites $markers 'MON-ENTER'
+  Check 'TMonitor.Enter(FGuard): one key in MonitorSite and MonitorTimeout' (($keyMon -ne '') -and ($keyMon -ceq (Get-Key $sites $markers 'MONTIME-ENTER'))) $keyMon
+  Check 'TMonitor.Enter(Self): a self key' ((Get-Key $sites $markers 'MONSELF-ENTER') -like 'self:*') (Get-Key $sites $markers 'MONSELF-ENTER')
+  Check 'TMonitor.Enter(pOther.FGuard): another key than FGuard' (((Get-Key $sites $markers 'MONOTHER-ENTER') -ne '') -and ((Get-Key $sites $markers 'MONOTHER-ENTER') -cne $keyMon)) (Get-Key $sites $markers 'MONOTHER-ENTER')
 
   # Regions.
   $regA = @(($doc.routines | Where-Object { $_.routine -eq "$U.AThenB" }).regions)

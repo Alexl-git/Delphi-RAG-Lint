@@ -3,15 +3,22 @@ unit DRagLint.Query.LockSites;
 { drag-lint 1.56 -- lane THR-S: S6, the lock sites of a project (which lock, where taken, where released),
   read by DRagLint.V156.THR (G-05 lock-order-inversion) and by the check-init preset lock-held-when (G-56).
 
-  A LOCK SITE is one call that takes or releases a lock. It is read from the index only (refs,
-  ref_receivers, symbols, files): nothing is parsed and nothing is persisted (no extractor change).
+  A LOCK SITE is one call that takes or releases a lock. It is read from the index (refs,
+  ref_receivers, symbols, files, type ancestry): nothing is parsed and nothing is persisted (no extractor change).
     * Which call counts is decided by the NAME of the call AND the declared TYPE of its receiver
       (refs.receiver_type_text): `FLock.Enter` on a TCriticalSection is a site, `Edit1.Enter` and
-      `Form.Release` are not. A receiver whose type the index does not name is never a site.
-    * Which lock it is (the IDENTITY) is the symbol the receiver ref resolves to. Two sites in two routines
-      are the same lock only when both are EXACT: a field reached through Self, or a unit-level variable.
-      A local, a parameter, a field of another object, a property or any other expression is kept, with
-      its text, but its LockKey only means something inside its own routine.
+      `Form.Release` are not. A receiver whose type the index does not name is never a site. A class of
+      the project that descends from a lock class (TCriticalSection, TMutex, TThreadList,
+      TMultiReadExclusiveWriteSynchronizer) is a lock of that type.
+    * BY-ARGUMENT calls -- TMonitor.Enter(X) / Exit(X) / TryEnter(X), EnterCriticalSection(X) /
+      LeaveCriticalSection(X) -- name the lock in their first argument. The index does not store argument
+      text, so for these calls only, the one source LINE of the call is read from the file (files.path)
+      to find the argument; a second argument (a timeout) makes an Enter a try-enter.
+    * Which lock it is (the IDENTITY) is the symbol the receiver (or the argument) resolves to. Two sites in
+      two routines are the same lock only when both are EXACT: a field reached through Self, a unit-level
+      variable, or Self itself (TMonitor.Enter(Self)). A local, a parameter, a field of another object, a
+      property or any other expression (`FLocks[I]`) is kept, with its text, but its LockKey only means
+      something inside its own routine.
     * Sites of one routine are in source order. An enter is paired with the next leave of the same key
       (innermost first); the pair is a REGION, the stretch of source the lock is held over. An enter
       with no leave gives an OPEN region up to the end of the routine.
@@ -180,6 +187,8 @@ implementation
 
 uses
   System.SysUtils
+  , System.IOUtils
+  , System.Math
   , System.Generics.Collections
   , System.JSON
   , FireDAC.Comp.Client
@@ -189,11 +198,25 @@ uses
 type
   { One row of the lock vocabulary: a call name on a receiver of one declared type. }
   TLockCall = record
-    TypeLeaf: string;   // lower-case type name without unit and without generic arguments
+    TypeLeaf: string;   // lower-case type name without unit and without generic arguments; '' = no receiver
     Call    : string;   // lower-case call name
     Kind    : TLockSiteKind;
     Op      : TLockSiteOp;
     Shared  : Boolean;
+    ByArg   : Boolean;  // the lock is the first argument of the call, not its receiver
+  end;
+
+  { A second name of a lock type, and a class whose descendants are locks of that type. }
+  TLockTypeName = record
+    Name: string;       // as declared, for the ancestry question
+    Leaf: string;       // the TypeLeaf of LOCK_CALLS it stands for
+  end;
+
+  { What the index knows about one name in the source: the last name of a lock argument. }
+  TArgRef = record
+    SymbolId: Int64;
+    Kind    : string;
+    QName   : string;
   end;
 
 const
@@ -208,30 +231,81 @@ const
   { LockKey shapes. Ids and lower-cased source text only. }
   KEY_SYMBOL     = 'sym:%d';
   KEY_SYMBOL_VIA = 'sym:%d@%s';
+  KEY_SELF       = 'self:%d';
   KEY_TEXT       = 'text:%d:%s';
-  { symbols.kind of the things a lock can be. }
+  KEY_POSITION   = '%d:%d:%d';
+  KEY_ROUTINE    = '%d:%d';
+  { symbols.kind of the things a lock can be; SYM_SELF is this unit's word for the argument `Self`. }
   SYM_FIELD    = 'field';
   SYM_VAR      = 'var';
   SYM_LOCAL    = 'local_var';
   SYM_PARAM    = 'param';
   SYM_PROPERTY = 'property';
+  SYM_SELF     = 'self';
+  T_NONE             = '';
   T_CRITICAL_SECTION = 'tcriticalsection';
+  T_RTL_SECTION      = 'trtlcriticalsection';
+  T_MUTEX            = 'tmutex';
+  T_SPIN_LOCK        = 'tspinlock';
+  T_READ_WRITE       = 'tmultireadexclusivewritesynchronizer';
+  T_THREAD_LIST      = 'tthreadlist';
+  T_MONITOR          = 'tmonitor';
 
-  LOCK_CALLS: array[0..4] of TLockCall = (
-    (TypeLeaf: T_CRITICAL_SECTION; Call: 'enter';    Kind: lskCriticalSection; Op: lsoEnter;    Shared: False),
-    (TypeLeaf: T_CRITICAL_SECTION; Call: 'acquire';  Kind: lskCriticalSection; Op: lsoEnter;    Shared: False),
-    (TypeLeaf: T_CRITICAL_SECTION; Call: 'tryenter'; Kind: lskCriticalSection; Op: lsoTryEnter; Shared: False),
-    (TypeLeaf: T_CRITICAL_SECTION; Call: 'leave';    Kind: lskCriticalSection; Op: lsoLeave;    Shared: False),
-    (TypeLeaf: T_CRITICAL_SECTION; Call: 'release';  Kind: lskCriticalSection; Op: lsoLeave;    Shared: False)
+  LOCK_CALLS: array[0..26] of TLockCall = (
+    (TypeLeaf: T_CRITICAL_SECTION; Call: 'enter';    Kind: lskCriticalSection; Op: lsoEnter;    Shared: False; ByArg: False),
+    (TypeLeaf: T_CRITICAL_SECTION; Call: 'acquire';  Kind: lskCriticalSection; Op: lsoEnter;    Shared: False; ByArg: False),
+    (TypeLeaf: T_CRITICAL_SECTION; Call: 'tryenter'; Kind: lskCriticalSection; Op: lsoTryEnter; Shared: False; ByArg: False),
+    (TypeLeaf: T_CRITICAL_SECTION; Call: 'leave';    Kind: lskCriticalSection; Op: lsoLeave;    Shared: False; ByArg: False),
+    (TypeLeaf: T_CRITICAL_SECTION; Call: 'release';  Kind: lskCriticalSection; Op: lsoLeave;    Shared: False; ByArg: False),
+    (TypeLeaf: T_RTL_SECTION; Call: 'enter';    Kind: lskWinapiCs; Op: lsoEnter;    Shared: False; ByArg: False),
+    (TypeLeaf: T_RTL_SECTION; Call: 'tryenter'; Kind: lskWinapiCs; Op: lsoTryEnter; Shared: False; ByArg: False),
+    (TypeLeaf: T_RTL_SECTION; Call: 'leave';    Kind: lskWinapiCs; Op: lsoLeave;    Shared: False; ByArg: False),
+    (TypeLeaf: T_NONE; Call: 'entercriticalsection';    Kind: lskWinapiCs; Op: lsoEnter;    Shared: False; ByArg: True),
+    (TypeLeaf: T_NONE; Call: 'tryentercriticalsection'; Kind: lskWinapiCs; Op: lsoTryEnter; Shared: False; ByArg: True),
+    (TypeLeaf: T_NONE; Call: 'leavecriticalsection';    Kind: lskWinapiCs; Op: lsoLeave;    Shared: False; ByArg: True),
+    (TypeLeaf: T_MONITOR; Call: 'enter';    Kind: lskMonitor; Op: lsoEnter;    Shared: False; ByArg: True),
+    (TypeLeaf: T_MONITOR; Call: 'tryenter'; Kind: lskMonitor; Op: lsoTryEnter; Shared: False; ByArg: True),
+    (TypeLeaf: T_MONITOR; Call: 'exit';     Kind: lskMonitor; Op: lsoLeave;    Shared: False; ByArg: True),
+    (TypeLeaf: T_MUTEX; Call: 'acquire'; Kind: lskMutex; Op: lsoEnter; Shared: False; ByArg: False),
+    (TypeLeaf: T_MUTEX; Call: 'release'; Kind: lskMutex; Op: lsoLeave; Shared: False; ByArg: False),
+    (TypeLeaf: T_SPIN_LOCK; Call: 'enter';    Kind: lskSpinLock; Op: lsoEnter;    Shared: False; ByArg: False),
+    (TypeLeaf: T_SPIN_LOCK; Call: 'tryenter'; Kind: lskSpinLock; Op: lsoTryEnter; Shared: False; ByArg: False),
+    (TypeLeaf: T_SPIN_LOCK; Call: 'exit';     Kind: lskSpinLock; Op: lsoLeave;    Shared: False; ByArg: False),
+    (TypeLeaf: T_READ_WRITE; Call: 'beginread';     Kind: lskReadWrite; Op: lsoEnter;    Shared: True;  ByArg: False),
+    (TypeLeaf: T_READ_WRITE; Call: 'trybeginread';  Kind: lskReadWrite; Op: lsoTryEnter; Shared: True;  ByArg: False),
+    (TypeLeaf: T_READ_WRITE; Call: 'endread';       Kind: lskReadWrite; Op: lsoLeave;    Shared: True;  ByArg: False),
+    (TypeLeaf: T_READ_WRITE; Call: 'beginwrite';    Kind: lskReadWrite; Op: lsoEnter;    Shared: False; ByArg: False),
+    (TypeLeaf: T_READ_WRITE; Call: 'trybeginwrite'; Kind: lskReadWrite; Op: lsoTryEnter; Shared: False; ByArg: False),
+    (TypeLeaf: T_READ_WRITE; Call: 'endwrite';      Kind: lskReadWrite; Op: lsoLeave;    Shared: False; ByArg: False),
+    (TypeLeaf: T_THREAD_LIST; Call: 'locklist';   Kind: lskThreadList; Op: lsoEnter; Shared: False; ByArg: False),
+    (TypeLeaf: T_THREAD_LIST; Call: 'unlocklist'; Kind: lskThreadList; Op: lsoLeave; Shared: False; ByArg: False)
   );
 
-  { %0:s = the quoted call names of LOCK_CALLS, %1:s = '' or one more AND on ids. No user text reaches the SQL.
+  { Other declared names that are one of the types above. }
+  LOCK_ALIASES: array[0..4] of TLockTypeName = (
+    (Name: 'TIdCriticalSection'; Leaf: T_CRITICAL_SECTION),
+    (Name: 'TMREWSync';          Leaf: T_READ_WRITE),
+    (Name: 'TLightweightMREW';   Leaf: T_READ_WRITE),
+    (Name: 'IReadWriteSync';     Leaf: T_READ_WRITE),
+    (Name: 'TSimpleRWSync';      Leaf: T_READ_WRITE)
+  );
+
+  { The lock CLASSES: a class of the project that descends from one is a lock of that type. }
+  LOCK_BASES: array[0..3] of TLockTypeName = (
+    (Name: 'TCriticalSection';                     Leaf: T_CRITICAL_SECTION),
+    (Name: 'TMutex';                               Leaf: T_MUTEX),
+    (Name: 'TMultiReadExclusiveWriteSynchronizer'; Leaf: T_READ_WRITE),
+    (Name: 'TThreadList';                          Leaf: T_THREAD_LIST)
+  );
+
+  { %0:s = quoted call names, %1:s = '' or one more AND on ids. No user text reaches the SQL.
     A statement call is stored twice (call + member-access) and a call in an expression once (member-access):
     both kinds are read and the loader keeps one row per position. }
   SQL_SITES =
     'SELECT r.id, r.file_id, f.path, r.name_text, r.start_line, r.start_col, r.receiver_text, r.receiver_type_text, ' +
     'r.enclosing_symbol_id AS routine_id, e.qualified_name AS routine_qname, e.impl_end_line AS routine_end, ' +
-    'x.symbol_id AS lock_id, x.receiver_text AS lock_receiver, s.kind AS lock_kind, s.qualified_name AS lock_qname ' +
+    'x.symbol_id AS lock_id, x.receiver_text AS lock_receiver, s.kind AS lock_kind, s.qualified_name AS lock_qname, ' +
+    'e.parent_id AS class_id, r.end_col ' +
     'FROM refs r JOIN files f ON f.id = r.file_id ' +
     'LEFT JOIN symbols e ON e.id = r.enclosing_symbol_id ' +
     'LEFT JOIN ref_receivers rr ON rr.ref_id = r.id ' +
@@ -255,8 +329,43 @@ const
   COL_LOCK_RECEIVER = 12;
   COL_LOCK_KIND = 13;
   COL_LOCK_QNAME = 14;
+  COL_CLASS_ID = 15;
+  COL_END_COL = 16;
+  { Every resolved name that follows a by-argument lock call on its line: the candidates for its argument.
+    Same placeholders as SQL_SITES; %0:s holds the by-argument call names only. }
+  SQL_ARG_REFS =
+    'SELECT a.file_id, a.start_line, a.start_col, a.symbol_id, s.kind, s.qualified_name ' +
+    'FROM refs r JOIN refs a ON a.file_id = r.file_id AND a.start_line = r.start_line AND a.start_col > r.start_col ' +
+    'JOIN symbols s ON s.id = a.symbol_id ' +
+    'WHERE r.kind IN (''call'', ''member-access'') AND r.name_text COLLATE NOCASE IN (%0:s)%1:s';
+  ARG_FILE_ID = 0;
+  ARG_LINE = 1;
+  ARG_COL = 2;
+  ARG_SYMBOL_ID = 3;
+  ARG_KIND = 4;
+  ARG_QNAME = 5;
   SCOPE_FILE    = ' AND r.file_id = %d';
   SCOPE_ROUTINE = ' AND r.enclosing_symbol_id = %d';
+
+type
+  { One load: the index, and what it had to look up on the way (argument names, source lines, type ancestry). }
+  TLockSiteLoader = class
+  private
+    FStore  : ISymbolStore;
+    FArgRefs: TDictionary<string, TArgRef>;
+    FLines  : TDictionary<Int64, TArray<string>>;
+    FBaseOf : TDictionary<string, string>;
+    function NewQuery(const pSqlFmt: string; pByArgOnly: Boolean; const pScope: string): TFDQuery;
+    procedure LoadArgRefs(const pScope: string);
+    function SourceLine(pFileId: Int64; const pPath: string; pLine: Integer): string;
+    function LockTypeOf(const pTypeText: string; pFileId: Int64): string;
+    function ArgLock(const pQuery: TFDQuery; var pSite: TLockSite; out pOuter: string; out pHasMore: Boolean): string;
+    function ReadSite(const pQuery: TFDQuery; out pSite: TLockSite): Boolean;
+  public
+    constructor Create(const pStore: ISymbolStore);
+    destructor Destroy; override;
+    function Load(const pScope: string): TArray<TRoutineLockSites>;
+  end;
 
 function LockSiteKindName(pKind: TLockSiteKind): string;
 begin
@@ -291,10 +400,10 @@ begin
     if Regions[I].Contains(pLine, pCol) then Result:= Result + [I];
 end;
 
-{ `System.SyncObjs.TCriticalSection` / `TThreadList<Integer>` -> the bare lower-case type name. }
-function TypeLeaf(const pTypeText: string): string;
+{ `System.SyncObjs.TCriticalSection` / `TThreadList<Integer>` -> `TCriticalSection` / `TThreadList`. }
+function TypeBare(const pTypeText: string): string;
 begin
-  Result:= LowerCase(Trim(pTypeText));
+  Result:= Trim(pTypeText);
   var Cut:= Pos('<', Result);
   if Cut > 0 then Result:= Trim(Copy(Result, 1, Cut - 1));
   Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
@@ -312,14 +421,21 @@ begin
     end;
 end;
 
-{ The call names of LOCK_CALLS as a SQL list, each once. }
-function CallNameList: string;
+function IsLockTypeLeaf(const pTypeLeaf: string): Boolean;
+begin
+  Result:= False;
+  for var I:= Low(LOCK_CALLS) to High(LOCK_CALLS) do
+    if LOCK_CALLS[I].TypeLeaf = pTypeLeaf then Exit(True);
+end;
+
+{ The call names of LOCK_CALLS as a SQL list, each once; pByArgOnly keeps the by-argument rows only. }
+function CallNameList(pByArgOnly: Boolean): string;
 begin
   Result:= '';
   var Seen:= TList<string>.Create;
   try
     for var I:= Low(LOCK_CALLS) to High(LOCK_CALLS) do
-      if not Seen.Contains(QuotedStr(LOCK_CALLS[I].Call)) then
+      if (LOCK_CALLS[I].ByArg or not pByArgOnly) and not Seen.Contains(QuotedStr(LOCK_CALLS[I].Call)) then
         Seen.Add(QuotedStr(LOCK_CALLS[I].Call));
     Result:= string.Join(', ', Seen.ToArray);
   finally
@@ -327,12 +443,57 @@ begin
   end;
 end;
 
-{ Fills Identity, Exact and LockKey from the symbol the lock resolves to (pSymbolKind = '' when it does not).
-  pOuterReceiver is what the lock itself is reached through: '' or Self = the routine's own object. }
-procedure SetIdentity(var pSite: TLockSite; const pSymbolKind, pOuterReceiver: string; pRoutineId: Int64);
+{ The first argument of the call whose name ends before column pFrom of pLine: its text and its column.
+  pHasMore = another argument follows. False when the call has no argument list on this line. }
+function FirstArgument(const pLine: string; pFrom: Integer; out pArg: string; out pArgCol: Integer;
+  out pHasMore: Boolean): Boolean;
+begin
+  Result  := False;
+  pArg    := '';
+  pArgCol := 0;
+  pHasMore:= False;
+  var Open:= pFrom;
+  while (Open <= Length(pLine)) and (pLine[Open] = ' ') do Inc(Open);
+  if (Open > Length(pLine)) or (pLine[Open] <> '(') then Exit;
+  var Stop := 0;
+  var Depth:= 0;
+  for var K:= Open + 1 to Length(pLine) do
+  begin
+    var C:= pLine[K];
+    if (C = '(') or (C = '[') then Inc(Depth)
+    else if ((C = ')') or (C = ']')) and (Depth > 0) then Dec(Depth)
+    else if (C = ')') or ((C = ',') and (Depth = 0)) then
+    begin
+      Stop    := K;
+      pHasMore:= C = ',';
+      Break;
+    end;
+  end;
+  if Stop = 0 then Exit;
+  var Raw:= Copy(pLine, Open + 1, Stop - Open - 1);
+  pArg   := Trim(Raw);
+  pArgCol:= Open + 1 + Length(Raw) - Length(TrimLeft(Raw));
+  Result := pArg <> '';
+end;
+
+{ True for `Name` and `Name.Name.Name`: an argument whose last name IS the lock. }
+function IsNameChain(const pText: string): Boolean;
+begin
+  Result:= (pText <> '') and not CharInSet(pText[1], ['0'..'9', '.']) and (pText[Length(pText)] <> '.')
+    and not pText.Contains('..');
+  if Result then
+    for var I:= 1 to Length(pText) do
+      if not CharInSet(pText[I], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) then Exit(False);
+end;
+
+{ Fills Identity, Exact and LockKey from the symbol the lock resolves to (pSymbolKind = '' when it does not;
+  SYM_SELF for the object itself). pOuterReceiver is what the lock is reached through: '' or Self = the
+  routine's own object. }
+procedure SetIdentity(var pSite: TLockSite; const pSymbolKind, pOuterReceiver: string; pRoutineId, pClassId: Int64);
 begin
   var OnSelf:= (pOuterReceiver = '') or SameText(pOuterReceiver, SELF_TEXT);
-  if pSite.LockSymbolId = 0 then pSite.Identity:= liExpression
+  if pSymbolKind = SYM_SELF then pSite.Identity:= liSelf
+  else if pSite.LockSymbolId = 0 then pSite.Identity:= liExpression
   else if pSymbolKind = SYM_FIELD then pSite.Identity:= if OnSelf then liSelfField else liOtherField
   else if pSymbolKind = SYM_VAR then pSite.Identity:= liGlobal
   else if pSymbolKind = SYM_LOCAL then pSite.Identity:= liLocal
@@ -345,35 +506,11 @@ begin
       pSite.LockKey:= Format(KEY_SYMBOL, [pSite.LockSymbolId]);
     liOtherField, liProperty:
       pSite.LockKey:= Format(KEY_SYMBOL_VIA, [pSite.LockSymbolId, LowerCase(pSite.LockText)]);
+    liSelf:
+      pSite.LockKey:= Format(KEY_SELF, [pClassId]);
   else
     pSite.LockKey:= Format(KEY_TEXT, [pRoutineId, LowerCase(pSite.LockText)]);
   end;
-end;
-
-{ The current row as a site; False when the call is not a lock call for the type of its receiver. }
-function ReadSite(const pQuery: TFDQuery; out pSite: TLockSite): Boolean;
-var
-  Call: TLockCall;
-begin
-  pSite:= Default(TLockSite);
-  var TypeText:= pQuery.Fields[COL_RECEIVER_TYPE_TEXT].AsString;
-  var CallName:= pQuery.Fields[COL_NAME_TEXT].AsString;
-  Result:= FindLockCall(TypeLeaf(TypeText), LowerCase(CallName), Call);
-  if not Result then Exit;
-  pSite.RefId       := pQuery.Fields[COL_ID].AsLargeInt;
-  pSite.Line        := pQuery.Fields[COL_START_LINE].AsInteger;
-  pSite.Col         := pQuery.Fields[COL_START_COL].AsInteger;
-  pSite.Kind        := Call.Kind;
-  pSite.Op          := Call.Op;
-  pSite.Shared      := Call.Shared;
-  pSite.CallName    := CallName;
-  pSite.LockText    := pQuery.Fields[COL_RECEIVER_TEXT].AsString;
-  pSite.TypeText    := TypeText;
-  pSite.LockSymbolId:= pQuery.Fields[COL_LOCK_ID].AsLargeInt;
-  pSite.LockQName   := pQuery.Fields[COL_LOCK_QNAME].AsString;
-  pSite.Mate        := NO_MATE;
-  SetIdentity(pSite, pQuery.Fields[COL_LOCK_KIND].AsString, pQuery.Fields[COL_LOCK_RECEIVER].AsString,
-    pQuery.Fields[COL_ROUTINE_ID].AsLargeInt);
 end;
 
 { Opens a region at enter site pEnter; it stays open (to the end of the routine) until CloseRegion. }
@@ -435,31 +572,190 @@ begin
   end;
 end;
 
+{ TLockSiteLoader }
+
+constructor TLockSiteLoader.Create(const pStore: ISymbolStore);
+begin
+  inherited Create;
+  FStore  := pStore;
+  FArgRefs:= TDictionary<string, TArgRef>.Create;
+  FLines  := TDictionary<Int64, TArray<string>>.Create;
+  FBaseOf := TDictionary<string, string>.Create;
+end;
+
+destructor TLockSiteLoader.Destroy;
+begin
+  FBaseOf.Free;
+  FLines.Free;
+  FArgRefs.Free;
+  inherited;
+end;
+
+{ The caller frees the query. }
+function TLockSiteLoader.NewQuery(const pSqlFmt: string; pByArgOnly: Boolean; const pScope: string): TFDQuery;
+begin
+  Result:= TFDQuery.Create(nil);
+  Result.Connection:= (FStore as TSQLiteSymbolStore).GetConnection;
+  Result.SQL.Text  := Format(pSqlFmt, [CallNameList(pByArgOnly), pScope]);
+end;
+
+procedure TLockSiteLoader.LoadArgRefs(const pScope: string);
+var
+  Ref: TArgRef;
+begin
+  var Query:= NewQuery(SQL_ARG_REFS, True, pScope);
+  try
+    Query.Open;
+    while not Query.Eof do
+    begin
+      Ref.SymbolId:= Query.Fields[ARG_SYMBOL_ID].AsLargeInt;
+      Ref.Kind    := Query.Fields[ARG_KIND].AsString;
+      Ref.QName   := Query.Fields[ARG_QNAME].AsString;
+      FArgRefs.AddOrSetValue(Format(KEY_POSITION, [Query.Fields[ARG_FILE_ID].AsLargeInt,
+        Query.Fields[ARG_LINE].AsInteger, Query.Fields[ARG_COL].AsInteger]), Ref);
+      Query.Next;
+    end;
+  finally
+    Query.Free;
+  end;
+end;
+
+{ One line of an indexed file, '' when the file or the line is not there. A file is read once per load. }
+function TLockSiteLoader.SourceLine(pFileId: Int64; const pPath: string; pLine: Integer): string;
+var
+  Lines: TArray<string>;
+begin
+  if not FLines.TryGetValue(pFileId, Lines) then
+  begin
+    Lines:= if TFile.Exists(pPath) then TFile.ReadAllLines(pPath) else nil;
+    FLines.Add(pFileId, Lines);
+  end;
+  Result:= if InRange(pLine, 1, Length(Lines)) then Lines[pLine - 1] else '';
+end;
+
+{ The lock type (a TypeLeaf of LOCK_CALLS) a declared type is, '' when it is none: the type itself, a second
+  name of it, or a class of the project that descends from a lock class. Asked once per type name. }
+function TLockSiteLoader.LockTypeOf(const pTypeText: string; pFileId: Int64): string;
+begin
+  var Bare:= TypeBare(pTypeText);
+  var Leaf:= LowerCase(Bare);
+  if IsLockTypeLeaf(Leaf) then Exit(Leaf);
+  if FBaseOf.TryGetValue(Leaf, Result) then Exit;
+  Result:= '';
+  for var I:= Low(LOCK_ALIASES) to High(LOCK_ALIASES) do
+    if SameText(LOCK_ALIASES[I].Name, Bare) then Result:= LOCK_ALIASES[I].Leaf;
+  if Result = '' then
+  begin
+    var Outside:= FStore.UnresolvedAncestorNames(Bare, pFileId);
+    for var I:= Low(LOCK_BASES) to High(LOCK_BASES) do
+    begin
+      var Hit:= False;
+      for var Name in Outside do Hit:= Hit or SameText(TypeBare(Name), LOCK_BASES[I].Name);
+      if Hit or FStore.IsDescendantOf(Bare, LOCK_BASES[I].Name, pFileId) then
+      begin
+        Result:= LOCK_BASES[I].Leaf;
+        Break;
+      end;
+    end;
+  end;
+  FBaseOf.Add(Leaf, Result);
+end;
+
+{ The lock of a by-argument call (`TMonitor.Enter(FGuard)`): fills LockText and, when the argument is a plain
+  name or name chain the index resolved, LockSymbolId / LockQName. Returns the symbol kind (SYM_SELF for `Self`,
+  '' when not resolved); pOuter = what the last name is reached through. }
+function TLockSiteLoader.ArgLock(const pQuery: TFDQuery; var pSite: TLockSite; out pOuter: string;
+  out pHasMore: Boolean): string;
+var
+  Arg   : string;
+  ArgCol: Integer;
+  Ref   : TArgRef;
+begin
+  Result:= '';
+  pOuter:= '';
+  var FileId:= pQuery.Fields[COL_FILE_ID].AsLargeInt;
+  var Line:= SourceLine(FileId, pQuery.Fields[COL_PATH].AsString, pSite.Line);
+  if not FirstArgument(Line, pQuery.Fields[COL_END_COL].AsInteger, Arg, ArgCol, pHasMore) then Exit;
+  pSite.LockText:= Arg;
+  if SameText(Arg, SELF_TEXT) then Exit(SYM_SELF);
+  if not IsNameChain(Arg) then Exit;
+  var Dot:= LastDelimiter('.', Arg);
+  if Dot > 0 then pOuter:= Copy(Arg, 1, Dot - 1);
+  if FArgRefs.TryGetValue(Format(KEY_POSITION, [FileId, pSite.Line, ArgCol + Dot]), Ref) then
+  begin
+    pSite.LockSymbolId:= Ref.SymbolId;
+    pSite.LockQName   := Ref.QName;
+    Result:= Ref.Kind;
+  end;
+end;
+
+{ The current row as a site; False when the call is not a lock call for the type of its receiver. }
+function TLockSiteLoader.ReadSite(const pQuery: TFDQuery; out pSite: TLockSite): Boolean;
+var
+  Call      : TLockCall;
+  Outer     : string;
+  SymbolKind: string;
+  HasMore   : Boolean;
+begin
+  pSite:= Default(TLockSite);
+  var TypeText:= pQuery.Fields[COL_RECEIVER_TYPE_TEXT].AsString;
+  var Receiver:= pQuery.Fields[COL_RECEIVER_TEXT].AsString;
+  var CallName:= pQuery.Fields[COL_NAME_TEXT].AsString;
+  var Leaf:= if TypeText <> '' then LockTypeOf(TypeText, pQuery.Fields[COL_FILE_ID].AsLargeInt)
+    else LowerCase(TypeBare(Receiver));
+  Result:= FindLockCall(Leaf, LowerCase(CallName), Call) and (Call.ByArg or (TypeText <> ''));
+  if not Result then Exit;
+  pSite.RefId   := pQuery.Fields[COL_ID].AsLargeInt;
+  pSite.Line    := pQuery.Fields[COL_START_LINE].AsInteger;
+  pSite.Col     := pQuery.Fields[COL_START_COL].AsInteger;
+  pSite.Kind    := Call.Kind;
+  pSite.Op      := Call.Op;
+  pSite.Shared  := Call.Shared;
+  pSite.CallName:= CallName;
+  pSite.TypeText:= TypeText;
+  pSite.Mate    := NO_MATE;
+  if Call.ByArg then
+  begin
+    SymbolKind:= ArgLock(pQuery, pSite, Outer, HasMore);
+    { TMonitor.Enter(Obj, Timeout) answers whether it got the lock. }
+    if HasMore and (pSite.Op = lsoEnter) then pSite.Op:= lsoTryEnter;
+  end
+  else
+  begin
+    pSite.LockText    := Receiver;
+    pSite.LockSymbolId:= pQuery.Fields[COL_LOCK_ID].AsLargeInt;
+    pSite.LockQName   := pQuery.Fields[COL_LOCK_QNAME].AsString;
+    SymbolKind:= pQuery.Fields[COL_LOCK_KIND].AsString;
+    Outer     := pQuery.Fields[COL_LOCK_RECEIVER].AsString;
+  end;
+  SetIdentity(pSite, SymbolKind, Outer, pQuery.Fields[COL_ROUTINE_ID].AsLargeInt,
+    pQuery.Fields[COL_CLASS_ID].AsLargeInt);
+end;
+
 { Every lock site the scope admits, grouped by routine, regions built. pScope = '' or one AND on ids. }
-function LoadSites(const pStore: ISymbolStore; const pScope: string): TArray<TRoutineLockSites>;
+function TLockSiteLoader.Load(const pScope: string): TArray<TRoutineLockSites>;
 var
   Site: TLockSite;
   At  : Integer;
 begin
   Result:= nil;
-  if (pStore = nil) or (pStore is not TSQLiteSymbolStore) then Exit;
+  if (FStore = nil) or (FStore is not TSQLiteSymbolStore) then Exit;
+  LoadArgRefs(pScope);
   var Ends: TArray<Integer>:= nil;
   var IndexOf:= TDictionary<string, Integer>.Create;
-  var Query:= TFDQuery.Create(nil);
+  var Query:= NewQuery(SQL_SITES, False, pScope);
   try
-    Query.Connection:= (pStore as TSQLiteSymbolStore).GetConnection;
-    Query.SQL.Text  := Format(SQL_SITES, [CallNameList, pScope]);
     Query.Open;
     var LastPosition:= '';
     while not Query.Eof do
     begin
       var FileId:= Query.Fields[COL_FILE_ID].AsLargeInt;
-      var Position:= Format('%d:%d:%d', [FileId, Query.Fields[COL_START_LINE].AsInteger,
+      var Position:= Format(KEY_POSITION, [FileId, Query.Fields[COL_START_LINE].AsInteger,
         Query.Fields[COL_START_COL].AsInteger]);
       if (Position <> LastPosition) and ReadSite(Query, Site) then
       begin
         var RoutineId:= Query.Fields[COL_ROUTINE_ID].AsLargeInt;
-        var Key:= Format('%d:%d', [FileId, RoutineId]);
+        var Key:= Format(KEY_ROUTINE, [FileId, RoutineId]);
         if not IndexOf.TryGetValue(Key, At) then
         begin
           At:= Length(Result);
@@ -481,6 +777,16 @@ begin
     IndexOf.Free;
   end;
   for var I:= 0 to High(Result) do BuildRegions(Result[I], Ends[I]);
+end;
+
+function LoadSites(const pStore: ISymbolStore; const pScope: string): TArray<TRoutineLockSites>;
+begin
+  var Loader:= TLockSiteLoader.Create(pStore);
+  try
+    Result:= Loader.Load(pScope);
+  finally
+    Loader.Free;
+  end;
 end;
 
 function LockSitesOfProject(const pStore: ISymbolStore): TArray<TRoutineLockSites>;
