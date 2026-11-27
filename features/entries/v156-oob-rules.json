@@ -30,5 +30,11 @@
       "example": "drag-lint lint <file.pas> --rule variant-in-loop"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "2e5d6a6f286ad0821bf948e53a48588a924001d2abbd87fb55fa49d84c3c2046"
+  }
 }

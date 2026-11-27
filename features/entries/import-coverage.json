@@ -5,17 +5,17 @@
   "owner": "ENGINE",
   "status": "internal",
   "since": "1.56.0-alpha",
-  "summary": "Imports a Delphi code-coverage report (DelphiCodeCoverage EMMA XML, or Cobertura XML) beside the index, reports every record that matches no routine, and feeds the ask risk chart",
+  "summary": "Imports a Delphi code-coverage report (EMMA or Cobertura XML) beside the index, names records matching no routine, and feeds the ask risk chart",
   "intro": "Read this when your tests already produce a coverage report and you want to know which complex routines they leave untested. import-coverage matches the report to the indexed routines by file and routine name, stores the records next to the index, and lists everything that did not match; ask risk then ranks the routines by complexity times missing coverage.",
   "wikiPage": "import-coverage",
   "surfaces": [
     {
       "type": "cli",
       "verb": "import-coverage",
-      "usage": "drag-lint import-coverage --file <report.xml> --db <file.sqlite> [--json] (internal: accepted, not advertised; the EMMA reader is unverified against a real DelphiCodeCoverage report)",
+      "usage": "drag-lint import-coverage --in <report.xml> --db <file.sqlite> [--json] (internal: accepted, not advertised; the EMMA reader is unverified against a real DelphiCodeCoverage report)",
       "flags": [
         {
-          "name": "--file",
+          "name": "--in",
           "arg": "<report.xml>"
         },
         {
@@ -32,12 +32,18 @@
   "questions": [
     {
       "ask": "Import my coverage report so the risk chart can use it",
-      "command": "drag-lint import-coverage --file <report.xml> --db <db>"
+      "command": "drag-lint import-coverage --in <report.xml> --db <db>"
     },
     {
       "ask": "Which complex routines do my tests leave uncovered?",
       "command": "drag-lint ask risk --target project --db <db>"
     }
   ],
-  "access": "cli-only"
+  "access": "cli-only",
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "68edf21445f9755beb7984afb0f306fad03bfbfcf398e4e5e81c536fbc7e927a"
+  }
 }

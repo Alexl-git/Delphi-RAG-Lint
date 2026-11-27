@@ -216,6 +216,9 @@ Write-Host '-- P4: --out' -ForegroundColor Cyan
 $OutFile = Join-Path $WorkDir 'SbomApp.cdx.json'
 $r = Run @('sbom', '--project', $Dproj, '--db', $ProjDb, '--library-db', $LibDb, '--out', $OutFile)
 Check 'P4 exit 0, file written' (($r.Code -eq 0) -and (Test-Path $OutFile)) "exit $($r.Code) $($r.Err)"
+$OutFile2 = Join-Path $WorkDir 'SbomApp2.cdx.json'
+$r2 = Run @('sbom', '--project', $Dproj, '--db', $ProjDb, '--library-db', $LibDb, '--output', $OutFile2)
+Check 'P4 the canonical --output spelling works as --out does' (($r2.Code -eq 0) -and (Test-Path $OutFile2)) "exit $($r2.Code) $($r2.Err)"
 if (Test-Path $OutFile) {
   $bytes = [IO.File]::ReadAllBytes($OutFile)
   Check 'P4 UTF-8 without BOM' (-not (($bytes[0] -eq 0xEF) -and ($bytes[1] -eq 0xBB)))

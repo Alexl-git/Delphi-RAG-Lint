@@ -85,6 +85,8 @@ if ($ExpectRed) {
 }
 
 # ---- import ----
+$r = Run-Engine @('import-coverage', '--in', $xml, '--db', $db, '--json')
+Check 'import: the canonical --in spelling works as --file does' ($r.Code -eq 0) $r.Text
 $r = Run-Engine @('import-coverage', '--file', $xml, '--db', $db, '--json')
 Check 'import exits 0' ($r.Code -eq 0) $r.Text
 $j = $null

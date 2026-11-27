@@ -1,16 +1,16 @@
 # repo gen-wiki: a wiki page per repository table
 
 ```
-drag-lint repo gen-wiki (--repo <file> | --project <file>) --out <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]
+drag-lint repo gen-wiki (--repo <file> | --project <file>) --output <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]
 ```
 
-Writes Markdown pages from the field repository into the folder `--out`: one page per repository table with one anchored
+Writes Markdown pages from the field repository into the folder `--output`: one page per repository table with one anchored
 section per field. A section gives the caption, the type, the kind, the descriptions, and where the field is shown, edited
 and used by code, read from the project index.
 
 | Flag | Meaning |
 |---|---|
-| `--out <dir>` | the folder the pages go to |
+| `--output <dir>` | the folder the pages go to |
 | `--per-field` | one page per field; the table page then becomes an index of its fields |
 | `--table <T,...>` | only these tables |
 | `--db <project db>` | the project index the shown / edited / used facts are read from |

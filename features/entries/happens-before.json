@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.56.0-alpha",
   "summary": "Answers whether one event (a write, a read, a call, a source line, an Application.Run) has happened before another on every execution: YES, NO or MAY",
-  "intro": "Ask it when the order of two things matters and you want a proof, not a guess: is the connection opened before every query, is the flag written before it is read, is Randomize called before Random, is FormatSettings set before the first format call, does A happen before Application.Run. It proves order inside a routine, across calls, and across initialization sections, the program block and handlers (program-order). It reads the index, names every site of both events and answers YES or NO only when it can prove it; everything else is MAY, with the reason per site. Exit 0 = YES, 1 = NO or MAY, 2 = error.",
+  "intro": "Ask it when the order of two things matters and you want a proof, not a guess: is the connection opened before every query, is the flag written before it is read, is Randomize called before Random, is FormatSettings set before the first format call, does A happen before Application.Run. It proves order inside a routine, across calls, and across initialization sections, the program block and handlers (program-order). It reads the index, names every site of both events and answers YES or NO only when it can prove it, else MAY with the reason per site. Exit 0 = YES, 1 = NO or MAY, 2 = error.",
   "wikiPage": "happens-before",
   "surfaces": [
     {
@@ -87,5 +87,11 @@
       "command": "drag-lint happens-before --preset lock-held-when --a Unit.TClass.FLock --b write:Unit.TClass.FData --db <db>"
     }
   ],
-  "notes": "Lane HB6 added the in-force question (events free:, final-free:, held:, use:; presets use-after-free, finalization, lock-held-when; runner tests\\autotest\\run_v156_HB6.ps1). Shipped 1.56 (lane HB4, gap G-56; lane HB5 added program-order, the presets format-settings and before-app-run, the events extwrite: and app-run:, a comma list for extcall:, and the call-graph pre-check; spec docs\\superpowers\\specs\\2026-11-17-happens-before-design.md sec. 2.4). Units src\\query\\DRagLint.Query.HappensBefore.Verb.pas, src\\query\\DRagLint.Query.HappensBefore.pas (HbOrderSolve) and src\\cli\\DRagLint.CLI.HappensBefore.pas; guards tests\\autotest\\run_v156_HB4.ps1 and run_v156_HB5.ps1. Built presets: randomize, format-settings, before-app-run. Not built: finalization, use-after-free, lock-held-when."
+  "notes": "Lane HB6 added the in-force question (events free:, final-free:, held:, use:; presets use-after-free, finalization, lock-held-when; runner tests\\autotest\\run_v156_HB6.ps1). Shipped 1.56 (lane HB4, gap G-56; lane HB5 added program-order, the presets format-settings and before-app-run, the events extwrite: and app-run:, a comma list for extcall:, and the call-graph pre-check; spec docs\\superpowers\\specs\\2026-11-17-happens-before-design.md sec. 2.4). Units src\\query\\DRagLint.Query.HappensBefore.Verb.pas, src\\query\\DRagLint.Query.HappensBefore.pas (HbOrderSolve) and src\\cli\\DRagLint.CLI.HappensBefore.pas; guards tests\\autotest\\run_v156_HB4.ps1 and run_v156_HB5.ps1. Built presets: randomize, format-settings, before-app-run. Not built: finalization, use-after-free, lock-held-when.",
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "f2a4b59820b0e23d5f9cb991f22034101ff01b848cd696d5824fcdef8cfd8c69"
+  }
 }

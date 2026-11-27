@@ -11,12 +11,12 @@ This is the **v1 slice (1.56)**: the *source closure*. What it cannot see is lis
 ## Running it from the CLI
 
 ```
-drag-lint sbom --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]
+drag-lint sbom --project <x.dproj> [--output <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]
                [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]
 ```
 
 * `--project` -- the project's `.dproj` (required). Its base name is the application's name.
-* `--out` -- the file to write (UTF-8, no BOM). Without it the document goes to stdout.
+* `--output` -- the file to write (UTF-8, no BOM). Without it the document goes to stdout.
 * `--exe` -- the delivered executable. Its SHA-512 is written to `metadata.component.hashes`.
   The verb does not check that this file was built from the indexed sources: you state that.
 * `--app-version` -- the application's version, written as given. Without it no version is claimed.
@@ -145,7 +145,7 @@ the guideline as the lane knew it; check them against the TR-03183-2 version you
 | Code | Meaning |
 |---|---|
 | 0 | document written |
-| 1 | an index, the catalogue, the `--exe` file or the `--map` file cannot be read, or `--out` cannot be written; no document |
+| 1 | an index, the catalogue, the `--exe` file or the `--map` file cannot be read, or `--output` cannot be written; no document |
 | 2 | no `--project`, the project file is missing, it has no index, or `--creator-email` is not an address |
 | 3 | unknown flag |
 

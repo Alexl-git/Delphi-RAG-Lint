@@ -63,5 +63,11 @@
       "command": "drag-lint metrics --db <db> --save --trend"
     }
   ],
-  "access": "cli-only"
+  "access": "cli-only",
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "0fbdce4e093d8db22d45b801fab2bec4d00fe5507b4ba37e8b14d3a6e21e1047"
+  }
 }

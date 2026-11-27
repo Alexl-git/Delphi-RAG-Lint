@@ -122,19 +122,19 @@ const
   CPrioBlock = 2;
   CPrioOther = 1;
   CPrioNone = 0;
-  CUsageLine = 'usage: drag-lint import-coverage --file <report.xml> --db <file.sqlite> [--json]';
+  CUsageLine = 'usage: drag-lint import-coverage --in <report.xml> --db <file.sqlite> [--json]';
   RE_TAG = '<(/?)([A-Za-z_][\w:.\-]*)((?:\s[^>]*?)?)(/?)>';
   RE_ATTR = '([\w:.\-]+)\s*=\s*(?:"([^"]*)"|''([^'']*)'')';
   RE_COUNTS = '\((\d+)\s*/\s*(\d+)\)';
 
 type
   /// <summary>The flags import-coverage accepts.</summary>
-  TCoverageFlag = (cfFile, cfDb, cfJson, cfHelp, cfOutputEncoding);
+  TCoverageFlag = (cfFile, cfDb, cfJson, cfHelp, cfOutputEncoding, cfIn);
 
 const
   /// <summary>The spelling of each flag; the docs-sync guard reads this table.</summary>
-  COVERAGE_FLAG_NAMES: array[TCoverageFlag] of string = ('--file', '--db', '--json', '--help', '--output-encoding');
-  COVERAGE_VALUE_FLAGS = [cfFile, cfDb, cfOutputEncoding];
+  COVERAGE_FLAG_NAMES: array[TCoverageFlag] of string = ('--file', '--db', '--json', '--help', '--output-encoding', '--in');
+  COVERAGE_VALUE_FLAGS = [cfFile, cfDb, cfOutputEncoding, cfIn];
 
 type
   TCoverageOptions = record
@@ -455,7 +455,7 @@ begin
       Value:= pArgs[I];
     end;
     case Flag of
-      cfFile: pOpts.FilePath:= ExpandFileName(Value);
+      cfFile, cfIn: pOpts.FilePath:= ExpandFileName(Value);
       cfDb: pOpts.DbPath:= ExpandFileName(Value);
       cfJson: pOpts.AsJson:= True;
       cfHelp: pOpts.ShowHelp:= True;
@@ -554,7 +554,7 @@ begin
     Result:= CExitOk;
   end
   else if Opts.FilePath = '' then
-    Result:= Usage('give --file <report.xml>')
+    Result:= Usage('give --in <report.xml>')
   else if Opts.DbPath = '' then
     Result:= Usage('give --db <file.sqlite>')
   else if not FileExists(Opts.FilePath) then

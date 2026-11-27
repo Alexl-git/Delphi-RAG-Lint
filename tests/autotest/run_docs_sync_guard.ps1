@@ -1344,6 +1344,8 @@ $CrossCuttingFlags = [ordered]@{
 }
 $selfParsing = [ordered]@{ 'ask' = $askFlags; 'protocol' = $protoFlags; 'mcp-config' = $mcpCfgFlags; 'syntax-count' = $scFlags; 'uses-recover' = $urFlags; 'metrics' = $metFlags; 'sbom' = $sbFlags; 'happens-before' = $hbFlags }
 $f1v = New-Object System.Collections.Generic.List[string]
+# An alias is listed once, in the generated "Flag aliases:" section (docs\CLI-FLAG-ALIASES.md rule 3), so a verb table may carry it without its own help line.
+$f1vAliases = @((Get-Content -LiteralPath (Join-Path $Repo 'features\flag-aliases.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }).aliases | ForEach-Object { @($_.aliases) })
 foreach ($sv in $selfParsing.Keys) {
   $svBlock = New-Object System.Text.StringBuilder
   $inBlock = $false
@@ -1358,6 +1360,7 @@ foreach ($sv in $selfParsing.Keys) {
     "block has $($svBlockSet.Count) flag(s), own help $($svOwnSet.Count) -- the block scan is broken, not the verb"
   foreach ($fl in $selfParsing[$sv]) {
     if ($CrossCuttingFlags.Contains($fl)) { continue }
+    if ($f1vAliases -contains $fl) { continue }
     if (-not $svBlockSet.Contains($fl)) { $f1v.Add("$sv $fl (--help block)") }
     if (-not $svOwnSet.Contains($fl))   { $f1v.Add("$sv $fl ($sv --help)") }
   }

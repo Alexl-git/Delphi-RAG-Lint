@@ -37,5 +37,11 @@
       "ask": "How do I restore a repository from a zip or an SQL backup?",
       "command": "drag-lint repo restore --project App.dproj --format zip --in repo.dlrepo.zip --replace"
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "9ca5773792f253084a2ffd1c9d5706ab1da6a3b0cd9825502f0f949796dc7055"
+  }
 }

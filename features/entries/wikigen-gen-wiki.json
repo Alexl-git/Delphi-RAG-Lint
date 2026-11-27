@@ -12,11 +12,12 @@
     {
       "type": "cli",
       "verb": "repo",
-      "example": "drag-lint repo gen-wiki --project <x.dproj> --out <dir> --per-field",
-      "usage": "drag-lint repo gen-wiki (--repo <file> | --project <file>) --out <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]",
+      "sub": "gen-wiki",
+      "example": "drag-lint repo gen-wiki --project <x.dproj> --output <dir> --per-field",
+      "usage": "drag-lint repo gen-wiki (--repo <file> | --project <file>) --output <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]",
       "flags": [
         {
-          "name": "--out",
+          "name": "--output",
           "arg": "<dir>"
         },
         {
@@ -43,6 +44,7 @@
   "verified": {
     "date": "2026-11-27",
     "by": "ENGINE",
-    "build": "1.55.0-alpha"
+    "build": "1.55.0-alpha",
+    "surfaceHash": "311e1f82b2b4f0a6e860fc239d5e686e7b0539a2e3f408ac4029b05009741104"
   }
 }

@@ -1964,7 +1964,7 @@
       "status": "shipped",
       "since": "1.56.0-alpha",
       "summary": "Answers whether one event (a write, a read, a call, a source line, an Application.Run) has happened before another on every execution: YES, NO or MAY",
-      "intro": "Ask it when the order of two things matters and you want a proof, not a guess: is the connection opened before every query, is the flag written before it is read, is Randomize called before Random, is FormatSettings set before the first format call, does A happen before Application.Run. It proves order inside a routine, across calls, and across initialization sections, the program block and handlers (program-order). It reads the index, names every site of both events and answers YES or NO only when it can prove it; everything else is MAY, with the reason per site. Exit 0 = YES, 1 = NO or MAY, 2 = error.",
+      "intro": "Ask it when the order of two things matters and you want a proof, not a guess: is the connection opened before every query, is the flag written before it is read, is Randomize called before Random, is FormatSettings set before the first format call, does A happen before Application.Run. It proves order inside a routine, across calls, and across initialization sections, the program block and handlers (program-order). It reads the index, names every site of both events and answers YES or NO only when it can prove it, else MAY with the reason per site. Exit 0 = YES, 1 = NO or MAY, 2 = error.",
       "wikiPage": "happens-before",
       "surfaces": [
         {
@@ -2045,7 +2045,13 @@
           "command": "drag-lint happens-before --preset lock-held-when --a Unit.TClass.FLock --b write:Unit.TClass.FData --db <db>"
         }
       ],
-      "notes": "Lane HB6 added the in-force question (events free:, final-free:, held:, use:; presets use-after-free, finalization, lock-held-when; runner tests\\autotest\\run_v156_HB6.ps1). Shipped 1.56 (lane HB4, gap G-56; lane HB5 added program-order, the presets format-settings and before-app-run, the events extwrite: and app-run:, a comma list for extcall:, and the call-graph pre-check; spec docs\\superpowers\\specs\\2026-11-17-happens-before-design.md sec. 2.4). Units src\\query\\DRagLint.Query.HappensBefore.Verb.pas, src\\query\\DRagLint.Query.HappensBefore.pas (HbOrderSolve) and src\\cli\\DRagLint.CLI.HappensBefore.pas; guards tests\\autotest\\run_v156_HB4.ps1 and run_v156_HB5.ps1. Built presets: randomize, format-settings, before-app-run. Not built: finalization, use-after-free, lock-held-when."
+      "notes": "Lane HB6 added the in-force question (events free:, final-free:, held:, use:; presets use-after-free, finalization, lock-held-when; runner tests\\autotest\\run_v156_HB6.ps1). Shipped 1.56 (lane HB4, gap G-56; lane HB5 added program-order, the presets format-settings and before-app-run, the events extwrite: and app-run:, a comma list for extcall:, and the call-graph pre-check; spec docs\\superpowers\\specs\\2026-11-17-happens-before-design.md sec. 2.4). Units src\\query\\DRagLint.Query.HappensBefore.Verb.pas, src\\query\\DRagLint.Query.HappensBefore.pas (HbOrderSolve) and src\\cli\\DRagLint.CLI.HappensBefore.pas; guards tests\\autotest\\run_v156_HB4.ps1 and run_v156_HB5.ps1. Built presets: randomize, format-settings, before-app-run. Not built: finalization, use-after-free, lock-held-when.",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "f2a4b59820b0e23d5f9cb991f22034101ff01b848cd696d5824fcdef8cfd8c69"
+      }
     },
     {
       "id": "helpers-of",
@@ -2298,7 +2304,13 @@
           "ask": "Which place did a hit come from?",
           "command": "drag-lint query --concept \"<words>\" --json --db <db>"
         }
-      ]
+      ],
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "ed276bfefa42e463c873afb6a34f44264bf4359bcce32df3ba34bb8a396a588f"
+      }
     },
     {
       "id": "concept-search",
@@ -5380,7 +5392,13 @@
           ]
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "5633f914b1bc613874c2983cee813bcfdf0401bb54476d1d55a417654c30dba5"
+      }
     },
     {
       "id": "v156-noreturn-contract",
@@ -5399,7 +5417,13 @@
           "example": "drag-lint lint <file.pas> --rule noreturn-contract --db <index.sqlite>"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
+      }
     },
     {
       "id": "v154-dfm-form-rules",
@@ -5503,7 +5527,13 @@
           "example": "drag-lint lint <file.pas> --rule class-passed-as-interface --db <index.sqlite>"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "c64b3404080a52524931e776729b22b1e2683294f663e6e03895b52c13a944a5"
+      }
     },
     {
       "id": "ref-type-rules",
@@ -5676,7 +5706,13 @@
           "example": "drag-lint lint <file.pas> --rule variant-in-loop"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "2e5d6a6f286ad0821bf948e53a48588a924001d2abbd87fb55fa49d84c3c2046"
+      }
     },
     {
       "id": "lint-rules",
@@ -5907,7 +5943,13 @@
           "example": "drag-lint lint-all --db <project.sqlite> --rule lock-order-inversion"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "5633f914b1bc613874c2983cee813bcfdf0401bb54476d1d55a417654c30dba5"
+      }
     },
     {
       "id": "v152-atlb-rules",
@@ -10445,6 +10487,12 @@
       "accessReviewed": {
         "date": "2026-11-26",
         "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
       }
     },
     {
@@ -12158,17 +12206,17 @@
       "owner": "ENGINE",
       "status": "internal",
       "since": "1.56.0-alpha",
-      "summary": "Imports a Delphi code-coverage report (DelphiCodeCoverage EMMA XML, or Cobertura XML) beside the index, reports every record that matches no routine, and feeds the ask risk chart",
+      "summary": "Imports a Delphi code-coverage report (EMMA or Cobertura XML) beside the index, names records matching no routine, and feeds the ask risk chart",
       "intro": "Read this when your tests already produce a coverage report and you want to know which complex routines they leave untested. import-coverage matches the report to the indexed routines by file and routine name, stores the records next to the index, and lists everything that did not match; ask risk then ranks the routines by complexity times missing coverage.",
       "wikiPage": "import-coverage",
       "surfaces": [
         {
           "type": "cli",
           "verb": "import-coverage",
-          "usage": "drag-lint import-coverage --file <report.xml> --db <file.sqlite> [--json] (internal: accepted, not advertised; the EMMA reader is unverified against a real DelphiCodeCoverage report)",
+          "usage": "drag-lint import-coverage --in <report.xml> --db <file.sqlite> [--json] (internal: accepted, not advertised; the EMMA reader is unverified against a real DelphiCodeCoverage report)",
           "flags": [
             {
-              "name": "--file",
+              "name": "--in",
               "arg": "<report.xml>"
             },
             {
@@ -12185,14 +12233,20 @@
       "questions": [
         {
           "ask": "Import my coverage report so the risk chart can use it",
-          "command": "drag-lint import-coverage --file <report.xml> --db <db>"
+          "command": "drag-lint import-coverage --in <report.xml> --db <db>"
         },
         {
           "ask": "Which complex routines do my tests leave uncovered?",
           "command": "drag-lint ask risk --target project --db <db>"
         }
       ],
-      "access": "cli-only"
+      "access": "cli-only",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "68edf21445f9755beb7984afb0f306fad03bfbfcf398e4e5e81c536fbc7e927a"
+      }
     },
     {
       "id": "interface-implementors",
@@ -12357,7 +12411,13 @@
           "command": "drag-lint metrics --db <db> --save --trend"
         }
       ],
-      "access": "cli-only"
+      "access": "cli-only",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "0fbdce4e093d8db22d45b801fab2bec4d00fe5507b4ba37e8b14d3a6e21e1047"
+      }
     },
     {
       "id": "migrate-reports",
@@ -12587,20 +12647,20 @@
       "status": "shipped",
       "since": "1.56.0-alpha",
       "summary": "Writes a CycloneDX 1.6 JSON software bill of materials for a project from its index: the application, its library components and their dependencies",
-      "intro": "Read this when a customer, an auditor or the EU Cyber Resilience Act asks which third-party code your application contains. sbom reads the project index and the library index, groups every unit of the compile closure into components, and names each one from an editable library catalogue (supplier, version, licence, purl). A library the catalogue does not know is still listed, as 'unknown supplier'. Without a linker map it works from source only; with --map it marks which units the linker really linked, and with --bsi it writes the fields of the BSI TR-03183-2 profile and names every field it cannot fill instead of inventing a value. What it still cannot see (runtime packages, DLLs) is stated inside the document.",
+      "intro": "Read this when a customer, an auditor or the EU Cyber Resilience Act asks which third-party code your application contains. sbom reads the project index and the library index, groups every unit of the compile closure into components, and names each one from an editable library catalogue (supplier, version, licence, purl). Unknown libraries are listed as 'unknown supplier'. Without a linker map it works from source only; with --map it marks which units the linker really linked, and with --bsi it writes the fields of the BSI TR-03183-2 profile and names each field it cannot fill.",
       "wikiPage": "sbom",
       "surfaces": [
         {
           "type": "cli",
           "verb": "sbom",
-          "usage": "drag-lint sbom --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>] [--map <file.map>] [--bsi] [--creator <name>] [--creator-email <address>]",
+          "usage": "drag-lint sbom --project <x.dproj> [--output <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>] [--map <file.map>] [--bsi] [--creator <name>] [--creator-email <address>]",
           "flags": [
             {
               "name": "--project",
               "arg": "<x.dproj>"
             },
             {
-              "name": "--out",
+              "name": "--output",
               "arg": "<file.cdx.json>"
             },
             {
@@ -12640,33 +12700,39 @@
             }
           ],
           "helpOrder": 115,
-          "help": ["  drag-lint sbom               --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]", "                               [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]", "                               [--map <file.map>] [--bsi [--creator <name>] [--creator-email <address>]]", "                               CycloneDX 1.6 JSON software bill of materials from the project index (source closure).", "                               One component per unit group: every unit of the project index, each unit its uses rows reach in a", "                               library index (transitively), and each used unit with no source. The catalogue", "                               rules\\sbom-libraries.json (edit it, or --catalogue) gives supplier, name, version, licence, purl;", "                               a group with no row is listed with the supplier \"unknown supplier\", never dropped (NOTE on stderr).", "                               metadata.component = the application; --app-version states its version, --exe adds the SHA-512 of", "                               the delivered file. dependencies = uses edges between the groups. Read-only.", "                               --map reads a DETAILED linker map (DCC_MapFile=3, \"Detailed map of segments\") and marks every", "                               component drag-lint:linked = yes|partial|no with one linkedUnit / notLinkedUnit per unit; a unit", "                               the map does not name is reported as not linked, never dropped; units only the map names are", "                               listed in the metadata. --bsi adds the BSI TR-03183-2 fields (--creator / --creator-email = the", "                               SBOM creator; bsi:component:* file properties of --exe if it has an MZ header); what cannot be", "                               filled is NOT invented, it is named per component as drag-lint:bsi:unfilled (summary on stderr).", "                               Limits, stated in the document (compositions \"incomplete\", drag-lint:sbom:scope): runtime packages", "                               and DLLs are not listed; no VEX. --library-db none = direct uses only.", "                               Exit 0 = written (--out, else stdout); 1 = an index, the catalogue, --exe or --map cannot be read;", "                               2 = no --project / no index for it / --creator-email is no address; 3 = unknown flag."]
+          "help": ["  drag-lint sbom               --project <x.dproj> [--output <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]", "                               [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]", "                               [--map <file.map>] [--bsi [--creator <name>] [--creator-email <address>]]", "                               CycloneDX 1.6 JSON software bill of materials from the project index (source closure).", "                               One component per unit group: every unit of the project index, each unit its uses rows reach in a", "                               library index (transitively), and each used unit with no source. The catalogue", "                               rules\\sbom-libraries.json (edit it, or --catalogue) gives supplier, name, version, licence, purl;", "                               a group with no row is listed with the supplier \"unknown supplier\", never dropped (NOTE on stderr).", "                               metadata.component = the application; --app-version states its version, --exe adds the SHA-512 of", "                               the delivered file. dependencies = uses edges between the groups. Read-only.", "                               --map reads a DETAILED linker map (DCC_MapFile=3, \"Detailed map of segments\") and marks every", "                               component drag-lint:linked = yes|partial|no with one linkedUnit / notLinkedUnit per unit; a unit", "                               the map does not name is reported as not linked, never dropped; units only the map names are", "                               listed in the metadata. --bsi adds the BSI TR-03183-2 fields (--creator / --creator-email = the", "                               SBOM creator; bsi:component:* file properties of --exe if it has an MZ header); what cannot be", "                               filled is NOT invented, it is named per component as drag-lint:bsi:unfilled (summary on stderr).", "                               Limits, stated in the document (compositions \"incomplete\", drag-lint:sbom:scope): runtime packages", "                               and DLLs are not listed; no VEX. --library-db none = direct uses only.", "                               Exit 0 = written (--output, else stdout); 1 = an index, the catalogue, --exe or --map cannot be read;", "                               2 = no --project / no index for it / --creator-email is no address; 3 = unknown flag."]
         }
       ],
       "audience": "both",
       "questions": [
         {
           "ask": "Which third-party libraries does this application contain, with supplier and licence?",
-          "command": "drag-lint sbom --project <App.dproj> --out <App.cdx.json>"
+          "command": "drag-lint sbom --project <App.dproj> --output <App.cdx.json>"
         },
         {
           "ask": "How do I produce the SBOM of the version I deliver, with the hash of the executable?",
-          "command": "drag-lint sbom --project <App.dproj> --exe <App.exe> --app-version <1.2.3> --out <App.cdx.json>"
+          "command": "drag-lint sbom --project <App.dproj> --exe <App.exe> --app-version <1.2.3> --output <App.cdx.json>"
         },
         {
           "ask": "Which libraries does the SBOM list as unknown supplier, so I can add them to the catalogue?",
-          "command": "drag-lint sbom --project <App.dproj> --out <App.cdx.json>   (the NOTE lines on stderr name each one and its directory)"
+          "command": "drag-lint sbom --project <App.dproj> --output <App.cdx.json>   (the NOTE lines on stderr name each one and its directory)"
         },
         {
           "ask": "Which units of the closure did the linker really link into my executable?",
-          "command": "drag-lint sbom --project <App.dproj> --map <App.map> --out <App.cdx.json>   (build with DCC_MapFile=3; drag-lint:linked and notLinkedUnit on every component)"
+          "command": "drag-lint sbom --project <App.dproj> --map <App.map> --output <App.cdx.json>   (build with DCC_MapFile=3; drag-lint:linked and notLinkedUnit on every component)"
         },
         {
           "ask": "Which BSI TR-03183-2 fields can drag-lint fill, and which stay open?",
-          "command": "drag-lint sbom --project <App.dproj> --exe <App.exe> --app-version <1.2.3> --bsi --creator <name> --creator-email <address> --out <App.cdx.json>   (every unfilled field is named as drag-lint:bsi:unfilled)"
+          "command": "drag-lint sbom --project <App.dproj> --exe <App.exe> --app-version <1.2.3> --bsi --creator <name> --creator-email <address> --output <App.cdx.json>   (every unfilled field is named as drag-lint:bsi:unfilled)"
         }
       ],
-      "access": "cli-only"
+      "access": "cli-only",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "1ff011c2b62cd43185cedeae51ccafc7401c19088dda90e8a2acd42b5024bff5"
+      }
     },
     {
       "id": "scan-todos-fixmes",
@@ -16052,7 +16118,13 @@
           "ask": "Which views and events does a form have?",
           "command": "drag-lint repo copy-grid --dfm <form.dfm> --list --from <view> --repo <file>"
         }
-      ]
+      ],
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "4cb17aa42ed8f4cfdef41b2b8a847fe812032c602a12c3d2962f5c84bc08707c"
+      }
     },
     {
       "id": "repo-read-dfm-ancestor",
@@ -16526,7 +16598,13 @@
           "ask": "How do I restore a repository from a zip or an SQL backup?",
           "command": "drag-lint repo restore --project App.dproj --format zip --in repo.dlrepo.zip --replace"
         }
-      ]
+      ],
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "9ca5773792f253084a2ffd1c9d5706ab1da6a3b0cd9825502f0f949796dc7055"
+      }
     },
     {
       "id": "wikigen-gen-wiki",
@@ -16542,11 +16620,12 @@
         {
           "type": "cli",
           "verb": "repo",
-          "example": "drag-lint repo gen-wiki --project <x.dproj> --out <dir> --per-field",
-          "usage": "drag-lint repo gen-wiki (--repo <file> | --project <file>) --out <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]",
+          "sub": "gen-wiki",
+          "example": "drag-lint repo gen-wiki --project <x.dproj> --output <dir> --per-field",
+          "usage": "drag-lint repo gen-wiki (--repo <file> | --project <file>) --output <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]",
           "flags": [
             {
-              "name": "--out",
+              "name": "--output",
               "arg": "<dir>"
             },
             {
@@ -16573,7 +16652,8 @@
       "verified": {
         "date": "2026-11-27",
         "by": "ENGINE",
-        "build": "1.55.0-alpha"
+        "build": "1.55.0-alpha",
+        "surfaceHash": "311e1f82b2b4f0a6e860fc239d5e686e7b0539a2e3f408ac4029b05009741104"
       }
     },
     {
@@ -17096,7 +17176,13 @@
           "command": "drag-lint repo migrate --repo <file> --apply"
         }
       ],
-      "access": "cli-only"
+      "access": "cli-only",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+      }
     },
     {
       "id": "info",
@@ -17981,7 +18067,13 @@
           "ask": "Is this field safe to drop, or does a DFM control or code still name it?",
           "command": "drag-lint repo field-usage --fields \"PRICE\" --project <project file>"
         }
-      ]
+      ],
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "ab2e5e7e21bb576b9ea4f9add708dea8450b323ed6ae10d016791aa6d27a8445"
+      }
     },
     {
       "id": "repo-write-dfm",

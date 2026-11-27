@@ -27,6 +27,9 @@ try {
   $r = Run @('repo', 'gen-wiki', '--repo', $repoFile)
   Check 'A1 no --out = exit 2' ($r.Code -eq 2) "$($r.Code) $($r.Out)"
   $o1 = Join-Path $work 'o1'
+  $o0 = Join-Path $work 'o0'
+  $r = Run @('repo', 'gen-wiki', '--repo', $repoFile, '--output', $o0)
+  Check 'A1b the canonical --output spelling works as --out does' (($r.Code -eq 0) -and ($r.Out -match '2 written')) $r.Out
   $r = Run @('repo', 'gen-wiki', '--repo', $repoFile, '--out', $o1)
   Check 'A2 run exits 0, 2 written' (($r.Code -eq 0) -and ($r.Out -match '2 written, 0 unchanged')) $r.Out
   Check 'A3 note: no project index' ($r.Out -match 'note: no project index')

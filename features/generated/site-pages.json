@@ -516,7 +516,7 @@
     "version": "1.55.0-alpha"
   },
   "features/happens-before.md": {
-    "hash": "10cdebc30972105cb69d4534a2c304334c6e4ddd5c1a0b83f33be354cfa88fd3",
+    "hash": "d713536e9ccb0a79ee5456a0e2a44c0bf3f27320aa7bb57f66b50d3cec6919a1",
     "version": "1.55.0-alpha"
   },
   "features/heavy-initialization.md": {
@@ -892,7 +892,7 @@
     "version": "1.47.0-alpha"
   },
   "features/sbom.md": {
-    "hash": "0174abe3837047bba5a4fd6a78018ee3b0eb927042a291d7b3e237e54aa3ed5c",
+    "hash": "f366e73209b526b8a2a443b9e4c214ce36fbaa5100976d3eb2b4ae532f866a59",
     "version": "1.55.0-alpha"
   },
   "features/scan-todos-fixmes.md": {
@@ -1252,7 +1252,7 @@
     "version": "1.55.0-alpha"
   },
   "features/wikigen-gen-wiki.md": {
-    "hash": "b2d824730a3ead62ca33a7823e362b873e524d7a6753a909a4d30d7299f5c27d",
+    "hash": "e73d4b8028531a6937e7ad26c1f781e99f139ea83a09e3ca3bb3f8172b2d7a3f",
     "version": "1.55.0-alpha"
   },
   "features/workspace-add.md": {

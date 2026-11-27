@@ -54,7 +54,7 @@ const
   CTimestampFormat = 'yyyy"-"mm"-"dd"T"hh":"nn":"ss"Z"';
   CEmailPattern = '^[^@\s]+@[^@\s]+\.[^@\s]+$';
   CPeMagic: array[0..1] of Byte = (Ord('M'), Ord('Z'));
-  CUsage = 'usage: drag-lint sbom --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] ' +
+  CUsage = 'usage: drag-lint sbom --project <x.dproj> [--output <file.cdx.json>] [--exe <delivered.exe>] ' +
     '[--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>] ' +
     '[--map <file.map>] [--bsi] [--creator <name>] [--creator-email <address>]';
   SQL_FILES = 'select id, path from files';
@@ -78,15 +78,15 @@ const
 type
   /// <summary>The flags sbom accepts.</summary>
   TSbomFlag = (sfProject, sfOut, sfExe, sfAppVersion, sfDb, sfLibraryDb, sfCatalogue, sfMap, sfBsi, sfCreator,
-    sfCreatorEmail, sfHelp, sfOutputEncoding);
+    sfCreatorEmail, sfHelp, sfOutputEncoding, sfOutput);
 
 const
   /// <summary>The spelling of each flag: the verb's whole accepted-flag set (docs-sync check 9 reads this table).</summary>
   SBOM_FLAG_NAMES: array[TSbomFlag] of string = ('--project', '--out', '--exe', '--app-version', '--db',
-    '--library-db', '--catalogue', '--map', '--bsi', '--creator', '--creator-email', '--help', '--output-encoding');
+    '--library-db', '--catalogue', '--map', '--bsi', '--creator', '--creator-email', '--help', '--output-encoding', '--output');
   /// <summary>The flags that take the next token as their value.</summary>
   SBOM_VALUE_FLAGS = [sfProject, sfOut, sfExe, sfAppVersion, sfDb, sfLibraryDb, sfCatalogue, sfMap, sfCreator,
-    sfCreatorEmail, sfOutputEncoding];
+    sfCreatorEmail, sfOutputEncoding, sfOutput];
 
 type
   /// <summary>The parsed flags of one sbom run.</summary>
@@ -509,7 +509,7 @@ begin
     end;
     case LFlag of
       sfProject   : pOpts.Project:= ExpandFileName(LValue);
-      sfOut       : pOpts.OutPath:= ExpandFileName(LValue);
+      sfOut, sfOutput: pOpts.OutPath:= ExpandFileName(LValue); { --output is canonical, --out the alias }
       sfExe       : pOpts.ExePath:= ExpandFileName(LValue);
       sfAppVersion: pOpts.AppVersion:= LValue;
       sfDb        : pOpts.DbPath:= ExpandFileName(LValue);

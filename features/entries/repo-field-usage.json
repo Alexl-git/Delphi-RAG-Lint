@@ -45,5 +45,11 @@
       "ask": "Is this field safe to drop, or does a DFM control or code still name it?",
       "command": "drag-lint repo field-usage --fields \"PRICE\" --project <project file>"
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "ab2e5e7e21bb576b9ea4f9add708dea8450b323ed6ae10d016791aa6d27a8445"
+  }
 }

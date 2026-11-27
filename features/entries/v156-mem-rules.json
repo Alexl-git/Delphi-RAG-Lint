@@ -25,5 +25,11 @@
       "example": "drag-lint lint <file.pas> --rule class-passed-as-interface --db <index.sqlite>"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "c64b3404080a52524931e776729b22b1e2683294f663e6e03895b52c13a944a5"
+  }
 }

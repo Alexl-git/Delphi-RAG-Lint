@@ -86,5 +86,11 @@
       "ask": "Which views and events does a form have?",
       "command": "drag-lint repo copy-grid --dfm <form.dfm> --list --from <view> --repo <file>"
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "4cb17aa42ed8f4cfdef41b2b8a847fe812032c602a12c3d2962f5c84bc08707c"
+  }
 }

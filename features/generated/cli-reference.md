@@ -1970,6 +1970,7 @@ drag-lint repo copy-grid --dfm <file.dfm> [--unit <file.pas>] (--from <view> --t
 drag-lint repo field-usage --fields "A,B,C" [--json] [--db <index> | --project <project file>]
 drag-lint repo read-dfm --dfm <file.dfm>[;...] [--dataset <Name>] --direction dfm-to-repo (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json] [--db <project index>] (the persistent fields of a form's datasets as a change set: data, calc, lookup, internal-calc and aggregate fields, captions / formats / widths, lookup wiring, OnCalcFields code as CALC_BODY with {{FIELD}} component macros, OnGetText / OnSetText / OnValidate / OnChange code and OnGetDisplayText / OnCustomDrawCell code of TcxGridDBTableView columns, the column order of table and banded grid views and each column's in-place editor, PropertiesClassName and its Properties.* lines as the form has them (DL_GRID_COLUMNS; the editor needs schema 5, an older repository gets a warning); code in generated DLFR regions is not read back; needs a schema-4 repository or later; text or binary DFM, BDE or FireDAC; the table comes from UpdateTableName, TableName or a one-table SELECT, a join gives every field its own table, a calc reading several tables goes to the child end with {{ALIAS.FIELD}} inputs (alias = the table name) and DL_FIELD_INPUTS / DL_RELATIONS rows (the form's ON / WHERE joins choose the path; a join on a parent key with no FK is offered as a FORM relation, unchecked), a memory table takes the source of its AttachedTo or of a literal AttachTable / CloneCursor / CopyDataSet / CopyData / AppendData / Data := (cycle or two sources = unresolved), a link source, a lookup dataset and a grid's dataset that the module only inherits are read from the DFM of the ancestor form / data module (ancestor class from the unit beside the DFM, the one DFM of the same folder with that root class; not found or two = a warning, nothing picked), AttachTable(X.Table, ...) links to dataset X, an inherited dataset of an inherited form or module is itself read from the ancestor DFM (handler code from the unit of the form that states it), a module dmX.tblY that is not in the form's folder is found through the units the form's unit uses, in the project folder (nearest folder with a .dpr/.dproj/.dpk, up to three levels up) and below it, folders starting with __ or . left out, two candidates = a warning, nothing picked, anything else is listed as UNRESOLVED; with --dataset --json also lists the persistent fields and the repository fields of the table; --db <project index> = the index the lineage facts are read from: a persistent data field without a table column that code fills from other fields is proposed as insert DL_FIELDS_INFO T|F: derived(direct|aggregate); inputs {{..}} + insert DL_FIELD_INPUTS T|F||ALIAS, all unchecked (write them with --select), without it one warning lineage: skipped (no index); no --apply = dry run; exit 1 read / apply failure, 2 usage or a bad --select file)
 drag-lint repo write-dfm --dfm <file.dfm>[;...] [--dataset <Name> [--names <FIELD,...>|all]] --direction repo-to-dfm (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]
+drag-lint repo gen-wiki (--repo <file> | --project <file>) --output <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -2029,7 +2030,6 @@ drag-lint repo write-dfm --dfm <file.dfm>[;...] [--dataset <Name> [--names <FIEL
 | `--keep` | `<N>` |  |  |
 | `--fields` | `A,B,C` |  |  |
 | `--names` | `<FIELD,...>\|all` |  |  |
-| `--out` | `<dir>` |  |  |
 | `--per-field` |  |  |  |
 
 Described in:
@@ -2145,13 +2145,13 @@ Described in [safe-delete](../../docs/wiki/safe-delete.md).
 Writes a CycloneDX 1.6 JSON software bill of materials for a project from its index: the application, its library components and their dependencies.
 
 ```text
-drag-lint sbom --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>] [--map <file.map>] [--bsi] [--creator <name>] [--creator-email <address>]
+drag-lint sbom --project <x.dproj> [--output <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>] [--map <file.map>] [--bsi] [--creator <name>] [--creator-email <address>]
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--project` | `<x.dproj>` |  |  |
-| `--out` | `<file.cdx.json>` |  |  |
+| `--output` | `<file.cdx.json>` |  |  |
 | `--exe` | `<delivered.exe>` |  |  |
 | `--app-version` | `<v>` |  |  |
 | `--db` | `<project.sqlite>` |  |  |

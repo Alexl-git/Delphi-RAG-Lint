@@ -64,5 +64,11 @@
       "ask": "Which place did a hit come from?",
       "command": "drag-lint query --concept \"<words>\" --json --db <db>"
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "ed276bfefa42e463c873afb6a34f44264bf4359bcce32df3ba34bb8a396a588f"
+  }
 }

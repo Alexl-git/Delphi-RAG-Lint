@@ -48,12 +48,15 @@ param(
   [Parameter(Mandatory)][Alias('Qname','Unit','Form','Interface','Type')][string] $Target,
   [Parameter(Mandatory)][string] $DbPath,
   # 'implementors' (1.40) is answered in-process by `drag-lint ask` only -- there is no Emit-Implementors.ps1
+  # The 12 questions after it (1.56: value-origin .. change-coupling) are answered in-process by `drag-lint ask` only, the same way.
   [ValidateSet('butterfly','deps','who-calls','what-it-calls','who-writes','who-reads',
                'hierarchy','class-surface','event-wiring','touches-tables',
                'lifecycle','cycles','wiring','effects','architecture',
                'protocol-trace','crosses-boundary','shown-where','change-impact','tested-by',
                'exception-paths','consumers','feeds-from','lands-where','round-trip','path',
-               'implementors')]
+               'implementors',
+               'value-origin','value-use','class-diagram','sequence','control-flow','sent-not-handled',
+               'dependency-matrix','main-sequence','architecture-delta','risk','hotspots','change-coupling')]
   [string] $Question = 'butterfly',
   # crosses-boundary only: the other half of the system, so the far side of a
   # protocol command can be named. Optional -- without it the chart shows one side

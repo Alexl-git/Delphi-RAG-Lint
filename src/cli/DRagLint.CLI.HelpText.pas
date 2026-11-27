@@ -579,7 +579,7 @@ begin
   Writeln('                               unknown --level, --save/--trend with --in, --trend with fewer than two snapshots; 3 = unknown flag.');
   Writeln('  drag-lint repo copy-grid      --dfm <file.dfm> [--unit <file.pas>] (--from <view> --to <view> [--event <name> [--from-column <col> [--to-column <col>]]] | --list [--from <view>]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]   (copies the events of a grid view, its columns and their events to another view of the SAME form, between table / banded table / card / layout views, or with --event ONE event; a new column is declared in the unit; every byte outside a change stays, the new text is checked by the Delphi reader first, each changed file gets a backup; what cannot be settled is BLOCKED, what needs a look is unchecked; --list shows the views and, with --from, their events; the repository is not opened; no --apply = dry run; a --select ' +
     'file needs the # plan line of its dry run; exit 1 view / event / write failure or a changed plan, 2 usage)');
-  Writeln('  drag-lint sbom               --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]');
+  Writeln('  drag-lint sbom               --project <x.dproj> [--output <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]');
   Writeln('                               [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]');
   Writeln('                               [--map <file.map>] [--bsi [--creator <name>] [--creator-email <address>]]');
   Writeln('                               CycloneDX 1.6 JSON software bill of materials from the project index (source closure).');
@@ -597,7 +597,7 @@ begin
   Writeln('                               filled is NOT invented, it is named per component as drag-lint:bsi:unfilled (summary on stderr).');
   Writeln('                               Limits, stated in the document (compositions "incomplete", drag-lint:sbom:scope): runtime packages');
   Writeln('                               and DLLs are not listed; no VEX. --library-db none = direct uses only.');
-  Writeln('                               Exit 0 = written (--out, else stdout); 1 = an index, the catalogue, --exe or --map cannot be read;');
+  Writeln('                               Exit 0 = written (--output, else stdout); 1 = an index, the catalogue, --exe or --map cannot be read;');
   Writeln('                               2 = no --project / no index for it / --creator-email is no address; 3 = unknown flag.');
   Writeln('  drag-lint repo field-usage    --fields "A,B,C" [--json] [--db <index> | --project <project file>]   (read-only: where the project index finds each field, as the kinds dfm, grid, lookup, code; a field nothing uses is left out; the IDE Select Fields dialog draws its usage icons from it)');
   Writeln('  drag-lint happens-before     (--a <event> --b <event> | --preset <name>) --db <db> [--json] [--max-routines N] [--max-seconds S]');
@@ -748,10 +748,10 @@ begin
   Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
   Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
   Writeln('       see wiki page: query-text-near');
-  Writeln('  drag-lint repo gen-wiki (--repo <file> | --project <file>) --out <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]');
-  Writeln('       see wiki page: repo-gen-wiki');
   Writeln('  drag-lint repo backup (--repo <file> | --project <project file>) [--format text|sql|zip] [--output <file>]');
   Writeln('       see wiki page: repo-backup-formats');
+  Writeln('  drag-lint repo gen-wiki (--repo <file> | --project <file>) --output <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]');
+  Writeln('       see wiki page: repo-gen-wiki');
   Writeln('  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason "<text>" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)');
   Writeln('       see wiki page: v152-disable-rule');
   Writeln('  drag-lint settings list|get|set|unset [<key> [<value>]] [--local] [--project <.dproj> | --db <db> | --in <file>] [--json|--format json]   (per-project settings in _D-RAG\drag-lint-project.json; --local = this machine only, _D-RAG\drag-lint-project.local.json; exit 0 done, 1 nothing to do, 2 refused)');
@@ -1758,7 +1758,7 @@ begin
   end;
   if pVerb = 'sbom' then
   begin
-    Writeln('  drag-lint sbom               --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]');
+    Writeln('  drag-lint sbom               --project <x.dproj> [--output <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]');
     Writeln('                               [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]');
     Writeln('                               [--map <file.map>] [--bsi [--creator <name>] [--creator-email <address>]]');
     Writeln('                               CycloneDX 1.6 JSON software bill of materials from the project index (source closure).');
@@ -1776,7 +1776,7 @@ begin
     Writeln('                               filled is NOT invented, it is named per component as drag-lint:bsi:unfilled (summary on stderr).');
     Writeln('                               Limits, stated in the document (compositions "incomplete", drag-lint:sbom:scope): runtime packages');
     Writeln('                               and DLLs are not listed; no VEX. --library-db none = direct uses only.');
-    Writeln('                               Exit 0 = written (--out, else stdout); 1 = an index, the catalogue, --exe or --map cannot be read;');
+    Writeln('                               Exit 0 = written (--output, else stdout); 1 = an index, the catalogue, --exe or --map cannot be read;');
     Writeln('                               2 = no --project / no index for it / --creator-email is no address; 3 = unknown flag.');
     Exit;
   end;

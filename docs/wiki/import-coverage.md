@@ -4,7 +4,7 @@ Reads a Delphi code-coverage report and keeps, per routine, how many lines ran. 
 ([ask-risk](ask-risk)) uses it to rank complex, untested routines.
 
 ```
-drag-lint import-coverage --file <report.xml> --db <file.sqlite> [--json]
+drag-lint import-coverage --in <report.xml> --db <file.sqlite> [--json]
 ```
 
 ## Formats
@@ -26,5 +26,5 @@ A record matches an indexed routine when the file base name is the same (any cas
 record that matches no routine, every report file that matches no indexed file, and counts the indexed routines
 that have no record. Those routines score as 0% covered in `ask risk`.
 
-Exit 0 = imported; 1 = sidecar not writable; 2 = missing `--file` / `--db`, file or index missing, no routine record
+Exit 0 = imported; 1 = sidecar not writable; 2 = missing `--in` / `--db`, file or index missing, no routine record
 in the report; 3 = unknown flag.

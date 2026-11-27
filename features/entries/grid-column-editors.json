@@ -31,5 +31,11 @@
       "command": "drag-lint repo migrate --repo <file> --apply"
     }
   ],
-  "access": "cli-only"
+  "access": "cli-only",
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
+  }
 }
