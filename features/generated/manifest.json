@@ -5331,7 +5331,7 @@
       "verified": {
         "date": "2026-11-26",
         "by": "ENGINE",
-        "build": "1.54.1-alpha",
+        "build": "1.55.0-alpha",
         "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
       }
     },
@@ -15768,6 +15768,11 @@
           "type": "ide-menu",
           "path": "drag-lint > Field Repository > Select Fields of Dataset...",
           "steps": ["Open the form; select the dataset in the designer, or pick it from the list", "Choose drag-lint > Field Repository > Select Fields of Dataset...", "Check the fields the dataset should have and press Preview...", "Check the changes you want and press Apply (repo write-dfm --names --select); the form is reloaded"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Field Repository > Copy Grid Columns...",
+          "steps": ["Choose drag-lint > Field Repository > Copy Grid Columns...", "In 1.56 this row is a placeholder that only shows a message; the grid-copy lanes fill it"]
         }
       ],
       "audience": "both",
@@ -15859,7 +15864,7 @@
       "verified": {
         "date": "2026-11-26",
         "by": "ENGINE",
-        "build": "1.54.1-alpha",
+        "build": "1.55.0-alpha",
         "surfaceHash": "4db3bbef6db4dcc00dd5e677a2235e4d64ea6ff16e426b3b3511f1fde004e73c"
       }
     },
@@ -16213,8 +16218,8 @@
       "verified": {
         "date": "2026-11-26",
         "by": "ENGINE",
-        "build": "1.54.1-alpha",
-        "surfaceHash": "ba9cdc84f27bccd03b2496fb320d7bd370b690c06bf1f9e495e17aa3b7fa299d"
+        "build": "1.55.0-alpha",
+        "surfaceHash": "bbf8410e53bf53f7bd8cb8a307a9912cf90b438969d11af9d6924c57a28d97e0"
       }
     },
     {
@@ -16586,7 +16591,7 @@
       "verified": {
         "date": "2026-11-26",
         "by": "ENGINE",
-        "build": "1.54.1-alpha",
+        "build": "1.55.0-alpha",
         "surfaceHash": "b3c68c0e777b0e4c018d9429d0a8d43b308cddceea25b1c75066096f994808da"
       }
     },
@@ -16656,7 +16661,7 @@
       "verified": {
         "date": "2026-11-26",
         "by": "ENGINE",
-        "build": "1.54.1-alpha",
+        "build": "1.55.0-alpha",
         "surfaceHash": "51211977d794e6edf60b41b4660a128a02069cfdfd6d07770bbd61c688d59b4b"
       }
     },
@@ -16703,8 +16708,8 @@
       "verified": {
         "date": "2026-11-26",
         "by": "ENGINE",
-        "build": "1.54.1-alpha",
-        "surfaceHash": "14384b5823f8afb2ba9d3c60d8b7e94e0938e5549c5c792e01f5780723e08111"
+        "build": "1.55.0-alpha",
+        "surfaceHash": "133984b9ba60d9074614f47a88b1c25ae730c69231ee9ff41857b6d71f134cd1"
       }
     },
     {
@@ -17049,7 +17054,7 @@
       "verified": {
         "date": "2026-11-26",
         "by": "ENGINE",
-        "build": "1.54.1-alpha",
+        "build": "1.55.0-alpha",
         "surfaceHash": "9bbdf57ce772311852bfdd8688e80bee40f0cd97ab228f13a4ac235af7bdfd1d"
       }
     },
@@ -17134,7 +17139,7 @@
       "verified": {
         "date": "2026-11-26",
         "by": "ENGINE",
-        "build": "1.54.1-alpha",
+        "build": "1.55.0-alpha",
         "surfaceHash": "8a252b87fe2b4ff63e81a933d9c2b4f678f120892232a418c925d5945d96145b"
       }
     },

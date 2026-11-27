@@ -25,7 +25,7 @@ implementation
 uses
   DragLint.Plugin.Cmd152;
 
-procedure InvokeGridCopy(pSender: TObject);
+procedure InvokeGridCopy(pSender: TObject);  // dl:ok unused-parameter@1fb2 -- TCmd152Click signature; stub ignores the sender
 begin
   Cmd152NotYetAvailable(GRID_COPY_CMD_ID);
 end;
