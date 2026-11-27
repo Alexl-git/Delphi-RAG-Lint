@@ -38,7 +38,10 @@ foreach ($f in $files) {
 }
 function Count($k) { if ($decl.ContainsKey($k)) { @($decl[$k]).Count } else { 0 } }
 Assert "TDfmNode declared once (found $(Count 'TDfmNode'): $(@($decl['TDfmNode']) -join ', '))" ((Count 'TDfmNode') -eq 1)
-Assert "TDfmProp declared once (positive control, found $(Count 'TDfmProp'))" ((Count 'TDfmProp') -eq 1)
+# 1.56: DRagLint.Index.RepoCopy declares a PRIVATE implementation-section TDfmProp record (its own .dfm reader), not a
+# global name; the positive control is the V151.Dfm.Common declaration, seen exactly once, and no third unit.
+$propUnits = @($decl['TDfmProp'])
+Assert "TDfmProp declared once in DRagLint.V151.Dfm.Common (positive control, found: $($propUnits -join ', '))" ((@($propUnits | Where-Object { $_ -eq 'DRagLint.V151.Dfm.Common.pas' }).Count -eq 1) -and (@($propUnits | Where-Object { $_ -notin 'DRagLint.V151.Dfm.Common.pas', 'DRagLint.Index.RepoCopy.pas' }).Count -eq 0))
 Assert "TReemitDfmNode declared once in Convert.DfmReemit (found $(Count 'TReemitDfmNode'))" (((Count 'TReemitDfmNode') -eq 1) -and ($decl['TReemitDfmNode'][0] -eq 'DRagLint.Convert.DfmReemit.pas'))
 $clash = @()
 foreach ($f in $files) {
