@@ -79,14 +79,14 @@ type
 /// <summary>Reads the first object line of a text or binary DFM without parsing the file.</summary>
 /// <param name="pFile">Path of a DFM.</param>
 /// <returns>Kind, name and class of the root; all '' when the file is missing, unreadable or holds no object.</returns>
-function ReadDfmRootHead(const pFile: string): TDfmrRootHead;
+function ReadDfmRootHead(const pFile: string): TDfmrRootHead;  // dl:ok unused-public-symbol@7af7 -- REVIEWED 2026-11-27 GCR-2: tested on its own by tests/fieldrepo/DfmReadInheritTests.dpr, which is outside this project index
 
 /// <summary>The ancestor class a unit declares for a class: `TClass = class(TAncestor, ...)`.</summary>
 /// <param name="pUnitText">Unit source; comments and strings are not read.</param>
 /// <param name="pClass">Class name, case-insensitive.</param>
 /// <returns>The ancestor's bare name (unit qualifier and type arguments removed); '' when the unit does not declare
 /// the class with an ancestor.</returns>
-function AncestorClassOf(const pUnitText, pClass: string): string;
+function AncestorClassOf(const pUnitText, pClass: string): string;  // dl:ok unused-public-symbol@0ca5 -- REVIEWED 2026-11-27 GCR-2: tested on its own by tests/fieldrepo/DfmReadInheritTests.dpr, which is outside this project index
 
 /// <summary>An `inherited` dataset completed from its ancestor's.</summary>
 /// <param name="pOwn">The dataset as the descendant DFM states it.</param>
@@ -94,7 +94,7 @@ function AncestorClassOf(const pUnitText, pClass: string): string;
 /// <returns>The ancestor's dataset with pOwn's name, class and kind; UpdateTableName, TableName, Sql, OnCalcFields
 /// and AttachedTo are pOwn's where pOwn states one; Fields = the ancestor's, then the fields pOwn adds;
 /// InheritedFields = pOwn's overridden fields the ancestor does not have.</returns>
-function MergeInherited(const pOwn, pAncestor: TDfmrDataset): TDfmrDataset;
+function MergeInherited(const pOwn, pAncestor: TDfmrDataset): TDfmrDataset;  // dl:ok unused-public-symbol@8449 -- REVIEWED 2026-11-27 GCR-2: tested on its own by tests/fieldrepo/DfmReadInheritTests.dpr, which is outside this project index
 
 /// <summary>The units a unit names in its uses clauses, interface and implementation.</summary>
 /// <param name="pUnitText">Unit source; comments, strings (the path of `in '...'`) and directives are not read, so a

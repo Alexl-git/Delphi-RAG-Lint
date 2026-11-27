@@ -1,4 +1,4 @@
-unit DRagLint.FieldRepo.DfmReadPlan;
+unit DRagLint.FieldRepo.DfmReadPlan;  // dl:ok unit-too-large@0940 -- REVIEWED 2026-11-27 GCR-2: 2617 lines before this lane, which added the public resolver and planner-host declarations with their DocInsight text; splitting planner and applier is a refactor of its own, in no 1.56 row
 
 (* drag-lint 1.54 -- lane TT-DFMREAD: the DFM -> repository change set and its applier (design
   2026-11-22-field-repository-v2-design.md sections 3, 4 and 9; plan 2026-11-23-fr-dfmread.md).
@@ -425,7 +425,7 @@ type
     Context: TDfmrCodeContext;
   end;
 
-  TDfmRead = class(TDfmrPlanHost)  // dl:ok high-response@327f -- REVIEWED 2026-11-23 TT-DFMREAD (2026-11-27 GCR-2: re-read with the nine one-line TDfmrPlanHost overrides): one read = collect facts + compare; private to the unit, its response set is FireDAC, dictionary and string calls
+  TDfmRead = class(TDfmrPlanHost)  // dl:ok high-response@327f, god-class@327f -- REVIEWED 2026-11-23 TT-DFMREAD (2026-11-27 GCR-2: re-read with the nine one-line TDfmrPlanHost overrides): one read = collect facts + compare; private to the unit, its response set is FireDAC, dictionary and string calls
   strict private
     FRepo: TFDConnection;
     FPlan: TDfmrPlan;

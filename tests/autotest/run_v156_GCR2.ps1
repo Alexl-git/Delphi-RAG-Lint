@@ -94,7 +94,7 @@ try {
   ReadDfm (Join-Path $fix 'sub\uSub.dfm')
   Check 'X3 a form below the project file finds the module in a sibling folder' (Ch 'dataset uSub\.dfm memCust \(TFDMemTable\) -> CUSTOMERS \(via CopyDataSet dmMod\.tblCust\): 1 data') $o
 
-  $bare = Join-Path $work 'bare'
+  $bare = Join-Path $work 'l3\l2\bare' # three folders of its own above sub\: the search for a project file ends inside $work
   CopyTree $fixSrc $bare
   [IO.File]::Delete((Join-Path $bare 'App.dpr'))
   ReadDfm (Join-Path $bare 'sub\uSub.dfm')
