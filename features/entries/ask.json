@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "ask",
       "example": "drag-lint ask who-writes --target U.TForm.FField --project P.dproj",
-      "usage": "drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>] [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale] [--plain] [--open] [--resolve-only]",
+      "usage": "drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>] [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N] [--since <rev|YYYY-MM-DD>] [--min-support N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale] [--plain] [--open] [--resolve-only]",
       "flags": [
         {
           "name": "--question",
@@ -76,6 +76,14 @@
           "arg": "N"
         },
         {
+          "name": "--since",
+          "arg": "<rev|YYYY-MM-DD>"
+        },
+        {
+          "name": "--min-support",
+          "arg": "N"
+        },
+        {
           "name": "--out-root",
           "arg": "<dir>"
         },
@@ -97,7 +105,7 @@
         }
       ],
       "helpOrder": 8,
-      "help": ["  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]", "                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]", "                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]", "                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:", "                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process", "                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.", "                               --question <id> is the same as the positional <question>."]
+      "help": ["  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]", "                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]", "                               [--mode write|read|both] [--max-rows N] [--since <rev|YYYY-MM-DD>] [--min-support N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]", "                               [--plain] [--open] [--resolve-only]   one report question (39 ids; `ask --help` lists them) as text:", "                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process", "                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.", "                               --question <id> is the same as the positional <question>.", "                               --since / --min-support: change-coupling only (the history read; the least shared commits of a pair).", "                               --counterpart-db: the other index of crosses-boundary, sent-not-handled and architecture-delta (--db is the AFTER index)."]
     },
     {
       "type": "ide-menu",

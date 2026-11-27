@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.56.0-alpha",
   "summary": "repo read-dfm follows link sources, lookups and grid datasets, and inherited datasets, into the ancestor DFM, and finds modules of used units in the project",
-  "intro": "Read this when repo read-dfm reports a memory table or a lookup as unresolved although its source is a dataset of an inherited data module. drag-lint finds the ancestor class in the unit beside the DFM and reads the one DFM of the same folder that has it, also for inherited datasets; a module of a used unit elsewhere in the project folder is found too. What it cannot follow is a warning that names the reason; nothing is picked. AttachTable(X.Table) links to dataset X.",
+  "intro": "Read this when repo read-dfm reports a memory table or a lookup as unresolved although its source is a dataset of an inherited data module. drag-lint finds the ancestor class in the unit beside the DFM and reads the one DFM of the same folder that has it, also for inherited datasets; a module of a used unit elsewhere in the project folder or on the project's unit search path is found too, and an ancestor form in another folder. What it cannot follow is a warning that names the reason; nothing is picked. AttachTable(X.Table) links to dataset X.",
   "wikiPage": "repo-read-dfm-ancestor",
   "surfaces": [
     {

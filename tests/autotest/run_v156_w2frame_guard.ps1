@@ -33,6 +33,7 @@ $srcUnits += 'charts\DRagLint.Charts.Adapter.Grid.pas'
 $questions = [ordered]@{
   'class-diagram' = 'ClassDiagram'; 'sequence' = 'Sequence'; 'control-flow' = 'ControlFlow'
   'sent-not-handled' = 'SentNotHandled'; 'dependency-matrix' = 'DepMatrix'; 'main-sequence' = 'MainSequence'
+  'architecture-delta' = 'ArchDelta'; 'risk' = 'Risk'; 'hotspots' = 'Hotspots'; 'change-coupling' = 'ChangeCoupling'
 }
 foreach ($q in $questions.Values) { $srcUnits += "charts\DRagLint.Charts.Q.$q.pas" }
 # verb -> CLI unit suffix (the function is Run<suffix>Verb)

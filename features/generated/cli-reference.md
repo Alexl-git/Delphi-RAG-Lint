@@ -68,7 +68,7 @@ Described in [arch-diagram](../../docs/wiki/arch-diagram.md).
 Ask one report question and print the answer as text.
 
 ```text
-drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>] [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale] [--plain] [--open] [--resolve-only]
+drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>] [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N] [--since <rev|YYYY-MM-DD>] [--min-support N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale] [--plain] [--open] [--resolve-only]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -88,6 +88,8 @@ drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db
 | `--control` | `<C>` |  |  |
 | `--mode` | `write\|read\|both` |  |  |
 | `--max-rows` | `N` |  |  |
+| `--since` | `<rev\|YYYY-MM-DD>` |  |  |
+| `--min-support` | `N` |  |  |
 | `--out-root` | `<dir>` |  |  |
 | `--pairs-file` | `<f.json>` |  |  |
 | `--allow-stale` |  |  |  |

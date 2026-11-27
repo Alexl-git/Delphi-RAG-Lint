@@ -29,8 +29,14 @@ function Check([string]$name, [bool]$ok, [string]$detail = '') {
   if ($ok) { $script:pass++; Write-Host "PASS  $name" } else { $script:fail++; Write-Host "FAIL  $name  $detail" -ForegroundColor Red }
 }
 function Run-Engine([string[]]$a) {
-  $out = & $Exe @a 2>&1 | Out-String
-  [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
+  # ProcessStartInfo with redirected streams: the engine's stderr ('loaded defaults' ...) must not become a
+  # NativeCommandError under $ErrorActionPreference = 'Stop' (the way run_v156_FB1.ps1's Lane-Run does it).
+  $psi = [Diagnostics.ProcessStartInfo]::new($Exe)
+  foreach ($x in $a) { $psi.ArgumentList.Add($x) }
+  $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.UseShellExecute = $false
+  $p = [Diagnostics.Process]::Start($psi)
+  $o = $p.StandardOutput.ReadToEndAsync(); $e = $p.StandardError.ReadToEndAsync(); $p.WaitForExit()
+  [pscustomobject]@{ Code = $p.ExitCode; Text = ($o.Result + $e.Result) }
 }
 function Index-Fixture([string]$dir, [string]$db) {
   if (Test-Path $db) { [IO.File]::Delete($db) }

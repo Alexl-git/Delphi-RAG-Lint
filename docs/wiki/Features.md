@@ -369,6 +369,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Find Dead Code](Find-Dead-Code) | drag-lint > Code Quality > Find Dead Code...; `find-deadcode` |  |
 | [Forms for testers (CSV)](Generate-Test-Helper-CSV) | drag-lint > Reports > Forms for testers (CSV)...; `forms-csv` |  |
 | [Impact / Blast Radius (symbol)](Impact-Blast-Radius-symbol) | drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...; `impact` |  |
+| [import-coverage](import-coverage) | `import-coverage` | internal |
 | [Interface Implementors Report](interface-implementors) | `implementors`; `query implementors`; `mcp get_implementors`; `lsp textDocument/implementation`; `lsp textDocument/codeLens` |  |
 | [metrics](metrics) | `metrics` |  |
 | [Migrate saved reports](migrate-reports) | `migrate-reports` |  |
@@ -389,7 +390,7 @@ Ask a question about a symbol and get a clickable chart.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [ask](ask) | `ask`; drag-lint > Reports |  |
-| [Chart questions](Diagrams-and-Charts) | 35 questions; `ask`; drag-lint > Reports |  |
+| [Chart questions](Diagrams-and-Charts) | 39 questions; `ask`; drag-lint > Reports |  |
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md`; drag-lint > Reports |  |
 | [Click-to-source: the draglint:// handler](Draglint-Protocol-Handler) | `protocol`; `drag-lint-open.exe` |  |
 | [Compare a report with current code](compare) | `compare`; drag-lint > Reports > Compare a Saved Report or Chart with Current Code... |  |

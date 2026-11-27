@@ -187,11 +187,13 @@ begin
   Writeln('                               a stale schema; 3 = unknown flag.');
   Writeln('  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]');
   Writeln('                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]');
-  Writeln('                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]');
-  Writeln('                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:');
+  Writeln('                               [--mode write|read|both] [--max-rows N] [--since <rev|YYYY-MM-DD>] [--min-support N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]');
+  Writeln('                               [--plain] [--open] [--resolve-only]   one report question (39 ids; `ask --help` lists them) as text:');
   Writeln('                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process');
   Writeln('                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.');
   Writeln('                               --question <id> is the same as the positional <question>.');
+  Writeln('                               --since / --min-support: change-coupling only (the history read; the least shared commits of a pair).');
+  Writeln('                               --counterpart-db: the other index of crosses-boundary, sent-not-handled and architecture-delta (--db is the AFTER index).');
   Writeln('  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]');
   Writeln('                               of these type names, which does THIS file actually REFERENCE? Answers a');
   Writeln('                               LIST in one pass (an RTL surface, say). Counts declarations, X.Create');
@@ -617,7 +619,15 @@ begin
   Writeln('                               --preset randomize = --a extcall:Randomize --b extcall:Random.');
   Writeln('                               --preset format-settings = --a extwrite:FormatSettings --b extcall: of the RTL format / parse routines.');
   Writeln('                               --preset before-app-run --a <event> = B is app-run:* (does A happen before Application.Run?).');
-  Writeln('                               Not built: presets finalization, use-after-free, lock-held-when.');
+  Writeln('                               In-force question (lane HB6): --a free:<QName> / final-free:<QName> / held:<QName> is a STATE that lasts');
+  Writeln('                               from a site of A until a re-assignment (free) or any other mention of the lock (held); B is often use:<QName>.');
+  Writeln('                               free / final-free: YES = a site of B runs with A in force, NO = none can (b-never-after-a) or A never happens,');
+  Writeln('                               MAY = b-may-run-after-a. held: YES = in force at every site of B. Proofs in-force, reassigned-first,');
+  Writeln('                               finalization-order. JSON carries question: in-force.');
+  Writeln('                               --preset use-after-free --a <QName> = A free:X, B use:X (wanted: NO).');
+  Writeln('                               --preset finalization --a <QName> = A final-free:X, B use:X (wanted: NO; unit variable or class var).');
+  Writeln('                               --preset lock-held-when --a <QName> --b <event> = A held:L (wanted: YES).');
+  Writeln('                               Limits of the in-force question: aliases-not-followed, callbacks-not-modelled.');
   Writeln('                               Limits: sites are not instances (instance-insensitive); extcall: matches by name (matched-by-name);');
   Writeln('                               pre-check (call graph alone, no body solved); program-order: relied-on-handler-order and');
   Writeln('                               program-order: relied-on-indirect-edges (what a program-order YES leaned on; a NO never does).');
@@ -985,11 +995,13 @@ begin
   begin
     Writeln('  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]');
     Writeln('                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]');
-    Writeln('                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]');
-    Writeln('                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:');
+    Writeln('                               [--mode write|read|both] [--max-rows N] [--since <rev|YYYY-MM-DD>] [--min-support N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]');
+    Writeln('                               [--plain] [--open] [--resolve-only]   one report question (39 ids; `ask --help` lists them) as text:');
     Writeln('                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process');
     Writeln('                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.');
     Writeln('                               --question <id> is the same as the positional <question>.');
+    Writeln('                               --since / --min-support: change-coupling only (the history read; the least shared commits of a pair).');
+    Writeln('                               --counterpart-db: the other index of crosses-boundary, sent-not-handled and architecture-delta (--db is the AFTER index).');
     Exit;
   end;
   if pVerb = 'rules' then
@@ -1789,7 +1801,15 @@ begin
     Writeln('                               --preset randomize = --a extcall:Randomize --b extcall:Random.');
     Writeln('                               --preset format-settings = --a extwrite:FormatSettings --b extcall: of the RTL format / parse routines.');
     Writeln('                               --preset before-app-run --a <event> = B is app-run:* (does A happen before Application.Run?).');
-    Writeln('                               Not built: presets finalization, use-after-free, lock-held-when.');
+    Writeln('                               In-force question (lane HB6): --a free:<QName> / final-free:<QName> / held:<QName> is a STATE that lasts');
+    Writeln('                               from a site of A until a re-assignment (free) or any other mention of the lock (held); B is often use:<QName>.');
+    Writeln('                               free / final-free: YES = a site of B runs with A in force, NO = none can (b-never-after-a) or A never happens,');
+    Writeln('                               MAY = b-may-run-after-a. held: YES = in force at every site of B. Proofs in-force, reassigned-first,');
+    Writeln('                               finalization-order. JSON carries question: in-force.');
+    Writeln('                               --preset use-after-free --a <QName> = A free:X, B use:X (wanted: NO).');
+    Writeln('                               --preset finalization --a <QName> = A final-free:X, B use:X (wanted: NO; unit variable or class var).');
+    Writeln('                               --preset lock-held-when --a <QName> --b <event> = A held:L (wanted: YES).');
+    Writeln('                               Limits of the in-force question: aliases-not-followed, callbacks-not-modelled.');
     Writeln('                               Limits: sites are not instances (instance-insensitive); extcall: matches by name (matched-by-name);');
     Writeln('                               pre-check (call graph alone, no body solved); program-order: relied-on-handler-order and');
     Writeln('                               program-order: relied-on-indirect-edges (what a program-order YES leaned on; a NO never does).');

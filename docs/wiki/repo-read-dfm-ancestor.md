@@ -77,9 +77,15 @@ folder of the form (one DFM with the root object `dmX`). When that folder has no
    `X.dfm: 2 DFMs of the used unit uMod have the root dmX (dm\uMod.dfm, old\uMod.dfm): module not read` and nothing
    is picked.
 
-A module whose unit the form does not use, and a module outside the project folder (a search-path folder elsewhere),
-are not found: the dataset stays `UNRESOLVED (linked to dmX.tblY (...), which is no dataset of the form or of a module
+A module whose unit the form does not use is not found: the dataset stays `UNRESOLVED (linked to dmX.tblY (...), which is no dataset of the form or of a module
 beside it)`.
+
+## Search path, ancestor in another folder, inherited code (1.56 GCR-3)
+
+* **Search path.** When the project folder holds no DFM of the used unit, the `DCC_UnitSearchPath` of the `.dproj` found as above (the base groups and the active configuration's group) is searched too: every entry without an unresolved `$(...)` macro is a folder (`$(DCC_UnitSearchPath)` itself is skipped), and `<uUnit>.dfm` is looked for flat in it. Hits join the same candidate list: two candidates are still a warning and nothing is picked.
+* **Ancestor form in another folder.** When the form's own folder holds no DFM with the ancestor class, the ancestor is looked for by its class among the DFMs of the module finder (project folder, search path); the own folder still wins.
+* **Inherited code.** For a component the form inherits, the link sources, the field writes and the calc bodies are read from the units of the ancestor chain (the unit of the form that states them), not only from the descendant's unit; a calc body of an inherited JOIN dataset is looked for in the same chain.
+* **Write side.** `repo write-dfm` no longer proposes removing a derived field (a `DL_FIELDS_INFO` row with `DERIVED_KIND`) that the selection leaves out; derived rows are not table data.
 
 ## `AttachTable(X.Table, ...)`
 

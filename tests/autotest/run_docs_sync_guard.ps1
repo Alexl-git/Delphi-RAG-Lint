@@ -221,6 +221,7 @@ Write-Host '-- check 1: verbs' -ForegroundColor Cyan
 # ASSERTED below, both directions: an entry that is no longer accepted is stale
 # and must be deleted, and an entry that HAS since been documented is stale too.
 $UndocumentedOnPurpose = [ordered]@{
+  'import-coverage'     = '1.56 G51: registry status internal, not advertised -- its EMMA reader was written from a hand-made fixture and has not read a real DelphiCodeCoverage report yet; advertise once verified.'
   'verify-index'        = '1.53.0 LSP1-VERIFY: internal measurement verb (index vs DelphiLSP); registry status internal, not advertised until 1.53.1.'
   'shutdown'            = '1.52 Q15: hidden alias of stop-now (the autonomy guard matches the old name); accepted, not advertised.'
   'selftest'            = 'umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\. Not a user verb.'

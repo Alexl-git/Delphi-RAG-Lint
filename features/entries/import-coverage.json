@@ -3,7 +3,7 @@
   "title": "import-coverage",
   "group": "graphs-reports",
   "owner": "ENGINE",
-  "status": "shipped",
+  "status": "internal",
   "since": "1.56.0-alpha",
   "summary": "Imports a Delphi code-coverage report (DelphiCodeCoverage EMMA XML, or Cobertura XML) beside the index, reports every record that matches no routine, and feeds the ask risk chart",
   "intro": "Read this when your tests already produce a coverage report and you want to know which complex routines they leave untested. import-coverage matches the report to the indexed routines by file and routine name, stores the records next to the index, and lists everything that did not match; ask risk then ranks the routines by complexity times missing coverage.",
@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "import-coverage",
-      "usage": "drag-lint import-coverage --file <report.xml> --db <file.sqlite> [--json]",
+      "usage": "drag-lint import-coverage --file <report.xml> --db <file.sqlite> [--json] (internal: accepted, not advertised; the EMMA reader is unverified against a real DelphiCodeCoverage report)",
       "flags": [
         {
           "name": "--file",
@@ -25,17 +25,6 @@
         {
           "name": "--json"
         }
-      ],
-      "helpOrder": 116,
-      "help": [
-        "  drag-lint import-coverage    --file <report.xml> --db <db> [--json]",
-        "                               import a Delphi code-coverage report (DelphiCodeCoverage EMMA XML; Cobertura XML also read) into <db>.coverage.json",
-        "                               beside the index (the index is not written; a re-import replaces the file). A record matches an indexed routine",
-        "                               by file base name and Class.Method; nothing is dropped: the summary lists every record that matches no routine,",
-        "                               every report file that matches no indexed file, and counts the indexed routines without a record.",
-        "                               ask risk then ranks routines by cc^2 * (1 - coverage)^3 + cc. json: format, sidecar, records, matched,",
-        "                               unmatched_records, indexed_routines_without_record, unmatched_files[], unmatched_routines[].",
-        "                               Exit 0 = imported; 1 = sidecar not writable; 2 = no --file / --db, file or index missing, no routine record in the report; 3 = unknown flag."
       ]
     }
   ],

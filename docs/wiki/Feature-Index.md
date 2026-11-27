@@ -474,6 +474,10 @@ Every chart question, by its **drag-lint > Reports** caption in RAD Studio. Outs
 * [Commands sent but never handled](ask-sent-not-handled) -- `sent-not-handled` (This project)
 * [Unit dependency matrix](ask-dependency-matrix) -- `dependency-matrix` (This project)
 * [Abstractness and instability (main sequence)](ask-main-sequence) -- `main-sequence` (This project)
+* [What changed in the unit dependencies (before and after)](ask-architecture-delta) -- `architecture-delta` (This project)
+* [Risky untested routines (complexity x missing coverage)](ask-risk) -- `risk` (This project)
+* [Hotspots: size and complexity (treemap)](ask-hotspots) -- `hotspots` (This project)
+* [Units that change together](ask-change-coupling) -- `change-coupling` (This project)
 
 ## Lint rules
 

@@ -25,7 +25,7 @@ except `round-trip` ([Field-Round-Trip-Report](Field-Round-Trip-Report)) and
 ```
 drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <index>]
               [--to <routine B>] [--server-db <idx>] [--sql-db <idx>] [--counterpart-db <idx>]
-              [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N]
+              [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N] [--since <rev|YYYY-MM-DD>] [--min-support N]
               [--out-root <dir>] [--pairs-file <report-pairs.json>] [--allow-stale] [--plain] [--open] [--resolve-only]
 ```
 
@@ -38,9 +38,11 @@ drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db
 | `--db <index>` | The project index itself, skipping resolution (never its freshness check). |
 | `--to <B>` | Routine B of the `path` question (`--target` is routine A). |
 | `--server-db`, `--sql-db` | The SERVER and SQL-script indexes that `round-trip`, `lands-where`, `consumers` and `feeds-from` also read. Default: the pair in `report-pairs.json`. |
-| `--counterpart-db` | The other side of `crosses-boundary`. Default: the pair's other index. |
+| `--counterpart-db` | The other side of `crosses-boundary`, `sent-not-handled` and `architecture-delta` (for the last, `--db` is the AFTER index and this the BEFORE index). Default: the pair's other index. |
 | `--depth`, `--cap`, `--surface-cap`, `--control`, `--mode` | Passed to the chart, as the question's page describes. |
 | `--max-rows N` | Rows printed from the chart (default 80). |
+| `--since <rev\|YYYY-MM-DD>` | `change-coupling` only: the history read. A revision is exclusive, a date inclusive. Default: the whole history. |
+| `--min-support N` | `change-coupling` only: the least number of shared commits a pair needs to be listed (default 2). |
 | `--out-root <dir>` | Where the bundle folder (chart, page, trace) is written. Default `%TEMP%\drag-lint-reports`. |
 | `--pairs-file <f>` | The pairing file. Default `%APPDATA%\drag-lint\report-pairs.json`, else the repository's `charts\report-pairs.json`. |
 | `--allow-stale` | Answer from a stale index anyway, with a note on stderr. |

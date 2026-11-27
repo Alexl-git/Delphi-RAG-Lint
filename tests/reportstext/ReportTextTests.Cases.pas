@@ -157,7 +157,8 @@ const
     'exception-paths', 'consumers', 'feeds-from', 'lands-where', 'round-trip',
     'path', 'implementors',
     'value-origin', 'value-use', 'class-diagram', 'sequence', 'control-flow',
-    'sent-not-handled', 'dependency-matrix', 'main-sequence');
+    'sent-not-handled', 'dependency-matrix', 'main-sequence',
+    'architecture-delta', 'risk', 'hotspots', 'change-coupling');
 var
   Q: TReportQuestion;
 begin

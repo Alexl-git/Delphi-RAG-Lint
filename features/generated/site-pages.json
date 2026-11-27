@@ -28,8 +28,8 @@
     "version": "1.50.0-alpha"
   },
   "features/ask.md": {
-    "hash": "6ec77c982b4e0d8c974dadf29ef9c8b0283b66a4ab536535f92792c478d7c1ca",
-    "version": "1.54.0-alpha"
+    "hash": "dc053f975ff04aaf15c78f99dac8cd41a99cd666ae1b68b7bd74da52a3341b0b",
+    "version": "1.55.0-alpha"
   },
   "features/auto-document-whole-project.md": {
     "hash": "02365ba15ecc39834dc621dfe632bba3540b72c3b3b3dd03c26c9088e9923daa",
@@ -104,7 +104,7 @@
     "version": "1.55.0-alpha"
   },
   "features/compare.md": {
-    "hash": "8a73d9c363a9bc4b0673aead9c04eb0f143660ce72c6fc7e6e5114cd1077039f",
+    "hash": "c3ed7e8e370b016bf7fe0f573e4b9282effc75c9d73140ce0ba08c95932c2cc7",
     "version": "1.55.0-alpha"
   },
   "features/compile-buffer-unsaved.md": {
@@ -128,8 +128,8 @@
     "version": "1.55.0-alpha"
   },
   "features/compiler-message-passthrough.md": {
-    "hash": "cd2f91b4e2ea737c88346c860b8f19014cf1efa96c160316d0d5260cb47b596e",
-    "version": "1.52.0-alpha"
+    "hash": "45c3dcbcd5375bd6fb30809f67090bd2154172d4b7437b0fdda5a67cc3fe9b33",
+    "version": "1.55.0-alpha"
   },
   "features/complexity-if-expression.md": {
     "hash": "e815653b31d6d64595b429b5c97d26a68bc88baed8d66a84a20b8dffd86db728",
@@ -516,7 +516,7 @@
     "version": "1.55.0-alpha"
   },
   "features/happens-before.md": {
-    "hash": "7110b4bd1219f65ba8b44960afb637eb64568404db000eb01e6dbe8bbdb6ccf7",
+    "hash": "10cdebc30972105cb69d4534a2c304334c6e4ddd5c1a0b83f33be354cfa88fd3",
     "version": "1.55.0-alpha"
   },
   "features/heavy-initialization.md": {
@@ -844,7 +844,7 @@
     "version": "1.55.0-alpha"
   },
   "features/repo-read-dfm-ancestor.md": {
-    "hash": "8792003792836ed23318af0fad472cb40f95892f865103a31ef112cfb7f9c8b0",
+    "hash": "8bbc59dad7679e16bce010a7f1535e49521e4fe8a3091b3553d0b54f292896c6",
     "version": "1.55.0-alpha"
   },
   "features/repo-read-dfm.md": {
