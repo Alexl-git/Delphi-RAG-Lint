@@ -1,0 +1,19 @@
+{
+  "id": "v156-mem-rules",
+  "title": "Lint rules for unfreed container items and unowned instances",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "Three rules: new objects in a container that does not own them, a new instance passed to a routine that only reads it, a class instance passed as an interface",
+  "intro": "Read this to see what each of the three rules reports, when it stays silent, and which two you have to turn on.",
+  "wikiPage": "v156-mem-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas> --rule container-items-leak --db <index.sqlite>"
+    }
+  ],
+  "audience": "both"
+}
