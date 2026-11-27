@@ -54,17 +54,22 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V156.OOB1.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V156.OOB1.Support  // dl:ok uses-global-census -- REVIEWED v156 OOB-1: the Support unit of the lane holds the checks; the pair travels together
+  ;
 
 class procedure TV156OOB1Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_FIELD_COULD_BE_LOCAL, 'bug-patterns', 'hint', 'Private field is used in one routine only and written before it is read: it could be a local variable', False));
+  ADecls.Add(V151Rule(RULE_REPEATED_STRING_LITERAL, 'project-wide', 'hint', 'The same string literal of 9 or more characters is typed at 5 or more sites', False));
 end;
 
 class function TV156OOB1Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
+  if not ACtx.Wants(RULE_FIELD_COULD_BE_LOCAL) then Exit;
+  if not (SameText(ACtx.NarrowRule, RULE_FIELD_COULD_BE_LOCAL) or ACtx.Cfg.IsEnabled(RULE_FIELD_COULD_BE_LOCAL)) then Exit;
+  Result:= TOOB1Checks.FieldsCouldBeLocal(ACtx.Store, ACtx.FileId, ACtx.Path, RULE_FIELD_COULD_BE_LOCAL);
 end;
 
 class function TV156OOB1Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
@@ -80,6 +85,9 @@ end;
 class function TV156OOB1Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
+  if not ACtx.Wants(RULE_REPEATED_STRING_LITERAL) then Exit;
+  if not (SameText(ACtx.NarrowRule, RULE_REPEATED_STRING_LITERAL) or ACtx.Cfg.IsEnabled(RULE_REPEATED_STRING_LITERAL)) then Exit;
+  Result:= TOOB1Checks.RepeatedLiterals(ACtx.Store, RULE_REPEATED_STRING_LITERAL);
 end;
 
 end.
