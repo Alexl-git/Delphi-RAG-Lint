@@ -70,7 +70,7 @@
       "name": "Indy (Internet Direct)",
       "supplier": "Indy Project",
       "licenseName": "Indy Modified BSD License (dual-licensed with MPL-1.1)",
-      "purl": "pkg:github/IndySockets/Indy",
+      "purl": "pkg:github/indysockets/indy",
       "paths": ["\\Embarcadero\\Studio\\*\\source\\Indy10\\", "\\Indy10\\", "\\Indy\\Lib\\"]
     },
     {
@@ -78,7 +78,7 @@
       "name": "DUnitX",
       "supplier": "VSoft Technologies Pty Ltd",
       "licenseId": "Apache-2.0",
-      "purl": "pkg:github/VSoftTechnologies/DUnitX",
+      "purl": "pkg:github/vsofttechnologies/dunitx",
       "paths": ["\\DUnitX\\"],
       "units": ["DUnitX.*"]
     },
@@ -136,7 +136,7 @@
       "name": "OmniThreadLibrary",
       "supplier": "Primoz Gabrijelcic",
       "licenseId": "BSD-3-Clause",
-      "purl": "pkg:github/gabr42/OmniThreadLibrary",
+      "purl": "pkg:github/gabr42/omnithreadlibrary",
       "paths": ["\\OmniThreadLibrary\\"]
     },
     {
@@ -144,7 +144,7 @@
       "name": "FastMM4",
       "supplier": "Pierre le Riche",
       "licenseExpression": "MPL-1.1 OR LGPL-2.1-only",
-      "purl": "pkg:github/pleriche/FastMM4",
+      "purl": "pkg:github/pleriche/fastmm4",
       "paths": ["\\FastMM4\\"]
     },
     {
@@ -152,7 +152,7 @@
       "name": "TurboPack Orpheus",
       "supplier": "TurboPack",
       "licenseId": "MPL-1.1",
-      "purl": "pkg:github/TurboPack/Orpheus",
+      "purl": "pkg:github/turbopack/orpheus",
       "paths": ["\\Orpheus\\"]
     },
     {
@@ -160,7 +160,7 @@
       "name": "TurboPack SysTools",
       "supplier": "TurboPack",
       "licenseId": "MPL-1.1",
-      "purl": "pkg:github/TurboPack/SysTools",
+      "purl": "pkg:github/turbopack/systools",
       "paths": ["\\SysTools\\"]
     },
     {
@@ -168,7 +168,7 @@
       "name": "TurboPack Abbrevia",
       "supplier": "TurboPack",
       "licenseId": "MPL-1.1",
-      "purl": "pkg:github/TurboPack/Abbrevia",
+      "purl": "pkg:github/turbopack/abbrevia",
       "paths": ["\\Abbrevia\\"]
     }
   ]

@@ -213,5 +213,11 @@ Check 'B4 --creator without a value: usage, exit 2' (($r.Code -eq 2) -and ($r.Er
 $r = Run (SbomArgs @('--bsi', '--creator-email', 'not-an-address'))
 Check 'B4 --creator-email that is not an address: exit 2, named, no document' (($r.Code -eq 2) -and ($r.Err -match 'creator-email') -and ($r.Out.Trim() -eq '')) "exit $($r.Code) $($r.Err)"
 
+Write-Host '-- P7: catalogue purls follow the purl spec' -ForegroundColor Cyan
+$cat = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\..\rules\sbom-libraries.json') | ConvertFrom-Json
+$purls = @($cat.PSObject.Properties.Value | ForEach-Object { $_ } | ForEach-Object { $_.purl } | Where-Object { $_ })
+$badPurl = @($purls | Where-Object { $_ -cmatch '^pkg:(github|bitbucket)/' -and $_ -cne $_.ToLowerInvariant() })
+Check 'B6 github/bitbucket purls are lowercase (purl spec: type, namespace and name)' (($purls.Count -gt 0) -and ($badPurl.Count -eq 0)) ($badPurl -join ' ')
+
 Write-Host ("RESULT: {0} passed, {1} failed" -f $script:Pass, $script:Fail)
 if ($script:Failed) { exit 1 } else { exit 0 }
