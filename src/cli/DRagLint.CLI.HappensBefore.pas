@@ -153,10 +153,26 @@ begin
   pOptions:= Default(THbOptions);
   var MaxS: Double:= 0;
   var WithPreset:= pArgs.Preset <> '';
-  if WithPreset and ((pArgs.A <> '') or (pArgs.B <> '')) then
+  var PresetA:= '';
+  var PresetB:= '';
+  var Known:= WithPreset and HbvPresetEvents(pArgs.Preset, PresetA, PresetB);
+  { a preset names B, and A too unless it takes the caller's --a (HbvPresetEvents leaves A empty) }
+  var TakesA:= Known and (PresetA = '');
+  var Clash:= WithPreset and not TakesA and ((pArgs.A <> '') or (pArgs.B <> ''));
+  if Known and not Clash then
+  begin
+    if not TakesA then pArgs.A:= PresetA;
+    if not TakesA or (pArgs.B = '') then pArgs.B:= PresetB
+    else Clash:= True;
+  end;
+  if Clash and TakesA then
+    Result:= Format('--preset %s names event B: give --a <event> only', [LowerCase(pArgs.Preset)])
+  else if Clash then
     Result:= '--preset names both events: do not give --a or --b with it'
-  else if WithPreset and not HbvPresetEvents(pArgs.Preset, pArgs.A, pArgs.B) then
+  else if WithPreset and not Known then
     Result:= Format('unknown preset "%s". Presets: %s', [pArgs.Preset, string.Join(', ', HbvPresetNames)])
+  else if TakesA and (pArgs.A = '') then
+    Result:= Format('--preset %s needs --a <event>: the event that must happen first', [LowerCase(pArgs.Preset)])
   else if (pArgs.A = '') or (pArgs.B = '') then
     Result:= 'needs --a <event> and --b <event>, or --preset <name>'
   else if pArgs.DbPath = '' then

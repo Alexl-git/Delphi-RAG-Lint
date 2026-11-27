@@ -18,7 +18,7 @@ proves or it does not answer.
 
 ```
 drag-lint happens-before --a <event> --b <event> --db <db> [--json] [--max-routines N] [--max-seconds S]
-drag-lint happens-before --preset <name> --db <db> [--json]
+drag-lint happens-before --preset <name> [--a <event>] --db <db> [--json]
 ```
 
 Exit 0: `YES`. Exit 1: `NO` or `MAY`. Exit 2: usage or other error (unknown event kind, unknown or
@@ -34,7 +34,9 @@ An event is a set of sites in the index.
 | `write:<QName>` | the writers of a unit variable, class var or instance field |
 | `read:<QName>` | its reads |
 | `call:<QName>` | the call sites the index resolves to that routine |
-| `extcall:<Name>` | the calls of a routine the index does NOT hold (RTL, a library), matched by name |
+| `extcall:<Name>[,<Name>...]` | the calls of routines the index does NOT hold (RTL, a library), matched by name; a comma list is one event |
+| `extwrite:<Name>[,<Name>...]` | the assignments to (or through) a variable the index does NOT hold, e.g. `FormatSettings.DecimalSeparator :=  ` |
+| `app-run:<program>\|*` | the top-level `Application.Run` of that program block (`*` = every program) |
 | `site:<file>:<line>[:<col>]` | one source position |
 
 `<QName>` may be a unique trailing part (`GFlag`, `TConn.Open`); an ambiguous one is refused with
@@ -62,13 +64,17 @@ Two properties of an event decide what can be proven:
 | `callee` | the same, counting a certain call of a routine that performs A on every normal return |
 | `callers` | B's routine runs only through resolved, certain calls, and A is proven before every one of them (up to 6 levels up) |
 | `check-init` | for `write:T` before `read:T` only: the [check-init](check-init) solver answers SET for every use (it knows the order of initialization sections and the program block) |
+| `program-order` | what the methods above could not prove goes to the ordered-root solve (`HbOrderSolve`): the initialization chain, the program block, handler order and call chains, with the definite sites of A as marks. A is first from every root that reaches B. Works for every event kind, not only `write:` / `read:` |
 
 `NO` -- one of two proofs:
 
 | Reason | Proof |
 |---|---|
 | `a-never-happens` | A is complete and has no site, B has at least one |
-| `b-first` | A is complete and every site of A (uncertain ones too) runs after a site of B in its own routine: the first A of any run is preceded by a B that no A preceded |
+| `b-first` | A is complete and every site of A (uncertain ones too) runs after a site of B in its own routine, or (`program-order`, the same solve with B as marks) after a B from every root: the first A of any run is preceded by a B that no A preceded |
+
+A `program-order` `YES` that leaned on a heuristic says so in `limits[]` (see Limits). A `NO` never
+leans on the handler-order heuristic or on indirect-call edges.
 
 `MAY` -- each unproven site of B carries one reason:
 
@@ -76,12 +82,23 @@ Two properties of an event decide what can be proven:
 |---|---|
 | `a-not-on-every-path` | A is in the routine, but a path reaches B without it (an `if`, a loop, an exception handler) |
 | `a-site-uncertain` | the only A in the routine is an uncertain site |
-| `a-in-other-routine` | A has no site in B's routine, in a callee that always performs it, or before every call of B's routine |
+| `a-in-other-routine` | A has no site in B's routine, in a callee that always performs it, or before every call of B's routine; also what the pre-check answers (see below) |
 | `a-sites-incomplete` | A can also happen where the index holds no site |
 | `b-sites-incomplete` | every known site of B is proven, but B can also happen where the index holds no site |
 | `no-b-site` | B has no site in the index: nothing to judge (a `YES` over nothing would be vacuous) |
-| `no-routine-body` | the site is in a program block, an initialization section, at unit level, in an anonymous method, or in a body with `goto` / `asm` |
+| `no-routine-body` | the site is in a program block, an initialization section, at unit level, in an anonymous method, or in a body with `goto` / `asm`, and `program-order` could not order it either |
 | `budget` | `--max-routines` or `--max-seconds` ran out |
+
+## Pre-check
+
+Before any routine body is solved, the call graph alone says which sites of B a proof can reach at
+all: the routines that hold a site of A, everything that reaches one backwards (calls of every
+confidence, dispatch, indirect edges), and everything those reach forwards. A site of B outside
+that set cannot be proven, so it answers `MAY` / `a-in-other-routine` at once with the limit
+`pre-check` and no routine body is solved for it. When the pre-check refutes every site of B the
+`b-first` proof is skipped too. The pre-check stands down (proves nothing, refutes nothing) when A
+is in an initialization section or a program block, when a walk passes its node cap, and for
+`write:T` / `read:T` (the constructor model of check-init orders sites the call graph does not).
 
 ## Examples
 
@@ -121,13 +138,21 @@ limits: check-init: UNKNOWN-CALLEE
 | Preset | Events |
 |---|---|
 | `randomize` | A = `extcall:Randomize`, B = `extcall:Random` |
+| `format-settings` | A = `extwrite:FormatSettings`, B = `extcall:` of the RTL routines that format or parse with the global FormatSettings |
+| `before-app-run --a <event>` | B = `app-run:*`: does A happen before `Application.Run`? |
+
+```
+drag-lint happens-before --preset randomize --db App.sqlite
+drag-lint happens-before --preset format-settings --db App.sqlite
+drag-lint happens-before --preset before-app-run --a write:uConfig.GConfig --db App.sqlite
+```
 
 `--preset randomize` answers `NO` (`a-never-happens`) when the project calls `Random` and never
 `Randomize`, `YES` when every `Random` call is proven to run after a `Randomize`, else `MAY`.
+`format-settings` asks whether the settings are assigned before the first format / parse call;
+`before-app-run` takes A from `--a` and is refused without it.
 
-Not built (they are not "A before every B" over sites, or need the order of initialization
-sections for call events): `use-after-free`, `lock-held-when`, `format-settings`,
-`before-app-run`, `finalization`.
+Not built: `finalization`, `use-after-free`, `lock-held-when`.
 
 ## --json
 
@@ -155,10 +180,14 @@ One line:
   used" ask [check-init](check-init).
 * **`extcall:` matches by name** (limit `matched-by-name`): a same-named routine of another unit the
   index does not hold matches too.
-* **Order across routines** is proven through certain calls only (`callee`, `callers`). The order of
-  initialization sections and the program block is known to the check-init solver, so it is proven
-  for `write:T` / `read:T` pairs only; a `call:` or `site:` event there answers `MAY`
-  (`no-routine-body`).
+* **Order across routines** is proven through certain calls (`callee`, `callers`) and, for the
+  initialization chain, the program block, handler order and call chains, by `program-order` for
+  every event kind. A `program-order` `YES` that depended on a heuristic carries the limit
+  `program-order: relied-on-handler-order` (the order handlers run in was assumed) or
+  `program-order: relied-on-indirect-edges` (an indirect call edge was followed); a `NO` never
+  does. What neither proves answers `MAY` (`no-routine-body`).
+* **`pre-check`**: the call graph alone showed that no routine performing A reaches a site of B;
+  that site answers `MAY` without a routine body being solved.
 * The `check-init` method inherits check-init's reading of a `var` / `out` argument as a write; its
   own limits travel with the answer as `check-init: <code>`.
 * `--max-routines N` (default 2000) caps the routine bodies solved, `--max-seconds S` (default 60,
@@ -166,4 +195,4 @@ One line:
   `YES` or `NO` because of it.
 * On demand only: the verb is not part of `lint-all`.
 
-Guard: `tests\autotest\run_v156_HB4.ps1`.
+Guards: `tests\autotest\run_v156_HB4.ps1`, `tests\autotest\run_v156_HB5.ps1`.
