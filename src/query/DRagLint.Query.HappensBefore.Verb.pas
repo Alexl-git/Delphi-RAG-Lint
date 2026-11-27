@@ -51,6 +51,35 @@ unit DRagLint.Query.HappensBefore.Verb;
   Sites are not instances: `write:TFoo.FBar` is a write of FBar on ANY object (limit
   instance-insensitive).
 
+  THE IN-FORCE QUESTION (lane HB6). An A of kind free: / final-free: / held: is a STATE, not a moment:
+  it is IN FORCE from a site of A until something undoes it (a re-assignment, a Leave). The verb then
+  answers "is A in force when B runs?" (`question: in-force` in the JSON):
+    free:<QName>        X.Free / X.Destroy / X.DisposeOf / FreeAndNil(X) / X := nil; undone by an assignment
+    final-free:<QName>  the same sites, only those inside a finalization section (unit variable / class var)
+    held:<QName>        L.Enter / Acquire / BeginRead / BeginWrite, TMonitor.Enter(L), EnterCriticalSection(L);
+                        undone by ANY other mention of L (Leave, Release, a `with`, passing it on)
+    use:<QName>         (an event for B) the dereferencing reads of X: `X.`, `X[`, `X^`
+  free: / final-free: ask "does B EVER run with A in force?":
+    YES  a site of B is in force on every path that reaches it (whenever that site runs);
+    NO   no site of B can run with A in force (b-never-after-a), or A never happens;
+    MAY  everything else (b-may-run-after-a).
+  held: asks "is A in force at EVERY site of B?": YES all sites, NO only when A never happens, else MAY.
+  Proofs (sound; every doubt is a MAY):
+    in-force            SolveRoutineInForce in B's own routine: a certain site of A on every path and no
+                        possible undo since. A call that can reach a routine which writes / mentions the
+                        variable (calls of every confidence, dispatch, indirect edges) is an undo.
+    reassigned-first    the mirror: a certain assignment on every path and no possible free since.
+    finalization-order  (final-free:) nothing that can run after the free reaches the site: no caller
+                        chain from a finalization section (other than statements before the free in its
+                        own section), from a destructor, or from a routine that runs without a visible
+                        call (the escape classifier). Every OTHER unit's finalization counts as "after":
+                        the unit order is not used.
+  Refusals: a variable whose address is taken or that is overlaid (absolute) gets no site proof; a field
+  site on another object than Self is neither a mark nor judged; final-free: of a variable that is also
+  freed outside a finalization section is incomplete. Limits on every such answer:
+  aliases-not-followed (another reference to the same object is not a site), callbacks-not-modelled (code
+  the index does not hold calling back into the project between the two sites is not seen).
+
   Read-only; nothing is persisted (no extractor change). }
 
 interface
@@ -80,6 +109,14 @@ const
   HBV_PRECHECK_MAX_NODES = 5000;
   /// <summary>The program-order solve is not tried with more marks than this (cost).</summary>
   HBV_ORDER_MAX_MARKS = 256;
+  /// <summary>The `limits[]` code of an in-force answer over free: / final-free:: another reference
+  /// to the same object (an alias, an owner that frees it) is not a site.</summary>
+  HBV_LIMIT_ALIASES = 'aliases-not-followed';
+  /// <summary>The `limits[]` code of a proven in-force answer: code the index does not hold that calls
+  /// back into the project between the two sites is not seen.</summary>
+  HBV_LIMIT_CALLBACKS = 'callbacks-not-modelled';
+  /// <summary>The `question` value of an in-force answer; a plain answer has no `question` key.</summary>
+  HBV_QUESTION_IN_FORCE = 'in-force';
   /// <summary>Exit code of a YES.</summary>
   HBV_EXIT_YES = 0;
   /// <summary>Exit code of a NO or a MAY.</summary>
@@ -90,18 +127,26 @@ type
   THbvVerdict = (hbvYes, hbvNo, hbvMay);
 
   /// <summary>The kinds of event a `--a` / `--b` value can name: the prefix is write, read, call, extcall,
-  /// site, extwrite, app-run.</summary>
-  THbvEventKind = (hekWrite, hekRead, hekCall, hekExtCall, hekSite, hekExtWrite, hekAppRun);
+  /// site, extwrite, app-run, free, final-free, use, held. free / final-free / held as event A ask the
+  /// in-force question (unit header).</summary>
+  THbvEventKind = (hekWrite, hekRead, hekCall, hekExtCall, hekSite, hekExtWrite, hekAppRun, hekFree, hekFinalFree,
+    hekUse, hekHeld);
 
   /// <summary>Closed list of reason codes, in the order of the `reasons[]` literals a-never-happens, b-first,
   /// a-not-on-every-path, a-in-other-routine, a-site-uncertain, a-sites-incomplete, b-sites-incomplete,
-  /// no-b-site, no-routine-body, budget; tools branch on them. Never rename one.</summary>
-  /// <remarks>a-never-happens and b-first are the two proofs of NO; the rest explain a MAY.</remarks>
+  /// no-b-site, no-routine-body, budget, b-never-after-a, b-may-run-after-a; tools branch on them.
+  /// Never rename one.</summary>
+  /// <remarks>a-never-happens and b-first are the two proofs of NO; b-never-after-a is the NO of the
+  /// in-force question, b-may-run-after-a its MAY; the rest explain a MAY.</remarks>
   THbvReason = (hvrANeverHappens, hvrBFirst, hvrANotOnEveryPath, hvrAInOtherRoutine, hvrASiteUncertain,
-    hvrASitesIncomplete, hvrBSitesIncomplete, hvrNoBSite, hvrNoRoutineBody, hvrBudget);
+    hvrASitesIncomplete, hvrBSitesIncomplete, hvrNoBSite, hvrNoRoutineBody, hvrBudget, hvrBNeverAfterA,
+    hvrBMayRunAfterA);
 
-  /// <summary>How a site was proven: same-routine, callee, callers, check-init, program-order; hvmNone = not proven.</summary>
-  THbvMethod = (hvmNone, hvmSameRoutine, hvmCallee, hvmCallers, hvmCheckInit, hvmProgramOrder);
+  /// <summary>How a site was proven: same-routine, callee, callers, check-init, program-order; in-force
+  /// (A is in force at the site), reassigned-first and finalization-order (A is never in force at the
+  /// site); hvmNone = not proven.</summary>
+  THbvMethod = (hvmNone, hvmSameRoutine, hvmCallee, hvmCallers, hvmCheckInit, hvmProgramOrder, hvmInForce,
+    hvmReassignedFirst, hvmFinalizationOrder);
 
   /// <summary>One site of an event.</summary>
   THbvSite = record
@@ -175,6 +220,10 @@ type
     Exhausted: Boolean;
     /// <summary>Wall-clock milliseconds.</summary>
     Ms: Int64;
+    /// <summary>True when the in-force question was asked (A is free: / final-free: / held:): a judged
+    /// row is then Proven with method in-force (A is in force there) or with reassigned-first /
+    /// finalization-order (A is never in force there).</summary>
+    InForce: Boolean;
   end;
 
 /// <summary>Answers "has event A happened before event B, on every execution?" over one index.</summary>
@@ -196,11 +245,23 @@ function HappensBefore(const pDbPath, pA, pB: string; const pOptions: THbOptions
 /// <param name="pPreset">Preset name, case-insensitive.</param>
 /// <param name="pA">Out: event A of the preset; '' when the preset takes the caller's --a.</param>
 /// <param name="pB">Out: event B of the preset.</param>
-/// <returns>False for a name that is not a built preset (pA and pB are then '').</returns>
+/// <returns>False for a name that is not a built preset (pA and pB are then ''), and for the three
+/// presets that take a variable (<see cref="HbvPresetTarget"/>).</returns>
 /// <remarks>Built: `randomize` (A = extcall:Randomize, B = extcall:Random); `format-settings`
 /// (A = extwrite:FormatSettings, B = extcall: of the RTL routines that format or parse with the
 /// global settings); `before-app-run` (A = the caller's --a, B = app-run:*).</remarks>
 function HbvPresetEvents(const pPreset: string; out pA, pB: string): Boolean;
+
+/// <summary>Rewrites the --a / --b values of the presets that take a VARIABLE: `use-after-free`
+/// (A = free:X, B = use:X), `finalization` (A = final-free:X, B = use:X) and `lock-held-when`
+/// (A = held:L, B = the caller's event).</summary>
+/// <param name="pPreset">Preset name, case-insensitive.</param>
+/// <param name="pA">In: the variable's QName as given with --a. Out: event A.</param>
+/// <param name="pB">In: the --b value ('' when absent). Out: event B.</param>
+/// <param name="pError">Out: '' or the usage error (missing --a, an event in place of the variable,
+/// a --b the preset does not take, lock-held-when without --b); pA and pB are then unchanged.</param>
+/// <returns>True when pPreset is one of the three presets (also when pError is set).</returns>
+function HbvPresetTarget(const pPreset: string; var pA, pB: string; out pError: string): Boolean;
 
 /// <summary>The names of the built presets, in help order.</summary>
 /// <returns>A new array; never empty.</returns>
@@ -208,7 +269,7 @@ function HbvPresetNames: TArray<string>;
 
 /// <summary>The `--json` document of an answer (one line).</summary>
 /// <param name="pAnswer">A complete answer.</param>
-/// <returns>`{verb, preset?, a, b, verdict, proven, summary, reasons[], methods[], judged[], limits[],
+/// <returns>`{verb, preset?, question?, a, b, verdict, proven, summary, reasons[], methods[], judged[], limits[],
 /// budget{routines, ms, exhausted}}`; a / b = `{event, kind, name, complete, incomplete[], sites[]}`.</returns>
 function HbvAnswerJson(const pAnswer: THbvAnswer): string;
 
@@ -234,6 +295,7 @@ uses
 , System.Diagnostics
 , System.Generics.Collections
 , System.Generics.Defaults
+, System.RegularExpressions
 , DRagLint.Core.Interfaces
 , DRagLint.Storage.SQLite
 , DRagLint.Charts.Index
@@ -246,16 +308,40 @@ uses
 
 const
   VERB_NAME = 'happens-before';
+  FLAG_A = '--a';
+  FLAG_B = '--b';
   EVENT_SEP = ':';
   QNAME_SEP = '.';
   NAME_LIST_SEP = ',';
   APP_RUN_ALL = '*';
-  KIND_CODES: array[THbvEventKind] of string = ('write', 'read', 'call', 'extcall', 'site', 'extwrite', 'app-run');
+  KIND_CODES: array[THbvEventKind] of string = ('write', 'read', 'call', 'extcall', 'site', 'extwrite', 'app-run',
+    'free', 'final-free', 'use', 'held');
+  STATE_KINDS = [hekFree, hekFinalFree, hekHeld];
   VERDICT_CODES: array[THbvVerdict] of string = ('YES', 'NO', 'MAY');
   REASON_CODES: array[THbvReason] of string = ('a-never-happens', 'b-first', 'a-not-on-every-path',
     'a-in-other-routine', 'a-site-uncertain', 'a-sites-incomplete', 'b-sites-incomplete', 'no-b-site',
-    'no-routine-body', 'budget');
-  METHOD_CODES: array[THbvMethod] of string = ('', 'same-routine', 'callee', 'callers', 'check-init', 'program-order');
+    'no-routine-body', 'budget', 'b-never-after-a', 'b-may-run-after-a');
+  METHOD_CODES: array[THbvMethod] of string = ('', 'same-routine', 'callee', 'callers', 'check-init', 'program-order',
+    'in-force', 'reassigned-first', 'finalization-order');
+  PRESET_USE_AFTER_FREE = 'use-after-free';
+  PRESET_FINALIZATION = 'finalization';
+  PRESET_LOCK_HELD_WHEN = 'lock-held-when';
+  KIND_FINALIZATION = 'finalization';
+  KIND_DESTRUCTOR = 'destructor';
+  ROOT_KINDS: array[0..3] of string = ('initialization', 'finalization', 'program', 'library');
+  { how one mention of the variable reads, by the text around the identifier }
+  RE_FREE_AFTER = '(?i)^\.\s*(Free|Destroy|DisposeOf)\b';
+  RE_FREE_BEFORE = '(?i)\bFreeAndNil\s*\(\s*(\w+\s*\.\s*)*$';
+  RE_ENTER_AFTER = '(?i)^\.\s*(Enter|Acquire|BeginRead|BeginWrite)\b';
+  RE_ENTER_BEFORE = '(?i)\b(TMonitor\s*\.\s*Enter|EnterCriticalSection)\s*\(\s*(\w+\s*\.\s*)*$';
+  RE_LEAVE_AFTER = '(?i)^\.\s*(Leave|Release|EndRead|EndWrite)\b';
+  RE_LEAVE_BEFORE = '(?i)\b(TMonitor\s*\.\s*Exit|LeaveCriticalSection)\s*\(\s*(\w+\s*\.\s*)*$';
+  RE_SELF_BEFORE = '(?i)(^|[^\w.])self\s*\.$';
+  RE_IDENT_CHAR = '^\w';
+  RE_LOOP = '(?i)\b(for|while|repeat|goto)\b';
+  DEREF_CHARS = '.[^';
+  HOLDERS_BUILT = 1;
+  HOLDERS_STOOD_DOWN = 2;
   PRESET_RANDOMIZE = 'randomize';
   PRESET_FORMAT_SETTINGS = 'format-settings';
   PRESET_BEFORE_APP_RUN = 'before-app-run';
@@ -269,9 +355,12 @@ const
   SECTION_KINDS_SQL = '''initialization'', ''finalization''';
   ORDER_WHY_PREFIX = 'why not SET: ';
   CHECK_INIT_LIMIT = 'check-init: ';
-  PRESET_NAMES: array[0..2] of string = (PRESET_RANDOMIZE, PRESET_FORMAT_SETTINGS, PRESET_BEFORE_APP_RUN);
+  PRESET_NAMES: array[0..5] of string = (PRESET_RANDOMIZE, PRESET_FORMAT_SETTINGS, PRESET_BEFORE_APP_RUN,
+    PRESET_USE_AFTER_FREE, PRESET_FINALIZATION, PRESET_LOCK_HELD_WHEN);
+  TARGET_PRESETS: array[0..2] of string = (PRESET_USE_AFTER_FREE, PRESET_FINALIZATION, PRESET_LOCK_HELD_WHEN);
+  TARGET_PRESET_KINDS: array[0..2] of THbvEventKind = (hekFree, hekFinalFree, hekHeld);
   EVENT_KINDS_HELP = 'write:<QName>, read:<QName>, call:<QName>, extcall:<Name>[,<Name>...], extwrite:<Name>[,<Name>...], ' +
-    'site:<file>:<line>[:<col>], app-run:<program>|*';
+    'site:<file>:<line>[:<col>], app-run:<program>|*, free:<QName>, final-free:<QName>, use:<QName>, held:<QName>';
   ROUTINE_KINDS_SQL = '''procedure'', ''function'', ''method'', ''constructor'', ''destructor''';
   { a routine declared in the interface carries its body in impl_*_line; one that lives only in the
     implementation carries it in start_line / end_line (impl_* = 0 or NULL) }
@@ -296,6 +385,26 @@ type
     IsCall: Boolean;
     Certain: Boolean;
     Confidence: string;
+  end;
+
+  { Lane HB6: how one mention of the variable of a free: / final-free: / held: event reads. rcOther = a
+    mention that may free, re-assign or enter it (a var / out argument, a `with`, an address, a
+    mention the text does not explain); rcRead = a plain read that does neither. }
+  TRefClass = (rcFree, rcNil, rcAssign, rcUse, rcRead, rcEnter, rcLeave, rcOther);
+
+  TStateRef = record
+    Site: THbSite;
+    Cls: TRefClass;
+    { False for a mention of an instance field on another object than Self }
+    SelfOk: Boolean;
+  end;
+
+  { One initialization / finalization section of the index. }
+  TSectionSpan = record
+    FileName: string;
+    First: Integer;
+    Last: Integer;
+    IsFinal: Boolean;
   end;
 
   { The marks of one event (A for the YES proof, B for the b-first proof) and what was derived from them. }
@@ -336,6 +445,32 @@ type
     FPossible: THashSet<Int64>;
     FPreConclusive: Boolean;
     FHasIndirect: Boolean;
+    { lane HB6, the in-force question: the classified mentions of A's variable, whether it is an
+      instance field / a lock / open to writes the index does not see, the routines that can undo A
+      (FStHoldersState: 0 = not built, HOLDERS_BUILT, HOLDERS_STOOD_DOWN), symbol kinds, sections }
+    FStRefs: TArray<TStateRef>;
+    FStField: Boolean;
+    FStHeld: Boolean;
+    FStOpen: Boolean;
+    FStHolders: THashSet<Int64>;
+    FStHoldersState: Integer;
+    FKinds: TDictionary<Int64, string>;
+    FSections: TArray<TSectionSpan>;
+    FSectionsLoaded: Boolean;
+    FIndirectProbed: Boolean;
+    function RawLine(const pFile: string; pLine: Integer): string;
+    function SymKind(pId: Int64): string;
+    function IsRootKind(const pKind: string): Boolean;
+    procedure ProbeIndirect;
+    function UpClosure(const pSeeds: TArray<Int64>; pInto: THashSet<Int64>; var pTops: TArray<THbSite>): Boolean;
+    function ClassifyAt(const pSite: THbSite; const pBare: string; pIsField, pIsWriter: Boolean; pHow: THbWriterHow): TStateRef;
+    function ClassifyRefs(const pName: string; out pEvents: THbEvents): TArray<TStateRef>;
+    procedure ResolveState(var pEvent: THbvEvent; pIsA: Boolean);
+    function SectionOf(const pSite: THbSite): Integer;
+    function TopRunsBeforeFree(const pA: THbvEvent; const pSite: THbSite): Boolean;
+    function HoldersReady: Boolean;
+    function ClearCalls(const pSite: THbSite): TArray<THbSite>;
+    procedure JudgeFinal(const pA: THbvEvent; const pSite: THbSite; var pRow: THbvSiteAnswer);
     function Walk(const pSeeds: TArray<Int64>; pUp: Boolean; const pRoots, pInto: THashSet<Int64>): Boolean;
     function Id64(const pRow: TIndexRow; const pCol: string): Int64;
     function RoutineName(pId: Int64): string;
@@ -362,6 +497,8 @@ type
     function Resolve(const pSpec, pFlag: string): THbvEvent;
     function Dominated(pSide: TMarkSide; const pSite: THbSite; pDepth: Integer; out pMethod: THbvMethod;
       out pNoBody: Boolean): Boolean;
+    { lane HB6: judges one site of B for the in-force question (unit header); pA was resolved with --a }
+    function JudgeInForce(const pA: THbvEvent; const pSite: THbSite): THbvSiteAnswer;
     { the call-graph pre-check: which routines a proof of "A first" can reach at all (unit header) }
     procedure PreCheck(const pA, pB: THbvEvent);
     { True when the pre-check is conclusive and says no proof can reach a site in pRoutineId }
@@ -398,6 +535,31 @@ begin
     pB:= KIND_CODES[hekAppRun] + EVENT_SEP + APP_RUN_ALL
   else
     Result:= False;
+end;
+
+function HbvPresetTarget(const pPreset: string; var pA, pB: string; out pError: string): Boolean;
+const
+  LOCK_PRESET = 2;
+begin
+  pError:= '';
+  var Ix:= IndexText(pPreset, TARGET_PRESETS);
+  Result:= Ix >= 0;
+  if not Result then Exit;
+  var IsLock:= Ix = LOCK_PRESET;
+  if pA = '' then
+    pError:= Format('--preset %s needs --a <QName>: %s', [TARGET_PRESETS[Ix],
+      if IsLock then 'the lock (a unit variable, class var or field)' else 'the variable (a unit variable, class var or field) whose free is event A'])
+  else if pA.Contains(EVENT_SEP) then
+    pError:= Format('--preset %s takes the variable itself in --a (a QName such as uCache.GCache), not an event', [TARGET_PRESETS[Ix]])
+  else if IsLock and (pB = '') then
+    pError:= Format('--preset %s needs --b <event>: the access that must run with the lock held', [TARGET_PRESETS[Ix]])
+  else if not IsLock and (pB <> '') then
+    pError:= Format('--preset %s names event B (%s%s<variable>): give --a <QName> only', [TARGET_PRESETS[Ix], KIND_CODES[hekUse], EVENT_SEP])
+  else
+  begin
+    if not IsLock then pB:= KIND_CODES[hekUse] + EVENT_SEP + pA;
+    pA:= KIND_CODES[TARGET_PRESET_KINDS[Ix]] + EVENT_SEP + pA;
+  end;
 end;
 
 function HbvExitCode(const pAnswer: THbvAnswer): Integer;
@@ -462,10 +624,14 @@ begin
   FSource:= TDictionary<string, TArray<string>>.Create;
   FCallsIn:= TDictionary<Int64, TArray<TEdgeSite>>.Create;
   FPossible:= THashSet<Int64>.Create;
+  FStHolders:= THashSet<Int64>.Create;
+  FKinds:= TDictionary<Int64, string>.Create;
 end;
 
 destructor TEngine.Destroy;
 begin
+  FKinds.Free;
+  FStHolders.Free;
   FPossible.Free;
   FCallsIn.Free;
   FSource.Free;
@@ -496,6 +662,11 @@ end;
 
 function TEngine.SourceLine(const pFile: string; pLine: Integer): string;
 begin
+  Result:= RawLine(pFile, pLine).Trim;
+end;
+
+function TEngine.RawLine(const pFile: string; pLine: Integer): string;
+begin
   var Lines: TArray<string>:= nil;
   if not FSource.TryGetValue(pFile, Lines) then
   begin
@@ -506,7 +677,7 @@ begin
     end;
     FSource.Add(pFile, Lines);
   end;
-  Result:= if InRange(pLine, 1, Length(Lines)) then Lines[pLine - 1].Trim else '';
+  Result:= if InRange(pLine, 1, Length(Lines)) then Lines[pLine - 1] else '';
 end;
 
 function TEngine.VarEvents(const pName: string): THbEvents;
@@ -786,6 +957,7 @@ begin
     hekExtWrite: ResolveUnresolved(Result, REF_KINDS_EXTWRITE);
     hekSite: ResolveSite(Result);
     hekAppRun: ResolveAppRun(Result);
+    hekFree, hekFinalFree, hekUse, hekHeld: ResolveState(Result, pFlag = FLAG_A);
   end;
   Result.Complete:= Result.IncompleteWhy = nil;
   Result.Spec:= KIND_CODES[Result.Kind] + EVENT_SEP + Result.Name;
@@ -1249,6 +1421,462 @@ begin
   end;
 end;
 
+{ ---- lane HB6: the in-force question ---- }
+
+function SiteKey(const pSite: THbSite): string;
+begin
+  Result:= Format('%s|%d|%d', [LowerCase(pSite.FileName), pSite.Line, pSite.Col]);
+end;
+
+function TEngine.SymKind(pId: Int64): string;
+begin
+  if FKinds.TryGetValue(pId, Result) then Exit;
+  Result:= '';
+  var R:= FIndex.Query(Format('SELECT kind FROM symbols WHERE id = %d', [pId]));
+  try
+    if R.Count > 0 then Result:= R[0].S('kind');
+  finally
+    R.Free;
+  end;
+  FKinds.Add(pId, Result);
+end;
+
+function TEngine.IsRootKind(const pKind: string): Boolean;
+begin
+  Result:= IndexStr(pKind, ROOT_KINDS) >= 0;
+end;
+
+procedure TEngine.ProbeIndirect;
+begin
+  if FIndirectProbed then Exit;
+  FIndirectProbed:= True;
+  var R:= FIndex.Query('SELECT COUNT(*) AS n FROM sqlite_master WHERE type = ''table'' AND name = ''indirect_edges''');
+  try
+    FHasIndirect:= (R.Count > 0) and (R[0].I('n') > 0);
+  finally
+    R.Free;
+  end;
+end;
+
+{ Everything that can reach pSeeds backwards: calls of every confidence (a routine named as a value
+  counts), dispatch (an override is reached through its base), indirect edges. A caller that is no
+  routine (a section, a program block) is returned in pTops with its position, RoutineId = its symbol
+  or 0; FileName = '' when the index cannot place it. False = stood down (node cap, time). }
+function TEngine.UpClosure(const pSeeds: TArray<Int64>; pInto: THashSet<Int64>; var pTops: TArray<THbSite>): Boolean;
+const
+  SQL_CALLERS = 'SELECT COALESCE(r.enclosing_symbol_id, 0) AS x, f.path AS p, r.start_line AS l, r.start_col AS c ' +
+    'FROM refs r JOIN call_edges ce ON ce.ref_id = r.id JOIN files f ON f.id = r.file_id WHERE ce.target_symbol_id = %0:d ' +
+    'UNION ALL SELECT base_symbol_id, '''', 0, 0 FROM dispatch_edges WHERE impl_symbol_id = %0:d';
+  SQL_CALLERS_INDIRECT = ' UNION ALL SELECT COALESCE(r.enclosing_symbol_id, 0), COALESCE(f.path, ''''), ' +
+    'COALESCE(r.start_line, 0), COALESCE(r.start_col, 0) FROM indirect_edges e LEFT JOIN refs r ON r.id = e.ref_id ' +
+    'LEFT JOIN files f ON f.id = r.file_id WHERE e.target_symbol_id = %0:d';
+begin
+  Result:= False;
+  ProbeIndirect;
+  var Sql:= SQL_CALLERS + (if FHasIndirect then SQL_CALLERS_INDIRECT else '') + ' ORDER BY 1, 2, 3, 4';
+  var Queue:= TQueue<Int64>.Create;
+  try
+    for var Id in pSeeds do
+      if (Id <> 0) and not IsRootKind(SymKind(Id)) and pInto.Add(Id) then Queue.Enqueue(Id);
+    while Queue.Count > 0 do
+    begin
+      if (pInto.Count > HBV_PRECHECK_MAX_NODES) or HbTimeUp then Exit;
+      var R:= FIndex.Query(Format(Sql, [Queue.Dequeue]));
+      try
+        for var Row in R do
+        begin
+          var X:= Id64(Row, 'x');
+          if (X = 0) or IsRootKind(SymKind(X)) then
+          begin
+            var Top:= Default(THbSite);
+            Top.FileName:= Row.S('p');
+            Top.Line:= Row.I('l');
+            Top.Col:= Row.I('c');
+            Top.RoutineId:= X;
+            pTops:= pTops + [Top];
+          end
+          else if pInto.Add(X) then Queue.Enqueue(X);
+        end;
+      finally
+        R.Free;
+      end;
+    end;
+  finally
+    Queue.Free;
+  end;
+  Result:= True;
+end;
+
+function TEngine.ClassifyAt(const pSite: THbSite; const pBare: string; pIsField, pIsWriter: Boolean; pHow: THbWriterHow): TStateRef;
+begin
+  Result:= Default(TStateRef);
+  Result.Site:= pSite;
+  if Result.Site.Routine = '' then Result.Site.Routine:= RoutineName(pSite.RoutineId);
+  Result.Cls:= rcOther;
+  var Line:= RawLine(pSite.FileName, pSite.Line);
+  var Tail:= Copy(Line, pSite.Col + Length(pBare), MaxInt);
+  { the column must stand on the identifier itself; else the text explains nothing }
+  if (pSite.Col < 1) or not SameText(Copy(Line, pSite.Col, Length(pBare)), pBare) or TRegEx.IsMatch(Tail, RE_IDENT_CHAR) then Exit;
+  var Before:= Copy(Line, 1, pSite.Col - 1).TrimRight;
+  var After:= Tail.TrimLeft;
+  Result.SelfOk:= not pIsField or not Before.EndsWith(QNAME_SEP) or TRegEx.IsMatch(Before, RE_SELF_BEFORE);
+  if TRegEx.IsMatch(After, RE_FREE_AFTER) or TRegEx.IsMatch(Before, RE_FREE_BEFORE) then Result.Cls:= rcFree
+  else if TRegEx.IsMatch(After, RE_ENTER_AFTER) or TRegEx.IsMatch(Before, RE_ENTER_BEFORE) then Result.Cls:= rcEnter
+  else if TRegEx.IsMatch(After, RE_LEAVE_AFTER) or TRegEx.IsMatch(Before, RE_LEAVE_BEFORE) then Result.Cls:= rcLeave
+  else if pIsWriter then
+    Result.Cls:= if pHow = hwAssignNil then rcNil else if pHow in [hwAssign, hwCreateInto] then rcAssign else rcOther
+  else if After = '' then Result.Cls:= rcOther   { the expression goes on in the next line: not known }
+  else Result.Cls:= if DEREF_CHARS.Contains(After[1]) then rcUse else rcRead;
+end;
+
+function TEngine.ClassifyRefs(const pName: string; out pEvents: THbEvents): TArray<TStateRef>;
+begin
+  Result:= nil;
+  pEvents:= VarEvents(pName);
+  var QName:= pEvents.Target.QName;
+  var Bare:= QName.Substring(QName.LastIndexOf(QNAME_SEP) + 1);
+  var IsField:= pEvents.Target.Kind = htkInstanceField;
+  var Seen:= THashSet<string>.Create;
+  try
+    for var W in pEvents.Writers do
+      if (W.How <> hwDfmStream) and Seen.Add(SiteKey(W.Site)) then
+        Result:= Result + [ClassifyAt(W.Site, Bare, IsField, {pIsWriter=}True, W.How)];
+    for var U in pEvents.UseSites do
+      if Seen.Add(SiteKey(U.Site)) then
+        Result:= Result + [ClassifyAt(U.Site, Bare, IsField, {pIsWriter=}False, hwAssign)];
+  finally
+    Seen.Free;
+  end;
+end;
+
+procedure TEngine.ResolveState(var pEvent: THbvEvent; pIsA: Boolean);
+const
+  WHY_OTHER_OBJECT = 'on another object than Self: which object is meant is not known';
+  WHY_MAY_UNDO = 'not a plain use: it may be freed or re-assigned here (a var / out argument, a with, an address, an unresolved callee)';
+  WHY_MAY_ENTER = 'the lock is mentioned in a way that is not Enter / Leave: it may be entered here';
+begin
+  var Ev: THbEvents;
+  var Refs:= ClassifyRefs(pEvent.Name, Ev);
+  pEvent.Name:= Ev.Target.QName;
+  pEvent.InstanceField:= Ev.Target.Kind = htkInstanceField;
+  if (pEvent.Kind = hekFinalFree) and pEvent.InstanceField then
+    raise EHbUsage.Create(Format('%s%s judges a unit variable or a class var; "%s" is an instance field (ask --preset %s)',
+      [KIND_CODES[hekFinalFree], EVENT_SEP, pEvent.Name, PRESET_USE_AFTER_FREE]));
+  var Open:= Ev.AbsoluteOverlay;
+  if Ev.IsPublished then
+    pEvent.IncompleteWhy:= pEvent.IncompleteWhy + ['the target is published: RTTI and DFM streaming can reach it'];
+  if Ev.AbsoluteOverlay then
+    pEvent.IncompleteWhy:= pEvent.IncompleteWhy + ['another variable overlays it (absolute)'];
+  for var W in Ev.Writers do
+    if W.How = hwAddressOf then
+    begin
+      Open:= True;
+      pEvent.IncompleteWhy:= pEvent.IncompleteWhy + ['its address is taken at ' + SiteText(W.Site)];
+    end;
+  for var Ref in Refs do
+    case pEvent.Kind of
+      hekUse:
+        if Ref.Cls in [rcUse, rcEnter, rcLeave] then AddSite(pEvent, Ref.Site, True, '');
+      hekHeld:
+        if Ref.Cls = rcEnter then AddSite(pEvent, Ref.Site, Ref.SelfOk, WHY_OTHER_OBJECT)
+        else if Ref.Cls in [rcOther, rcRead, rcUse] then AddSite(pEvent, Ref.Site, False, WHY_MAY_ENTER);
+      hekFree, hekFinalFree:
+        if Ref.Cls in [rcFree, rcNil, rcOther] then
+        begin
+          var Why:= if Ref.Cls = rcOther then WHY_MAY_UNDO else WHY_OTHER_OBJECT;
+          var Definite:= (Ref.Cls <> rcOther) and Ref.SelfOk;
+          if (pEvent.Kind = hekFree) or ((SectionOf(Ref.Site) >= 0) and FSections[SectionOf(Ref.Site)].IsFinal) then
+            AddSite(pEvent, Ref.Site, Definite, Why)
+          else
+            pEvent.IncompleteWhy:= pEvent.IncompleteWhy + [Format('it is also freed (or may be) outside a finalization section at %s: ' +
+              '--preset %s judges that', [SiteText(Ref.Site), PRESET_USE_AFTER_FREE])];
+        end;
+    end;
+  if not pIsA then Exit;
+  FStRefs:= Refs;
+  FStField:= pEvent.InstanceField;
+  FStHeld:= pEvent.Kind = hekHeld;
+  FStOpen:= Open;
+end;
+
+function TEngine.SectionOf(const pSite: THbSite): Integer;
+begin
+  if not FSectionsLoaded then
+  begin
+    FSectionsLoaded:= True;
+    var R:= FIndex.Query(Format('SELECT f.path, s.start_line, s.end_line, s.kind FROM symbols s JOIN files f ON f.id = s.file_id ' +
+      'WHERE s.kind IN (%s) ORDER BY f.path, s.start_line, s.id', [SECTION_KINDS_SQL]));
+    try
+      for var Row in R do
+      begin
+        var Span:= Default(TSectionSpan);
+        Span.FileName:= Row.S('path');
+        Span.First:= Row.I('start_line');
+        Span.Last:= Row.I('end_line');
+        Span.IsFinal:= Row.S('kind') = KIND_FINALIZATION;
+        FSections:= FSections + [Span];
+      end;
+    finally
+      R.Free;
+    end;
+  end;
+  { the section that starts last at or before the line: an initialization span may run on to `end.` }
+  Result:= -1;
+  for var I:= 0 to High(FSections) do
+    if SameText(FSections[I].FileName, pSite.FileName) and InRange(pSite.Line, FSections[I].First, FSections[I].Last)
+      and ((Result < 0) or (FSections[I].First > FSections[Result].First)) then Result:= I;
+end;
+
+{ True when a site outside every routine is certain to run before every site of the final-free event:
+  it is in no finalization section (program block, initialization, unit level), or it stands before
+  every site of A in the one section that holds them all and that section has no loop. }
+function TEngine.TopRunsBeforeFree(const pA: THbvEvent; const pSite: THbSite): Boolean;
+begin
+  var Sec:= SectionOf(pSite);
+  if (Sec < 0) or not FSections[Sec].IsFinal then Exit(True);
+  Result:= False;
+  for var S in pA.Sites do
+    if (SectionOf(S.Site) <> Sec) or (SiteLess(pSite, S.Site) >= 0) then Exit;
+  for var L:= FSections[Sec].First to FSections[Sec].Last do
+    if TRegEx.IsMatch(RawLine(FSections[Sec].FileName, L), RE_LOOP) then Exit;
+  Result:= True;
+end;
+
+function TEngine.HoldersReady: Boolean;
+begin
+  if FStHoldersState = 0 then
+  begin
+    { a lock: every routine that mentions it; a variable: every routine that may free or write it }
+    var Seeds: TArray<Int64>:= nil;
+    for var Ref in FStRefs do
+      if FStHeld or not (Ref.Cls in [rcUse, rcRead, rcEnter, rcLeave]) then Seeds:= Seeds + [Ref.Site.RoutineId];
+    TArray.Sort<Int64>(Seeds);
+    var Tops: TArray<THbSite>:= nil;
+    FStHoldersState:= if UpClosure(Seeds, FStHolders, Tops) then HOLDERS_BUILT else HOLDERS_STOOD_DOWN;
+  end;
+  Result:= FStHoldersState = HOLDERS_BUILT;
+end;
+
+{ The calls in the routine of pSite that can reach a routine which may undo A. }
+function TEngine.ClearCalls(const pSite: THbSite): TArray<THbSite>;
+const
+  SQL_CALLS = 'SELECT r.start_line AS l, r.start_col AS c, ce.target_symbol_id AS t FROM refs r JOIN call_edges ce ' +
+    'ON ce.ref_id = r.id WHERE r.enclosing_symbol_id = %0:d';
+  SQL_CALLS_INDIRECT = ' UNION ALL SELECT r.start_line, r.start_col, e.target_symbol_id FROM indirect_edges e JOIN refs r ' +
+    'ON r.id = e.ref_id WHERE r.enclosing_symbol_id = %0:d';
+begin
+  Result:= nil;
+  var R:= FIndex.Query(Format(SQL_CALLS + (if FHasIndirect then SQL_CALLS_INDIRECT else '') + ' ORDER BY 1, 2, 3',
+    [pSite.RoutineId]));
+  try
+    for var Row in R do
+      if FStHolders.Contains(Id64(Row, 't')) then
+      begin
+        var Call:= pSite;
+        Call.Line:= Row.I('l');
+        Call.Col:= Row.I('c');
+        Result:= Result + [Call];
+      end;
+  finally
+    R.Free;
+  end;
+end;
+
+procedure TEngine.JudgeFinal(const pA: THbvEvent; const pSite: THbSite; var pRow: THbvSiteAnswer);
+begin
+  if (pSite.RoutineId = 0) or IsRootKind(SymKind(pSite.RoutineId)) then
+  begin
+    pRow.Proven:= TopRunsBeforeFree(pA, pSite);
+    pRow.Why:= if pRow.Proven then 'the site runs before the finalization that frees the variable'
+      else 'the site is in a finalization section that can run after the free';
+  end
+  else
+  begin
+    var Reach:= THashSet<Int64>.Create;
+    try
+      var Tops: TArray<THbSite>:= nil;
+      if not Spend or not UpClosure([pSite.RoutineId], Reach, Tops) then
+      begin
+        FExhausted:= True;
+        pRow.Reason:= hvrBudget;
+        pRow.Why:= 'the budget ran out before every caller chain of this routine was seen';
+        Exit;
+      end;
+      var Ids:= Reach.ToArray;
+      TArray.Sort<Int64>(Ids);
+      for var Id in Ids do
+      begin
+        var Esc:= FClassifier.ClassOf(Id);
+        if SymKind(Id) = KIND_DESTRUCTOR then
+          pRow.Why:= Format('%s is a destructor: an object can be destroyed during or after the unit finalizations', [RoutineName(Id)])
+        else if not (Esc in [hecNone, hecZeroCallers]) then
+          pRow.Why:= Format('%s can run without a call the index sees (%s), so also after the free', [RoutineName(Id), EscapeClassCode(Esc)]);
+        if pRow.Why <> '' then Exit;
+      end;
+      for var Top in Tops do
+        if Top.FileName = '' then pRow.Why:= 'a caller the index cannot place reaches this routine'
+        else if not TopRunsBeforeFree(pA, Top) then
+          pRow.Why:= Format('the finalization section at %s reaches this routine and can run after the free', [SiteText(Top)]);
+      if pRow.Why <> '' then Exit;
+      pRow.Proven:= True;
+      pRow.Why:= 'no finalization section, destructor or routine that runs without a visible call reaches this site: it runs before the free';
+    finally
+      Reach.Free;
+    end;
+  end;
+  if pRow.Proven then pRow.Method:= hvmFinalizationOrder;
+end;
+
+function TEngine.JudgeInForce(const pA: THbvEvent; const pSite: THbSite): THbvSiteAnswer;
+begin
+  Result:= Default(THbvSiteAnswer);
+  Result.Site:= pSite;
+  Result.Reason:= hvrBMayRunAfterA;
+  if FStOpen then
+  begin
+    Result.Reason:= hvrASitesIncomplete;
+    Result.Why:= 'the address of the variable is taken, or another variable overlays it: a write the index does not see can happen anywhere';
+    Exit;
+  end;
+  if pA.Kind = hekFinalFree then
+  begin
+    JudgeFinal(pA, pSite, Result);
+    Exit;
+  end;
+  if FStField then
+    for var Ref in FStRefs do
+      if not Ref.SelfOk and (SiteKey(Ref.Site) = SiteKey(pSite)) then
+      begin
+        Result.Why:= 'this site is on another object than Self: which object A is in force for is not known';
+        Exit;
+      end;
+  if not HoldersReady or not Spend then
+  begin
+    FExhausted:= True;
+    Result.Reason:= hvrBudget;
+    Result.Why:= 'the budget ran out before the routines that can undo A were known';
+    Exit;
+  end;
+  { marks put A in force; undos may end it; for a variable the mirror pair proves "never in force" }
+  var Marks, Undos, Assigns, Frees: TArray<THbSite>;
+  for var Ref in FStRefs do
+  begin
+    if Ref.Site.RoutineId <> pSite.RoutineId then Continue;
+    if FStHeld then
+    begin
+      if Ref.Cls <> rcEnter then Undos:= Undos + [Ref.Site]
+      else if Ref.SelfOk then Marks:= Marks + [Ref.Site];
+      Continue;
+    end;
+    if (Ref.Cls in [rcFree, rcNil]) and Ref.SelfOk then Marks:= Marks + [Ref.Site];
+    if Ref.Cls in [rcAssign, rcOther] then Undos:= Undos + [Ref.Site];
+    if (Ref.Cls = rcAssign) and Ref.SelfOk then Assigns:= Assigns + [Ref.Site];
+    if Ref.Cls in [rcFree, rcNil, rcOther] then Frees:= Frees + [Ref.Site];
+  end;
+  var Calls:= ClearCalls(pSite);
+  var St:= SolveRoutineInForce(FStore, pSite.RoutineId, Marks, Undos + Calls, [pSite]);
+  if not St.Found or St.CfgSkipped or (Length(St.Queries) = 0) or not St.Queries[0].Located or St.Queries[0].InClosure then
+  begin
+    Result.Reason:= hvrNoRoutineBody;
+    Result.Why:= 'the site is in no routine body this verb can solve (program block, section, unit level, anonymous method, or a body with goto / asm)';
+    Exit;
+  end;
+  if St.Queries[0].Done then
+  begin
+    Result.Proven:= True;
+    Result.Method:= hvmInForce;
+    Result.Why:= 'A is in force here on every path that reaches the site: a site of A ran and nothing can have undone it since';
+    Exit;
+  end;
+  if not FStHeld and (Assigns <> nil) and Spend then
+  begin
+    St:= SolveRoutineInForce(FStore, pSite.RoutineId, Assigns, Frees + Calls, [pSite]);
+    if (Length(St.Queries) > 0) and St.Queries[0].Done then
+    begin
+      Result.Proven:= True;
+      Result.Method:= hvmReassignedFirst;
+      Result.Why:= 'the variable is assigned on every path that reaches the site, and nothing can have freed it since';
+      Exit;
+    end;
+  end;
+  Result.Why:= if Marks = nil then 'A has no certain site in this routine: whether it is in force when the routine is entered is not known'
+    else 'A is in this routine, but not in force on every path that reaches the site (a path without it, or a possible undo in between)';
+end;
+
+procedure ConcludeInForce(var pAnswer: THbvAnswer; pVerdict: THbvVerdict; const pSummary: string);
+begin
+  pAnswer.Verdict:= pVerdict;
+  pAnswer.Proven:= pVerdict <> hbvMay;
+  pAnswer.Summary:= pSummary;
+  for var J in pAnswer.Judged do
+    if not J.Proven and (pVerdict = hbvMay) then AddReason(pAnswer, J.Reason)
+    else if J.Proven and ((J.Method = hvmInForce) = (pVerdict = hbvYes)) and (pVerdict <> hbvMay) then AddMethod(pAnswer, J.Method);
+  if pAnswer.Proven and (pAnswer.Judged <> nil) then AddLimit(pAnswer, HBV_LIMIT_CALLBACKS);
+end;
+
+{ Lane HB6: "is A in force when B runs?" (unit header). }
+procedure DecideInForce(pEngine: TEngine; var pAnswer: THbvAnswer);
+begin
+  pAnswer.InForce:= True;
+  var Held:= pAnswer.A.Kind = hekHeld;
+  if not Held then AddLimit(pAnswer, HBV_LIMIT_ALIASES);
+  if pAnswer.B.Sites = nil then
+  begin
+    AddReason(pAnswer, hvrNoBSite);
+    ConcludeInForce(pAnswer, hbvMay, '(not proven: B has no site in the index, so there is nothing to judge)');
+    Exit;
+  end;
+  if pAnswer.A.Sites = nil then
+  begin
+    if pAnswer.A.Complete then
+    begin
+      AddReason(pAnswer, hvrANeverHappens);
+      ConcludeInForce(pAnswer, hbvNo, '(proven: A has no site in the index -- it is never in force when B runs)');
+    end
+    else
+    begin
+      AddReason(pAnswer, hvrASitesIncomplete);
+      ConcludeInForce(pAnswer, hbvMay, '(not proven: A has no site this question counts, but it can happen elsewhere)');
+    end;
+    Exit;
+  end;
+  var AnyIn:= False;
+  var AllIn:= True;
+  var AllNever:= True;
+  for var S in pAnswer.B.Sites do
+  begin
+    var Row:= pEngine.JudgeInForce(pAnswer.A, S.Site);
+    var IsIn:= Row.Proven and (Row.Method = hvmInForce);
+    AnyIn:= AnyIn or IsIn;
+    AllIn:= AllIn and IsIn;
+    AllNever:= AllNever and Row.Proven and not IsIn;
+    pAnswer.Judged:= pAnswer.Judged + [Row];
+  end;
+  if Held then
+  begin
+    if AllIn and pAnswer.B.Complete then
+      ConcludeInForce(pAnswer, hbvYes, '(proven: A is in force at every site of B)')
+    else
+    begin
+      if AllIn then AddReason(pAnswer, hvrBSitesIncomplete);
+      ConcludeInForce(pAnswer, hbvMay, if AllIn then '(not proven: A is in force at every known site of B, but B can also happen where the index holds no site)'
+        else '(not proven: A is not shown to be in force at every site of B)');
+    end;
+  end
+  else if AnyIn then
+    ConcludeInForce(pAnswer, hbvYes, '(proven: a site of B runs with A in force, whenever that site runs)')
+  else if AllNever and ((pAnswer.A.Kind = hekFree) or pAnswer.A.Complete) then
+  begin
+    AddReason(pAnswer, hvrBNeverAfterA);
+    ConcludeInForce(pAnswer, hbvNo, '(proven: no site of B runs with A in force)');
+  end
+  else
+  begin
+    if AllNever then AddReason(pAnswer, hvrASitesIncomplete);
+    ConcludeInForce(pAnswer, hbvMay, '(not proven either way)');
+  end;
+end;
+
 function HappensBefore(const pDbPath, pA, pB: string; const pOptions: THbOptions): THbvAnswer;
 begin
   Result:= Default(THbvAnswer);
@@ -1260,12 +1888,13 @@ begin
     var Engine:= TEngine.Create(Index, Store,
       if pOptions.MaxRoutines > 0 then pOptions.MaxRoutines else HB_DEFAULT_MAX_ROUTINES);
     try
-      Result.A:= Engine.Resolve(pA, '--a');
-      Result.B:= Engine.Resolve(pB, '--b');
+      Result.A:= Engine.Resolve(pA, FLAG_A);
+      Result.B:= Engine.Resolve(pB, FLAG_B);
       if (Result.A.Kind in [hekExtCall, hekExtWrite]) or (Result.B.Kind in [hekExtCall, hekExtWrite]) then
         AddLimit(Result, HBV_LIMIT_MATCHED_BY_NAME);
       if Result.A.InstanceField or Result.B.InstanceField then AddLimit(Result, HBV_LIMIT_INSTANCE_INSENSITIVE);
-      Decide(Engine, pDbPath, pOptions, Result);
+      if Result.A.Kind in STATE_KINDS then DecideInForce(Engine, Result)
+      else Decide(Engine, pDbPath, pOptions, Result);
       Result.Routines:= Engine.Solved;
       Result.Exhausted:= Engine.Exhausted;
       if Result.Exhausted then
@@ -1315,6 +1944,7 @@ begin
   try
     Root.AddPair('verb', VERB_NAME);
     if pAnswer.Preset <> '' then Root.AddPair('preset', pAnswer.Preset);
+    if pAnswer.InForce then Root.AddPair('question', HBV_QUESTION_IN_FORCE);
     Root.AddPair('a', EventJson(pAnswer.A));
     Root.AddPair('b', EventJson(pAnswer.B));
     Root.AddPair('verdict', VERDICT_CODES[pAnswer.Verdict]);
@@ -1373,12 +2003,14 @@ begin
     pAnswer.A.Spec, Length(pAnswer.A.Sites), SITE_WORD[Length(pAnswer.A.Sites) = 1],
     pAnswer.B.Spec, Length(pAnswer.B.Sites), SITE_WORD[Length(pAnswer.B.Sites) = 1],
     if pAnswer.Preset <> '' then '   preset ' + pAnswer.Preset else '']));
-  Writeln(Format('verdict  %s   %s', [VERDICT_CODES[pAnswer.Verdict], pAnswer.Summary]));
+  Writeln(Format('verdict  %s   %s%s', [VERDICT_CODES[pAnswer.Verdict], pAnswer.Summary,
+    if pAnswer.InForce then '   question: is A in force when B runs?' else '']));
   { the rows that carry the verdict: sites of B for a YES, sites of A for a b-first NO, all for a MAY }
   for var J in pAnswer.Judged do
-    if (pAnswer.Verdict = hbvMay) or (J.SideA = (pAnswer.Verdict = hbvNo)) then
+    if (pAnswer.Verdict = hbvMay) or pAnswer.InForce or (J.SideA = (pAnswer.Verdict = hbvNo)) then
       Writeln(Format('  %s  %s  in %s   %s   %s', [if J.SideA then 'A' else 'B', SiteText(J.Site), J.Site.Routine,
-      if J.Proven then 'proven' else if J.SideA then 'open' else REASON_CODES[J.Reason], J.Why]));
+      if J.Proven and pAnswer.InForce then METHOD_CODES[J.Method] else if J.Proven then 'proven'
+      else if J.SideA then 'open' else REASON_CODES[J.Reason], J.Why]));
   WriteEventNotes('A', pAnswer.A);
   WriteEventNotes('B', pAnswer.B);
   if pAnswer.Limits <> nil then Writeln('limits: ', string.Join(', ', pAnswer.Limits));

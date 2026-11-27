@@ -53,7 +53,7 @@ const
     '[--json] [--max-routines N] [--max-seconds S]';
   { Printed for --help until DRagLint.CLI.HelpText carries the verb's block (INT merges it from the
     lane's help text); the two must say the same. }
-  HELP_LINES: array[0..27] of string = (
+  HELP_LINES: array[0..37] of string = (
     'happens-before  has event A happened before event B, on every execution?   (read-only, on demand)',
     '  drag-lint happens-before --a <event> --b <event> --db <db> [--json] [--max-routines N] [--max-seconds S]',
     '  drag-lint happens-before --preset <name> [--a <event>] --db <db> [--json]',
@@ -64,9 +64,14 @@ const
     '            extwrite:<Name>[,<Name>...]  the assignments to (or through) a variable the index does not hold',
     '            app-run:<program>|*          the top-level Application.Run of that program block (* = every program)',
     '            site:<file>:<line>[:<col>]   one source position',
+    '            use:<QName>     the dereferencing reads of a variable (X.  X[  X^)',
+    '            free:<QName> / final-free:<QName> / held:<QName>   as --a: a STATE, see the in-force question',
     '  --preset randomize        A = extcall:Randomize, B = extcall:Random',
     '  --preset format-settings  A = extwrite:FormatSettings, B = extcall: of the RTL routines that format / parse with it',
     '  --preset before-app-run --a <event>   B = app-run:* (does A happen before Application.Run?)',
+    '  --preset use-after-free --a <QName>   A = free:X, B = use:X      (does a use ever run after the free?)',
+    '  --preset finalization --a <QName>     A = final-free:X, B = use:X (is X used after a finalization freed it?)',
+    '  --preset lock-held-when --a <QName> --b <event>   A = held:L      (is the lock held at every site of B?)',
     '  Answers  YES  every site of B runs after A (proven)',
     '           NO   a B runs with no A before it (proven): A has no site, or every A runs after a B',
     '           MAY  not proven either way -- every doubt answers MAY, each judged site says why',
@@ -74,10 +79,15 @@ const
     '  every call of B''s routine), check-init (write:T before read:T through the check-init solver),',
     '  program-order (initialization chain, program block, handler order: A first from every root that reaches B).',
     '  Reasons: a-never-happens, b-first, a-not-on-every-path, a-in-other-routine, a-site-uncertain,',
-    '  a-sites-incomplete, b-sites-incomplete, no-b-site, no-routine-body, budget.',
+    '  a-sites-incomplete, b-sites-incomplete, no-b-site, no-routine-body, budget, b-never-after-a, b-may-run-after-a.',
     '  Limits: sites are not instances (instance-insensitive); extcall: matches by name (matched-by-name);',
     '  pre-check = the call graph alone showed no routine that performs A reaches that site (no body solved);',
     '  program-order: relied-on-handler-order / relied-on-indirect-edges = what a program-order YES leaned on.',
+    '  In-force question (--a free: / final-free: / held:): A is in force from a site of A until a re-assignment',
+    '  (free) or any other mention of the lock (held). free / final-free: YES = a site of B runs with A in force,',
+    '  NO = none can (b-never-after-a) or A never happens, MAY = b-may-run-after-a. held: YES = in force at every',
+    '  site of B. Proofs: in-force, reassigned-first (own routine), finalization-order. Limits: aliases-not-followed,',
+    '  callbacks-not-modelled. Wanted: use-after-free NO, finalization NO, lock-held-when YES.',
     '  --max-routines N  routine bodies to solve (default 2000);  --max-seconds S  wall-clock cap (default 60, 0 = none)',
     '  Exit: 0 = YES, 1 = NO or MAY, 2 = usage / unknown target / missing or stale --db, 3 = unknown flag.',
     '  Example: drag-lint happens-before --a call:TConn.Open --b call:TConn.Exec --db App\_D-RAG\App.sqlite',
@@ -183,7 +193,9 @@ function Validate(var pArgs: THappensBeforeArgs; out pOptions: THbOptions): stri
 begin
   pOptions:= Default(THbOptions);
   var MaxS: Double:= 0;
-  var WithPreset:= pArgs.Preset <> '';
+  { the presets that take a variable rewrite --a / --b themselves and are then a plain question }
+  var TargetError:= '';
+  var WithPreset:= (pArgs.Preset <> '') and not HbvPresetTarget(pArgs.Preset, pArgs.A, pArgs.B, TargetError);
   var PresetA:= '';
   var PresetB:= '';
   var Known:= WithPreset and HbvPresetEvents(pArgs.Preset, PresetA, PresetB);
@@ -196,7 +208,9 @@ begin
     if not TakesA or (pArgs.B = '') then pArgs.B:= PresetB
     else Clash:= True;
   end;
-  if Clash and TakesA then
+  if TargetError <> '' then
+    Result:= TargetError
+  else if Clash and TakesA then
     Result:= Format('--preset %s names event B: give --a <event> only', [LowerCase(pArgs.Preset)])
   else if Clash then
     Result:= '--preset names both events: do not give --a or --b with it'
