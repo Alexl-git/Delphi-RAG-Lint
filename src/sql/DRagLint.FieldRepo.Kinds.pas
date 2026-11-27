@@ -129,7 +129,7 @@ function FrKindHasBody(pKind: TFrFieldKind): Boolean;
 /// <summary>Tests whether a text is one of the DERIVED_KIND values.</summary>
 /// <param name="pText">The cell text; case-sensitive, not trimmed.</param>
 /// <returns>True for `direct`, `aggregate` and `unknown`; False for anything else, also for '' (not derived).</returns>
-function FrDerivedKindKnown(const pText: string): Boolean;
+function FrDerivedKindKnown(const pText: string): Boolean;  // dl:ok unused-public-symbol@99f9 -- REVIEWED 2026-11-26 GC-S: public API of schema 5, called by tests\fieldrepo\GridCol2SchemaTests.dpr (outside this index) and by the 1.57 lineage slice (repo check derived-kind-invalid)
 
 /// <summary>Finds every `{{FIELD}}` macro of a calc body (grammar of spec 4.3); one in a string or a comment is text.</summary>
 /// <param name="pBody">The CALC_BODY text; '' or Pascal text without macros gives an empty array.</param>

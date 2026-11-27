@@ -139,7 +139,7 @@ begin
     VColumns := nil;
     for VCol in VTable.Columns do
       VColumns := VColumns + [VCol.Name];
-    Result := Result + Format('add %s.%s, ', [VTable.Name, string.Join(', ', VColumns)]);
+    Result := Result + Format('add %s.%s, ', [VTable.Name, string.Join(', ', VColumns)]);  // dl:ok concat-in-loop@00a4 -- REVIEWED 2026-11-26 GC-S: one piece per altered table (two in schema 5); a TStringBuilder adds nothing
   end;
   VTables := nil;
   for VTable in NewTables(pFrom) do
