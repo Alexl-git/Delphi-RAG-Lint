@@ -35,7 +35,7 @@
           "arg": "<file>"
         }
       ],
-      "helpOrder": 29,
+      "helpOrder": 32,
       "help": ["  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]"]
     }
   ],

@@ -59,7 +59,7 @@
           "name": "--no-compile-gate"
         }
       ],
-      "helpOrder": 61,
+      "helpOrder": 68,
       "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method"]
     },
     {

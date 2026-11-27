@@ -19,7 +19,7 @@
           "arg": "PATH"
         }
       ],
-      "helpOrder": 74,
+      "helpOrder": 83,
       "help": ["  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)"]
     }
   ],

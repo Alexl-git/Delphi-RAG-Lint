@@ -34,7 +34,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 28,
+      "helpOrder": 31,
       "help": ["  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]"]
     }
   ],

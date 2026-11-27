@@ -27,7 +27,7 @@
           "name": "--format"
         }
       ],
-      "helpOrder": 41,
+      "helpOrder": 47,
       "help": ["  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]"]
     }
   ],

@@ -36,7 +36,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 6,
+      "helpOrder": 7,
       "help": ["  drag-lint syntax-count       (--db <file.sqlite> | --in <path>...) [--feature <a,b>|all] [--per-file] [--hits] [--json]", "                               counts syntax features in the tree-sitter parse of each unit -- shapes, not text, so strings", "                               and comments never count; uncapped. Features: if-expr, is-not, not-in (Delphi 13), inline-var,", "                               inline-const (10.3), anon-method (2009), multiline-string (12); --feature picks some (default all).", "                               --db = every .pas/.dpr/.dpk/.inc row of that index (opened read-only, nothing written);", "                               --in adds a path (repeatable). Text as written: no $IFDEF evaluation, every branch counts.", "                               --per-file lists files with a hit; --hits lists path:line:col per occurrence.", "                               json: features[], files_scanned, files_unreadable, files_with_parse_errors, totals{feature: n},", "                               files[{path, counts}] (--per-file), hits[{feature, path, line, col}] (--hits).", "                               Exit 0 = counted (zero included); 2 = no --db/--in, unknown --feature, unreadable index;", "                               3 = unknown flag."]
     }
   ],

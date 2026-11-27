@@ -31,7 +31,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 99,
+      "helpOrder": 108,
       "help": ["  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift; roots the section exclude prunes are listed as excluded, not counted)"]
     }
   ],

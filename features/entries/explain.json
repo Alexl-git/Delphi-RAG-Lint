@@ -22,7 +22,7 @@
           "arg": "<dir>"
         }
       ],
-      "helpOrder": 49,
+      "helpOrder": 55,
       "help": ["  drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)"]
     }
   ],

@@ -46,7 +46,7 @@
           "arg": "<manifest>"
         }
       ],
-      "helpOrder": 35,
+      "helpOrder": 39,
       "help": ["  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite> | --all-projects [--platform win32|win64] [--config <manifest>]] [--depth N] [--format text|json]", "                               an interface method also lists its implementors; an implementor, the interface sites reaching it", "                               --format json: \"implementors\" [QName,...] and \"via_dispatch\" [{via,kind,sites}] (keys present only when non-empty; RB-5)", "                               --all-projects: asks every database the manifest names instead of one (--db is refused). A project DB answers callers and implementors, a library declarations only; a section with no DB, an old schema or an unreadable file is a line of its own with its repair command, and so is a stale one", "                               --format json with --all-projects: {qname,depth,platform,complete,found,declarations[],sections[{name,kind,db,state,repair,stale_files,target_declared,by_name_refs,levels[],implementors[{qname,edge}],via_dispatch[]}],summary}; exit 0 found, 1 found nowhere, 2 --db given or the manifest did not load. complete covers manifest sections only; a project the manifest does not name is not seen"]
     }
   ],

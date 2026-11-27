@@ -23,7 +23,8 @@
           "name": "--json"
         }
       ],
-      "help": ["  drag-lint gain               [--since yyyy-mm-dd] [--json]   (counted savings: sums %LOCALAPPDATA%\\drag-lint\\usage.log -- one line per context / query / find-callers run, written best effort; DRAGLINT_USAGE_LOG=0 turns the log off -- per verb and per day: tokens_returned, tokens_avoided = source bytes the answer stood in for / 4, ratio)"]
+      "helpOrder": 149,
+      "help": ["  drag-lint gain [--since yyyy-mm-dd] [--json]", "       ^ tokens_returned is measured only for context and query --text; the other readers are estimated at 15 tokens per row", "       ^ The log is per user and best effort: an unwritable LOCALAPPDATA loses lines silently by design", "       see wiki page: Gain-usage-log", "  drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]", "       see wiki page: Format-Whole-Project-with-YADF", "  drag-lint index --project <file.dproj> --db <file.sqlite> [--build-config <Release|Debug|name>]", "       see wiki page: index-build-config", "  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--rule-cache-warm background|wait|off] [--watch [--interval N]] [--target-compiler <ver|auto>]", "       see wiki page: Rebuild-Index-for-This-Project", "  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]", "       see wiki page: Rescan-this-unit", "  drag-lint index --project <X.dproj> --db <file.sqlite> (prints a WARN line for a unit within 10% below settings.maxParseFileKB, default 2048 KB)", "       see wiki page: rule-time-budget"]
     }
   ],
   "audience": "both",

@@ -40,7 +40,7 @@
           "arg": "<file>"
         }
       ],
-      "helpOrder": 43,
+      "helpOrder": 49,
       "help": ["  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)"]
     },
     {

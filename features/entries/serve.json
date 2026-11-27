@@ -19,7 +19,7 @@
           "arg": "<file.sqlite>"
         }
       ],
-      "helpOrder": 22,
+      "helpOrder": 24,
       "help": ["  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server; --db repeatable, every one is opened; none = project + every library section)"]
     }
   ],

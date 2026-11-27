@@ -36,7 +36,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 77,
+      "helpOrder": 86,
       "help": ["  drag-lint find-callees --qname <Foo.Bar> | --name <bare> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X; --name = every routine of that bare name, each under a # <qname> header when several: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)", "                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.", "                               With no library open the text ends N external (library not open) for the calls one could bind."]
     },
     {

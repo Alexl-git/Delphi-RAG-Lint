@@ -30,7 +30,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 11,
+      "helpOrder": 13,
       "help": ["  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)"]
     },
     {

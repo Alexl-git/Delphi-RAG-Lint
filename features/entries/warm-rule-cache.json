@@ -26,7 +26,7 @@
           "name": "--detached"
         }
       ],
-      "helpOrder": 26,
+      "helpOrder": 29,
       "help": ["  drag-lint warm-rule-cache --db <project.sqlite> [--library-db <lib.sqlite>] [--detached]   (fill the `lint <file>` rule", "                               cache for a project index now, in this process; what index starts in the background.", "                               --detached: the form index uses -- every line of output goes to NUL)"]
     }
   ],

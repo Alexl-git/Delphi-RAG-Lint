@@ -39,7 +39,7 @@
           "name": "--include-sites"
         }
       ],
-      "helpOrder": 89,
+      "helpOrder": 98,
       "help": ["  drag-lint preprocess-file --in PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] [--include-sites]   (diagnostic: print {$IFDEF}-resolved source to stdout)"]
     }
   ],

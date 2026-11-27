@@ -26,7 +26,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 75,
+      "helpOrder": 84,
       "help": ["  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)"]
     }
   ],

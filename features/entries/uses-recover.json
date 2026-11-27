@@ -41,7 +41,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 7,
+      "helpOrder": 9,
       "help": ["  drag-lint uses-recover       --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--project <x.dproj>] [--apply] [--json]", "                               uses edges of units with NO source in --db or any --library-db, from the vendor's C++Builder", "                               .hpp headers (#include lines = interface uses; System/SysInit dropped; never reads a .dcu).", "                               --hpp-dir is repeatable, not recursive, first hit wins; sourceless targets are followed.", "                               --map: a dcc -GS/-GD map; in_map per unit, map_only = linked units no header reaches.", "                               --project: the .dproj's DCC_UnitAlias + the Delphi targets' defaults (WinProcs=Winapi.Windows ...);", "                               a used alias is classified by its target.", "                               --apply WRITES --db: one files row per recovered header (language hpp), its includes as interface", "                               unit_uses rows, then the uses pass binds the project's rows to them; idempotent. Without it: read-only.", "                               json: units[{unit, reach direct|header, used_by, header, in_map, uses[{unit, status", "                               indexed|library|sourceless}]}], no_header[], map_only[], aliases[{unit, to, status}], headers_found,", "                               applied{files, uses, bound} (--apply only).", "                               Exit 0 = reported (zero included); 2 = no --db/--hpp-dir, missing DB/dir/map/project, or --apply on", "                               a stale schema; 3 = unknown flag."]
     }
   ],

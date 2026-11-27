@@ -30,7 +30,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 63,
+      "helpOrder": 72,
       "help": ["  drag-lint exception-facts (--target <routine> | --name <Type>) --db <db> [--json]   (which routine raises and handles which exception type; one row per site; no ancestry, no callers: ask exception-paths walks those)"]
     }
   ],

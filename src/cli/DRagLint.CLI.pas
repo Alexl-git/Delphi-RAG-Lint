@@ -30455,7 +30455,7 @@ begin
     else if Args.Command = 'metrics'           then Result:= RunMetricsVerb { v156 W2FRAME: own flags, DRagLint.CLI.Metrics (lane MET-1) }
     else if Args.Command = 'sbom'              then Result:= RunSbomVerb { v156 W2FRAME: own flags, DRagLint.CLI.Sbom (lane SBOM-1) }
     else if Args.Command = 'happens-before'    then Result:= RunHappensBeforeVerb { v156 W2FRAME: own flags, DRagLint.CLI.HappensBefore (lane HB4) }
-    else if Args.Command = MIGRATE_REPORTS_VERB then Result:= RunMigrateReportsVerb { v156 QE-3: own flags, DRagLint.CLI.MigrateReports }
+    else if Args.Command = 'migrate-reports'   then Result:= RunMigrateReportsVerb { literal: the docs-sync guard reads the dispatch by literal; = MIGRATE_REPORTS_VERB. v156 QE-3: own flags, DRagLint.CLI.MigrateReports }
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
     else if Args.Command = 'exception-facts'   then Result:= DoExceptionFacts  (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)

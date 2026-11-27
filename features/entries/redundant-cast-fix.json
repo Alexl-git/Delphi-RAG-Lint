@@ -55,8 +55,7 @@
           "name": "--library-db",
           "arg": "<db>"
         }
-      ],
-      "help": ["  drag-lint lint --fix --fix-rule redundant-cast --db <db> [--project <X.dproj> --apply] [--in <f.pas>] [--fix-line <L>] [--no-backup] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]   - remove identity casts: proved from ref_types, every refusal named, --apply builds before and after and rolls back"]
+      ]
     }
   ],
   "audience": "both",

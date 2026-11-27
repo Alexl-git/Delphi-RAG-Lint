@@ -26,7 +26,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 12,
+      "helpOrder": 14,
       "help": ["  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor's class pickers. exit 1 = no such ancestor)"]
     },
     {

@@ -27,7 +27,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 103,
+      "helpOrder": 113,
       "help": ["  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)"]
     }
   ],

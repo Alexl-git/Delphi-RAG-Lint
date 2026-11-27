@@ -68,7 +68,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 115,
+      "helpOrder": 141,
       "help": ["  drag-lint repo copy-grid      --dfm <file.dfm> [--unit <file.pas>] (--from <view> --to <view> [--event <name> [--from-column <col> [--to-column <col>]]] | --list [--from <view>]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]   (copies the events of a grid view, its columns and their events to another view of the SAME form, between table / banded table / card / layout views, or with --event ONE event; a new column is declared in the unit; every byte outside a change stays, the new text is checked by the Delphi reader first, each changed file gets a backup; what cannot be settled is BLOCKED, what needs a look is unchecked; --list shows the views and, with --from, their events; the repository is not opened; no --apply = dry run; a --select file needs the # plan line of its dry run; exit 1 view / event / write failure or a changed plan, 2 usage)"]
     }
   ],
