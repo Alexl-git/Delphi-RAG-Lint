@@ -590,13 +590,15 @@ const
   V156_CAPTION = 1;
   V156_LEFT = 2;
   V156_RIGHT = 3;
-  V156_QUESTIONS: array[0..5] of array[V156_ID..V156_RIGHT] of string = (
+  V156_QUESTIONS: array[0..6] of array[V156_ID..V156_RIGHT] of string = (
     ('class-diagram', 'Class diagram of this type...', 'classes', 'relations'),
     ('sequence', 'Sequence of calls in this routine...', 'calls', 'participants'),
     ('control-flow', 'Control flow of this routine...', 'nodes', 'edges'),
     ('sent-not-handled', 'Commands sent but never handled...', 'commands sent', 'never handled'),
     ('dependency-matrix', 'Unit dependency matrix...', 'units', 'uses edges'),
-    ('main-sequence', 'Abstractness and instability (main sequence)...', 'units', 'off the main sequence'));
+    ('main-sequence', 'Abstractness and instability (main sequence)...', 'units', 'off the main sequence'),
+    { v156 G41 }
+    ('hotspots', 'Hotspots: size and complexity (treemap)...', 'units', 'above complexity 20'));
   NO_ROW = -1;
 
 var

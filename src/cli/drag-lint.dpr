@@ -273,6 +273,7 @@ uses
   DRagLint.Charts.Q.SentNotHandled in '..\charts\DRagLint.Charts.Q.SentNotHandled.pas',
   DRagLint.Charts.Q.DepMatrix in '..\charts\DRagLint.Charts.Q.DepMatrix.pas',
   DRagLint.Charts.Q.MainSequence in '..\charts\DRagLint.Charts.Q.MainSequence.pas',
+  DRagLint.Charts.Q.Hotspots in '..\charts\DRagLint.Charts.Q.Hotspots.pas',
   DRagLint.CLI.Metrics in 'DRagLint.CLI.Metrics.pas',
   DRagLint.CLI.Sbom in 'DRagLint.CLI.Sbom.pas',
   DRagLint.CLI.HappensBefore in 'DRagLint.CLI.HappensBefore.pas',

@@ -44,6 +44,7 @@
     "sequence":         { "aliases": ["sequence diagram", "call sequence"] },
     "dependency-matrix": { "aliases": ["uses matrix", "dsm", "unit dependency matrix"] },
     "main-sequence":    { "aliases": ["abstractness", "instability", "zone of pain"] },
+    "hotspots":        { "aliases": ["treemap", "size map", "complexity map"] },
     "control-flow":    { "aliases": ["flow graph", "basic blocks"] },
     "sent-not-handled": { "aliases": ["unhandled commands", "commands never handled"] }
   }
