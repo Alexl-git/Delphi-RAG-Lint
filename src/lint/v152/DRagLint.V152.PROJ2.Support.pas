@@ -28,7 +28,7 @@ const
 /// <remarks>
 /// A candidate is a .pas the .dpr lists in its uses clause, that no other indexed file
 /// uses, and none of whose symbols the program code references. Exempt: a self-registering unit
-/// (an initialization section, or a container registration in the unit itself) -- but NOT a
+/// (an initialization section, a container registration in the unit itself, or - 1.56 - a class of the unit that a container registration anywhere names) -- but NOT a
 /// form: a unit with an indexed sibling .dfm / .fmx form is exempt only when something opens it,
 /// i.e. the program code names it (covered above) or another .pas names one of its classes in a
 /// string literal (FindClass / GetClass('TName')). A .dpk lists package members by design and is
@@ -126,14 +126,23 @@ begin
     if SameText(Hit.Text, AClassName) and not SameText(Hit.FilePath, AOwnPath) then Exit(True);
 end;
 
-{ The unit registers itself in a DI container: a di_bindings row in its own file. }
+{ The unit takes part in a DI container (v156 G-61): a di_bindings row in its own file (a self-registration or
+  a registrar unit whose RegisterType<TX> names classes of other units), or a row anywhere whose
+  implementation is one of the unit's classes (the registration lives in a config unit). }
 function RegistersInContainer(const AStore: ISymbolStore; const AFileId: Int64;
   const AClasses: TList<string>): Boolean;
 begin
   Result:= False;
   for var ClassName: string in AClasses do
-    for var Row: TDiBindingRow in AStore.FindDiBindingsForImpl(ClassName) do
-      if Row.FileId = AFileId then Exit(True);
+    if Length(AStore.FindDiBindingsForImpl(ClassName)) > 0 then Exit(True);
+  for var Ref: TReference in AStore.GetReferencesFromFile(AFileId) do
+    if Ref.SymbolId <> 0 then
+    begin
+      var Sym: TSymbol:= AStore.GetSymbolById(Ref.SymbolId);
+      if (Sym.Id = 0) or (Sym.Kind <> skClass) then Continue;
+      for var Row: TDiBindingRow in AStore.FindDiBindingsForImpl(Sym.Name) do
+        if Row.FileId = AFileId then Exit(True);
+    end;
 end;
 
 function MakeFinding(const APath: string; ALine: Integer; const AUnit, AProgram: string; AIsForm: Boolean): TLintFinding;
