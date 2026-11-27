@@ -232,7 +232,7 @@ Each has a TDD fixture under `tests/lint/` verified by `tests/lint/run_lint_test
 | `loop-executes-at-most-once` | warning | `for`/`while`/`repeat` whose first body statement is `Exit`/`Break`/`raise` |
 | `format-argument-count` | error | `Format` specifier count != argument count |
 | `format-specifier-type-mismatch` | error | literal `Format` argument type incompatible with its specifier |
-| `try-except-swallowed` | warning | `try..except` with no raise/log/`HandleException` |
+| `try-except-swallowed` | warning | `try..except` with no raise/log/`HandleException`; in a service or console unit the message adds: write to a log file and an EurekaLog report with call stack |
 | `dataset-open-without-close` | warning | dataset opened without a matching `Close` in a `finally` |
 | `criticalsection-not-released` | error | lock `Enter`/`Acquire`, or `TMonitor.Enter(L)`, without a `finally` `Leave`/`Release`/`TMonitor.Exit(L)` |
 | `too-many-exit-points` | info | routine with more than 5 `Exit` statements |

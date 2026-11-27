@@ -8509,6 +8509,7 @@ end; // function
 
 class function TAstChecker.CheckSwallowedExcept(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@48e4 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
+  ServiceHint: Boolean;  { v156 RF-2: the file is a service or console unit; adds the log-file hint to the message }
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
@@ -9012,6 +9013,8 @@ var
         F.RuleId  := 'try-except-swallowed';
         F.Severity:= 'warning';
         F.Message := 'Exception silently swallowed -- add raise, logging, or Application.HandleException.';
+        if ServiceHint then
+          F.Message:= F.Message + ' In a service or console program nobody sees a dialog: write the exception to a log file and an EurekaLog report with the call stack.';
         F.FilePath:= AFile;
         F.StartLine:= Integer(ExceptPt.Row   ) + 1;
         F.StartCol := TAstParseCache.CharCol(AFile, ExceptPt); { 1.52 BK-COLS2: character column }
@@ -9028,6 +9031,7 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
+  ServiceHint:= TRegEx.IsMatch(TEncoding.UTF8.GetString(PF.RawSrc), '(?i)\bSvcMgr\b|\bTService\b|\{\$APPTYPE\s+CONSOLE\s*\}');
   Findings:= TList<TLintFinding>.Create;
   try
 
