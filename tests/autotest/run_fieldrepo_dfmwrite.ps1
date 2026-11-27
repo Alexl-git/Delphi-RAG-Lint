@@ -519,7 +519,8 @@ end
     "  if Ask('H13?') then`n    Q.Filter := 'A = 1';`n  Q.Filter := 'A = 1';`n  ShowMessage('H14');`nend;`nend.`n")
   $r = Write-Dfm @('--dataset', 'qryMain', '--names', 'ID') $q2dfm
   $state = (1..14 | ForEach-Object { $m = [regex]::Match($r.Out, "delete uQ\.dfm qryMainH$($_): [^\n]*\n  (BLOCKED: [^\n]*|\(unchecked\))"); if (-not $m.Success) { '?' } elseif ($m.Value -match 'BLOCKED') { 'B' } else { '-' } }) -join ''
-  Check 'W13e Q17 whole expression: Format inside Filter := (H1), the second literal of a concatenation (H2), ds[..] (H3), a const given to FieldByName (H4, typed H9), a SQL parameter in a later literal (H11), a nested argument (H12) BLOCK; a message with Format (H5), a caption (H6), a log line (H7), a set (H8), a const only shown (H10), a message before / after a Filter statement (H13, H14) do not' ($state -eq 'BBBB----B-BB--') ($state + "`n" + $r.Out)  # ---- M2: the plan id ----
+  Check 'W13e Q17 whole expression: Format inside Filter := (H1), the second literal of a concatenation (H2), ds[..] (H3), a const given to FieldByName (H4, typed H9), a SQL parameter in a later literal (H11), a nested argument (H12) BLOCK; a message with Format (H5), a caption (H6), a log line (H7), a set (H8), a const only shown (H10), a message before / after a Filter statement (H13, H14) do not' ($state -eq 'BBBB----B-BB--') ($state + "`n" + $r.Out)
+  # ---- M2: the plan id ----
   $pd = NewForms 'plan'
   $pdfm = Join-Path $pd 'uAllKinds.dfm'; $ppas = Join-Path $pd 'uAllKinds.pas'
   $names = @('--dataset', 'memOrders', '--names', 'ID,QTY,NOTE,USEDCOL')

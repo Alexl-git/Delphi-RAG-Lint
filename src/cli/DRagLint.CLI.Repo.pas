@@ -358,11 +358,14 @@ begin
 end;
 
 { 1.55 UPDORM Q2: the console question before update-orm --apply overwrites a hand-edited region. Only when stdin is a
-  console: a pipe, a file or no console (the IDE plugin, a script, an agent) never waits for an answer and keeps the region. }
+  console: a pipe, a file, NUL or no console (the IDE plugin, a script, an agent) never waits for an answer and keeps the
+  region. GetConsoleMode, not GetFileType: NUL is a character device too, and a prompt under `< NUL` reads end-of-file. }
 function ConsoleAsk: TOrmAskOverwrite;
+var
+  Mode: DWORD;
 begin
   Result:= nil;
-  if GetFileType(GetStdHandle(STD_INPUT_HANDLE)) <> FILE_TYPE_CHAR then
+  if not GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), Mode) then
     Exit;
   Result:= function(const pFile, pRegionId: string): Boolean
     var
