@@ -398,7 +398,7 @@ var
 var
   VWalSize: Int64;
 begin
-  VHash := THashSHA2.Create(SHA256);  // dl:ok object-leak@552d -- REVIEWED LINTFIX-B 2026-11-27: THashSHA2 is a record, there is nothing to free
+  VHash := THashSHA2.Create(SHA256);
   pSize := 0;
   VWalSize := 0;
   Feed(pPath, pSize);
@@ -532,7 +532,7 @@ var
   VQuery: TFDQuery;
   VHash: THashSHA2;
 begin
-  VHash := THashSHA2.Create(SHA256);  // dl:ok object-leak@552d -- REVIEWED LINTFIX-B 2026-11-27: THashSHA2 is a record, there is nothing to free
+  VHash := THashSHA2.Create(SHA256);
   VQuery := NewQuery(FConn, SQL_FILES_STAMP);
   try
     VQuery.Open;

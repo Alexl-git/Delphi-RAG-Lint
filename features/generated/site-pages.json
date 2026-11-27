@@ -1220,8 +1220,8 @@
     "version": "1.55.0-alpha"
   },
   "features/v156-math-dfm-rules.md": {
-    "hash": "0db400d075a2f33fd0966418dfc4f5faeb875a7bf57e39d7de19086398a3ec4f",
-    "version": "1.55.0-alpha"
+    "hash": "9ba1ded9a4f4cbcc05d2425148cc62cbe455ebbe4b63eee6a0ffc010a12f1c3e",
+    "version": "1.56.0-alpha"
   },
   "features/v156-mem-rules.md": {
     "hash": "d3157d75bf0ca0457955426969dd79f7d10c724a10d69c713ed27e2ac73ad171",

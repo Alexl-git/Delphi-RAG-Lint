@@ -10,10 +10,10 @@ drag-lint lint <form.dfm> --rule dfm-control-overlap
 
 ## math-single-overload (G-32, warning, bug-patterns, OFF)
 
-`Max`, `Min` or `Power` called with Single arguments or float literals (so the Single overload is chosen and the
+`Power` called with ONLY Single variables as arguments (so the Single overload is chosen and the
 arithmetic runs in single precision), when the result is assigned to a Double, Extended or Real variable. Reported at the call.
 
-Silent when any argument is a Double or Extended, when the result goes to a Single, when the argument type cannot be
+Silent for `Max` and `Min` (the result is one of the arguments, so widening loses nothing), when any argument is a float literal (the compiler then binds the Double overload), when any argument is a Double or Extended, when the result goes to a Single, when the argument type cannot be
 resolved, after an explicit `Double(...)` cast, for an integer literal and for a user routine of the same name.
 
 ## dfm-god-handler (G-35, hint, structure, OFF)

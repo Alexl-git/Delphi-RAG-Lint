@@ -59,7 +59,6 @@ implementation
 
 uses
   System.IOUtils
-  , DRagLint.Lint.Config
   , DRagLint.Lint.RuleCatalog
   , DRagLint.V151.DFMB.Support
   , DRagLint.V156.DFMR.Support
@@ -73,7 +72,7 @@ const
   TITLE_GOD = 'One event handler is wired to many events of a form (a hidden dispatcher) -- split it per event or per control';
   TITLE_OVERLAP = 'A visible control covers a sibling in the same parent -- one of them is partly hidden';
 
-procedure AddFinding(const AList: TList<TLintFinding>; const ACtx: TV151FileCtx; const ARule, ADefaultSev: string;
+procedure AddFinding(const AList: TList<TLintFinding>; const ACtx: TV151FileCtx; const ARule, ADefaultSev: string;  // dl:ok duplicate-code -- REVIEWED FIXF 2026-11-27: same finding-builder shape as the v154 DFM lane; each lane keeps a private copy so the lanes stay independent units
   ALine, ACol: Integer; const AMessage: string);
 begin
   var F: TLintFinding:= Default(TLintFinding);
@@ -107,8 +106,8 @@ class function TV156DFMRRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFi
 begin
   Result:= nil;
   if ACtx.DfmPath = '' then Exit;
-  var WantsGod: Boolean:= ACtx.Wants(RULE_DFM_GOD_HANDLER);
-  var WantsOverlap: Boolean:= ACtx.Wants(RULE_DFM_CONTROL_OVERLAP);
+  var WantsGod: Boolean:= ACtx.Wants(RULE_DFM_GOD_HANDLER) and (SameText(ACtx.NarrowRule, RULE_DFM_GOD_HANDLER) or ACtx.Cfg.IsEnabled(RULE_DFM_GOD_HANDLER));
+  var WantsOverlap: Boolean:= ACtx.Wants(RULE_DFM_CONTROL_OVERLAP) and (SameText(ACtx.NarrowRule, RULE_DFM_CONTROL_OVERLAP) or ACtx.Cfg.IsEnabled(RULE_DFM_CONTROL_OVERLAP));
   if not (WantsGod or WantsOverlap) then Exit;
   var Model: TDfmModel;
   try

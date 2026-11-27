@@ -8932,7 +8932,7 @@ begin
   SeedFound:= False;
   for DbPath in PathsToScan do
   begin
-    if not (PlaceOfDb(DbPath) in TextPlaces) then Continue; { v156 TS-N }  // dl:ok nonminimal-bool@2db4 -- LINTFIX-A: Delphi has no `not in` operator; `not (A in S)` is the one spelling
+    if PlaceOfDb(DbPath) not in TextPlaces then Continue; { v156 TS-N }
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(DbPath, RoOk);
     if not RoOk then
@@ -9924,7 +9924,7 @@ begin
 
   for DbPath in PathsToScan do
   begin
-    if not (PlaceOfDb(DbPath) in Places) then Continue; { v156 TS-N }  // dl:ok nonminimal-bool@fe5c -- LINTFIX-A: Delphi has no `not in` operator; `not (A in S)` is the one spelling
+    if PlaceOfDb(DbPath) not in Places then Continue; { v156 TS-N }
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(DbPath, RoOk);
     if not RoOk then
@@ -9967,7 +9967,7 @@ begin
     // Fuzzy fallback: hit each DB, accumulate, top-K overall.
     for DbPath in PathsToScan do
     begin
-      if not (PlaceOfDb(DbPath) in Places) then Continue; { v156 TS-N }  // dl:ok nonminimal-bool@fe5c -- LINTFIX-A: Delphi has no `not in` operator; `not (A in S)` is the one spelling
+      if PlaceOfDb(DbPath) not in Places then Continue; { v156 TS-N }
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbPath, RoOk);
       if not RoOk then

@@ -1,8 +1,8 @@
 {
-  "product": "1.55.0-alpha",
-  "extractor": "1.43.0-alpha",
-  "resolver": "1.31.0-alpha",
-  "schema": 27,
+  "product": "1.56.0-alpha",
+  "extractor": "1.56.0-alpha",
+  "resolver": "1.56.0-alpha",
+  "schema": 28,
   "groups": [
     {
       "id": "indexing",
@@ -5721,7 +5721,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.56.0-alpha",
-      "summary": "Finds Max, Min and Power calls that run in Single precision for a Double result, a handler wired to many events, and overlapping controls",
+      "summary": "Finds Power calls on Single variables that run in Single precision for a Double result, a handler wired to many events, and overlapping controls",
       "intro": "Read this to see what math-single-overload, dfm-god-handler and dfm-control-overlap report, that all three are off by default and what each leaves alone.",
       "wikiPage": "v156-math-dfm-rules",
       "surfaces": [
@@ -23619,7 +23619,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Max / Min / Power on Single arguments and literals binds the Single overload; the result feeds a Double / Extended variable (bug-patterns, warning)",
+        "summary": "Power on all-Single variable arguments binds the Single overload; the result feeds a Double / Extended variable (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {

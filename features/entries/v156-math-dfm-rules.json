@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.56.0-alpha",
-  "summary": "Finds Max, Min and Power calls that run in Single precision for a Double result, a handler wired to many events, and overlapping controls",
+  "summary": "Finds Power calls on Single variables that run in Single precision for a Double result, a handler wired to many events, and overlapping controls",
   "intro": "Read this to see what math-single-overload, dfm-god-handler and dfm-control-overlap report, that all three are off by default and what each leaves alone.",
   "wikiPage": "v156-math-dfm-rules",
   "surfaces": [

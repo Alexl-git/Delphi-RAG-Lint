@@ -10,7 +10,6 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , DRagLint.V151.DFMB.Support
-  , DRagLint.V151.Dfm.Common
   ;
 
 type
@@ -45,22 +44,6 @@ type
 const
   /// <summary>Fewest event bindings of one handler that count as "many" when the project sets no threshold.</summary>
   DEFAULT_GOD_HANDLER_BINDINGS = 5;
-  /// <summary>Two rectangles must share more than this many pixels in BOTH directions to count as covering each other.</summary>
-  OVERLAP_TOLERANCE_PX = 1;
-
-/// <summary>Reads one property of a form-file object as an integer.</summary>
-/// <param name="AObj">Form-file object.</param>
-/// <param name="AName">Property name.</param>
-/// <param name="ADefault">Value when the property is not stored.</param>
-/// <param name="AOk">False when the property is stored but is not a plain integer.</param>
-/// <returns>The stored value, ADefault when absent.</returns>
-function IntProp(const AObj: TDfmObj; const AName: string; ADefault: Integer; out AOk: Boolean): Integer;
-
-/// <summary>Tells whether a stored property is an event binding and names the event.</summary>
-/// <param name="AProp">One property of a form-file object.</param>
-/// <param name="AEvent">The event name (the part after the last dot, e.g. OnClick); '' when not an event.</param>
-/// <returns>True when the name is On + capital letter and the value is a bare method identifier.</returns>
-function IsEventBinding(const AProp: TDfmProp; out AEvent: string): Boolean;
 
 /// <summary>Finds the handlers that a form file wires to at least AThreshold events of at least two kinds.</summary>
 /// <param name="AModel">Parsed form file.</param>
@@ -69,26 +52,6 @@ function IsEventBinding(const AProp: TDfmProp; out AEvent: string): Boolean;
 /// <remarks>A handler shared by many controls for ONE event (every OnClick of a row of buttons, a Sender
 /// dispatcher) is the common deliberate pattern and is not reported.</remarks>
 function FindGodHandlers(const AModel: TDfmModel; AThreshold: Integer): TArray<TGodHandler>;
-
-/// <summary>True when the class lays out its children itself or stacks them on purpose.</summary>
-/// <param name="AClass">Class name of the parent.</param>
-/// <returns>True for page controls, notebooks, card / grid / flow / stack panels, layout controls and tool bars.</returns>
-function IsStackingParent(const AClass: string): Boolean;
-
-/// <summary>True when the class is drawn behind other controls on purpose (bevel, shape, group box, panel, image).</summary>
-/// <param name="AClass">Class name.</param>
-/// <returns>True for a backdrop class.</returns>
-function IsBackdropClass(const AClass: string): Boolean;
-
-/// <summary>Gives the screen rectangle of a control whose position is fixed by its stored Left, Top, Width and Height.</summary>
-/// <param name="AObj">Form-file object.</param>
-/// <param name="ALeft">Left edge.</param>
-/// <param name="ATop">Top edge.</param>
-/// <param name="ARight">Right edge (exclusive).</param>
-/// <param name="ABottom">Bottom edge (exclusive).</param>
-/// <returns>False for a non-visual component, a hidden control, an aligned or anchored-to-stretch control, a
-/// splitter, or a control without a stored Width and Height.</returns>
-function FixedRect(const AObj: TDfmObj; out ALeft, ATop, ARight, ABottom: Integer): Boolean;
 
 /// <summary>Finds the controls that cover an earlier visible sibling under the same parent.</summary>
 /// <param name="AModel">Parsed form file.</param>
@@ -104,7 +67,11 @@ uses
   , System.Math
   , System.Character
   , DRagLint.V154.DFM.Support
+  , DRagLint.V151.Dfm.Common
   ;
+const
+  OVERLAP_TOLERANCE_PX = 1;  { two rectangles must share more than this many pixels in BOTH directions to count as covering }
+
 
 type
   /// <summary>Running count of the bindings of one handler: the first binding plus the event kinds seen, '|'-delimited.</summary>

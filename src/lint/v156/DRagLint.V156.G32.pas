@@ -45,7 +45,7 @@ type
 implementation
 
 uses
-  DRagLint.V156.G32.Support  // dl:ok uses-global-census -- REVIEWED v156 G32: the Support unit of the lane holds the check; the pair travels together
+  DRagLint.V156.G32.Support
   ;
 
 const
@@ -53,7 +53,7 @@ const
 
 class procedure TV156G32Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  ADecls.Add(V151Rule(RULE_MATH_SINGLE_OVERLOAD, 'bug-patterns', 'warning', 'Max / Min / Power on Single arguments and literals binds the Single overload; the result feeds a Double / Extended variable', False));
+  ADecls.Add(V151Rule(RULE_MATH_SINGLE_OVERLOAD, 'bug-patterns', 'warning', 'Power on all-Single variable arguments binds the Single overload; the result feeds a Double / Extended variable', False));
 end;
 
 class function TV156G32Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;

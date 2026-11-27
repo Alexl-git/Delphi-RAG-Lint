@@ -2,18 +2,19 @@ unit DRagLint.V156.G32.Support;
 
 { Wave v156 lane G32 -- helpers of DRagLint.V156.G32 (private to the lane).
 
-  math-single-overload (G-32): a call of the System.Math routines Max / Min / Power whose
-  arguments are Single-typed variables and float literals only, so the compiler binds the
-  SINGLE overload, and whose result is assigned straight to a Double / Extended / Real variable
-  (`D:= Max(S, 1.5)`). The value is computed in 24-bit precision and only then widened.
+  math-single-overload (G-32): a call of System.Math Power whose arguments are ALL Single-typed
+  variables (no float literal), so the compiler binds the SINGLE overload, and whose result is assigned
+  straight to a Double / Extended / Real variable (D:= Power(S, E)). The value is computed in 24-bit
+  precision and only then widened. Max / Min never fire: their result is one of the arguments, so the
+  widening is exact. A float literal argument makes the compiler bind the Double overload (measured
+  with dcc64 37.0), so a call with a literal never fires.
 
   The rule answers only when it can PROVE every part from the index: the call is an unresolved
-  (library) bare or Math-qualified call on one line; each argument is a float literal or a plain
-  identifier whose static type ref_types records (RefStaticTypeAt); at least one argument is
-  Single and none is Double / Extended / Real / unknown / an expression / an integer literal;
-  the call is the whole right-hand side of an assignment to one identifier whose recorded type
-  is Double, Extended or Real. A ref bound to a project routine (a user-defined Max), a call
-  spread over several lines, or any argument whose type the index does not hold: no finding. }
+  (library) bare or Math-qualified call on one line; each argument is a plain identifier whose static
+  type ref_types records (RefStaticTypeAt) and is Single (not Double / Extended / Real / unknown / an
+  expression / a literal); the call is the whole right-hand side of an assignment to one identifier
+  whose recorded type is Double, Extended or Real. A ref bound to a project routine, a call spread
+  over several lines, or any argument whose type the index does not hold: no finding. }
 
 interface
 
@@ -28,7 +29,7 @@ type
   /// <remarks>Stateless; class methods only. Reads the store and the source file, never writes.</remarks>
   TG32Checks = class
   public
-    /// <summary>Max / Min / Power calls of one file that bind the Single overload and feed a wider variable.</summary>
+    /// <summary>Power calls of one file that bind the Single overload and feed a wider variable.</summary>
     /// <param name="AStore">Project index; nil returns nil. An index without ref_types answers nothing.</param>
     /// <param name="AFileId">files.id of APath in AStore; 0 returns nil.</param>
     /// <param name="APath">The file path stamped on each finding; the source is read from it.</param>
@@ -58,7 +59,7 @@ type
   end;
 
 const
-  MATH_ROUTINES: array[0..2] of string = ('max', 'min', 'power');
+  MATH_ROUTINES: array[0..0] of string = ('power');
   WIDE_TYPES   : array[0..2] of string = ('double', 'extended', 'real');
   SINGLE_TYPE  = 'single';
   FLOAT_RE     = '^\d+\.\d+([eE][+-]?\d+)?$';
@@ -153,16 +154,15 @@ begin
     if (Open > Length(Line)) or (Line[Open] <> '(') then Continue;
     var Args: TArray<TArgText>;
     if not SplitArgs(Line, Open, Args) or (Length(Args) < MIN_ARGS) then Continue;
-    var Singles: Integer:= 0;
     var Provable: Boolean:= True;
     for var A: TArgText in Args do
-    begin
-      var Kind: TArgKind:= ClassifyArg(AStore, AFileId, R.StartLine, A);
-      if Kind = akSingle then Inc(Singles);
-      if (Kind <> akSingle) and (Kind <> akFloatLiteral) then Provable:= False;
-    end;
-    if not Provable or (Singles = 0) then Continue;
-    if not FeedsWideVariable(AStore, AFileId, R.StartLine, Line, R.StartCol) then Continue;
+      if ClassifyArg(AStore, AFileId, R.StartLine, A) <> akSingle then  // dl:ok query-in-loop@5155 -- REVIEWED FIXF 2026-11-27: one point lookup per argument of a Math call (2-3 per call, only for calls of Power); there is no set form of RefStaticTypeAt and a batch would read every ref_types row of the file
+      begin
+        Provable:= False;
+        Break;
+      end;
+    if not Provable then Continue;
+    if not FeedsWideVariable(AStore, AFileId, R.StartLine, Line, R.StartCol) then Continue;  // dl:ok query-in-loop@8903 -- REVIEWED FIXF 2026-11-27: one point lookup for the assignment target, reached only after every argument was proven Single
     var F: TLintFinding:= Default(TLintFinding);
     F.RuleId    := ARuleId;
     F.Severity  := 'warning';
@@ -173,7 +173,7 @@ begin
     F.EndLine   := R.StartLine;
     F.EndCol    := R.StartCol + Length(R.NameText);
     F.SymbolName:= R.NameText;
-    F.Message   := Format('%s(...) binds the Single overload (every argument is Single or a literal) but its result feeds a Double / Extended variable: the value is computed in Single precision -- cast an argument to Double',
+    F.Message   := Format('%s(...) binds the Single overload (every argument is a Single variable, no float literal) but its result feeds a Double / Extended variable: the value is computed in Single precision -- cast an argument to Double',
       [R.NameText]);
     Result:= Result + [F];
   end;

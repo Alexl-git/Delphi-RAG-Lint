@@ -22,10 +22,8 @@ end;
 
 procedure FireCases(S, S2: Single; var D: Double; var E: Extended);
 begin
-  D:= Max(S, 1.5);  // FIRE math-single-overload
-  D:= Power(S, 2.5);  // FIRE math-single-overload
-  E:= Min(S, S2);  // FIRE math-single-overload
-  D:= Math.Max(0.5, S);  // FIRE math-single-overload
+  D:= Power(S, S2);  // FIRE math-single-overload
+  E:= Math.Power(S2, S);  // FIRE math-single-overload
 end;
 
 procedure SilentCases(S: Single; Dbl: Double; var D: Double; var Sg: Single);
@@ -39,11 +37,18 @@ begin
   D:= UserMax(S, 1.5);
   D:= Max(Dbl, Dbl);
   D:= Round(S);
+  D:= Max(S, 1.5);
+  D:= Power(S, 2.5);
+  D:= Math.Max(0.5, S);
+  D:= Max(S, S);
+  D:= Min(S, S);
+  D:= Power(S, Dbl);
+  Sg:= Power(S, S);
 end;
 
 function ResultFire(S1, S2: Single): Double;
 begin
-  Result:= Max(S1, S2);  // FIRE math-single-overload
+  Result:= Power(S1, S2);  // FIRE math-single-overload
 end;
 
 function ResultSilent(D1, D2: Double): Double;

@@ -91,7 +91,7 @@ function MatchCoverage(const pRoutines: TArray<TMetricRow>; const pIndexedFiles:
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.StrUtils,
+  System.SysUtils, System.Classes, System.IOUtils, System.JSON,
   System.RegularExpressions, System.Generics.Collections,
   DRagLint.Core.CliError; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
 
