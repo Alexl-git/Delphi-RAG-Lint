@@ -143,6 +143,7 @@ contains
   DragLint.Plugin.Cmd.IdxRange in 'DragLint.Plugin.Cmd.IdxRange.pas',
   DragLint.Plugin.Cmd.FixMarker in 'DragLint.Plugin.Cmd.FixMarker.pas',
   DragLint.Plugin.Cmd.FieldRepo in 'DragLint.Plugin.Cmd.FieldRepo.pas',
+  DragLint.Plugin.Cmd.GridCopy in 'DragLint.Plugin.Cmd.GridCopy.pas',
   DRagLint.FieldRepo.Kinds in '..\sql\DRagLint.FieldRepo.Kinds.pas',
   DRagLint.FieldRepo.DfmReadSelection in '..\sql\DRagLint.FieldRepo.DfmReadSelection.pas',
   DragLint.Plugin.FieldSelectModel in 'DragLint.Plugin.FieldSelectModel.pas',
