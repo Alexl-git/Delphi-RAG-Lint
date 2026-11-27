@@ -1,0 +1,23 @@
+What the Delphi 13 compiler (dcc64 37.0, -W+ -H+) says about noreturn, measured 2026-11-26 by lane FA-1.
+The rule noreturn-contract leaves these to the compiler and reports only what is missing here.
+
+Probe.dpr
+  Probe.dpr(18) Warning: W1080 NORETURN procedure FallsOff should not return
+  Probe.dpr(23) Warning: W1080 NORETURN procedure EndsInPlain should not return
+  Probe.dpr(27) Warning: W1080 NORETURN procedure UsesExit should not return
+  Probe.dpr(35) Hint: H2077 Value assigned to 'AfterCall' never used
+  Probe.dpr(49) Error: E2037 Declaration of 'Stop' differs from previous declaration
+  (no W1035 for NoResult: the compiler follows the directive of the callee)
+
+Probe2.dpr, with "procedure Stop;" of TImp lacking the directive
+  Probe2.dpr(9) Error: E2211 Declaration of 'Stop' differs from declaration in interface 'IStop'
+
+Probe2.dpr as committed
+  Probe2.dpr(16) Warning: W1080 NORETURN procedure TImp.Stop should not return
+  Probe2.dpr(21) Warning: W1080 NORETURN procedure CrossPlain should not return
+  Probe2.dpr(34) Warning: W1080 NORETURN procedure Swallow should not return
+  Probe2.dpr(43) Warning: W1080 NORETURN procedure SwallowCall should not return
+  Probe2.dpr(48) Warning: W1080 NORETURN procedure ViaVar should not return
+  Probe2.dpr(54) Warning: W1080 NORETURN procedure LoopBreak should not return
+  (nothing for AfterCall2: a statement after a call to a noreturn routine is not reported;
+   nothing for a routine that never returns and is not declared noreturn)

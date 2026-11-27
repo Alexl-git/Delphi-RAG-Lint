@@ -1,0 +1,19 @@
+{
+  "id": "v156-noreturn-contract",
+  "title": "Lint rule for calls that never return (noreturn)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "One rule on the stored noreturn fact: code after a call that never comes back, and a routine that never returns but is not declared noreturn",
+  "intro": "Read this to see what noreturn-contract reports, what it leaves to the compiler (W1080, E2037, E2211) and how the flow graph reads the noreturn fact of the index.",
+  "wikiPage": "v156-noreturn-contract",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas> --rule noreturn-contract --db <index.sqlite>"
+    }
+  ],
+  "audience": "both"
+}
