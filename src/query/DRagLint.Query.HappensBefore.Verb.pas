@@ -226,6 +226,17 @@ type
     InForce: Boolean;
   end;
 
+const
+  /// <summary>The separator of an event spec: `<kind>:<name>`.</summary>
+  EVENT_SEP = ':';
+  /// <summary>The name of an `app-run:` event that stands for every program.</summary>
+  APP_RUN_ALL = '*';
+  /// <summary>The prefix of each <see cref="THbvEventKind"/>, in declaration order.</summary>
+  KIND_CODES: array[THbvEventKind] of string = ('write', 'read', 'call', 'extcall', 'site', 'extwrite', 'app-run',
+    'free', 'final-free', 'use', 'held');
+  /// <summary>The `use-after-free` preset name.</summary>
+  PRESET_USE_AFTER_FREE = 'use-after-free';
+
 /// <summary>Answers "has event A happened before event B, on every execution?" over one index.</summary>
 /// <param name="pDbPath">The project index; must exist and be readable (the verb checks the schema).</param>
 /// <param name="pA">Event A: `write:`, `read:`, `call:`, `extcall:` or `site:` (see the unit header).</param>
@@ -240,32 +251,6 @@ type
 /// <remarks>Read-only. Not thread-safe (the shared parse cache and clock of the check-init units).
 /// Deterministic except Ms.</remarks>
 function HappensBefore(const pDbPath, pA, pB: string; const pOptions: THbOptions): THbvAnswer;
-
-/// <summary>Expands a preset name into its events.</summary>
-/// <param name="pPreset">Preset name, case-insensitive.</param>
-/// <param name="pA">Out: event A of the preset; '' when the preset takes the caller's --a.</param>
-/// <param name="pB">Out: event B of the preset.</param>
-/// <returns>False for a name that is not a built preset (pA and pB are then ''), and for the three
-/// presets that take a variable (<see cref="HbvPresetTarget"/>).</returns>
-/// <remarks>Built: `randomize` (A = extcall:Randomize, B = extcall:Random); `format-settings`
-/// (A = extwrite:FormatSettings, B = extcall: of the RTL routines that format or parse with the
-/// global settings); `before-app-run` (A = the caller's --a, B = app-run:*).</remarks>
-function HbvPresetEvents(const pPreset: string; out pA, pB: string): Boolean;
-
-/// <summary>Rewrites the --a / --b values of the presets that take a VARIABLE: `use-after-free`
-/// (A = free:X, B = use:X), `finalization` (A = final-free:X, B = use:X) and `lock-held-when`
-/// (A = held:L, B = the caller's event).</summary>
-/// <param name="pPreset">Preset name, case-insensitive.</param>
-/// <param name="pA">In: the variable's QName as given with --a. Out: event A.</param>
-/// <param name="pB">In: the --b value ('' when absent). Out: event B.</param>
-/// <param name="pError">Out: '' or the usage error (missing --a, an event in place of the variable,
-/// a --b the preset does not take, lock-held-when without --b); pA and pB are then unchanged.</param>
-/// <returns>True when pPreset is one of the three presets (also when pError is set).</returns>
-function HbvPresetTarget(const pPreset: string; var pA, pB: string; out pError: string): Boolean;
-
-/// <summary>The names of the built presets, in help order.</summary>
-/// <returns>A new array; never empty.</returns>
-function HbvPresetNames: TArray<string>;
 
 /// <summary>The `--json` document of an answer (one line).</summary>
 /// <param name="pAnswer">A complete answer.</param>
@@ -310,12 +295,8 @@ const
   VERB_NAME = 'happens-before';
   FLAG_A = '--a';
   FLAG_B = '--b';
-  EVENT_SEP = ':';
   QNAME_SEP = '.';
   NAME_LIST_SEP = ',';
-  APP_RUN_ALL = '*';
-  KIND_CODES: array[THbvEventKind] of string = ('write', 'read', 'call', 'extcall', 'site', 'extwrite', 'app-run',
-    'free', 'final-free', 'use', 'held');
   STATE_KINDS = [hekFree, hekFinalFree, hekHeld];
   VERDICT_CODES: array[THbvVerdict] of string = ('YES', 'NO', 'MAY');
   REASON_CODES: array[THbvReason] of string = ('a-never-happens', 'b-first', 'a-not-on-every-path',
@@ -323,9 +304,6 @@ const
     'no-routine-body', 'budget', 'b-never-after-a', 'b-may-run-after-a');
   METHOD_CODES: array[THbvMethod] of string = ('', 'same-routine', 'callee', 'callers', 'check-init', 'program-order',
     'in-force', 'reassigned-first', 'finalization-order');
-  PRESET_USE_AFTER_FREE = 'use-after-free';
-  PRESET_FINALIZATION = 'finalization';
-  PRESET_LOCK_HELD_WHEN = 'lock-held-when';
   KIND_FINALIZATION = 'finalization';
   KIND_DESTRUCTOR = 'destructor';
   ROOT_KINDS: array[0..3] of string = ('initialization', 'finalization', 'program', 'library');
@@ -342,23 +320,12 @@ const
   DEREF_CHARS = '.[^';
   HOLDERS_BUILT = 1;
   HOLDERS_STOOD_DOWN = 2;
-  PRESET_RANDOMIZE = 'randomize';
-  PRESET_FORMAT_SETTINGS = 'format-settings';
-  PRESET_BEFORE_APP_RUN = 'before-app-run';
-  { the RTL routines that format or parse with the global FormatSettings when no settings argument is given }
-  FORMAT_SETTINGS_USERS = 'Format,FormatFloat,FormatCurr,FormatDateTime,FloatToStr,FloatToStrF,CurrToStr,CurrToStrF,' +
-    'StrToFloat,StrToFloatDef,TryStrToFloat,StrToCurr,StrToCurrDef,TryStrToCurr,DateToStr,TimeToStr,DateTimeToStr,' +
-    'StrToDate,StrToDateDef,TryStrToDate,StrToTime,StrToTimeDef,TryStrToTime,StrToDateTime,StrToDateTimeDef,TryStrToDateTime';
   REF_KINDS_EXTCALL = '''call'', ''read''';
   REF_KINDS_EXTWRITE = '''write'', ''write-through''';
   ROOT_KINDS_SQL = '''initialization'', ''finalization'', ''program'', ''library''';
   SECTION_KINDS_SQL = '''initialization'', ''finalization''';
   ORDER_WHY_PREFIX = 'why not SET: ';
   CHECK_INIT_LIMIT = 'check-init: ';
-  PRESET_NAMES: array[0..5] of string = (PRESET_RANDOMIZE, PRESET_FORMAT_SETTINGS, PRESET_BEFORE_APP_RUN,
-    PRESET_USE_AFTER_FREE, PRESET_FINALIZATION, PRESET_LOCK_HELD_WHEN);
-  TARGET_PRESETS: array[0..2] of string = (PRESET_USE_AFTER_FREE, PRESET_FINALIZATION, PRESET_LOCK_HELD_WHEN);
-  TARGET_PRESET_KINDS: array[0..2] of THbvEventKind = (hekFree, hekFinalFree, hekHeld);
   EVENT_KINDS_HELP = 'write:<QName>, read:<QName>, call:<QName>, extcall:<Name>[,<Name>...], extwrite:<Name>[,<Name>...], ' +
     'site:<file>:<line>[:<col>], app-run:<program>|*, free:<QName>, final-free:<QName>, use:<QName>, held:<QName>';
   ROUTINE_KINDS_SQL = '''procedure'', ''function'', ''method'', ''constructor'', ''destructor''';
@@ -430,7 +397,7 @@ type
     property EntryBusy: THashSet<Int64> read FEntryBusy;
   end;
 
-  TEngine = class  // dl:ok high-response@8aca -- REVIEWED 2026-11-27 v156 HB4: one engine per question -- event resolution (4 kinds) plus the three site proofs share its index, store, classifier and budget; its RFC is the store and solver calls those need, splitting it would only pass the same six caches around
+  TEngine = class  // dl:ok high-response@8aca, god-class@8aca -- REVIEWED 2026-11-27 v156 HB4: one engine per question -- event resolution (4 kinds) plus the three site proofs share its index, store, classifier and budget; its RFC is the store and solver calls those need, splitting it would only pass the same six caches around (god-class: the methods are those three proofs plus event resolution over that one shared state; the presets are already split out into HappensBefore.Judge)
   strict private
     FIndex: TChartsIndex;
     FStore: ISymbolStore;
@@ -471,6 +438,8 @@ type
     function HoldersReady: Boolean;
     function ClearCalls(const pSite: THbSite): TArray<THbSite>;
     procedure JudgeFinal(const pA: THbvEvent; const pSite: THbSite; var pRow: THbvSiteAnswer);
+    { the solver half of JudgeInForce: marks, undos and the two solves over the routine of pSite }
+    procedure SolveInForce(const pSite: THbSite; var pRow: THbvSiteAnswer);
     function Walk(const pSeeds: TArray<Int64>; pUp: Boolean; const pRoots, pInto: THashSet<Int64>): Boolean;
     function Id64(const pRow: TIndexRow; const pCol: string): Int64;
     function RoutineName(pId: Int64): string;
@@ -509,58 +478,6 @@ type
     property Solved: Integer read FSolved;
     property Exhausted: Boolean read FExhausted;
   end;
-
-function HbvPresetNames: TArray<string>;
-begin
-  Result:= nil;
-  for var N in PRESET_NAMES do Result:= Result + [N];
-end;
-
-function HbvPresetEvents(const pPreset: string; out pA, pB: string): Boolean;
-begin
-  pA:= '';
-  pB:= '';
-  Result:= True;
-  if SameText(pPreset, PRESET_RANDOMIZE) then
-  begin
-    pA:= KIND_CODES[hekExtCall] + EVENT_SEP + 'Randomize';
-    pB:= KIND_CODES[hekExtCall] + EVENT_SEP + 'Random';
-  end
-  else if SameText(pPreset, PRESET_FORMAT_SETTINGS) then
-  begin
-    pA:= KIND_CODES[hekExtWrite] + EVENT_SEP + 'FormatSettings';
-    pB:= KIND_CODES[hekExtCall] + EVENT_SEP + FORMAT_SETTINGS_USERS;
-  end
-  else if SameText(pPreset, PRESET_BEFORE_APP_RUN) then
-    pB:= KIND_CODES[hekAppRun] + EVENT_SEP + APP_RUN_ALL
-  else
-    Result:= False;
-end;
-
-function HbvPresetTarget(const pPreset: string; var pA, pB: string; out pError: string): Boolean;
-const
-  LOCK_PRESET = 2;
-begin
-  pError:= '';
-  var Ix:= IndexText(pPreset, TARGET_PRESETS);
-  Result:= Ix >= 0;
-  if not Result then Exit;
-  var IsLock:= Ix = LOCK_PRESET;
-  if pA = '' then
-    pError:= Format('--preset %s needs --a <QName>: %s', [TARGET_PRESETS[Ix],
-      if IsLock then 'the lock (a unit variable, class var or field)' else 'the variable (a unit variable, class var or field) whose free is event A'])
-  else if pA.Contains(EVENT_SEP) then
-    pError:= Format('--preset %s takes the variable itself in --a (a QName such as uCache.GCache), not an event', [TARGET_PRESETS[Ix]])
-  else if IsLock and (pB = '') then
-    pError:= Format('--preset %s needs --b <event>: the access that must run with the lock held', [TARGET_PRESETS[Ix]])
-  else if not IsLock and (pB <> '') then
-    pError:= Format('--preset %s names event B (%s%s<variable>): give --a <QName> only', [TARGET_PRESETS[Ix], KIND_CODES[hekUse], EVENT_SEP])
-  else
-  begin
-    if not IsLock then pB:= KIND_CODES[hekUse] + EVENT_SEP + pA;
-    pA:= KIND_CODES[TARGET_PRESET_KINDS[Ix]] + EVENT_SEP + pA;
-  end;
-end;
 
 function HbvExitCode(const pAnswer: THbvAnswer): Integer;
 begin
@@ -1735,6 +1652,54 @@ begin
   if pRow.Proven then pRow.Method:= hvmFinalizationOrder;
 end;
 
+procedure TEngine.SolveInForce(const pSite: THbSite; var pRow: THbvSiteAnswer);
+begin
+  { marks put A in force; undos may end it; for a variable the mirror pair proves "never in force" }
+  var Marks, Undos, Assigns, Frees: TArray<THbSite>;
+  for var Ref in FStRefs do
+  begin
+    if Ref.Site.RoutineId <> pSite.RoutineId then Continue;
+    if FStHeld then
+    begin
+      if Ref.Cls <> rcEnter then Undos:= Undos + [Ref.Site]
+      else if Ref.SelfOk then Marks:= Marks + [Ref.Site];
+      Continue;
+    end;
+    if (Ref.Cls in [rcFree, rcNil]) and Ref.SelfOk then Marks:= Marks + [Ref.Site];
+    if Ref.Cls in [rcAssign, rcOther] then Undos:= Undos + [Ref.Site];
+    if (Ref.Cls = rcAssign) and Ref.SelfOk then Assigns:= Assigns + [Ref.Site];
+    if Ref.Cls in [rcFree, rcNil, rcOther] then Frees:= Frees + [Ref.Site];
+  end;
+  var Calls:= ClearCalls(pSite);
+  var St:= SolveRoutineInForce(FStore, pSite.RoutineId, Marks, Undos + Calls, [pSite]);
+  if not St.Found or St.CfgSkipped or (Length(St.Queries) = 0) or not St.Queries[0].Located or St.Queries[0].InClosure then
+  begin
+    pRow.Reason:= hvrNoRoutineBody;
+    pRow.Why:= 'the site is in no routine body this verb can solve (program block, section, unit level, anonymous method, or a body with goto / asm)';
+    Exit;
+  end;
+  if St.Queries[0].Done then
+  begin
+    pRow.Proven:= True;
+    pRow.Method:= hvmInForce;
+    pRow.Why:= 'A is in force here on every path that reaches the site: a site of A ran and nothing can have undone it since';
+    Exit;
+  end;
+  if not FStHeld and (Assigns <> nil) and Spend then
+  begin
+    St:= SolveRoutineInForce(FStore, pSite.RoutineId, Assigns, Frees + Calls, [pSite]);
+    if (Length(St.Queries) > 0) and St.Queries[0].Done then
+    begin
+      pRow.Proven:= True;
+      pRow.Method:= hvmReassignedFirst;
+      pRow.Why:= 'the variable is assigned on every path that reaches the site, and nothing can have freed it since';
+      Exit;
+    end;
+  end;
+  pRow.Why:= if Marks = nil then 'A has no certain site in this routine: whether it is in force when the routine is entered is not known'
+    else 'A is in this routine, but not in force on every path that reaches the site (a path without it, or a possible undo in between)';
+end;
+
 function TEngine.JudgeInForce(const pA: THbvEvent; const pSite: THbSite): THbvSiteAnswer;
 begin
   Result:= Default(THbvSiteAnswer);
@@ -1765,50 +1730,7 @@ begin
     Result.Why:= 'the budget ran out before the routines that can undo A were known';
     Exit;
   end;
-  { marks put A in force; undos may end it; for a variable the mirror pair proves "never in force" }
-  var Marks, Undos, Assigns, Frees: TArray<THbSite>;
-  for var Ref in FStRefs do
-  begin
-    if Ref.Site.RoutineId <> pSite.RoutineId then Continue;
-    if FStHeld then
-    begin
-      if Ref.Cls <> rcEnter then Undos:= Undos + [Ref.Site]
-      else if Ref.SelfOk then Marks:= Marks + [Ref.Site];
-      Continue;
-    end;
-    if (Ref.Cls in [rcFree, rcNil]) and Ref.SelfOk then Marks:= Marks + [Ref.Site];
-    if Ref.Cls in [rcAssign, rcOther] then Undos:= Undos + [Ref.Site];
-    if (Ref.Cls = rcAssign) and Ref.SelfOk then Assigns:= Assigns + [Ref.Site];
-    if Ref.Cls in [rcFree, rcNil, rcOther] then Frees:= Frees + [Ref.Site];
-  end;
-  var Calls:= ClearCalls(pSite);
-  var St:= SolveRoutineInForce(FStore, pSite.RoutineId, Marks, Undos + Calls, [pSite]);
-  if not St.Found or St.CfgSkipped or (Length(St.Queries) = 0) or not St.Queries[0].Located or St.Queries[0].InClosure then
-  begin
-    Result.Reason:= hvrNoRoutineBody;
-    Result.Why:= 'the site is in no routine body this verb can solve (program block, section, unit level, anonymous method, or a body with goto / asm)';
-    Exit;
-  end;
-  if St.Queries[0].Done then
-  begin
-    Result.Proven:= True;
-    Result.Method:= hvmInForce;
-    Result.Why:= 'A is in force here on every path that reaches the site: a site of A ran and nothing can have undone it since';
-    Exit;
-  end;
-  if not FStHeld and (Assigns <> nil) and Spend then
-  begin
-    St:= SolveRoutineInForce(FStore, pSite.RoutineId, Assigns, Frees + Calls, [pSite]);
-    if (Length(St.Queries) > 0) and St.Queries[0].Done then
-    begin
-      Result.Proven:= True;
-      Result.Method:= hvmReassignedFirst;
-      Result.Why:= 'the variable is assigned on every path that reaches the site, and nothing can have freed it since';
-      Exit;
-    end;
-  end;
-  Result.Why:= if Marks = nil then 'A has no certain site in this routine: whether it is in force when the routine is entered is not known'
-    else 'A is in this routine, but not in force on every path that reaches the site (a path without it, or a possible undo in between)';
+  SolveInForce(pSite, Result);
 end;
 
 procedure ConcludeInForce(var pAnswer: THbvAnswer; pVerdict: THbvVerdict; const pSummary: string);

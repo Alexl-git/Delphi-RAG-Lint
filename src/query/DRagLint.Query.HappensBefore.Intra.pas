@@ -435,7 +435,7 @@ end;
 
 function TIntraSolver.Step(pBlock, pItem: Integer; pState: Boolean): Boolean;
 begin
-  Result:= not (FInForce and FCleared[pBlock][pItem]) and (pState or FMarked[pBlock][pItem]);
+  Result:= not (FInForce and FCleared[pBlock][pItem]) and (pState or FMarked[pBlock][pItem]);  // dl:ok index-possibly-out-of-range@675d -- LINTFIX-A: pBlock / pItem are a block and item of FCfg (StateBefore, the only caller, takes them from a located item); FCleared and FMarked are sized to FCfg.Blocks / Items in Init
 end;
 
 procedure TIntraSolver.CollectExceptBodies(const pNode: TTSNode; pList: TList<TTSNode>);

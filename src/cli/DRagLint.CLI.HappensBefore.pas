@@ -40,6 +40,7 @@ uses
 , DRagLint.CLI.HelpText
 , DRagLint.Query.HappensBefore.Types
 , DRagLint.Query.HappensBefore.Verb
+, DRagLint.Query.HappensBefore.Judge
   ; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared unknown-flag text every verb uses; the other CliError consts are other verbs' errors
 
 const
@@ -147,6 +148,16 @@ begin
   end;
 end;
 
+{ Reads --max-routines / --max-seconds into pOptions (MaxSeconds parsed into pMaxSeconds); '' = fine, else the usage error. }
+function BudgetError(const pArgs: THappensBeforeArgs; var pOptions: THbOptions; var pMaxSeconds: Double): string;
+begin
+  Result:= '';
+  if (pArgs.MaxRoutines <> '') and not (TryStrToInt(pArgs.MaxRoutines, pOptions.MaxRoutines) and (pOptions.MaxRoutines >= 0)) then
+    Result:= '--max-routines needs a whole number >= 0 (0 = the default budget)'
+  else if (pArgs.MaxSeconds <> '') and not (TryStrToFloat(pArgs.MaxSeconds, pMaxSeconds, TFormatSettings.Invariant) and (pMaxSeconds >= 0)) then
+    Result:= '--max-seconds needs a number >= 0 (0 = no wall-clock cap)';
+end;
+
 { Fills the two events and the options from the parsed flags; '' = fine, else the usage error. }
 function Validate(var pArgs: THappensBeforeArgs; out pOptions: THbOptions): string;
 begin
@@ -181,12 +192,8 @@ begin
     Result:= 'needs --a <event> and --b <event>, or --preset <name>'
   else if pArgs.DbPath = '' then
     Result:= 'give --db <file.sqlite>'
-  else if (pArgs.MaxRoutines <> '') and not (TryStrToInt(pArgs.MaxRoutines, pOptions.MaxRoutines) and (pOptions.MaxRoutines >= 0)) then
-    Result:= '--max-routines needs a whole number >= 0 (0 = the default budget)'
-  else if (pArgs.MaxSeconds <> '') and not (TryStrToFloat(pArgs.MaxSeconds, MaxS, TFormatSettings.Invariant) and (MaxS >= 0)) then
-    Result:= '--max-seconds needs a number >= 0 (0 = no wall-clock cap)'
   else
-    Result:= '';
+    Result:= BudgetError(pArgs, pOptions, MaxS);
   { as check-init: absent = the default cap; an explicit 0 = no cap (THbOptions: negative) }
   pOptions.MaxSeconds:= if pArgs.MaxSeconds = '' then 0 else if MaxS <= 0 then -1 else MaxS;
 end;
