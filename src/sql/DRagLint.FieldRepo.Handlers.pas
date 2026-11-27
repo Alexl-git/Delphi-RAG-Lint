@@ -133,6 +133,16 @@ function EventRegionContent(const pFields: TArray<TFrhField>; const pBody: strin
 function NewHandlerRegion(const pFields: TArray<TFrhField>; const pComponent, pEvent, pBody, pEol: string;
   out pText, pReason: string): Boolean;
 
+/// <summary>The grid events of an EXISTING grid column the repository holds code for and the column has no handler for
+/// (GC-H, 1.56): what `repo write-dfm` offers as UNCHECKED changes, never applied by default.</summary>
+/// <param name="pRowEvents">The stored event bodies of the field, in FR_EVENT_COLUMNS order (TRepoField.Events); a short
+/// array is read as empty past its end.</param>
+/// <param name="pAssigned">Names of the events the column already has a handler for (case-insensitive).</param>
+/// <returns>The names of the grid events (OnGetDisplayText, OnCustomDrawCell) whose stored body is not blank and that are
+/// not in pAssigned, in FR_EVENT_COLUMNS order. The TField events are never listed.</returns>
+/// <remarks>Pure: no I/O. The caller adds one unchecked insert per name; an assigned handler is never replaced.</remarks>
+function MissingGridEvents(const pRowEvents, pAssigned: TArray<string>): TArray<string>;
+
 /// <summary>The parameter names stored code of a field event uses.</summary>
 /// <param name="pEvent">Event name.</param>
 /// <returns>Comma-separated, in the order of the event type; '' for another event.</returns>
@@ -527,6 +537,16 @@ begin
 end;
 
 { ---- stored bodies ---- }
+
+function MissingGridEvents(const pRowEvents, pAssigned: TArray<string>): TArray<string>;
+var
+  VI: Integer;
+begin
+  Result := nil;
+  for VI := 0 to Min(High(FR_EVENT_COLUMNS), High(pRowEvents)) do
+    if FR_EVENT_COLUMNS[VI].IsGrid and (Trim(pRowEvents[VI]) <> '') and not MatchText(FR_EVENT_COLUMNS[VI].Event, pAssigned) then
+      Result := Result + [FR_EVENT_COLUMNS[VI].Event];
+end;
 
 function FieldEventParams(const pEvent: string): string;
 var
