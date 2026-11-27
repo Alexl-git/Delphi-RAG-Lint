@@ -860,6 +860,10 @@ type
     /// orm_links / fb_relations, e.g. 'di:IFolderService (singleton)' or
     /// 'ds:qryFolders -&gt; FOLDERS (ID, NAME)'. '' when none.</summary>
     Wiring       : string;
+    /// <summary>1.56 B5 (lane EXT-C1): what the routine writes on EVERY path that returns normally,
+    /// comma separated, in first-write order: `Result`, a var / out parameter by name, an own field by
+    /// name. '' = none proven, or the routine was not analysed. Column symbol_facts.must_writes.</summary>
+    MustWrites   : string;
     /// <summary>False when no symbol_facts row exists for SymbolId -- the
     /// renderer's cue to omit every derived doc-comment line entirely.</summary>
     Present     : Boolean;
@@ -1869,8 +1873,335 @@ type
     /// <summary>True = the reaching path passed a branch/loop join with a differing state, or the routine
     /// took the flow-insensitive fallback. Explainability only: never used to drop a row.</summary>
     Cond       : Boolean;
+    /// <summary>1.56 B3: the value class of the flowing value, one of the DF_VAL_* constants; '' on every
+    /// row written before 1.56 and on string / object / unknown-typed values (the pre-1.56 row set).
+    /// Column data_flows.val_class; absent on an index not migrated by a 1.56 writer (reads '').</summary>
+    ValClass   : string ;
   end;
 
+{ ---- 1.56 store seam (lane EXT-S, S1; plan docs\superpowers\plans\2026-11-27-v156-plan.md) ----
+  The TEXT values and row records of every fact the 1.56 extractor bump adds. The EXT-* lanes
+  write and compare THESE constants, never a literal typed from memory. Tables: DDL in
+  DRagLint.Storage.Schema (SCHEMA_DDL_V156*), created by TSQLiteSymbolStore.Migrate, ADDITIVE and
+  probed (ISymbolStore.HasV156Facts / HasIndirectEdges / HasConceptTables). Positions are 1-based
+  lines and the refs table's column base, as in data_flows. }
+const
+  /// <summary>B14-2 dst_kind: a write to a dataset field that has no DF_DST_WRITE row (by-name receiver,
+  /// receiver rooted in a local / parameter / class field / unit variable, inside `with`). dst_name = the
+  /// field name ('' when not a literal), dst_receiver = the dataset text (shape accessor: the field
+  /// text), dst_index = TDsFieldAccessRow.RootIndex; position = the ds_field_accesses row's line / col.</summary>
+  DF_DST_DSFIELD  = 'dsfield';
+  /// <summary>B14-3 src_kind: a read of a dataset field; src_line / src_col = the ds_field_accesses row's
+  /// position, src_name = the field name, src_index = TDsFieldAccessRow.RootIndex. Emitted IN ADDITION
+  /// to the row the extractor emits today for the same read.</summary>
+  DF_SRC_DSFIELD  = 'dsfield';
+  /// <summary>B4 dst_kind: a value reaches a raised exception (a constructor argument of `raise
+  /// E.Create(..)`, or a re-raised object). dst_name = the exception class as written ('' for a bare
+  /// `raise`), dst_index = the constructor argument position (-1 = the object itself); position = the
+  /// `raise` statement.</summary>
+  DF_DST_RAISE    = 'raise';
+  /// <summary>B4 src_kind: the exception object of a handler (`on E: T do`, or the implicit object of a
+  /// bare `except`). src_name = the handled class as written ('' = any), src_line / src_col = the `on`
+  /// clause (bare except: the `except` keyword).</summary>
+  DF_SRC_EXCEPT   = 'except';
+  /// <summary>B3 val_class: an integer-typed value (Integer, Int64, Cardinal, Byte, subranges of them).</summary>
+  DF_VAL_INT      = 'int';
+  /// <summary>B3 val_class: a floating-point value (Double, Extended, Single, Real).</summary>
+  DF_VAL_FLOAT    = 'float';
+  /// <summary>B3 val_class: Currency (also BCD / DECFLOAT wrappers when the type is known).</summary>
+  DF_VAL_CURRENCY = 'currency';
+  /// <summary>B3 val_class: TDateTime, TDate or TTime.</summary>
+  DF_VAL_DATETIME = 'datetime';
+  /// <summary>B3 val_class: Boolean and its sized variants.</summary>
+  DF_VAL_BOOL     = 'bool';
+  /// <summary>B3 val_class: an enumeration, a set, a Char or another ordinal that is not an integer.</summary>
+  DF_VAL_ORD      = 'ord';
+  /// <summary>B3 val_class: Variant / OleVariant (a dataset `Value`, `FieldValues[..]`).</summary>
+  DF_VAL_VARIANT  = 'variant';
+
+  /// <summary>ds_field_accesses.mode: the field value is read.</summary>
+  DSFA_MODE_READ      = 'read';
+  /// <summary>ds_field_accesses.mode: the field value is written.</summary>
+  DSFA_MODE_WRITE     = 'write';
+  /// <summary>ds_field_accesses.shape: `D.FieldByName(..)` + accessor.</summary>
+  DSFA_SHAPE_BYNAME   = 'byname';
+  /// <summary>ds_field_accesses.shape: `D.FindField(..)` + accessor.</summary>
+  DSFA_SHAPE_FIND     = 'find';
+  /// <summary>ds_field_accesses.shape: `D.FieldValues[..]`.</summary>
+  DSFA_SHAPE_VALUES   = 'values';
+  /// <summary>ds_field_accesses.shape: `D[..]` (default indexed property with one string argument).</summary>
+  DSFA_SHAPE_DEFAULT  = 'default';
+  /// <summary>ds_field_accesses.shape: `D.Fields[i]` + accessor.</summary>
+  DSFA_SHAPE_INDEX    = 'index';
+  /// <summary>ds_field_accesses.shape: `X.AsY` / `X.Value` / `X.NewValue` / `X.Clear` / `X.Assign(e)` where X
+  /// is none of the other shapes (a persistent field component, a field object held in a variable).</summary>
+  DSFA_SHAPE_ACCESSOR = 'accessor';
+  /// <summary>ds_field_accesses.name_kind: the field name is a string literal (field_name holds it).</summary>
+  DSFA_NAME_LITERAL   = 'literal';
+  /// <summary>ds_field_accesses.name_kind: a named constant (name_text holds the identifier).</summary>
+  DSFA_NAME_CONST     = 'const';
+  /// <summary>ds_field_accesses.name_kind: any other expression (name_text holds it, cut at DSFA_NAME_TEXT_MAX).</summary>
+  DSFA_NAME_EXPR      = 'expr';
+  /// <summary>ds_field_accesses.name_kind: shape index -- name_text is the index expression.</summary>
+  DSFA_NAME_INDEX     = 'index';
+  /// <summary>ds_field_accesses.name_kind: shape accessor -- the field is named by its component / variable (field_text).</summary>
+  DSFA_NAME_COMPONENT = 'component';
+  /// <summary>ds_field_accesses.root_kind: the leftmost identifier is a parameter (root_index = its position).</summary>
+  DSFA_ROOT_PARAM     = 'param';
+  /// <summary>ds_field_accesses.root_kind: a local variable.</summary>
+  DSFA_ROOT_LOCAL     = 'local';
+  /// <summary>ds_field_accesses.root_kind: a field of the owning class.</summary>
+  DSFA_ROOT_FIELD     = 'field';
+  /// <summary>ds_field_accesses.root_kind: a unit-level variable.</summary>
+  DSFA_ROOT_GLOBAL    = 'global';
+  /// <summary>ds_field_accesses.root_kind: an unqualified access inside a `with` body (root_name '').</summary>
+  DSFA_ROOT_WITH      = 'with';
+  /// <summary>ds_field_accesses.root_kind: anything else (a form component, a call result).</summary>
+  DSFA_ROOT_OTHER     = 'other';
+  /// <summary>Longest name_text stored; a longer argument is cut.</summary>
+  DSFA_NAME_TEXT_MAX  = 120;
+
+  /// <summary>loop_facts.kind: `while .. do`.</summary>
+  LOOP_KIND_WHILE  = 'while';
+  /// <summary>loop_facts.kind: `repeat .. until`.</summary>
+  LOOP_KIND_REPEAT = 'repeat';
+  /// <summary>loop_facts.kind: `for i := a to / downto b do`.</summary>
+  LOOP_KIND_FOR    = 'for';
+  /// <summary>loop_facts.kind: `for x in c do`.</summary>
+  LOOP_KIND_FOR_IN = 'for-in';
+
+  /// <summary>symbol_extras.noreturn (B1): the routine may return.</summary>
+  NORETURN_NONE      = 0;
+  /// <summary>symbol_extras.noreturn (B1): the declaration carries the `noreturn` directive.</summary>
+  NORETURN_DIRECTIVE = 1;
+  /// <summary>symbol_extras.noreturn (B1): no directive, but the routine is one the compiler treats as
+  /// never returning (System.Halt, RunError, SysUtils.Abort ...): the library-DB fact.</summary>
+  NORETURN_KNOWN     = 2;
+  /// <summary>symbol_extras.param_mode (B8): a by-value parameter.</summary>
+  PARAM_MODE_VALUE    = '';
+  /// <summary>symbol_extras.param_mode (B8): `const`.</summary>
+  PARAM_MODE_CONST    = 'const';
+  /// <summary>symbol_extras.param_mode (B8): `var`.</summary>
+  PARAM_MODE_VAR      = 'var';
+  /// <summary>symbol_extras.param_mode (B8): `out`.</summary>
+  PARAM_MODE_OUT      = 'out';
+  /// <summary>symbol_extras.param_mode (B8): `[Ref] const` / `constref`.</summary>
+  PARAM_MODE_CONSTREF = 'constref';
+
+  /// <summary>call_literal_args.lit_kind: a string literal (value = the decoded text).</summary>
+  CLA_KIND_STRING = 'string';
+  /// <summary>call_literal_args.lit_kind: a numeric literal (value = the text as written).</summary>
+  CLA_KIND_NUMBER = 'number';
+  /// <summary>call_literal_args.lit_kind: a named constant or enum member (value = the identifier as written).</summary>
+  CLA_KIND_CONST  = 'const';
+  /// <summary>Longest call_literal_args.value stored; a longer literal is cut.</summary>
+  CLA_VALUE_MAX   = 400;
+
+  /// <summary>indirect_edges.kind: a call through a method-pointer / procedural variable, field or
+  /// parameter (`FCallback(X)`), bound by an assignment the pass found.</summary>
+  IE_KIND_METHOD_POINTER = 'method-pointer';
+  /// <summary>indirect_edges.kind: an event property assigned in code (`Btn.OnClick := Handler`).</summary>
+  IE_KIND_EVENT          = 'event';
+  /// <summary>indirect_edges.kind: an event bound in a .dfm (`OnClick = BtnClick`).</summary>
+  IE_KIND_DFM_EVENT      = 'dfm-event';
+  /// <summary>indirect_edges.kind: an anonymous method or a routine passed as an argument and called by the callee.</summary>
+  IE_KIND_CALLBACK_ARG   = 'callback-arg';
+  /// <summary>indirect_edges.confidence: target and site both resolved to symbols.</summary>
+  IE_CONF_RESOLVED = 'resolved';
+  /// <summary>indirect_edges.confidence: matched by member name only (several candidates may exist).</summary>
+  IE_CONF_BY_NAME  = 'by-name';
+
+type
+  /// <summary>One ds_field_accesses row (B14-1, spec 2026-11-27-derived-field-lineage-design.md section
+  /// 4.3): one syntactic access to a dataset field, read or write. Emitted per routine by lane EXT-B3
+  /// (DRagLint.Index.FieldLineage) into TExtFileFacts.DsFieldAccesses; written by ISymbolStore.PutExtFacts.</summary>
+  /// <remarks>Strings use the DSFA_* constants; an unused string is '', an unused position 0. Ordinal is
+  /// assigned by the store on write (the row's index in the file's array) and filled by the readers.</remarks>
+  TDsFieldAccessRow = record
+    /// <summary>files.id; ignored on write (the file tx token supplies it), filled by the readers.</summary>
+    FileId      : Int64  ;
+    /// <summary>symbols.id of the enclosing routine (the program symbol for a main block).</summary>
+    SymbolId    : Int64  ;
+    /// <summary>0-based order within the file; set by the store.</summary>
+    Ordinal     : Integer;
+    /// <summary>DSFA_MODE_READ / DSFA_MODE_WRITE.</summary>
+    Mode        : string ;
+    /// <summary>Position of the LEAF ref of the access (the accessor, or FieldValues / `[` when there is
+    /// none): the same position data_flows uses for this site.</summary>
+    Line        : Integer;
+    /// <summary>Column companion of Line.</summary>
+    Col         : Integer;
+    /// <summary>One of DSFA_SHAPE_*.</summary>
+    Shape       : string ;
+    /// <summary>Text before .FieldByName / .FieldValues / `[` as written; '' for shape accessor and inside with.</summary>
+    DatasetText : string ;
+    /// <summary>Shape accessor: the receiver of the accessor ('tblMTOTAL'); else ''.</summary>
+    FieldText   : string ;
+    /// <summary>The literal field name, unquoted; '' when not a literal.</summary>
+    FieldName   : string ;
+    /// <summary>One of DSFA_NAME_*.</summary>
+    NameKind    : string ;
+    /// <summary>The argument as written when NameKind is const / expr / index (max DSFA_NAME_TEXT_MAX); else ''.</summary>
+    NameText    : string ;
+    /// <summary>'AsFloat', 'Value', 'Clear', 'Assign' ...; '' when none.</summary>
+    Accessor    : string ;
+    /// <summary>One of DSFA_ROOT_*: storage of the leftmost identifier.</summary>
+    RootKind    : string ;
+    /// <summary>That identifier as written; '' for DSFA_ROOT_WITH.</summary>
+    RootName    : string ;
+    /// <summary>DSFA_ROOT_PARAM: 0-based declared position (Self excluded); else -1.</summary>
+    RootIndex   : Integer;
+    /// <summary>'' outside with; else the with expressions, innermost first, '|' separated.</summary>
+    WithCtx     : string ;
+    /// <summary>A write by `:=`: start of the right-hand side; else 0.</summary>
+    RhsStartLine: Integer;
+    /// <summary>Column companion of RhsStartLine.</summary>
+    RhsStartCol : Integer;
+    /// <summary>A write by `:=`: end of the right-hand side; else 0.</summary>
+    RhsEndLine  : Integer;
+    /// <summary>Column companion of RhsEndLine.</summary>
+    RhsEndCol   : Integer;
+    /// <summary>Start of the statement holding the access.</summary>
+    StmtLine    : Integer;
+    /// <summary>Column companion of StmtLine.</summary>
+    StmtCol     : Integer;
+  end;
+
+  /// <summary>One loop_facts row (B14-5): the range of one loop statement and of its condition.</summary>
+  /// <remarks>Parent is the INDEX of the enclosing loop of the same routine in the file's
+  /// TExtFileFacts.LoopFacts array (= its ordinal), -1 = none. Ordinal is set by the store.</remarks>
+  TLoopFactRow = record
+    /// <summary>files.id; ignored on write, filled by the readers.</summary>
+    FileId       : Int64  ;
+    /// <summary>symbols.id of the enclosing routine.</summary>
+    SymbolId     : Int64  ;
+    /// <summary>0-based order within the file; set by the store.</summary>
+    Ordinal      : Integer;
+    /// <summary>Ordinal of the enclosing loop of the same routine, -1 = none.</summary>
+    Parent       : Integer;
+    /// <summary>One of LOOP_KIND_*.</summary>
+    Kind         : string ;
+    /// <summary>Whole statement: start line.</summary>
+    StartLine    : Integer;
+    /// <summary>Whole statement: start column.</summary>
+    StartCol     : Integer;
+    /// <summary>Whole statement: end line.</summary>
+    EndLine      : Integer;
+    /// <summary>Whole statement: end column.</summary>
+    EndCol       : Integer;
+    /// <summary>while: the condition; repeat: the until condition; for: from after `for` to before `do`;
+    /// for-in: the collection expression. Start line.</summary>
+    CondStartLine: Integer;
+    /// <summary>Condition range: start column.</summary>
+    CondStartCol : Integer;
+    /// <summary>Condition range: end line.</summary>
+    CondEndLine  : Integer;
+    /// <summary>Condition range: end column.</summary>
+    CondEndCol   : Integer;
+  end;
+
+  /// <summary>One symbol_extras row: the per-symbol facts of B1 (noreturn), B2 (variant part) and B8
+  /// (parameter mode). Emitted by the Delphi parser (lane EXT-A1) into TParseResult.SymbolExtras.</summary>
+  /// <remarks>SPARSE: a symbol with no row reads as Default: may return, not in a variant part, by
+  /// value, position unknown. SymbolIdx indexes TParseResult.Symbols on the write side (the store maps
+  /// it to symbols.id); readers fill SymbolId and leave SymbolIdx -1.</remarks>
+  TSymbolExtraRow = record
+    /// <summary>Write side: index into TParseResult.Symbols. Readers: -1.</summary>
+    SymbolIdx  : Integer;
+    /// <summary>Readers: symbols.id. Unused on the write side.</summary>
+    SymbolId   : Int64  ;
+    /// <summary>B1, routines: NORETURN_NONE / NORETURN_DIRECTIVE / NORETURN_KNOWN.</summary>
+    NoReturn   : Integer;
+    /// <summary>B2, record fields: 0 = not in a variant part; else the 1-based ordinal of the variant
+    /// BRANCH holding the field, counted in source order over the whole record (nested parts included),
+    /// so two fields with different non-zero values may overlap in memory.</summary>
+    VariantPart: Integer;
+    /// <summary>B2, record fields: True for the tag field of a variant part (`case Tag: T of`).</summary>
+    VariantTag : Boolean;
+    /// <summary>B8, parameters: one of PARAM_MODE_*.</summary>
+    ParamMode  : string ;
+    /// <summary>B8, parameters: 0-based declared position (Self excluded); -1 = not a parameter / unknown.</summary>
+    ParamIndex : Integer;
+  end;
+
+  /// <summary>One call_literal_args row (SPEC-SEARCH C-1): "this literal is argument ArgIndex of that
+  /// call". The call is named by the position of its ref (refs.start_line / start_col), so a reader
+  /// joins refs by (file_id, call_line, call_col).</summary>
+  /// <remarks>Emitted by the Delphi parser into TParseResult.CallLiteralArgs or by a routine-facts hook
+  /// into TExtFileFacts.CallLiteralArgs. SymbolId is resolved by the indexer (0 = no enclosing routine)
+  /// when the producer leaves it 0.</remarks>
+  TCallLiteralArgRow = record
+    /// <summary>files.id; ignored on write, filled by the readers.</summary>
+    FileId      : Int64  ;
+    /// <summary>symbols.id of the enclosing routine; 0 = none / not resolved yet.</summary>
+    SymbolId    : Int64  ;
+    /// <summary>0-based order within the file; set by the store.</summary>
+    Ordinal     : Integer;
+    /// <summary>Line of the call ref (refs.start_line).</summary>
+    CallLine    : Integer;
+    /// <summary>Column of the call ref (refs.start_col).</summary>
+    CallCol     : Integer;
+    /// <summary>Leaf name of the callee as written ('FieldByName').</summary>
+    CalleeName  : string ;
+    /// <summary>Text before the dot at the call site; '' when bare.</summary>
+    ReceiverText: string ;
+    /// <summary>0-based argument position.</summary>
+    ArgIndex    : Integer;
+    /// <summary>Number of arguments of the call.</summary>
+    ArgCount    : Integer;
+    /// <summary>Line of the literal.</summary>
+    LitLine     : Integer;
+    /// <summary>Column of the literal.</summary>
+    LitCol      : Integer;
+    /// <summary>One of CLA_KIND_*.</summary>
+    LitKind     : string ;
+    /// <summary>The decoded literal (string), or the text as written (number / const); cut at CLA_VALUE_MAX.</summary>
+    Value       : string ;
+  end;
+
+  /// <summary>One indirect_edges row (B5, lane EXT-C2): "the call site / event CAN run TargetId".
+  /// A DERIVED whole-table fact: the indirect pass returns every row, ISymbolStore.ReplaceIndirectEdges
+  /// replaces the table.</summary>
+  /// <remarks>RefId 0 = no call ref (a .dfm event the framework fires); CallerId 0 = no calling routine
+  /// in this index. BindFileId / BindLine / BindCol = where the target was bound (the assignment, or the
+  /// .dfm property line), 0 when unknown.</remarks>
+  TIndirectEdgeRow = record
+    /// <summary>refs.id of the indirect call site; 0 = none.</summary>
+    RefId     : Int64  ;
+    /// <summary>symbols.id of the routine holding the call site; 0 = none.</summary>
+    CallerId  : Int64  ;
+    /// <summary>symbols.id of the routine that may run.</summary>
+    TargetId  : Int64  ;
+    /// <summary>One of IE_KIND_*.</summary>
+    Kind      : string ;
+    /// <summary>The variable / field / event called through, as written ('FOnChange', 'Button1.OnClick').</summary>
+    ViaText   : string ;
+    /// <summary>files.id of the binding site; 0 = unknown.</summary>
+    BindFileId: Int64  ;
+    /// <summary>Line of the binding site; 0 = unknown.</summary>
+    BindLine  : Integer;
+    /// <summary>Column of the binding site; 0 = unknown.</summary>
+    BindCol   : Integer;
+    /// <summary>IE_CONF_RESOLVED / IE_CONF_BY_NAME.</summary>
+    Confidence: string ;
+  end;
+
+  /// <summary>Every 1.56 per-file fact of one file, written in one call by ISymbolStore.PutExtFacts
+  /// (which REPLACES the file's rows in all four tables, also when an array is empty).</summary>
+  /// <remarks>Filled by the indexer: SymbolExtras and CallLiteralArgs start from the parser's
+  /// TParseResult arrays; the routine-facts hooks (TIndexer.RegisterRoutineFactsHook) append to any of
+  /// the four. A hook appends (`A:= A + [Row]`), never reorders: an array index is the row's ordinal and
+  /// TLoopFactRow.Parent refers to it.</remarks>
+  TExtFileFacts = record
+    /// <summary>symbol_extras rows (B1, B2, B8).</summary>
+    SymbolExtras   : TArray<TSymbolExtraRow>   ;
+    /// <summary>ds_field_accesses rows (B14-1).</summary>
+    DsFieldAccesses: TArray<TDsFieldAccessRow> ;
+    /// <summary>loop_facts rows (B14-5).</summary>
+    LoopFacts      : TArray<TLoopFactRow>      ;
+    /// <summary>call_literal_args rows (C-1).</summary>
+    CallLiteralArgs: TArray<TCallLiteralArgRow>;
+  end;
   /// <summary>One hop of a finding's path (taint: source -> hops -> sink), serialised as an element of
   /// the `path` array in `lint --format json` and as a SARIF threadFlow location.</summary>
   /// <remarks>

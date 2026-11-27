@@ -64,6 +64,10 @@ const
     context") and read only by the resolve pass, which runs on a migrated writer; probed by
     HasIncVariants. SCHEMA_READ_MIN stays 23. Filled by the re-parse of the extractor bump
     that ships with it (INT). }
+  { 1.56 lane EXT-S S1 (2026-11-26): stays 27 for now. The 1.56 tables / columns (SCHEMA_DDL_V156*
+    below) are ADDITIVE and probed; the version moves ONCE, in the bump commit at the freeze
+    (the same commit as DRAGLINT_EXTRACTOR_VERSION), because schema= is part of the indexer
+    fingerprint and a change re-parses every DB. }
   SCHEMA_VERSION = 27;
 
   /// <summary>The oldest stored schema_version this engine READS without migrating
@@ -446,6 +450,198 @@ const
     '''procedure'',''constructor'',''destructor'',''property'',''field'',''const'',''var'',' +
     '''component'',''form''';
 
+
+  /// <summary>1.56 lane EXT-S (S1): every table and index the ONE 1.56 extractor bump adds, plain
+  /// SQLite (no FTS5). Run by TSQLiteSymbolStore.Migrate through its additive TryExec on every
+  /// writable open; ADDITIVE and probed by the readers (ISymbolStore.HasV156Facts, HasIndirectEdges,
+  /// HasConceptTables), so SCHEMA_READ_MIN does not move.</summary>
+  /// <remarks>
+  /// Kept OUT of SCHEMA_DDL (SCHEMA_DDL_FTS5_FIRST does not move). Column semantics: the row
+  /// records of DRagLint.Core.Model (TSymbolExtraRow, TDsFieldAccessRow, TLoopFactRow,
+  /// TCallLiteralArgRow, TIndirectEdgeRow); ds_field_accesses and loop_facts are column for column
+  /// the DDL of docs\superpowers\specs\2026-11-27-derived-field-lineage-design.md section 4.3;
+  /// repo_copy and concept_* are column for column section 2.2 of the three-place-search /
+  /// caption-concepts design (names frozen there), plus two indexes on the symbol-id columns of
+  /// concept_links (the v0.85 PERF rule: every FK child column leads an index).
+  /// Every column REFERENCING symbols(id) is classified in TSQLiteSymbolStore's
+  /// SYMBOL_ID_COLUMN_CLASSES (guard tests\autotest\run_v153_symid_fk_classes.ps1).
+  /// </remarks>
+  SCHEMA_DDL_V156: array[0..23] of string = (
+    { B1 / B2 / B8: per-symbol facts, sparse, replaced per file by PutExtFacts }
+    'CREATE TABLE IF NOT EXISTS symbol_extras (' +
+    '  symbol_id    INTEGER PRIMARY KEY REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  file_id      INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+    '  noreturn     INTEGER NOT NULL DEFAULT 0,' +
+    '  variant_part INTEGER NOT NULL DEFAULT 0,' +
+    '  variant_tag  INTEGER NOT NULL DEFAULT 0,' +
+    '  param_mode   TEXT    NOT NULL DEFAULT '''',' +
+    '  param_index  INTEGER NOT NULL DEFAULT -1)',
+    'CREATE INDEX IF NOT EXISTS idx_symbol_extras_file ON symbol_extras(file_id)',
+    { B14-1 }
+    'CREATE TABLE IF NOT EXISTS ds_field_accesses (' +
+    '  file_id        INTEGER NOT NULL REFERENCES files(id)   ON DELETE CASCADE,' +
+    '  symbol_id      INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  ordinal        INTEGER NOT NULL,' +
+    '  mode           TEXT    NOT NULL,' +
+    '  line           INTEGER NOT NULL,' +
+    '  col            INTEGER NOT NULL,' +
+    '  shape          TEXT    NOT NULL,' +
+    '  dataset_text   TEXT    NOT NULL,' +
+    '  field_text     TEXT    NOT NULL,' +
+    '  field_name     TEXT    NOT NULL,' +
+    '  name_kind      TEXT    NOT NULL,' +
+    '  name_text      TEXT    NOT NULL,' +
+    '  accessor       TEXT    NOT NULL,' +
+    '  root_kind      TEXT    NOT NULL,' +
+    '  root_name      TEXT    NOT NULL,' +
+    '  root_index     INTEGER NOT NULL,' +
+    '  with_ctx       TEXT    NOT NULL,' +
+    '  rhs_start_line INTEGER NOT NULL,' +
+    '  rhs_start_col  INTEGER NOT NULL,' +
+    '  rhs_end_line   INTEGER NOT NULL,' +
+    '  rhs_end_col    INTEGER NOT NULL,' +
+    '  stmt_line      INTEGER NOT NULL,' +
+    '  stmt_col       INTEGER NOT NULL,' +
+    '  PRIMARY KEY (file_id, ordinal))',
+    'CREATE INDEX IF NOT EXISTS idx_ds_field_accesses_sym ON ds_field_accesses(symbol_id, mode)',
+    'CREATE INDEX IF NOT EXISTS idx_ds_field_accesses_pos ON ds_field_accesses(file_id, line, col)',
+    { B14-5 }
+    'CREATE TABLE IF NOT EXISTS loop_facts (' +
+    '  file_id         INTEGER NOT NULL REFERENCES files(id)   ON DELETE CASCADE,' +
+    '  symbol_id       INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  ordinal         INTEGER NOT NULL,' +
+    '  parent          INTEGER NOT NULL,' +
+    '  kind            TEXT    NOT NULL,' +
+    '  start_line      INTEGER NOT NULL,' +
+    '  start_col       INTEGER NOT NULL,' +
+    '  end_line        INTEGER NOT NULL,' +
+    '  end_col         INTEGER NOT NULL,' +
+    '  cond_start_line INTEGER NOT NULL,' +
+    '  cond_start_col  INTEGER NOT NULL,' +
+    '  cond_end_line   INTEGER NOT NULL,' +
+    '  cond_end_col    INTEGER NOT NULL,' +
+    '  PRIMARY KEY (file_id, ordinal))',
+    'CREATE INDEX IF NOT EXISTS idx_loop_facts_sym ON loop_facts(symbol_id)',
+    { SPEC-SEARCH C-1: the literal-argument fact }
+    'CREATE TABLE IF NOT EXISTS call_literal_args (' +
+    '  file_id       INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+    '  ordinal       INTEGER NOT NULL,' +
+    '  symbol_id     INTEGER REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  call_line     INTEGER NOT NULL,' +
+    '  call_col      INTEGER NOT NULL,' +
+    '  callee_name   TEXT    NOT NULL,' +
+    '  receiver_text TEXT    NOT NULL DEFAULT '''',' +
+    '  arg_index     INTEGER NOT NULL,' +
+    '  arg_count     INTEGER NOT NULL,' +
+    '  lit_line      INTEGER NOT NULL,' +
+    '  lit_col       INTEGER NOT NULL,' +
+    '  lit_kind      TEXT    NOT NULL,' +
+    '  value         TEXT    NOT NULL,' +
+    '  PRIMARY KEY (file_id, ordinal))',
+    'CREATE INDEX IF NOT EXISTS idx_call_literal_args_call ON call_literal_args(file_id, call_line, call_col)',
+    'CREATE INDEX IF NOT EXISTS idx_call_literal_args_sym  ON call_literal_args(symbol_id)',
+    'CREATE INDEX IF NOT EXISTS idx_call_literal_args_name ON call_literal_args(callee_name COLLATE NOCASE, value COLLATE NOCASE)',
+    { B5: indirect-call edges, DERIVED, replaced whole by ReplaceIndirectEdges }
+    'CREATE TABLE IF NOT EXISTS indirect_edges (' +
+    '  id               INTEGER PRIMARY KEY,' +
+    '  ref_id           INTEGER REFERENCES refs(id)    ON DELETE CASCADE,' +
+    '  caller_symbol_id INTEGER REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  target_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+    '  kind             TEXT    NOT NULL,' +
+    '  via_text         TEXT    NOT NULL DEFAULT '''',' +
+    '  bind_file_id     INTEGER NOT NULL DEFAULT 0,' +
+    '  bind_line        INTEGER NOT NULL DEFAULT 0,' +
+    '  bind_col         INTEGER NOT NULL DEFAULT 0,' +
+    '  confidence       TEXT    NOT NULL)',
+    'CREATE INDEX IF NOT EXISTS idx_indirect_edges_ref    ON indirect_edges(ref_id)',
+    'CREATE INDEX IF NOT EXISTS idx_indirect_edges_caller ON indirect_edges(caller_symbol_id)',
+    'CREATE INDEX IF NOT EXISTS idx_indirect_edges_target ON indirect_edges(target_symbol_id)',
+    { CONCEPT (three-place search / caption concepts, design section 2.2) }
+    'CREATE TABLE IF NOT EXISTS repo_copy (' +
+    '  id                  INTEGER PRIMARY KEY CHECK (id = 1),' +
+    '  state               TEXT    NOT NULL,' +
+    '  repo_path           TEXT    NOT NULL DEFAULT '''',' +
+    '  repo_sha256         TEXT    NOT NULL DEFAULT '''',' +
+    '  repo_size           INTEGER NOT NULL DEFAULT 0,' +
+    '  repo_mtime_unix     INTEGER NOT NULL DEFAULT 0,' +
+    '  repo_schema_version INTEGER NOT NULL DEFAULT 0,' +
+    '  copied_at_unix      INTEGER NOT NULL DEFAULT 0,' +
+    '  checked_at_unix     INTEGER NOT NULL DEFAULT 0,' +
+    '  copy_format         INTEGER NOT NULL DEFAULT 0,' +
+    '  derived_format      INTEGER NOT NULL DEFAULT 0,' +
+    '  derived_at_unix     INTEGER NOT NULL DEFAULT 0,' +
+    '  last_error          TEXT    NOT NULL DEFAULT '''')',
+    'CREATE TABLE IF NOT EXISTS concept_fields (' +
+    '  id            INTEGER PRIMARY KEY,' +
+    '  table_name    TEXT    NOT NULL COLLATE NOCASE,' +
+    '  field_name    TEXT    NOT NULL COLLATE NOCASE,' +
+    '  caption       TEXT    NOT NULL DEFAULT '''',' +
+    '  type_text     TEXT    NOT NULL DEFAULT '''',' +
+    '  field_kind    INTEGER,' +
+    '  is_calculated INTEGER NOT NULL DEFAULT 0,' +
+    '  is_lookup     INTEGER NOT NULL DEFAULT 0,' +
+    '  visible       INTEGER NOT NULL DEFAULT 1,' +
+    '  UNIQUE (table_name, field_name))',
+    'CREATE TABLE IF NOT EXISTS concept_texts (' +
+    '  id          INTEGER PRIMARY KEY,' +
+    '  place       TEXT    NOT NULL,' +
+    '  text_kind   TEXT    NOT NULL,' +
+    '  table_name  TEXT    NOT NULL DEFAULT '''' COLLATE NOCASE,' +
+    '  field_name  TEXT    NOT NULL DEFAULT '''' COLLATE NOCASE,' +
+    '  text        TEXT    NOT NULL,' +
+    '  uses        INTEGER NOT NULL DEFAULT 1,' +
+    '  UNIQUE (place, text_kind, table_name, field_name, text))',
+    'CREATE INDEX IF NOT EXISTS idx_concept_texts_field ON concept_texts(table_name, field_name)',
+    'CREATE TABLE IF NOT EXISTS concept_links (' +
+    '  id                  INTEGER PRIMARY KEY,' +
+    '  link_kind           TEXT    NOT NULL,' +
+    '  confidence          TEXT    NOT NULL,' +
+    '  table_name          TEXT    NOT NULL DEFAULT '''' COLLATE NOCASE,' +
+    '  field_name          TEXT    NOT NULL COLLATE NOCASE,' +
+    '  file_id             INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,' +
+    '  line                INTEGER NOT NULL,' +
+    '  col                 INTEGER NOT NULL,' +
+    '  form_name           TEXT    NOT NULL DEFAULT '''',' +
+    '  form_class          TEXT    NOT NULL DEFAULT '''',' +
+    '  component_name      TEXT    NOT NULL DEFAULT '''',' +
+    '  dataset_name        TEXT    NOT NULL DEFAULT '''',' +
+    '  symbol_id           INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+    '  enclosing_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+    '  via                 TEXT    NOT NULL DEFAULT '''',' +
+    '  caption             TEXT    NOT NULL DEFAULT '''')',
+    'CREATE INDEX IF NOT EXISTS idx_concept_links_field  ON concept_links(field_name, table_name)',
+    'CREATE INDEX IF NOT EXISTS idx_concept_links_file   ON concept_links(file_id)',
+    'CREATE INDEX IF NOT EXISTS idx_concept_links_symbol ON concept_links(symbol_id)',
+    'CREATE INDEX IF NOT EXISTS idx_concept_links_encl   ON concept_links(enclosing_symbol_id)');
+
+  /// <summary>1.56 lane EXT-S: the columns the bump adds to EXISTING tables; each statement is an
+  /// `ALTER TABLE .. ADD COLUMN` Migrate runs through TryExec (a duplicate column is tolerated).</summary>
+  /// <remarks>data_flows.val_class (B3, TDataFlowRow.ValClass) and symbol_facts.must_writes (B5,
+  /// TSymbolFacts.MustWrites). Never referenced from SCHEMA_DDL (its INVARIANT); readers probe
+  /// (a read-only open of an older index has neither column and reads '').</remarks>
+  SCHEMA_DDL_V156_ALTER: array[0..1] of string = (
+    'ALTER TABLE data_flows ADD COLUMN val_class TEXT NOT NULL DEFAULT ''''',
+    'ALTER TABLE symbol_facts ADD COLUMN must_writes TEXT');
+  /// <summary>Index into SCHEMA_DDL_V156_ALTER: data_flows.val_class.</summary>
+  V156_ALTER_VAL_CLASS   = 0;
+  /// <summary>Index into SCHEMA_DDL_V156_ALTER: symbol_facts.must_writes.</summary>
+  V156_ALTER_MUST_WRITES = 1;
+
+  /// <summary>1.56 CONCEPT: the FTS5 mirror of concept_texts (external content, NO triggers: the
+  /// writer refills it with `INSERT INTO concept_texts_fts(concept_texts_fts) VALUES('rebuild')`).
+  /// Run by Migrate only when FTS5 is available; a reader probes for the table.</summary>
+  SCHEMA_DDL_V156_FTS5 =
+    'CREATE VIRTUAL TABLE IF NOT EXISTS concept_texts_fts USING fts5(' +
+    '  text, content=''concept_texts'', content_rowid=''id'',' +
+    '  tokenize=''unicode61 remove_diacritics 2'')';
+
+  /// <summary>The per-file 1.56 fact tables ISymbolStore.PutExtFacts replaces (HasV156Facts probes
+  /// for all of them).</summary>
+  V156_FILE_FACT_TABLES: array[0..3] of string = ('symbol_extras', 'ds_field_accesses', 'loop_facts', 'call_literal_args');
+
+  /// <summary>The CONCEPT tables ISymbolStore.HasConceptTables probes for (the FTS5 mirror is
+  /// probed apart: it is absent on a SQLite build without FTS5).</summary>
+  V156_CONCEPT_TABLES: array[0..3] of string = ('repo_copy', 'concept_fields', 'concept_texts', 'concept_links');
 /// <summary>True when an index whose stored schema_version is AFound can be opened
 /// for READING by this engine: AFound >= SCHEMA_READ_MIN (150 SC).</summary>
 /// <param name="AFound">The stored schema_version (ISymbolStore.IsSchemaCurrent's
