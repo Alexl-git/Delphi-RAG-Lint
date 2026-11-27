@@ -274,6 +274,8 @@ uses
   DRagLint.Charts.Q.DepMatrix in '..\charts\DRagLint.Charts.Q.DepMatrix.pas',
   DRagLint.Charts.Q.MainSequence in '..\charts\DRagLint.Charts.Q.MainSequence.pas',
   DRagLint.CLI.Metrics in 'DRagLint.CLI.Metrics.pas',
+  DRagLint.CLI.Coverage in 'DRagLint.CLI.Coverage.pas', { v156 G51 }
+  DRagLint.Charts.Q.Risk in '..\charts\DRagLint.Charts.Q.Risk.pas', { v156 G51 }
   DRagLint.CLI.Sbom in 'DRagLint.CLI.Sbom.pas',
   DRagLint.CLI.HappensBefore in 'DRagLint.CLI.HappensBefore.pas',
   DRagLint.CLI.ChangedSince in 'DRagLint.CLI.ChangedSince.pas',
