@@ -72,7 +72,7 @@
   "verified": {
     "date": "2026-11-26",
     "by": "ENGINE",
-    "build": "1.54.1-alpha",
+    "build": "1.55.0-alpha",
     "surfaceHash": "4db3bbef6db4dcc00dd5e677a2235e4d64ea6ff16e426b3b3511f1fde004e73c"
   }
 }

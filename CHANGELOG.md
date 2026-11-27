@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## Unreleased -- 1.55
+## v1.55.0-alpha -- 2026-11-26
 
 - LINT (QIL, owner Q8): `query-in-loop` is now ON by default (was OFF in 1.54): a query run once per loop iteration is very slow, BDE most of all. Rules: 463 total, 375 on by default. Turn it off with `"disabled": ["query-in-loop"]` or a `dl:ok` marker.
 - CLI (BKNAME review fixes): a backup made by a server on another machine is recorded and printed as `remote, not verified` (text, `--json` `verified`, `repo backup list`, the `repo alter-table --apply` backup line), no longer as `quick`; `--backup-name` with a remote server is refused (exit 1 before connecting) because gbak would silently overwrite a same-named file there: the automatic time-stamped name is used (default ruling, one check: `RemoteNameProblem`).
