@@ -84,6 +84,8 @@ type
   TFsFieldsForm = class(TFsListForm)
   strict private
     FSelection: TFieldSelection;
+    FUsageIcons: TImageList;
+    procedure BuildUsageIcons;
     procedure ItemChecked(pSender: TObject; pItem: TListItem);
     procedure SelectAllClick(pSender: TObject);
     procedure UnselectAllClick(pSender: TObject);
@@ -146,7 +148,9 @@ implementation
 
 uses
   System.SysUtils,
+  System.Types,
   System.UITypes,
+  Vcl.Graphics,
   DRagLint.FieldRepo.Kinds;
 
 const
@@ -158,6 +162,7 @@ const
   BUTTON_WIDTH = 100;
   BUTTON_HEIGHT = 26;
   MEMO_HEIGHT = 90;
+  ICON_SIZE = 16;
   COL_NARROW = 70;
   COL_NAME = 150;
   COL_KIND = 90;
@@ -308,14 +313,20 @@ begin
   inherited CreateFor(pTitle, HINT_FIELDS, pPpi);
   FSelection := pSelection;
   List.Checkboxes := True;
+  BuildUsageIcons;
   AddColumn('Field', COL_NAME);
   AddColumn('Kind', COL_KIND);
+  AddColumn('Used in', COL_NAME);
   AddColumn('In the form', COL_NAME);
   AddColumn('Note', COL_WIDE);
   FUpdating := True;
   try
     for VI := 0 to FSelection.Count - 1 do
-      AddRow([FSelection[VI].Name, FrKindName(FSelection[VI].Kind), FSelection[VI].Component, FSelection[VI].Locked]);
+    begin
+      AddRow([FSelection[VI].Name, FrKindName(FSelection[VI].Kind), UsageText(FSelection[VI].Used),
+        FSelection[VI].Component, FSelection[VI].Locked]);
+      List.Items[VI].ImageIndex := UsageIcon(FSelection[VI].Used);
+    end;
   finally
     FUpdating := False;
   end;
@@ -325,6 +336,44 @@ begin
   AddButton(CAPTION_CANCEL, alRight, CancelClick).Cancel := True;
   AddButton('Preview...', alRight, PreviewClick).Default := True;
   ShowState(FSelection.MissingNote);
+end;
+
+{ One flat icon per set of use kinds (UsageIcon 0 .. USAGE_ICON_COUNT - 1): a 2 x 2 block of squares, one per kind,
+  drawn only when the kind is in the set; no animation, no resource file, scaled to the PPI of the form. }
+procedure TFsFieldsForm.BuildUsageIcons;
+const
+  KIND_COLORS: array[TFsUseKind] of TColor = ($C07020, $40A040, $2080E0, $808080);
+  MASK_COLOR = clFuchsia;
+var
+  VSize, VHalf, VIcon: Integer;
+  VKind: TFsUseKind;
+  VBitmap: TBitmap;
+begin
+  VSize := ScaleValue(ICON_SIZE);
+  VHalf := VSize div 2;
+  FUsageIcons := TImageList.Create(Self);
+  FUsageIcons.Width := VSize;
+  FUsageIcons.Height := VSize;
+  for VIcon := 0 to USAGE_ICON_COUNT - 1 do
+  begin
+    VBitmap := TBitmap.Create;
+    try
+      VBitmap.SetSize(VSize, VSize);
+      VBitmap.Canvas.Brush.Color := MASK_COLOR;
+      VBitmap.Canvas.FillRect(Rect(0, 0, VSize, VSize));
+      for VKind := Low(TFsUseKind) to High(TFsUseKind) do
+        if VIcon and (1 shl Ord(VKind)) <> 0 then
+        begin
+          VBitmap.Canvas.Brush.Color := KIND_COLORS[VKind];
+          VBitmap.Canvas.FillRect(Rect((Ord(VKind) mod 2) * VHalf + 1, (Ord(VKind) div 2) * VHalf + 1,
+            (Ord(VKind) mod 2 + 1) * VHalf - 1, (Ord(VKind) div 2 + 1) * VHalf - 1));
+        end;
+      FUsageIcons.AddMasked(VBitmap, MASK_COLOR);
+    finally
+      VBitmap.Free;
+    end;
+  end;
+  List.SmallImages := FUsageIcons;
 end;
 
 { The check marks and the status line of the selection. }

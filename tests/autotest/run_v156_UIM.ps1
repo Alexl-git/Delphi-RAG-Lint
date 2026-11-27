@@ -5,10 +5,12 @@
   A missing toolchain or exe is a FAIL, never a skip. Exit 0 only when SUMMARY reports fail=0.
   Parameters: -Repo <root> (default: two levels above this script); -OutDir <dir> build output (default: a temp dir);
               -SkipBuild  run the exe already in -OutDir
+              -Engine <drag-lint.exe> (default: <Repo>\third_party\dll-win64\drag-lint.exe) indexes tests\fixtures\v156\UIP for the indexed case I1..I5; needs an engine with schema 25 (dfm_properties); a missing engine is a FAIL
 #>
 [CmdletBinding()]
-param([string]$Repo = '', [string]$OutDir = '', [switch]$SkipBuild)
+param([string]$Repo = '', [string]$OutDir = '', [switch]$SkipBuild, [string]$Engine = '')
 if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
+if (-not $Engine) { $Engine = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe' }
 if (-not $OutDir) { $OutDir = Join-Path $env:TEMP "dl-uim-$PID" }
 $ErrorActionPreference = 'Stop'
 Write-Host '== UI-M field usage tests ==' -ForegroundColor Cyan
@@ -33,5 +35,18 @@ Select-String -LiteralPath $log -Pattern '^FAIL' | ForEach-Object { Write-Host "
 if (-not $sum) { Write-Host 'UIM: FAIL -- no SUMMARY line' -ForegroundColor Red; exit 1 }
 Write-Host "  $($sum.Line)"
 if (($code -ne 0) -or ($sum.Line -notmatch 'fail=0\b')) { Write-Host 'UIM: FAIL' -ForegroundColor Red; exit 1 }
+$fxDb = Join-Path $OutDir 'fx.sqlite'
+if (Test-Path -LiteralPath $fxDb) { [IO.File]::Delete($fxDb) }
+if (-not (Test-Path -LiteralPath $Engine)) { Write-Host "UIM: FAIL -- engine not found for the indexed case: $Engine" -ForegroundColor Red; exit 1 }
+& { $ErrorActionPreference = 'Continue'; & $Engine index (Join-Path $Repo 'tests\fixtures\v156\UIP') --db $fxDb *> (Join-Path $OutDir 'index.log') }
+if (-not (Test-Path -LiteralPath $fxDb)) { Write-Host 'UIM: FAIL -- the engine wrote no fixture DB' -ForegroundColor Red; exit 1 }
+$ilog = Join-Path $OutDir 'run-indexed.log'
+& { $ErrorActionPreference = 'Continue'; & $bin --db $fxDb *> $ilog }
+$icode = $LASTEXITCODE
+$isum = Select-String -LiteralPath $ilog -Pattern '^SUMMARY ' | Select-Object -Last 1
+Select-String -LiteralPath $ilog -Pattern '^FAIL' | ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor Red }
+if (-not $isum) { Write-Host 'UIM: FAIL -- no SUMMARY line from the indexed case' -ForegroundColor Red; exit 1 }
+Write-Host "  indexed: $($isum.Line)"
+if (($icode -ne 0) -or ($isum.Line -notmatch 'fail=0\b')) { Write-Host 'UIM: FAIL (indexed case)' -ForegroundColor Red; exit 1 }
 Write-Host 'UIM: PASS' -ForegroundColor Green
 exit 0

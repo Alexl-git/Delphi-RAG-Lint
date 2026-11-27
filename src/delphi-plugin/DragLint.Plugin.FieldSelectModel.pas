@@ -12,7 +12,26 @@ uses
   DRagLint.FieldRepo.Kinds,
   DRagLint.FieldRepo.DfmReadSelection;
 
+const
+  /// <summary>Number of usage icons: one per set of use kinds (UsageIcon is 0 .. USAGE_ICON_COUNT - 1).</summary>
+  USAGE_ICON_COUNT = 16;
+
 type
+  /// <summary>How a field is used in the project (lane UI-M, DRagLint.FieldRepo.FieldUsage); same four kinds, in the
+  /// same order, so the caller maps one onto the other by Ord. Kept here so the plugin needs no FireDAC.</summary>
+  TFsUseKind = (
+    /// <summary>A data-aware edit control in a DFM (DataField).</summary>
+    fuDfmControl,
+    /// <summary>A grid column.</summary>
+    fuGridColumn,
+    /// <summary>A lookup key / list / result field.</summary>
+    fuLookup,
+    /// <summary>Code (a FieldByName / Fields access).</summary>
+    fuCode);
+
+  /// <summary>A set of use kinds; empty = unused.</summary>
+  TFsUseKinds = set of TFsUseKind;
+
   /// <summary>One persistent field of a dataset, as the DFM holds it.</summary>
   TFsPersistent = record
     /// <summary>FieldName property.</summary>
@@ -55,6 +74,8 @@ type
     Locked: string;
     /// <summary>In the selection.</summary>
     Checked: Boolean;
+    /// <summary>The kinds in which the project uses the field; empty until SetUsage.</summary>
+    Used: TFsUseKinds;
   end;
 
   /// <summary>The field selection of one dataset (FR-2).</summary>
@@ -97,6 +118,18 @@ type
     /// <summary>Checks or unchecks every row that can be changed.</summary>
     /// <param name="pValue">The new state; a field whose needs are not in the repository is not checked.</param>
     procedure SetAll(pValue: Boolean);
+    /// <summary>Records in which kinds the project uses a field.</summary>
+    /// <param name="pName">Field name, case-insensitive; a name that is no row is ignored.</param>
+    /// <param name="pKinds">The kinds; replaces what the row had.</param>
+    procedure SetUsage(const pName: string; pKinds: TFsUseKinds);
+    /// <summary>The names of every row, for `repo field-usage --fields`.</summary>
+    /// <returns>Comma-separated, in row order; '' when there are no rows.</returns>
+    function FieldList: string;
+    /// <summary>Takes the usage the engine reported (`repo field-usage --json`) into the rows.</summary>
+    /// <param name="pOutput">The engine output; the first line that is a JSON object is read:
+    /// {"usage":[{"field":"ID","kinds":["dfm","grid","lookup","code"]}]}. An unknown kind word and an unknown field are ignored.</param>
+    /// <returns>False = no usage object in the output; the rows keep what they had.</returns>
+    function ApplyUsage(const pOutput: string): Boolean;
     /// <summary>The value of write-dfm --names.</summary>
     /// <returns>The checked repository fields and what they need, comma-separated; '' when none is checked.</returns>
     /// <exception cref="EFrSelectionError">As ExpandSelection.</exception>
@@ -158,6 +191,16 @@ type
     /// <returns>The plan line when there is a plan id, then the ids of the checked changes; '' when no change is checked.</returns>
     function SelectFileText: string;
   end;
+
+/// <summary>Index of the icon of a set of use kinds in the dialog's image strip.</summary>
+/// <param name="pKinds">The kinds.</param>
+/// <returns>0 = unused (blank); otherwise the sum of 1 shl Ord(kind), so one kind gives 1, 2, 4 or 8 and all four 15.</returns>
+function UsageIcon(pKinds: TFsUseKinds): Integer;
+
+/// <summary>The kinds of a set as words, for a tooltip or a column.</summary>
+/// <param name="pKinds">The kinds.</param>
+/// <returns>`edit control, grid column, lookup, code` in that order, comma-separated; '' = unused.</returns>
+function UsageText(pKinds: TFsUseKinds): string;
 
 /// <summary>The datasets of a `repo read-dfm --json` run.</summary>
 /// <param name="pOutput">Output of the run; lines that are not the JSON object are ignored.</param>
@@ -475,6 +518,75 @@ begin
       then LOCK_UNKNOWN else LOCK_FOREIGN + VPersistent.TableName;
     FRows := FRows + [VRow];
   end;
+end;
+
+function UsageIcon(pKinds: TFsUseKinds): Integer;
+var
+  VKind: TFsUseKind;
+begin
+  Result := 0;
+  for VKind := Low(TFsUseKind) to High(TFsUseKind) do
+    if VKind in pKinds then
+      Inc(Result, 1 shl Ord(VKind));
+end;
+
+function UsageText(pKinds: TFsUseKinds): string;
+const
+  WORDS: array[TFsUseKind] of string = ('edit control', 'grid column', 'lookup', 'code');
+var
+  VKind: TFsUseKind;
+begin
+  Result := '';
+  for VKind := Low(TFsUseKind) to High(TFsUseKind) do
+    if VKind in pKinds then
+      Result := Result + (if Result = '' then '' else ', ') + WORDS[VKind];
+end;
+
+function TFieldSelection.FieldList: string;
+var
+  VRow: TFsRow;
+begin
+  Result := '';
+  for VRow in FRows do
+    Result := Result + (if Result = '' then '' else ',') + VRow.Name;
+end;
+
+function TFieldSelection.ApplyUsage(const pOutput: string): Boolean;
+const
+  KIND_WORDS: array[TFsUseKind] of string = ('dfm', 'grid', 'lookup', 'code');
+var
+  VRoot: TJSONObject;
+  VItem, VKindItem: TJSONValue;
+  VKinds: TFsUseKinds;
+  VKind: TFsUseKind;
+begin
+  VRoot := ObjectOf(pOutput);
+  Result := (VRoot <> nil) and (ArrayOf(VRoot, 'usage') <> nil);
+  try
+    if not Result then
+      Exit;
+    for VItem in ArrayOf(VRoot, 'usage') do
+    begin
+      VKinds := [];
+      if (VItem is TJSONObject) and (TJSONObject(VItem).GetValue('kinds') is TJSONArray) then
+        for VKindItem in TJSONArray(TJSONObject(VItem).GetValue('kinds')) do
+          for VKind := Low(TFsUseKind) to High(TFsUseKind) do
+            if SameText(VKindItem.Value, KIND_WORDS[VKind]) then
+              Include(VKinds, VKind);
+      SetUsage(TextOf(VItem, 'field'), VKinds);
+    end;
+  finally
+    VRoot.Free;
+  end;
+end;
+
+procedure TFieldSelection.SetUsage(const pName: string; pKinds: TFsUseKinds);
+var
+  VIndex: Integer;
+begin
+  VIndex := IndexOf(pName);
+  if VIndex >= 0 then
+    FRows[VIndex].Used := pKinds;
 end;
 
 function TFieldSelection.GetRows(pIndex: Integer): TFsRow;
