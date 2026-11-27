@@ -37,8 +37,13 @@ Check 'B-26 control: without --project-rules the banner says pass --project-rule
 Check 'B-26 with --project-rules the banner has a note but no stale doc-drift claim' (($a.Err -match 'project rules ran') -and ($a.Err -notmatch 'pass\s+--project-rules') -and ($a.Err -notmatch 'doc-drift/missing-doc \('))
 
 # B-38: 0 callers -> hint to usages on stderr, stdout unchanged; control: a real caller prints no hint
-$c = Run @('query','find-callers','--name','FName','--db',$Db)
-Check 'B-38 0 callers: stdout has 0 caller(s), stderr hints usages' (($c.Out -match '0 caller\(s\)') -and ($c.Err -match 'usages\s+(--rw\s+)?--name FName'))
+# 1.56 IDX-U (f34906379): a FIELD name now lists its write sites as rows tagged [write] (help: "a FIELD name also
+# lists its write sites"), so FName (written by SetName and Load) is no longer a 0-caller name; the hint is pinned
+# on Reset, a routine nothing calls.
+$c = Run @('query','find-callers','--name','Reset','--db',$Db)
+Check 'B-38 0 callers: stdout has 0 caller(s), stderr hints usages' (($c.Out -match '0 caller\(s\)') -and ($c.Err -match 'usages\s+(--rw\s+)?--name Reset'))
+$cf = Run @('query','find-callers','--name','FName','--db',$Db)
+Check 'B-38 IDX-U: a field lists its 2 write sites [write], no 0-caller hint' (($cf.Out -match '2 caller\(s\)') -and (([regex]::Matches($cf.Out, '\[write\]')).Count -eq 2) -and ($cf.Err -notmatch 'usages\s+(--rw\s+)?--name'))
 $d = Run @('query','find-callers','--name','TFoo','--db',$Db)
 Check 'B-38 control: a name with callers prints no hint' (($d.Err -notmatch 'usages\s+(--rw\s+)?--name') -and ($d.Out -notmatch '0 caller'))
 
