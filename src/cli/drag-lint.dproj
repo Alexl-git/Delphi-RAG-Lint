@@ -425,6 +425,7 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.ZipBackup.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.SqlBackup.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoGridCopy.pas"/>
+        <DCCReference Include="DRagLint.CLI.RepoFieldUsage.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoWiki.pas"/>
         <DCCReference Include="DRagLint.CLI.MigrateReports.pas"/>
         <DCCReference Include="..\lint\fixers\DRagLint.Fix.V152.XCONST.pas"/>

@@ -1715,6 +1715,7 @@ begin
     else if (A = '--dataset') and (i < ParamCount) then Inc(i) // repo read-dfm: DRagLint.CLI.RepoDfm reads it from ParamStr
     else if (A = '--select') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: the change-set id file, read from ParamStr
     else if (A = '--table') and (i < ParamCount) then Inc(i)
+    else if (A = '--fields') and (i < ParamCount) then Inc(i) { v156 FUSAGE: repo field-usage reads it from ParamStr }
     { repo alter-table (1.54): DRagLint.CLI.RepoAlter reads these from ParamStr }
     else if (A = '--order') and (i < ParamCount) then Inc(i)
     else if (A = '--hook') and (i < ParamCount) then Inc(i)
