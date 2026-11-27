@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.55.0-alpha';
+  DRAGLINT_VERSION = '1.56.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -309,7 +309,7 @@ const
       "set of 1 .. N * 2", shl / and / or / xor / div / mod, parentheses, "0 .. High(Byte) - 1").
     * refs: the const in the bound of a subrange-typed global ("G: 0..CMax"), and the consts and the
       element / index types of a classic local's array / set / subrange / string[N] type (no ref until now). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.43.0-alpha';
+  DRAGLINT_EXTRACTOR_VERSION = '1.56.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -581,7 +581,7 @@ const
   /// re-parse): var X := L[K] types X through a default indexer declared on an ANCESTOR of L's
   /// type (library TList / TObjectList / TDictionary or an own generic base, at most 8 parents),
   /// so members of X bind (lane EXT-RES-TAILS). Remedy: index --resolve-only per DB.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.31.0-alpha';
+  DRAGLINT_RESOLVER_VERSION = '1.56.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>

@@ -64,11 +64,11 @@ const
     context") and read only by the resolve pass, which runs on a migrated writer; probed by
     HasIncVariants. SCHEMA_READ_MIN stays 23. Filled by the re-parse of the extractor bump
     that ships with it (INT). }
-  { 1.56 lane EXT-S S1 (2026-11-26): stays 27 for now. The 1.56 tables / columns (SCHEMA_DDL_V156*
+  { 1.56 lane EXT-S S1 (2026-11-26): stayed 27 until the bump commit (INT-FINAL, 2026-11-27: now 28). The 1.56 tables / columns (SCHEMA_DDL_V156*
     below) are ADDITIVE and probed; the version moves ONCE, in the bump commit at the freeze
     (the same commit as DRAGLINT_EXTRACTOR_VERSION), because schema= is part of the indexer
     fingerprint and a change re-parses every DB. }
-  SCHEMA_VERSION = 27;
+  SCHEMA_VERSION = 28;
 
   /// <summary>The oldest stored schema_version this engine READS without migrating
   /// (150 SC, docs\superpowers\specs\2026-11-09-schema-read-compat.md).</summary>
