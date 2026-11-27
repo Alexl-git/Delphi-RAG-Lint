@@ -122,10 +122,11 @@ begin
   Result := '  {$REGION ''DB-RAD ' + pId + '''}'#13#10 + pBody + '  {$ENDREGION ''DB-RAD ' + pId + '''}'#13#10;
 end;
 
-{ ContentHash of DRagLint.FieldRepo.HandlersRegions, written out: SHA-256 of the body with LF line ends, 16 hex }
+{ OrmContentHash of DRagLint.FieldRepo.HandlersRegions, written out (1.55 R-155-ORMWS): SHA-256 of the body with every
+  space, tab and line break removed, 16 hex }
 function HashOf(const pBody: string): string;
 begin
-  Result := THashSHA2.GetHashString(pBody.Replace(#13#10, #10)).Substring(0, 16).ToLower;
+  Result := THashSHA2.GetHashString(pBody.Replace(' ', '').Replace(#9, '').Replace(#13, '').Replace(#10, '')).Substring(0, 16).ToLower;
 end;
 
 { Region with the hash of its body in the start marker, as update-orm writes it (1.55 UPDORM Q2) }
@@ -408,6 +409,13 @@ begin
     CheckText('H2 a stamped, intact region: a second run changes nothing', Updated(HRegion('4', vBody4)), HRegion('4', vBody4));
     Check('H2b nothing kept', Length(vGen.KeptEdited) = 0);
     CheckText('H3 an intact region of an older generation: overwritten', Updated(HRegion('4', 'stale'#13#10)), HRegion('4', vBody4));
+    vText := HRegion('4', vBody4).Replace('Self.fNAME', 'Self.fNAME2');
+    { 1.55 R-155-ORMWS: whitespace is not an edit }
+    vText := '  {$REGION ''DB-RAD 4 hash=' + HashOf(vBody4) + '''}'#13#10 + vBody4.Replace('      ', #9).Replace(#13#10, #13#10#13#10) +
+      '  {$ENDREGION ''DB-RAD 4''}'#13#10;
+    CheckText('H9 a region reformatted (tabs, blank lines) keeps its hash: kept byte for byte', Updated(vText), vText);
+    Check('H9b not edited, not listed as changed', (Length(vGen.KeptEdited) = 0) and (Length(vGen.ChangedRegions) = 0), IntToStr(Length(vGen.ChangedRegions)));
+    Check('H9c control: the reformatted body really differs from the generated one', vText <> HRegion('4', vBody4));
     vText := HRegion('4', vBody4).Replace('Self.fNAME', 'Self.fNAME2');
     CheckText('H4 a hand-edited region is kept byte for byte', Updated(vText), vText);
     Check('H4b and named', (Length(vGen.KeptEdited) = 1) and (vGen.KeptEdited[0] = '4'), string.Join(',', vGen.KeptEdited));
