@@ -78,7 +78,7 @@ const
   { a plain answer in Ask-Report -Plain's shape }
   PLAIN_ANSWER =
     'Who reads this field (drag-lint report who-reads) for U.TA.FB, asked on 2026-10-14 09:30, engine 1.0.' + CRLF +
-    'COMMAND who-reads -Target "U.TA.FB"' + CRLF +
+    'COMMAND who-reads --target "U.TA.FB"' + CRLF +
     'BUNDLE C:\T\who-reads-U_TA_FB' + CRLF +
     'INDEX C:\T\x.sqlite' + CRLF +
     'CHART who-reads U.TA.FB -- 2 read sites / 1 routines' + CRLF +
@@ -229,10 +229,10 @@ begin
   { the same arguments as Test-AskReport AR-HDR-CMD-ALL, which pins Get-ReportCommandLine }
   Assert.IsTrue(ParseAskArgs(['path', '--target', 'A', '--to', 'B', '--in', 'C:\P\u.pas', '--cap', '5', '--surface-cap', '6',  // dl:ok hardcoded-absolute-path@44bd -- REVIEWED 2026-10-14: inert test string -- ParseAskArgs/BuildCommandLine only echo it; nothing touches the filesystem
     '--control', 'c1', '--mode', 'x', '--max-rows', '7', '--db', 'zz', '--plain', '--open'], A, Error), Error);
-  Assert.AreEqual('path -Target "A" -To "B" -In "C:\P\u.pas" -Cap 5 -SurfaceCap 6 -Control "c1" -Mode x -MaxRows 7',
+  Assert.AreEqual('path --target "A" --to "B" --in "C:\P\u.pas" --cap 5 --surface-cap 6 --control "c1" --mode x --max-rows 7',
     BuildCommandLine(AskCommandOf(A)));
   Assert.IsTrue(ParseAskArgs(['who-writes', '--target', 'T', '--project', 'C:\P\A.dproj', '--in', 'C:\P\u.pas', '--depth', '3'], A, Error), Error);  // dl:ok hardcoded-absolute-path@88de -- REVIEWED 2026-10-14: inert test string -- ParseAskArgs/BuildCommandLine only echo it; nothing touches the filesystem
-  Assert.AreEqual('who-writes -Target "T" -Project "C:\P\A.dproj" -Depth 3', BuildCommandLine(AskCommandOf(A)), '--project wins over --in');
+  Assert.AreEqual('who-writes --target "T" --project "C:\P\A.dproj" --depth 3', BuildCommandLine(AskCommandOf(A)), '--project wins over --in');
 end;
 
 procedure TAskVerbTests.QuestionIdIsMatchedCaseInsensitivelyAndLowerCased;
@@ -301,7 +301,7 @@ begin
   Assert.AreEqual(Db, Stub.Options.DbOverride);
   Assert.IsTrue(Stub.Options.AllowStale, 'freshness is checked before the producer runs');
   Assert.AreEqual(FTempDir, Stub.Options.OutRoot);
-  Assert.AreEqual('who-reads -Target "U.TA.FB"', BuildCommandLine(Stub.Command));
+  Assert.AreEqual('who-reads --target "U.TA.FB"', BuildCommandLine(Stub.Command));
 end;
 
 procedure TAskVerbTests.PlainOutputIsTheProducersAnswer;
@@ -363,7 +363,7 @@ begin
     var Code:= Run(['touches-tables', '--target', TT_TARGET, '--db', Db, '--allow-stale', '--plain', '--out-root', FTempDir], nil);
     Assert.AreEqual(0, Code, Joined(FErr));
     Assert.Contains(Joined(FOut), CRLF + 'CHART touches-tables ' + TT_TARGET + ' -- 5 tables read / 5 tables written' + CRLF);
-    Assert.AreEqual('COMMAND touches-tables -Target "' + TT_TARGET + '"', FOut[1]);
+    Assert.AreEqual('COMMAND touches-tables --target "' + TT_TARGET + '"', FOut[1]);
     Assert.AreEqual('INDEX ' + Db, FOut[INDEX_LINE_NO]);
   finally
     SetEnvironmentVariable(ASK_REPORT_ENV, if Prev = '' then nil else PChar(Prev));
