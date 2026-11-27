@@ -15,12 +15,6 @@ uses
   , DRagLint.V151.Api
   ;
 
-const
-  /// <summary>Rule id of G-26; not in the catalog until Catalog declares it.</summary>
-  RULE_DUNITX_ATTRIBUTE_HYGIENE = 'dunitx-attribute-hygiene';
-  /// <summary>Rule id of G-30; not in the catalog until Catalog declares it.</summary>
-  RULE_VARIANT_IN_LOOP = 'variant-in-loop';
-
 type
   /// <summary>Checker entry points of v156 lane OOB-2; every method is called by TV151Dispatch.</summary>
   /// <remarks>Stateless; class methods only. A method that has nothing to check returns nil.
@@ -29,8 +23,7 @@ type
   public
     /// <summary>Declares every rule id this lane may emit: new ids (V151Rule) and host ids of in-place expansions (V151Host).</summary>
     /// <param name="ADecls">List to append to; owned by the caller.</param>
-    /// <remarks>Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.
-    /// The scaffold declares nothing.</remarks>
+    /// <remarks>Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.</remarks>
     class procedure Catalog(const ADecls: TList<TV151RuleDecl>); static;
     /// <summary>Per-file check of one .pas (parse tree, index, library).</summary>
     /// <param name="ACtx">The file being linted; Store / LibStore may be nil.</param>
@@ -54,30 +47,42 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V156.OOB2.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V156.OOB2.Support
+  ;
+
+const
+  CATEGORY_BUG = 'bug-patterns';
+  CATEGORY_REFACTORING = 'refactoring';
+  SEVERITY_WARNING = 'warning';
+  SEVERITY_HINT = 'hint';
 
 class procedure TV156OOB2Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_DUNITX_ATTRIBUTE_HYGIENE, CATEGORY_BUG, SEVERITY_WARNING, 'DUnitX fixture without a test, [Ignore] without a reason, or [Setup] / [TearDown] used twice in one fixture'));
+  ADecls.Add(V151Rule(RULE_VARIANT_IN_LOOP, CATEGORY_REFACTORING, SEVERITY_HINT, 'Arithmetic on a Variant inside a loop (late-bound calls)', False));
 end;
 
 class function TV156OOB2Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
   Result:= nil;
+  if ACtx.Wants(RULE_DUNITX_ATTRIBUTE_HYGIENE) then Result:= Result + TOob2Dunitx.Check(ACtx);
+  { OFF unless the config or --rule asks for it: computed only then }
+  if ACtx.Wants(RULE_VARIANT_IN_LOOP) and (SameText(ACtx.NarrowRule, RULE_VARIANT_IN_LOOP) or ACtx.Cfg.ShouldKeep(RULE_VARIANT_IN_LOOP, True)) then
+    Result:= Result + TOob2Variant.Check(ACtx);
 end;
 
-class function TV156OOB2Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV156OOB2Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@281c -- REVIEWED 2026-11-26 v156 OOB2: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV156OOB2Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV156OOB2Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@d23f -- REVIEWED 2026-11-26 v156 OOB2: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV156OOB2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV156OOB2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@d2f9 -- REVIEWED 2026-11-26 v156 OOB2: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
