@@ -122,6 +122,14 @@ type
     /// <param name="pName">Field name, case-insensitive; a name that is no row is ignored.</param>
     /// <param name="pKinds">The kinds; replaces what the row had.</param>
     procedure SetUsage(const pName: string; pKinds: TFsUseKinds);
+    /// <summary>The names of every row, for `repo field-usage --fields`.</summary>
+    /// <returns>Comma-separated, in row order; '' when there are no rows.</returns>
+    function FieldList: string;
+    /// <summary>Takes the usage the engine reported (`repo field-usage --json`) into the rows.</summary>
+    /// <param name="pOutput">The engine output; the first line that is a JSON object is read:
+    /// {"usage":[{"field":"ID","kinds":["dfm","grid","lookup","code"]}]}. An unknown kind word and an unknown field are ignored.</param>
+    /// <returns>False = no usage object in the output; the rows keep what they had.</returns>
+    function ApplyUsage(const pOutput: string): Boolean;
     /// <summary>The value of write-dfm --names.</summary>
     /// <returns>The checked repository fields and what they need, comma-separated; '' when none is checked.</returns>
     /// <exception cref="EFrSelectionError">As ExpandSelection.</exception>
@@ -532,6 +540,44 @@ begin
   for VKind := Low(TFsUseKind) to High(TFsUseKind) do
     if VKind in pKinds then
       Result := Result + (if Result = '' then '' else ', ') + WORDS[VKind];
+end;
+
+function TFieldSelection.FieldList: string;
+var
+  VRow: TFsRow;
+begin
+  Result := '';
+  for VRow in FRows do
+    Result := Result + (if Result = '' then '' else ',') + VRow.Name;
+end;
+
+function TFieldSelection.ApplyUsage(const pOutput: string): Boolean;
+const
+  KIND_WORDS: array[TFsUseKind] of string = ('dfm', 'grid', 'lookup', 'code');
+var
+  VRoot: TJSONObject;
+  VItem, VKindItem: TJSONValue;
+  VKinds: TFsUseKinds;
+  VKind: TFsUseKind;
+begin
+  VRoot := ObjectOf(pOutput);
+  Result := (VRoot <> nil) and (ArrayOf(VRoot, 'usage') <> nil);
+  try
+    if not Result then
+      Exit;
+    for VItem in ArrayOf(VRoot, 'usage') do
+    begin
+      VKinds := [];
+      if (VItem is TJSONObject) and (TJSONObject(VItem).GetValue('kinds') is TJSONArray) then
+        for VKindItem in TJSONArray(TJSONObject(VItem).GetValue('kinds')) do
+          for VKind := Low(TFsUseKind) to High(TFsUseKind) do
+            if SameText(VKindItem.Value, KIND_WORDS[VKind]) then
+              Include(VKinds, VKind);
+      SetUsage(TextOf(VItem, 'field'), VKinds);
+    end;
+  finally
+    VRoot.Free;
+  end;
 end;
 
 procedure TFieldSelection.SetUsage(const pName: string; pKinds: TFsUseKinds);

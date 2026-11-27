@@ -337,6 +337,28 @@ begin
   end;
 end;
 
+procedure TestUsageFromEngine;
+const
+  USAGE_JSON = '{"usage":[{"field":"ID","kinds":["dfm","grid"]},{"field":"QTY","kinds":["lookup","code","bogus"]},' +
+    '{"field":"NOSUCH","kinds":["code"]},{"field":"PRICE","kinds":[]}]}';
+var
+  VSel: TFieldSelection;
+begin
+  VSel := TFieldSelection.Create(FirstDataset(READ_JSON));
+  try
+    CheckText('field list for the engine = every row name', VSel.FieldList, 'ID,QTY,PRICE,TOTAL,VAT,TOOLID,TOOL,BAR,BAD,CNT,TNAME,LEGACY');
+    Check('engine JSON accepted (noise before it is skipped)', VSel.ApplyUsage('note' + sLineBreak + USAGE_JSON));
+    CheckText('ID: dfm + grid -> icon 3', IntToStr(UsageIcon(VSel[RowOf(VSel, 'ID')].Used)), '3');
+    CheckText('QTY: lookup + code (bogus word ignored) -> icon 12', IntToStr(UsageIcon(VSel[RowOf(VSel, 'QTY')].Used)), '12');
+    CheckText('PRICE: empty kinds -> icon 0', IntToStr(UsageIcon(VSel[RowOf(VSel, 'PRICE')].Used)), '0');
+    CheckText('a field the engine did not name -> icon 0', IntToStr(UsageIcon(VSel[RowOf(VSel, 'TOTAL')].Used)), '0');
+    Writeln('ICON ID ', UsageIcon(VSel[RowOf(VSel, 'ID')].Used), ' QTY ', UsageIcon(VSel[RowOf(VSel, 'QTY')].Used));
+    Check('no JSON -> False, icons kept', (not VSel.ApplyUsage('error: unknown verb')) and (UsageIcon(VSel[RowOf(VSel, 'ID')].Used) = 3));
+  finally
+    VSel.Free;
+  end;
+end;
+
 procedure Clicks(pSel: TFieldSelection; pFrom: Integer);
 var
   VI: Integer;
@@ -409,6 +431,7 @@ begin
       TestText;
       TestAfterWrite;
       TestUsageIcons;
+      TestUsageFromEngine;
       Writeln(Format('Summary: pass=%d fail=%d', [GPass, GFail]));
       if GFail > 0 then
         ExitCode := 1;

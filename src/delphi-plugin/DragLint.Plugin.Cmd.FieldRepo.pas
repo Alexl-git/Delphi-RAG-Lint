@@ -122,6 +122,7 @@ const
   REFRESH_ASK = 'Write the checked changes to the repository now? Deletes of vanished columns are not checked and stay out.';
   SUB_READ_DFM = 'read-dfm';
   SUB_WRITE_DFM = 'write-dfm';
+  SUB_FIELD_USAGE = 'field-usage';
   JSON_FLAG = '--json';
   NOT_WRITTEN_DIRTY = 'the form has unsaved changes now: nothing written';
   NO_PROJECT_MSG = 'drag-lint: open a project first; the field repository belongs to the active project.';
@@ -685,6 +686,35 @@ begin
     end);
 end;
 
+{ The dialog with the usage icons (UI-P): one `repo field-usage` run for the rows, quietly - an engine without that verb, or a
+  project without an index, only leaves the icons blank. Takes over pSelection and frees it. }
+procedure ShowFieldsWithUsage(const pForm: TFormContext; const pDataset, pTitle: string; pSelection: TFieldSelection);
+var
+  Form: TFormContext;
+  Selection: TFieldSelection;
+  Dataset, Title: string;
+begin
+  Form:= pForm;
+  Selection:= pSelection;
+  Dataset:= pDataset;
+  Title:= pTitle;
+  RunCliAsync(FieldRepoCommandLine(Form.Exe, SUB_FIELD_USAGE, Form.Project,
+      '--fields ' + AnsiQuotedStr(Selection.FieldList, '"') + ' ' + JSON_FLAG),
+    procedure(pExitCode: Integer; const pOutput: string)
+    begin
+      Form.Guarded(
+        procedure
+        begin
+          try
+            if pExitCode = 0 then Selection.ApplyUsage(pOutput);
+            if SelectFields(Title, Selection, ApplyIdeTheme) then WriteSelection(Form, Dataset, Selection);
+          finally
+            Selection.Free;
+          end;
+        end);
+    end, REPO_STALL_MS);
+end;
+
 { The field-selection dialog of one dataset (FR-2). }
 procedure SelectDatasetFields(const pForm: TFormContext; const pDataset: string);
 var
@@ -706,10 +736,16 @@ begin
       Title:= Form.Title + ' -- ' + Datasets[0].Caption + ', table ' + Datasets[0].TableName;
       Selection:= TFieldSelection.Create(Datasets[0]);
       try
-        if not Selection.HasTable then Form.Show(Selection.Refusal)
-        else if SelectFields(Title, Selection, ApplyIdeTheme) then WriteSelection(Form, Datasets[0].Name, Selection);
-      finally
+        if not Selection.HasTable then
+        begin
+          Form.Show(Selection.Refusal);
+          Selection.Free;
+        end
+        else
+          ShowFieldsWithUsage(Form, Datasets[0].Name, Title, Selection);
+      except
         Selection.Free;
+        raise;
       end;
     end);
 end;
