@@ -254,6 +254,10 @@ begin
             passed. Measured, not reasoned about. }
           Q.FetchOptions.Mode      := fmOnDemand;
           Q.FetchOptions.RowsetSize:= 100;
+          { v156 IDX-U: the text is the caller's SQL, verbatim. FireDAC's preprocessor would read `&name` as a macro (and
+            replace it with its empty value) and `:name` as a parameter; a LIKE '%a&b%' came back as '%ab%'. }
+          Q.ResourceOptions.MacroCreate:= False;
+          Q.ResourceOptions.MacroExpand:= False;
           Q.SQL.Text:= SqlText;
           try
             Q.Open;
