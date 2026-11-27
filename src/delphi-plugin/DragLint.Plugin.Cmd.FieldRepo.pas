@@ -873,7 +873,7 @@ begin
   RegisterRow('field-repository-07-read-dataset', 'Read Fields from Dataset...', True, InvokeReadDataset);
   RegisterRow('field-repository-08-read-form', 'Read Fields of All Datasets of Form...', True, InvokeReadForm);
   RegisterRow('field-repository-09-select-fields', 'Select Fields of Dataset...', True, InvokeSelectFields);
-  RegisterRow(GRID_COPY_CMD_ID, 'Copy Grid Columns...', True, InvokeGridCopy);
+  RegisterRow('field-repository-10-grid-copy', 'Copy Grid Columns...', True, InvokeGridCopy);  { literal = GRID_COPY_CMD_ID: the docs / registry harvest reads RegisterRow('<id>', '<caption>' by literal }
 end;
 
 initialization

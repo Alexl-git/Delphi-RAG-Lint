@@ -12,7 +12,14 @@
     {
       "type": "cli",
       "verb": "lint-all",
-      "example": "drag-lint lint-all --db <db> --changed-since <rev>"
+      "example": "drag-lint lint-all --db <db> --changed-since <rev>",
+      "usage": "drag-lint lint-all --db <db> --changed-since <rev> (git or hg; only findings on lines changed since <rev>; unknown revision or no working copy: exit 2, nothing answered)",
+      "flags": [
+        {
+          "name": "--changed-since",
+          "arg": "<rev>"
+        }
+      ]
     }
   ],
   "audience": "both"

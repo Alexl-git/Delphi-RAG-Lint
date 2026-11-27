@@ -37,7 +37,7 @@
         }
       ],
       "helpOrder": 59,
-      "help": ["  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses"]
+      "help": ["  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db> [--place library,project,repository]  - add the declaring unit to uses"]
     },
     {
       "type": "ide-menu",

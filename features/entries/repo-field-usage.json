@@ -12,7 +12,27 @@
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "field-usage"
+      "sub": "field-usage",
+      "usage": "drag-lint repo field-usage --fields \"A,B,C\" [--json] [--db <index> | --project <project file>]",
+      "flags": [
+        {
+          "name": "--fields",
+          "arg": "A,B,C"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--db",
+          "arg": "<index>"
+        },
+        {
+          "name": "--project",
+          "arg": "<project file>"
+        }
+      ],
+      "helpOrder": 116,
+      "help": ["  drag-lint repo field-usage    --fields \"A,B,C\" [--json] [--db <index> | --project <project file>]   (read-only: where the project index finds each field, as the kinds dfm, grid, lookup, code; a field nothing uses is left out; the IDE Select Fields dialog draws its usage icons from it)"]
     }
   ],
   "audience": "both",

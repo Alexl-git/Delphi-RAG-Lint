@@ -506,6 +506,7 @@ begin
   Writeln('       ^ never guess a DB path. Also --project <P.dproj> and --platform <win32|win64>.');
   Writeln('  What is wrong with this file?         drag-lint lint <U.pas>');
   Writeln('  ...with the whole project?            drag-lint lint-all --db <db>');
+  Writeln('  ...only on what changed since a revision?  drag-lint lint-all --db <db> --changed-since <rev>');
   Writeln('       ^ lint <file> is a strict SUBSET: project-wide rules can only fire in lint-all.');
   Writeln('  Record that a finding was reviewed    drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply');
   Writeln('  Repair what the linter can repair     drag-lint lint-all --db <db> --fix          (preview)');

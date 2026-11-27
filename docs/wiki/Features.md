@@ -481,7 +481,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](dump-refs) | `dump-refs` |  |
 | [Feature registry](Feature-Registry) | `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [featuregen](featuregen) | `featuregen.exe`; `build\_build_featuregen_local.bat builds featuregen.exe from this checkout`; `tools\featuregen-gate.ps1 -Repo -Full`; procedure: `docs\wiki\featuregen.md` | internal |
-| [Field repository backup formats: text, SQL, zip](repo-backup-formats) | `repo backup`; `repo restore` |  |
+| [Field repository backup formats: text, SQL, zip](repo-backup-formats) | `repo backup` |  |
 | [Field repository wiki pages](repo-gen-wiki) | `repo` |  |
 | [Field repository: fields of a form in the IDE](field-repository-forms) | drag-lint > Field Repository > Read Fields from Dataset...; drag-lint > Field Repository > Read Fields of All Datasets of Form...; drag-lint > Field Repository > Select Fields of Dataset...; drag-lint > Field Repository > Copy Grid Columns... |  |
 | [Field repository: generated handlers](field-repository-handlers) | `repo gen-handlers`; `repo gen-maxlen`; `repo renumber-regions` |  |

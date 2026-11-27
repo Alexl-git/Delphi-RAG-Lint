@@ -12,7 +12,22 @@
     {
       "type": "cli",
       "verb": "migrate-reports",
-      "example": "drag-lint migrate-reports <folder> --dry-run --json"
+      "example": "drag-lint migrate-reports <folder> --dry-run --json",
+      "usage": "drag-lint migrate-reports <file-or-folder>... [--project <P.dproj>] [--dry-run] [--json]",
+      "flags": [
+        {
+          "name": "--project",
+          "arg": "<P.dproj>"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "helpOrder": 7,
+      "help": ["  drag-lint migrate-reports    <file-or-folder>... [--project <P.dproj>] [--dry-run] [--json]", "                               Rewrite the COMMAND line of saved reports from the old style (-Target \"T\" -Project \"P\")", "                               to the CLI style of 1.56 (--target \"T\" --project \"P\"); only that line changes. A folder is", "                               searched with its subfolders; --project adds that project's snapshot folder. Lists what it", "                               left alone and why (no COMMAND line, wrapped or mixed-style line, unknown argument, not a", "                               report). Forms CSV / chart DOT carry no command line: reported current. compare reads both", "                               styles, so this is optional. Exit 0 = done; 1 = missing path / unreadable file; 2 = usage."]
     }
   ],
   "audience": "both",

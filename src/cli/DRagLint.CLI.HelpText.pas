@@ -50,6 +50,8 @@ begin
   Writeln('                               index OPEN until it ends, so a script that deletes the index right after should keep');
   Writeln('                               wait; a newer background warm of the same index stops the older one.');
   Writeln('                               The Done line ends in , parse-errors=N (files parsed this run whose syntax tree had ERROR / MISSING nodes), like the section line (1.51.1).');
+  Writeln('                               A project index also copies the configured field repository (captions, descriptions) and derives the caption concepts of its forms: prints `repository: copied <F> fields, <T> texts from <file>` | `repository: unchanged (<file>)`');
+  Writeln('                               | `repository: not configured` | `repository: not found: <file>` | `repository: not readable: <file> (<why>); previous copy kept`, then `concepts: <P> project texts, <L> links (<N> by name only)` | `concepts: unchanged`. A repository problem never changes the exit code.');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
   Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--rule-cache-warm background|wait|off] [--target-compiler <ver|auto>]');
@@ -88,7 +90,7 @@ begin
   Writeln('                               A POSITIONAL .dpr/.dproj/.dpk beats the "project" key of the defaults file (one stderr note names the override); an explicit --project beats both.');
   Writeln('                               --use-ignore is the default and is accepted so older scripts still parse; --dir <path> is the same as the positional <path>.');
   Writeln('                               EXIT 1 when any file FAILED to store (an ERROR line on stderr names it and the file keeps its old rows) and, for index --all, when any section failed.');
-  Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
+  Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact] [--place library,project,repository]');
   Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
   Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
   Writeln('                               --case-sensitive restores byte-exact matching.');
@@ -97,8 +99,9 @@ begin
   Writeln('                               JSON rows carry "match_kind": "exact" | "fuzzy" | "substring" (--name-like) -- reject "fuzzy" unless');
   Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
   Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
-  Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql|md] [--kind <k>] [--limit N] [--db ...] [--json]');
+  Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql|md] [--kind <k>] [--limit N] [--db ...] [--json] [--place library,project,repository]');
   Writeln('       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).');
+  Writeln('       ^ place=<library|project|repository> on every row; repository rows (repo-field / repo-table, --text source repo) come from the field-repository copy in the project index; --place narrows; notes on stderr.');
   Writeln('       ^ a phrase must sit inside ONE string literal / comment: a message built as ''a '' + ''b'' over several literals (or lines) is not one phrase -- search one piece, or --any-order.');
   Writeln('         --source md: Markdown text nodes (headings, paragraphs, list items of the .md files beside a project file).');
   Writeln('         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception');
@@ -117,6 +120,7 @@ begin
   Writeln('                               EXIT 0 = callers listed, 1 = ZERO callers (a valid answer, not an error;');
   Writeln('                               --json prints []), 2 = usage error or a missing/stale --db. See "Exit codes" below.');
   Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3); --resolved rows also carry "path" = the full path of the caller file ("file" stays the bare name), before "resolution"');
+  Writeln('                               a FIELD name also lists its write sites, each row tagged [read] or [write].');
   Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
   Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
   Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
@@ -126,6 +130,7 @@ begin
   Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
   Writeln('  drag-lint usages             --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]');
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
+  Writeln('                               --width wide|very-wide prints one `<group> file:line:col` site row per usage instead of the group counts.');
   Writeln('                               --scope (1.52): symbol (default) = the declaration --in/--line/--col or a qualified --name is BOUND to, in this project; project = every object of the name in this project (symbol and project skip a library-*.sqlite --db unless every --db is one); group = the name in every project of --group <x.groupproj>; everywhere = the name in every index the manifest knows. A bare --name with no position binds nothing and is answered as scope project (the JSON says scope, scope_note, databases).');
   Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
   Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
@@ -137,6 +142,7 @@ begin
   Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
   Writeln('                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,');
   Writeln('                               impl_end_line, end_line, is_class_method.');
+  Writeln('                               REGION ... END pairs are listed as kind region rows (line, end_line, depth).');
   Writeln('  drag-lint syntax-count       (--db <file.sqlite> | --in <path>...) [--feature <a,b>|all] [--per-file] [--hits] [--json]');
   Writeln('                               counts syntax features in the tree-sitter parse of each unit -- shapes, not text, so strings');
   Writeln('                               and comments never count; uncapped. Features: if-expr, is-not, not-in (Delphi 13), inline-var,');
@@ -148,15 +154,23 @@ begin
   Writeln('                               files[{path, counts}] (--per-file), hits[{feature, path, line, col}] (--hits).');
   Writeln('                               Exit 0 = counted (zero included); 2 = no --db/--in, unknown --feature, unreadable index;');
   Writeln('                               3 = unknown flag.');
-  Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
+  Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> --target T --project P ..."] [--project <P.dproj>]');
   Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
   Writeln('                               [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]');
+  Writeln('                               --command is read in either style: "<id> --target T --project P" (1.56) or "<id> -Target T -Project P" (1.55 and earlier).');
   Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
   Writeln('  drag-lint compare            --show <report|csv|bundle> [--json] [--output <f.html>] [--open]   any report as the HTML page');
   Writeln('  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot');
   Writeln('                               Reruns the old report''s COMMAND in-process (no PowerShell) and diffs the normalised');
   Writeln('                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,');
   Writeln('                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping.');
+  Writeln('  drag-lint migrate-reports    <file-or-folder>... [--project <P.dproj>] [--dry-run] [--json]');
+  Writeln('                               Rewrite the COMMAND line of saved reports from the old style (-Target "T" -Project "P")');
+  Writeln('                               to the CLI style of 1.56 (--target "T" --project "P"); only that line changes. A folder is');
+  Writeln('                               searched with its subfolders; --project adds that project''s snapshot folder. Lists what it');
+  Writeln('                               left alone and why (no COMMAND line, wrapped or mixed-style line, unknown argument, not a');
+  Writeln('                               report). Forms CSV / chart DOT carry no command line: reported current. compare reads both');
+  Writeln('                               styles, so this is optional. Exit 0 = done; 1 = missing path / unreadable file; 2 = usage.');
   Writeln('  drag-lint uses-recover       --db <db> --hpp-dir <dir>... [--library-db <db>...] [--map <file.map>] [--project <x.dproj>] [--apply] [--json]');
   Writeln('                               uses edges of units with NO source in --db or any --library-db, from the vendor''s C++Builder');
   Writeln('                               .hpp headers (#include lines = interface uses; System/SysInit dropped; never reads a .dcu).');
@@ -217,7 +231,7 @@ begin
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--reason "<text>"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker''s reason, e.g. "REVIEWED <yyyy-mm-dd> <why>" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]');
-  Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]');
+  Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--changed-since <rev>]');
   Writeln('                               --output <file>: the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
   Writeln('                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in');
@@ -227,7 +241,7 @@ begin
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
   Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
   Writeln('                               several projects, or when the DB spans more than the project you are reviewing.');
-  Writeln('                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index''s data_flows');
+  Writeln('                               taint-sql-injection / taint-command-injection / taint-path-traversal / taint-deserialization / taint-html-output / taint-log (taint-log OFF by default; name it with --rule) (store-backed): walk the index''s data_flows');
   Writeln('                               facts from a catalogued source to a sink; catalogues rules\taint-sources|sinks|propagators.json, extended by the');
   Writeln('                               "taint" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds');
   Writeln('                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.');
@@ -235,7 +249,7 @@ begin
   Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
   Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
   Writeln('  drag-lint lint-tree          --unit <B.pas> --db <file.sqlite> [--buffer <buf>] [--project <.dproj>]');
-  Writeln('                               [--baseline <f.json>] [--write-baseline <f.json>] [--platform win32|win64]');
+  Writeln('                               [--baseline <f.json>] [--write-baseline <f.json>] [--changed-since <rev>] [--platform win32|win64]');
   Writeln('                               [--with-rules] [--compile] [--format json|text]');
   Writeln('                               ^ does an interface edit to <B.pas> reach any dependent? Exits 0 whether or');
   Writeln('                                 not it found anything; 2 means it could NOT run. --baseline pins the OLD');
@@ -378,7 +392,7 @@ begin
   Writeln('     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)');
   Writeln('     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit');
   Writeln('  drag-lint helpers-of <T> [--json] --db <db>   - list record/class helper edges targeting type T anywhere in the index');
-  Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
+  Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db> [--place library,project,repository]  - add the declaring unit to uses');
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
@@ -464,6 +478,11 @@ begin
   Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion (index --all: each section''s own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
   Writeln('    --baseline <file>         report only findings absent from the baseline');
   Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
+  Writeln('    --changed-since <rev>     lint-all only: keep the findings on lines changed since a git or hg revision (the working copy on disk');
+  Writeln('                              against <rev>; a file the revision does not hold counts whole; a renamed file is a new file). The working');
+  Writeln('                              copy is the one holding --project''s folder, else the current directory. Refused with exit 2 BEFORE the');
+  Writeln('                              scan, never guessed: unknown revision, no .git/.hg, both in one folder, an hg revset naming several');
+  Writeln('                              changesets, git/hg not on PATH. Text mode prints one note line with the kept and dropped counts.');
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
@@ -578,6 +597,7 @@ begin
   Writeln('                               and DLLs are not listed; no VEX. --library-db none = direct uses only.');
   Writeln('                               Exit 0 = written (--out, else stdout); 1 = an index, the catalogue, --exe or --map cannot be read;');
   Writeln('                               2 = no --project / no index for it / --creator-email is no address; 3 = unknown flag.');
+  Writeln('  drag-lint repo field-usage    --fields "A,B,C" [--json] [--db <index> | --project <project file>]   (read-only: where the project index finds each field, as the kinds dfm, grid, lookup, code; a field nothing uses is left out; the IDE Select Fields dialog draws its usage icons from it)');
   Writeln('  drag-lint happens-before     (--a <event> --b <event> | --preset <name>) --db <db> [--json] [--max-routines N] [--max-seconds S]');
   Writeln('                               has event A happened before event B, on every execution? (read-only, on demand)');
   Writeln('                               <event>: write:<QName> | read:<QName> (unit variable, class var, instance field), call:<QName> (the call sites');
@@ -676,7 +696,9 @@ begin
   Writeln('       see wiki page: rule-time-budget');
   Writeln('  drag-lint lint <unit.pas> --db <db> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide [--fix-line <n>] --apply --project <X.dproj> [--compile-gate | --no-compile-gate] [--library-db <lib>] [--no-backup]');
   Writeln('       see wiki page: v152-ptw');
-  Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]');
+  Writeln('  drag-lint lint-all --db <db> --changed-since <rev> (git or hg; only findings on lines changed since <rev>; unknown revision or no working copy: exit 2, nothing answered)');
+  Writeln('       see wiki page: lint-changed-since');
+  Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down] [--changed-since <rev>]');
   Writeln('       ^ A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.');
   Writeln('       ^ `--library-db <lib>` names the library slot too and wins over a second --db and the manifest; a missing file refuses (exit 2), `none` means no library. Without a library, a type whose ancestry lives there stays unknown and the type-aware rules stay silent on it.');
   Writeln('       ^ lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.');
@@ -719,8 +741,6 @@ begin
   Writeln('  drag-lint repo gen-wiki (--repo <file> | --project <file>) --out <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]');
   Writeln('       see wiki page: repo-gen-wiki');
   Writeln('  drag-lint repo backup (--repo <file> | --project <project file>) [--format text|sql|zip] [--output <file>]');
-  Writeln('       see wiki page: repo-backup-formats');
-  Writeln('  drag-lint repo restore --in <backup file> (--repo <file> | --project <project file>) [--format text|sql|zip] [--replace]');
   Writeln('       see wiki page: repo-backup-formats');
   Writeln('  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason "<text>" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)');
   Writeln('       see wiki page: v152-disable-rule');
@@ -778,6 +798,8 @@ begin
     Writeln('                               index OPEN until it ends, so a script that deletes the index right after should keep');
     Writeln('                               wait; a newer background warm of the same index stops the older one.');
     Writeln('                               The Done line ends in , parse-errors=N (files parsed this run whose syntax tree had ERROR / MISSING nodes), like the section line (1.51.1).');
+    Writeln('                               A project index also copies the configured field repository (captions, descriptions) and derives the caption concepts of its forms: prints `repository: copied <F> fields, <T> texts from <file>` | `repository: unchanged (<file>)`');
+    Writeln('                               | `repository: not configured` | `repository: not found: <file>` | `repository: not readable: <file> (<why>); previous copy kept`, then `concepts: <P> project texts, <L> links (<N> by name only)` | `concepts: unchanged`. A repository problem never changes the exit code.');
     Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
     Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
     Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--rule-cache-warm background|wait|off] [--target-compiler <ver|auto>]');
@@ -820,7 +842,7 @@ begin
   end;
   if pVerb = 'query' then
   begin
-    Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact]');
+    Writeln('  drag-lint query              --name  <symbol-name>  [--db ...] [--json] [--case-sensitive] [--exact] [--place library,project,repository]');
     Writeln('  drag-lint query              --qname <qualified>    [--db ...] [--json] [--case-sensitive]');
     Writeln('                               --name/--qname match CASE-INSENSITIVELY (Delphi identifiers are);');
     Writeln('                               --case-sensitive restores byte-exact matching.');
@@ -829,8 +851,9 @@ begin
     Writeln('                               JSON rows carry "match_kind": "exact" | "fuzzy" | "substring" (--name-like) -- reject "fuzzy" unless');
     Writeln('                               you want suggestions; a fuzzy row does NOT carry the name you asked for.');
     Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
-    Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql|md] [--kind <k>] [--limit N] [--db ...] [--json]');
+    Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql|md] [--kind <k>] [--limit N] [--db ...] [--json] [--place library,project,repository]');
     Writeln('       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).');
+    Writeln('       ^ place=<library|project|repository> on every row; repository rows (repo-field / repo-table, --text source repo) come from the field-repository copy in the project index; --place narrows; notes on stderr.');
     Writeln('       ^ a phrase must sit inside ONE string literal / comment: a message built as ''a '' + ''b'' over several literals (or lines) is not one phrase -- search one piece, or --any-order.');
     Writeln('         --source md: Markdown text nodes (headings, paragraphs, list items of the .md files beside a project file).');
     Writeln('         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception');
@@ -849,6 +872,7 @@ begin
     Writeln('                               EXIT 0 = callers listed, 1 = ZERO callers (a valid answer, not an error;');
     Writeln('                               --json prints []), 2 = usage error or a missing/stale --db. See "Exit codes" below.');
     Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3); --resolved rows also carry "path" = the full path of the caller file ("file" stays the bare name), before "resolution"');
+    Writeln('                               a FIELD name also lists its write sites, each row tagged [read] or [write].');
     Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
     Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
     Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
@@ -880,6 +904,7 @@ begin
   begin
     Writeln('  drag-lint usages             --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]');
     Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
+    Writeln('                               --width wide|very-wide prints one `<group> file:line:col` site row per usage instead of the group counts.');
     Writeln('                               --scope (1.52): symbol (default) = the declaration --in/--line/--col or a qualified --name is BOUND to, in this project; project = every object of the name in this project (symbol and project skip a library-*.sqlite --db unless every --db is one); group = the name in every project of --group <x.groupproj>; everywhere = the name in every index the manifest knows. A bare --name with no position binds nothing and is answered as scope project (the JSON says scope, scope_note, databases).');
     Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
     Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
@@ -895,6 +920,7 @@ begin
     Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
     Writeln('                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,');
     Writeln('                               impl_end_line, end_line, is_class_method.');
+    Writeln('                               REGION ... END pairs are listed as kind region rows (line, end_line, depth).');
     Exit;
   end;
   if pVerb = 'syntax-count' then
@@ -914,15 +940,27 @@ begin
   end;
   if pVerb = 'compare' then
   begin
-    Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
+    Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> --target T --project P ..."] [--project <P.dproj>]');
     Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
     Writeln('                               [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]');
+    Writeln('                               --command is read in either style: "<id> --target T --project P" (1.56) or "<id> -Target T -Project P" (1.55 and earlier).');
     Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
     Writeln('  drag-lint compare            --show <report|csv|bundle> [--json] [--output <f.html>] [--open]   any report as the HTML page');
     Writeln('  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot');
     Writeln('                               Reruns the old report''s COMMAND in-process (no PowerShell) and diffs the normalised');
     Writeln('                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,');
     Writeln('                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping.');
+    Exit;
+  end;
+  if pVerb = 'migrate-reports' then
+  begin
+    Writeln('  drag-lint migrate-reports    <file-or-folder>... [--project <P.dproj>] [--dry-run] [--json]');
+    Writeln('                               Rewrite the COMMAND line of saved reports from the old style (-Target "T" -Project "P")');
+    Writeln('                               to the CLI style of 1.56 (--target "T" --project "P"); only that line changes. A folder is');
+    Writeln('                               searched with its subfolders; --project adds that project''s snapshot folder. Lists what it');
+    Writeln('                               left alone and why (no COMMAND line, wrapped or mixed-style line, unknown argument, not a');
+    Writeln('                               report). Forms CSV / chart DOT carry no command line: reported current. compare reads both');
+    Writeln('                               styles, so this is optional. Exit 0 = done; 1 = missing path / unreadable file; 2 = usage.');
     Exit;
   end;
   if pVerb = 'uses-recover' then
@@ -1000,7 +1038,7 @@ begin
   end;
   if pVerb = 'lint-all' then
   begin
-    Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]');
+    Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--changed-since <rev>]');
     Writeln('                               --output <file>: the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
     Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
     Writeln('                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in');
@@ -1010,7 +1048,7 @@ begin
     Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
     Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
     Writeln('                               several projects, or when the DB spans more than the project you are reviewing.');
-    Writeln('                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index''s data_flows');
+    Writeln('                               taint-sql-injection / taint-command-injection / taint-path-traversal / taint-deserialization / taint-html-output / taint-log (taint-log OFF by default; name it with --rule) (store-backed): walk the index''s data_flows');
     Writeln('                               facts from a catalogued source to a sink; catalogues rules\taint-sources|sinks|propagators.json, extended by the');
     Writeln('                               "taint" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds');
     Writeln('                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.');
@@ -1022,7 +1060,7 @@ begin
   if pVerb = 'lint-tree' then
   begin
     Writeln('  drag-lint lint-tree          --unit <B.pas> --db <file.sqlite> [--buffer <buf>] [--project <.dproj>]');
-    Writeln('                               [--baseline <f.json>] [--write-baseline <f.json>] [--platform win32|win64]');
+    Writeln('                               [--baseline <f.json>] [--write-baseline <f.json>] [--changed-since <rev>] [--platform win32|win64]');
     Writeln('                               [--with-rules] [--compile] [--format json|text]');
     Writeln('                               ^ does an interface edit to <B.pas> reach any dependent? Exits 0 whether or');
     Writeln('                                 not it found anything; 2 means it could NOT run. --baseline pins the OLD');
@@ -1326,7 +1364,7 @@ begin
   end;
   if pVerb = 'find-unit' then
   begin
-    Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
+    Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db> [--place library,project,repository]  - add the declaring unit to uses');
     Exit;
   end;
   if pVerb = 'safe-delete' then
@@ -1548,6 +1586,11 @@ begin
     Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion (index --all: each section''s own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
     Writeln('    --baseline <file>         report only findings absent from the baseline');
     Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
+    Writeln('    --changed-since <rev>     lint-all only: keep the findings on lines changed since a git or hg revision (the working copy on disk');
+    Writeln('                              against <rev>; a file the revision does not hold counts whole; a renamed file is a new file). The working');
+    Writeln('                              copy is the one holding --project''s folder, else the current directory. Refused with exit 2 BEFORE the');
+    Writeln('                              scan, never guessed: unknown revision, no .git/.hg, both in one folder, an hg revset naming several');
+    Writeln('                              changesets, git/hg not on PATH. Text mode prints one note line with the kept and dropped counts.');
     Exit;
   end;
   if pVerb = 'workspace' then
@@ -1673,6 +1716,7 @@ begin
     'checked by Delphi''s own reader first, each changed file gets a backup; what cannot be settled is BLOCKED with the reason; the repository is only read; no --apply = dry run; a --select file needs the # plan line of its dry run; a binary DFM is refused; the project setting fieldrepo.bde (full | readonly | none, read per form: --project, else the _D-RAG at or above the form, else at or above the repository) closes BDE datasets and the plan names the policy and its source; exit 1 plan / write failure, a changed plan or a bad fieldrepo.bde value, 2 usage)');
     Writeln('  drag-lint repo copy-grid      --dfm <file.dfm> [--unit <file.pas>] (--from <view> --to <view> [--event <name> [--from-column <col> [--to-column <col>]]] | --list [--from <view>]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]   (copies the events of a grid view, its columns and their events to another view of the SAME form, between table / banded table / card / layout views, or with --event ONE event; a new column is declared in the unit; every byte outside a change stays, the new text is checked by the Delphi reader first, each changed file gets a backup; what cannot be settled is BLOCKED, what needs a look is unchecked; --list shows the views and, with --from, their events; the repository is not opened; no --apply = dry run; a --select ' +
     'file needs the # plan line of its dry run; exit 1 view / event / write failure or a changed plan, 2 usage)');
+    Writeln('  drag-lint repo field-usage    --fields "A,B,C" [--json] [--db <index> | --project <project file>]   (read-only: where the project index finds each field, as the kinds dfm, grid, lookup, code; a field nothing uses is left out; the IDE Select Fields dialog draws its usage icons from it)');
     Exit;
   end;
   if pVerb = 'metrics' then

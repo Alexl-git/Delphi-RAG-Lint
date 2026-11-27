@@ -21,19 +21,6 @@
           "default": "text"
         }
       ]
-    },
-    {
-      "type": "cli",
-      "verb": "repo",
-      "sub": "restore",
-      "usage": "drag-lint repo restore --in <backup file> (--repo <file> | --project <project file>) [--format text|sql|zip] [--replace]",
-      "flags": [
-        {
-          "name": "--format",
-          "arg": "text|sql|zip",
-          "default": "text"
-        }
-      ]
     }
   ],
   "audience": "both",
