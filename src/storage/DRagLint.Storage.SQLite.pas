@@ -9144,7 +9144,9 @@ begin
   for I:= Low(SCHEMA_DDL_V156) to High(SCHEMA_DDL_V156) do TryExec(SCHEMA_DDL_V156[I]);
   TryExec(SCHEMA_DDL_V156_ALTER[V156_ALTER_VAL_CLASS]);
   if FFts5Available then TryExec(SCHEMA_DDL_V156_FTS5);
-  TryExec(SCHEMA_DDL_V156_REFS_LINE_INDEX); { 1.56 EXT-S2: refs(file_id, start_line), see the constant }
+  { 1.56 EXT-S2 idx_refs_file_line is NOT built here (FIXR-B, REV-1 #13): Migrate runs on every
+    writable open, and on an existing DB the build is seconds to minutes that a verb which is no
+    index run would pay. SetIndexerFingerprint builds it, once, at the start of an index run. }
   FHasV156Facts       := -1;
   FHasIndirectEdges   := -1;
   FHasConceptTables   := -1;
@@ -15433,6 +15435,10 @@ end;
 procedure TSQLiteSymbolStore.SetIndexerFingerprint(const AFingerprint: string);
 begin
   FIndexerFingerprint:= AFingerprint;
+  { FIXR-B (REV-1 #13): the one place an index run announces itself to the store. The additive
+    1.56 index refs(file_id, start_line) is built here -- free on a new DB, paid ONCE by the first
+    index run on an existing one (the re-parse of the extractor bump), a no-op afterwards. }
+  if not FReadOnly then ExecAdditiveDDL(FConn, SCHEMA_DDL_V156_REFS_LINE_INDEX);
 end;
 
 function TSQLiteSymbolStore.FileIndexedFingerprint(const AFilePath: string): string;

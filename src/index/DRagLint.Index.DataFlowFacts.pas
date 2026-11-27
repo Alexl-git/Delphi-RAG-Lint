@@ -62,6 +62,9 @@ const
   DF_DECL_GLOBAL = 'g';
   /// <summary>TDataFlowCallees.DeclaredClass group: the result of a function or method.</summary>
   DF_DECL_RESULT = 'r';
+  /// <summary>Separates the scope from the name in a TDataFlowCallees declared-class key (no
+  /// identifier holds it).</summary>
+  DF_SCOPE_SEP = '|';
 
 type
   /// <summary>The routines one unit declares, keyed by lower-case name: per argument
@@ -76,25 +79,67 @@ type
   /// unit's fields, unit variables and function results (DeclaredClass), which is why it
   /// is a class of its own and no longer a bare dictionary alias; the dictionary part is
   /// unchanged.
+  /// FIXR-B (REV-1 #6): the declared classes are keyed by SCOPE + name, not by the bare
+  /// name. A scope is the lower-case qualified name of the declaring symbol's parent
+  /// (ScopeOf): the class / record for a field or a method, the unit for a unit variable
+  /// or a plain function. A name-keyed table gave `Other.Total` (a string property of
+  /// another class) the class of this unit's `function Total: Currency`. The var/out
+  /// masks stay name-keyed.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Index.DataFlowFacts.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Index.DataFlowFacts.TCollector.Create (DRagLint.Index.DataFlowFacts.pas) ?, DRagLint.Index.DataFlowFacts.TDataFlowFacts.BuildCallees (DRagLint.Index.DataFlowFacts.pas), DRagLint.Index.DataFlowFacts.TDataFlowFacts.Collect (DRagLint.Index.DataFlowFacts.pas) ? (+1 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDataFlowCallees = class(TDictionary<string, TArray<Boolean>>)
     private
-      FDeclCls: TDictionary<string, string>;
-      procedure NoteDeclared(AGroup: Char; const ALowerName, ACls: string);
+      FDeclCls  : TDictionary<string, string>;
+      FDeclType : TDictionary<string, string>;
+      FTypeScope: TDictionary<string, string>;
+      FUnitScope: string;
+      procedure NoteDeclared(AGroup: Char; const AScope, ALowerName, ACls, ALowerType: string);
+      procedure NoteType(const ALowerTypeName, AScope: string);
     public
-      /// <summary>Frees the declared-class table with the dictionary.</summary>
+      /// <summary>Frees the declared-class tables with the dictionary.</summary>
       destructor Destroy; override;
-      /// <summary>The DF_VAL_* class every declaration of one name in the unit agrees on.</summary>
+      /// <summary>The scope a symbol is declared in: its qualified name without the last
+      /// segment, lower case ('uOrders.TOrder.FTotal' gives 'uorders.torder').</summary>
+      /// <param name="AQualifiedName">TSymbol.QualifiedName, as parsed.</param>
+      /// <returns>The scope key; '' when the name has no qualifier.</returns>
+      class function ScopeOf(const AQualifiedName: string): string; static;
+      /// <summary>The bare lower-case name of a type as written in a declaration: generic
+      /// arguments and a unit qualifier are dropped ('Generics.TList&lt;TFoo&gt;' gives
+      /// 'tlist').</summary>
+      /// <param name="ATypeText">The type text of a variable, parameter or field.</param>
+      /// <returns>The bare name, lower case; '' for an empty text.</returns>
+      class function BareTypeName(const ATypeText: string): string; static;
+      /// <summary>The DF_VAL_* class of the ONE declaration of a name in a scope.</summary>
       /// <param name="AGroup">DF_DECL_FIELD ('f', a class / record field), DF_DECL_GLOBAL ('g', a
       /// unit variable) or DF_DECL_RESULT ('r', the result of a function or method).</param>
+      /// <param name="AScope">The declaring scope (ScopeOf, ScopeOfType or UnitScope).</param>
       /// <param name="ALowerName">The bare name, lower case.</param>
-      /// <returns>The class; '' when the unit declares no such name, when its type is no scalar
-      /// (TAINT_SCALAR_TYPES), or when two declarations of the name in the unit differ in class
-      /// (the table is name-keyed like the var/out masks, so a disagreement claims nothing).</returns>
-      function DeclaredClass(AGroup: Char; const ALowerName: string): string;
+      /// <returns>The class; '' when that scope declares no such name, when its type is no scalar
+      /// (TAINT_SCALAR_TYPES), or when two declarations of the name IN THAT SCOPE differ in class
+      /// (overloads: a disagreement claims nothing).</returns>
+      function DeclaredClass(AGroup: Char; const AScope, ALowerName: string): string;
+      /// <summary>True when the scope declares the name in the group at all, scalar or not.</summary>
+      /// <param name="AGroup">As for DeclaredClass.</param>
+      /// <param name="AScope">The declaring scope.</param>
+      /// <param name="ALowerName">The bare name, lower case.</param>
+      /// <returns>False when DeclaredClass would answer '' for want of a declaration.</returns>
+      function Declares(AGroup: Char; const AScope, ALowerName: string): Boolean;
+      /// <summary>The declared type of a field or unit variable, as a bare type name.</summary>
+      /// <param name="AGroup">DF_DECL_FIELD or DF_DECL_GLOBAL.</param>
+      /// <param name="AScope">The declaring scope.</param>
+      /// <param name="ALowerName">The bare name, lower case.</param>
+      /// <returns>BareTypeName of the declared type; '' when the scope declares no such name.</returns>
+      function DeclaredType(AGroup: Char; const AScope, ALowerName: string): string;
+      /// <summary>The scope of a class / record / interface THIS unit declares.</summary>
+      /// <param name="ALowerTypeName">BareTypeName of the type.</param>
+      /// <returns>The scope its members are declared in; '' when the unit declares no such type or
+      /// declares two of that bare name (nested types).</returns>
+      function ScopeOfType(const ALowerTypeName: string): string;
+      /// <summary>The scope of the unit's own variables and plain routines; '' when the symbols
+      /// held no unit / program symbol.</summary>
+      property UnitScope: string read FUnitScope;
   end;
 
   /// <summary>1.56: the value of one expression as the data-flow walk sees it: the sources
@@ -130,6 +175,12 @@ type
       /// <summary>True on the pass that writes rows (the passes before it only move state).</summary>
       /// <returns>False during the fixpoint iteration.</returns>
       function IsRecording: Boolean; virtual; abstract;
+      /// <summary>The identity of this walk: one number per routine walk, never used twice in a
+      /// process (FIXR-B, REV-1 #2).</summary>
+      /// <returns>A value greater than 0; every pass of the same walk returns the same one.</returns>
+      /// <remarks>What a hook keys a memo of the routine's TREE on: a tree address or a node id
+      /// can be reused by a later parse, this cannot.</remarks>
+      function WalkId: UInt64; virtual; abstract;
       /// <summary>Evaluates an expression in the state at the hook's site, exactly as the walk
       /// itself would (argument rows of calls inside it are recorded, expression hooks run).</summary>
       /// <param name="AExpr">An expression node; never the node the running expression hook was
@@ -216,6 +267,11 @@ type
       /// (and hook) rows are added on top of the DF_ROW_CAP pre-1.56 rows.
       /// A field, unit variable or function result whose scalar type ACallees knows
       /// (TDataFlowCallees.DeclaredClass) emits BOTH its pre-1.56 row and a value row.
+      /// The type is looked up in the declaring SCOPE (FIXR-B, REV-1 #6): a field in the
+      /// class of ASym, a bare function name in that class and then in the unit, a member
+      /// `X.M` in the type X is declared with (a local, a parameter, a field of the class,
+      /// a unit variable) when this unit declares that type; any other receiver claims
+      /// no class.
       /// Identifiers the var table cannot classify are refs (by position).
       /// An argument variable gets an 'argout' source (the callee may write it) only
       /// when the callee may have a var / out parameter at that position: a callee
@@ -365,6 +421,8 @@ type
 var
   GFallbacks : Integer = 0;
   GCapped    : Integer = 0;
+  { FIXR-B (REV-1 #2): the last TDataFlowSite.WalkId handed out; one per TCollector }
+  GWalkSeq   : UInt64 = 0;
   { 1.56 seam: filled from unit initializations, read by every TCollector }
   GExprHooks : TArray<TExprHookReg>;
   GWriteHooks: TArray<TDataFlowWriteHook>;
@@ -614,6 +672,11 @@ type
     FBody       : TTSNode;
     FSrc        : TBytes;
     FVars       : TRoutineVarTable;
+    FWalkId     : UInt64;
+    { FIXR-B #6: the scope ASym is declared in (its class for a method), and the declared class of
+      each class-less source token that has one (token index -> DF_VAL_*) }
+    FScope      : string;
+    FTokDecl    : TDictionary<Integer, string>;
     FNSlots     : Integer;
     FSlotKind   : TArray<TVarKind>;
     FSlotScalar : TArray<Boolean>;
@@ -672,9 +735,13 @@ type
     procedure RunExprHooks(var St: TTaintVal; const N: TTSNode; var AV: TExprVal);
     procedure RunWriteHooks(var St: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
     procedure RunStmtHooks(var St: TTaintVal; const N: TTSNode);
-    function DeclCls(AGroup: Char; const ALowerName: string): string;
-    function TokDeclCls(const ATok: TSrcTok): string;
-    function TypedTokVal(const AKind: string; ALine, ACol: Integer; const AName: string; AGroup: Char): TExprVal;
+    function ScopedCls(AGroup: Char; const AScope, ALowerName: string): string;
+    function FieldCls(const ALowerName: string): string;
+    function GlobalCls(const ALowerName: string): string;
+    function BareResultCls(const ALowerName: string): string;
+    function RecvScope(const ARecv: TTSNode): string;
+    function RecvResultCls(const ARecv: TTSNode; const ALowerName: string): string;
+    function TypedTokVal(const AKind: string; ALine, ACol: Integer; const AName, ACls: string): TExprVal;
     procedure RecordTypedDst(const AKind: string; AGroup: Char; const APos: TTSNode; const AV: TExprVal);
     procedure RecordArgs(const ANameN: TTSNode; const ARecvText, ACallee: string; ABare: Boolean;
                          const AArgVals: TArray<TExprVal>);
@@ -692,6 +759,7 @@ type
     { TDataFlowSite }
     function NodeText(const ANode: TTSNode): string; override;
     function IsRecording: Boolean; override;
+    function WalkId: UInt64; override;
     function ValueOf(const AExpr: TTSNode): TDataFlowValue; override;
     function NewSource(const AKind: string; AIndex: Integer; const APos: TTSNode; const AName, AValClass: string): TDataFlowValue; override;
     function Merge(const A, B: TDataFlowValue): TDataFlowValue; override;
@@ -809,25 +877,74 @@ end;
 destructor TDataFlowCallees.Destroy;
 begin
   FDeclCls.Free;
+  FDeclType.Free;
+  FTypeScope.Free;
   inherited;
 end;
 
-{ One declaration of ALowerName in group AGroup has class ACls ('' = not a scalar). A second
-  declaration with another class leaves '' for good: the name claims nothing. }
-procedure TDataFlowCallees.NoteDeclared(AGroup: Char; const ALowerName, ACls: string);
+class function TDataFlowCallees.ScopeOf(const AQualifiedName: string): string;
+var
+  Cut: Integer;
+begin
+  Cut:= LastDelimiter('.', AQualifiedName);
+  Result:= if Cut > 1 then LowerCase(Copy(AQualifiedName, 1, Cut - 1)) else '';
+end;
+
+class function TDataFlowCallees.BareTypeName(const ATypeText: string): string;
+begin
+  Result:= LowerCase(Trim(ATypeText));
+  if Result.Contains('<') then Result:= Trim(Copy(Result, 1, Pos('<', Result) - 1));
+  Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
+end;
+
+{ One declaration of ALowerName in group AGroup of scope AScope has class ACls ('' = not a scalar)
+  and type ALowerType. A second declaration IN THE SAME SCOPE with another class (an overload)
+  leaves '' for good: the name claims nothing. }
+procedure TDataFlowCallees.NoteDeclared(AGroup: Char; const AScope, ALowerName, ACls, ALowerType: string);
 var
   Key, Old: string;
 begin
   if ALowerName = '' then Exit;
-  if FDeclCls = nil then FDeclCls:= TDictionary<string, string>.Create;
-  Key:= AGroup + ALowerName;
+  if FDeclCls = nil then
+  begin
+    FDeclCls := TDictionary<string, string>.Create;
+    FDeclType:= TDictionary<string, string>.Create;
+  end;
+  Key:= AGroup + AScope + DF_SCOPE_SEP + ALowerName;
   if FDeclCls.TryGetValue(Key, Old) and (Old <> ACls) then FDeclCls[Key]:= ''
   else FDeclCls.AddOrSetValue(Key, ACls);
+  FDeclType.AddOrSetValue(Key, ALowerType);
 end;
 
-function TDataFlowCallees.DeclaredClass(AGroup: Char; const ALowerName: string): string;
+{ A class / record / interface of this unit; a second type of the same bare name claims nothing. }
+procedure TDataFlowCallees.NoteType(const ALowerTypeName, AScope: string);
+var
+  Old: string;
 begin
-  if (FDeclCls = nil) or not FDeclCls.TryGetValue(AGroup + ALowerName, Result) then Result:= '';
+  if ALowerTypeName = '' then Exit;
+  if FTypeScope = nil then FTypeScope:= TDictionary<string, string>.Create;
+  if FTypeScope.TryGetValue(ALowerTypeName, Old) and (Old <> AScope) then FTypeScope[ALowerTypeName]:= ''
+  else FTypeScope.AddOrSetValue(ALowerTypeName, AScope);
+end;
+
+function TDataFlowCallees.DeclaredClass(AGroup: Char; const AScope, ALowerName: string): string;
+begin
+  if (FDeclCls = nil) or not FDeclCls.TryGetValue(AGroup + AScope + DF_SCOPE_SEP + ALowerName, Result) then Result:= '';
+end;
+
+function TDataFlowCallees.Declares(AGroup: Char; const AScope, ALowerName: string): Boolean;
+begin
+  Result:= (FDeclCls <> nil) and FDeclCls.ContainsKey(AGroup + AScope + DF_SCOPE_SEP + ALowerName);
+end;
+
+function TDataFlowCallees.DeclaredType(AGroup: Char; const AScope, ALowerName: string): string;
+begin
+  if (FDeclType = nil) or not FDeclType.TryGetValue(AGroup + AScope + DF_SCOPE_SEP + ALowerName, Result) then Result:= '';
+end;
+
+function TDataFlowCallees.ScopeOfType(const ALowerTypeName: string): string;
+begin
+  if (FTypeScope = nil) or (ALowerTypeName = '') or not FTypeScope.TryGetValue(ALowerTypeName, Result) then Result:= '';
 end;
 
 function IsDottedIdentChain(const N: TTSNode): Boolean;
@@ -959,7 +1076,11 @@ var
   LType      : string;
 begin
   inherited Create;
+  Inc(GWalkSeq);
+  FWalkId   := GWalkSeq;
   FCallees  := ACallees;
+  FScope    := TDataFlowCallees.ScopeOf(ASym.QualifiedName);
+  FTokDecl  := TDictionary<Integer, string>.Create;
   FSym      := ASym;
   FProc     := AProc;
   FBody     := ABody;
@@ -1011,6 +1132,7 @@ end;
 destructor TCollector.Destroy;
 begin
   FRowIdx.Free;
+  FTokDecl.Free;
   FRows.Free;
   FTokIdx.Free;
   FToks.Free;
@@ -1116,17 +1238,16 @@ end;
   flow that the old walk dropped at this point) becomes the same source WITH the class; a source
   that already has one keeps it (the class is the FIRST scalar the value became). The result
   never holds a class-less source, so no pre-1.56 row can come out of it.
-  Lane EXT-B1F: a source whose DECLARED type is a scalar (TokDeclCls) takes that class, not ACls --
+  Lane EXT-B1F: a source whose DECLARED type is a scalar (FTokDecl) takes that class, not ACls --
   a Currency field compared with 0 is a currency source of a Boolean, as a Currency parameter is. }
 function TCollector.Reclass(const AV: TExprVal; const ACls: string): TExprVal;
 var
   I, T: Integer;
   K   : TSrcTok;
 
-  function ClsFor(const ATok: TSrcTok): string;
+  function ClsFor(ATokIdx: Integer): string;
   begin
-    Result:= TokDeclCls(ATok);
-    if Result = '' then Result:= ACls;
+    if not FTokDecl.TryGetValue(ATokIdx, Result) then Result:= ACls;
   end;
 
 begin
@@ -1142,7 +1263,7 @@ begin
   begin
     T:= AV.May[I] shr 1;
     K:= FToks[T];
-    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ClsFor(K));
+    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ClsFor(T));
     Result.May[I]:= T * 2 + (AV.May[I] and 1);
   end;
   SetLength(Result.Must, Length(AV.Must));
@@ -1150,7 +1271,7 @@ begin
   begin
     T:= AV.Must[I];
     K:= FToks[T];
-    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ClsFor(K));
+    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ClsFor(T));
     Result.Must[I]:= T;
   end;
   Result.May := SetNorm(Result.May);
@@ -1161,35 +1282,79 @@ end;
   A field, a unit variable or the result of a function THIS unit declares with a scalar type is
   typed at the source. Its pre-1.56 source (no class) is kept wherever the old walk made it, so the
   rows with ValClass '' stay the pre-1.56 set; a twin source carrying the declared class travels
-  with it and gives the value rows. Types come from TDataFlowCallees.DeclaredClass (name-keyed, one
-  unit): an inherited field of another unit, a property and a routine of another unit stay untyped. }
+  with it and gives the value rows. Types come from TDataFlowCallees.DeclaredClass, keyed by the
+  declaring scope (FIXR-B, REV-1 #6): an inherited field of another unit, a property, a routine of
+  another unit and a member of a receiver whose type this unit does not declare stay untyped. }
 
-function TCollector.DeclCls(AGroup: Char; const ALowerName: string): string;
+function TCollector.ScopedCls(AGroup: Char; const AScope, ALowerName: string): string;
 begin
-  Result:= if Assigned(FCallees) then FCallees.DeclaredClass(AGroup, ALowerName) else '';
+  Result:= if Assigned(FCallees) then FCallees.DeclaredClass(AGroup, AScope, ALowerName) else '';
 end;
 
-{ The declared class of a class-less source token: a field, a unit variable, or a ref whose name
-  is a function of this unit (a call, with or without parentheses). }
-function TCollector.TokDeclCls(const ATok: TSrcTok): string;
+{ A field of the routine's own class (FFields holds exactly those). }
+function TCollector.FieldCls(const ALowerName: string): string;
 begin
-  if ATok.Kind = DF_SRC_FIELD then Result:= DeclCls(DF_DECL_FIELD, LowerCase(ATok.Name))
-  else if ATok.Kind = DF_SRC_GLOBAL then Result:= DeclCls(DF_DECL_GLOBAL, LowerCase(ATok.Name))
-  else if ATok.Kind = DF_SRC_REF then Result:= DeclCls(DF_DECL_RESULT, LowerCase(ATok.Name))
-  else Result:= '';
+  Result:= ScopedCls(DF_DECL_FIELD, FScope, ALowerName);
 end;
 
-{ The value of one source read: the pre-1.56 token and, when group AGroup declares AName with a
-  scalar class, its classed twin. }
-function TCollector.TypedTokVal(const AKind: string; ALine, ACol: Integer; const AName: string; AGroup: Char): TExprVal;
+function TCollector.GlobalCls(const ALowerName: string): string;
+begin
+  Result:= if Assigned(FCallees) then FCallees.DeclaredClass(DF_DECL_GLOBAL, FCallees.UnitScope, ALowerName) else '';
+end;
+
+{ A bare name read as a call (`Total`, `Twice(X)`): a method of the routine's own class, else a
+  plain function of the unit. A method the class declares hides the unit's function even when its
+  result is no scalar. }
+function TCollector.BareResultCls(const ALowerName: string): string;
+begin
+  Result:= '';
+  if not Assigned(FCallees) then Exit;
+  if (FScope <> FCallees.UnitScope) and FCallees.Declares(DF_DECL_RESULT, FScope, ALowerName) then
+    Exit(FCallees.DeclaredClass(DF_DECL_RESULT, FScope, ALowerName));
+  Result:= FCallees.DeclaredClass(DF_DECL_RESULT, FCallees.UnitScope, ALowerName);
+end;
+
+{ The scope the members of receiver ARecv are declared in: Self, or a plain identifier whose
+  declared type (a local / parameter, a field of the class, a unit variable) is a type of this
+  unit. '' = not known: a longer chain, a call, a type of another unit. }
+function TCollector.RecvScope(const ARecv: TTSNode): string;
 var
-  Cls: string;
+  Nm  : string;
+  Slot: Integer;
 begin
-  Result:= TokVal(Tok(AKind, -1, ALine, ACol, AName));
-  Cls:= DeclCls(AGroup, LowerCase(AName));
-  if Cls = '' then Exit;
-  Result:= ExprUnion(Result, TokVal(Tok(AKind, -1, ALine, ACol, AName, Cls)));
-  Result.Cls:= Cls;
+  Result:= '';
+  if (not Assigned(FCallees)) or ARecv.IsNull or (ARecv.NodeType <> 'identifier') then Exit;
+  Nm:= LowerCase(Text(ARecv));
+  if Nm = 'self' then Exit(FScope);
+  Slot:= SlotOf(ARecv);
+  if Slot >= 0 then Exit(FCallees.ScopeOfType(TDataFlowCallees.BareTypeName(FVars.Get(Slot).TypeText)));
+  if FFields.ContainsKey(Nm) then Exit(FCallees.ScopeOfType(FCallees.DeclaredType(DF_DECL_FIELD, FScope, Nm)));
+  if FGlobals.ContainsKey(Nm) then Result:= FCallees.ScopeOfType(FCallees.DeclaredType(DF_DECL_GLOBAL, FCallees.UnitScope, Nm));
+end;
+
+{ `ARecv.Name` read as a call: the result class of the method the receiver's type declares. An
+  unknown receiver claims nothing (REV-1 #6: the bare name alone matched any function of the unit). }
+function TCollector.RecvResultCls(const ARecv: TTSNode; const ALowerName: string): string;
+var
+  Scope: string;
+begin
+  Scope:= RecvScope(ARecv);
+  Result:= if Scope <> '' then ScopedCls(DF_DECL_RESULT, Scope, ALowerName) else '';
+end;
+
+{ The value of one source read: the pre-1.56 token and, when the declaration the caller resolved
+  has scalar class ACls, its classed twin. The class is remembered for the class-less token
+  (FTokDecl), so a later Reclass of the value keeps the DECLARED class. }
+function TCollector.TypedTokVal(const AKind: string; ALine, ACol: Integer; const AName, ACls: string): TExprVal;
+var
+  T: Integer;
+begin
+  T:= Tok(AKind, -1, ALine, ACol, AName);
+  Result:= TokVal(T);
+  if ACls = '' then Exit;
+  FTokDecl.AddOrSetValue(T, ACls);
+  Result:= ExprUnion(Result, TokVal(Tok(AKind, -1, ALine, ACol, AName, ACls)));
+  Result.Cls:= ACls;
 end;
 
 { A write to the field / unit variable at APos. A destination of declared scalar class types what
@@ -1200,7 +1365,7 @@ var
   V  : TExprVal;
 begin
   V:= AV;
-  Cls:= DeclCls(AGroup, LowerCase(Text(APos)));
+  Cls:= if AGroup = DF_DECL_FIELD then FieldCls(LowerCase(Text(APos))) else GlobalCls(LowerCase(Text(APos)));
   if Cls <> '' then V:= ExprUnion(AV, Reclass(AV, Cls));
   RecordDst(AKind, APos, -1, Text(APos), '', V);
 end;
@@ -1464,9 +1629,9 @@ begin
   if (Nm = '') or (Nm = 'self') then Exit;
   Slot:= SlotOf(N);
   if Slot >= 0 then Exit(ReadSlot(St, Slot));
-  if FFields.ContainsKey(Nm) then Exit(TypedTokVal(DF_SRC_FIELD, 0, 0, Text(N), DF_DECL_FIELD));
-  if FGlobals.ContainsKey(Nm) then Exit(TypedTokVal(DF_SRC_GLOBAL, 0, 0, Text(N), DF_DECL_GLOBAL));
-  Result:= TypedTokVal(DF_SRC_REF, Integer(N.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, N.StartByte, N.StartPoint.Column) + 1, Text(N), DF_DECL_RESULT);
+  if FFields.ContainsKey(Nm) then Exit(TypedTokVal(DF_SRC_FIELD, 0, 0, Text(N), FieldCls(Nm)));
+  if FGlobals.ContainsKey(Nm) then Exit(TypedTokVal(DF_SRC_GLOBAL, 0, 0, Text(N), GlobalCls(Nm)));
+  Result:= TypedTokVal(DF_SRC_REF, Integer(N.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, N.StartByte, N.StartPoint.Column) + 1, Text(N), BareResultCls(Nm));
 end;
 
 function TCollector.EvalDot(var St: TTaintVal; const N: TTSNode): TExprVal;
@@ -1481,15 +1646,16 @@ begin
   if (not L.IsNull) and (L.NodeType = 'identifier') and SameText(Text(L), 'Self') then
   begin
     if R.IsNull or (R.NodeType <> 'identifier') then Exit(Eval(St, R));
-    if FFields.ContainsKey(LowerCase(Text(R))) then Exit(TypedTokVal(DF_SRC_FIELD, 0, 0, Text(R), DF_DECL_FIELD));
-    Exit(TypedTokVal(DF_SRC_REF, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R), DF_DECL_RESULT));
+    if FFields.ContainsKey(LowerCase(Text(R))) then Exit(TypedTokVal(DF_SRC_FIELD, 0, 0, Text(R), FieldCls(LowerCase(Text(R)))));
+    Exit(TypedTokVal(DF_SRC_REF, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R), ScopedCls(DF_DECL_RESULT, FScope, LowerCase(Text(R)))));
   end;
   LV:= Eval(St, L);
   Member:= '';
   if (not R.IsNull) and (R.NodeType = 'identifier') then Member:= LowerCase(Text(R));
   Base:= BaseIdent(L);
-  { lane EXT-B1F: the member is a function of this unit with a scalar result (a call without parentheses) }
-  MCls:= if Member <> '' then DeclCls(DF_DECL_RESULT, Member) else '';
+  { lane EXT-B1F: the member is a function with a scalar result (a call without parentheses);
+    FIXR-B #6: of the type the RECEIVER is declared with, not any function of that name }
+  MCls:= if Member <> '' then RecvResultCls(L, Member) else '';
   { a member of a local / param reads that variable }
   if SlotOf(Base) >= 0 then
   begin
@@ -1501,7 +1667,7 @@ begin
   end
   else if (Member <> '') and RefShapeOk(L, SameText(Text(L), 'Self')) then
   begin
-    Result:= TypedTokVal(DF_SRC_REF, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R), DF_DECL_RESULT);
+    Result:= TypedTokVal(DF_SRC_REF, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R), MCls);
     BN:= LowerCase(Text(Base));
     if ((BN <> '') and (FFields.ContainsKey(BN) or FGlobals.ContainsKey(BN))) or IsHardCastRooted(L) then Result:= ExprUnion(Result, LV); { a cast keeps its operand's taint }
   end
@@ -1575,7 +1741,8 @@ begin
       St.Must[Slot]:= SetUnion(St.Must[Slot], [T]);
     end;
   if InList(Callee, TAINT_NOFLOW_RESULT) then Exit(EvalNoFlowCall(St, Callee, Args, ArgVals, Recv.IsNull));
-  Result:= TypedTokVal(DF_SRC_REF, CallLine, CallCol, Text(NameN), DF_DECL_RESULT);
+  Result:= TypedTokVal(DF_SRC_REF, CallLine, CallCol, Text(NameN),
+             if Recv.IsNull then BareResultCls(LowerCase(Text(NameN))) else RecvResultCls(Recv, LowerCase(Text(NameN))));
   { a method of a string-typed local/param (`S.Trim`, `S.Substring(1)`) derives from it }
   Slot:= SlotOf(BaseIdent(Recv));
   if (Slot >= 0) and FSlotString[Slot] then Result:= ExprUnion(Result, RecvVal);
@@ -2151,6 +2318,11 @@ begin
   Result:= FRecording;
 end;
 
+function TCollector.WalkId: UInt64;
+begin
+  Result:= FWalkId;
+end;
+
 function TCollector.ValueOf(const AExpr: TTSNode): TDataFlowValue;
 begin
   if (FCur = nil) or AExpr.IsNull then Exit(ExprEmpty);
@@ -2296,23 +2468,30 @@ end;
 class function TDataFlowFacts.BuildCallees(const ASymbols: TArray<TSymbol>): TDataFlowCallees;
 var
   S         : TSymbol;
-  Key       : string;
+  Key, Scope: string;
   Mask, Old : TArray<Boolean>;
   I         : Integer;
 begin
   Result:= TDataFlowCallees.Create;
   for S in ASymbols do
   begin
+    { FIXR-B #6: every declaration is filed under the scope that declares it }
+    Scope:= TDataFlowCallees.ScopeOf(S.QualifiedName);
+    if (S.Kind in [skUnit, skProgram, skPackage]) and (Result.FUnitScope = '') then Result.FUnitScope:= LowerCase(S.QualifiedName)
+    else if S.Kind in [skClass, skRecord, skInterface] then Result.NoteType(TDataFlowCallees.BareTypeName(S.Name), LowerCase(S.QualifiedName));
     { lane EXT-B1F: a field's / unit variable's Signature is its declared type }
-    if S.Kind = skField then Result.NoteDeclared(DF_DECL_FIELD, LowerCase(S.Name), ScalarClass(LowerCase(Trim(S.Signature))))
-    else if S.Kind = skVarDecl then Result.NoteDeclared(DF_DECL_GLOBAL, LowerCase(S.Name), ScalarClass(LowerCase(Trim(S.Signature))));
+    if S.Kind = skField then
+      Result.NoteDeclared(DF_DECL_FIELD, Scope, LowerCase(S.Name), ScalarClass(LowerCase(Trim(S.Signature))), TDataFlowCallees.BareTypeName(S.Signature))
+    else if S.Kind = skVarDecl then
+      Result.NoteDeclared(DF_DECL_GLOBAL, Scope, LowerCase(S.Name), ScalarClass(LowerCase(Trim(S.Signature))), TDataFlowCallees.BareTypeName(S.Signature));
     if S.Kind not in [skFunction, skProcedure, skMethod, skConstructor, skDestructor] then Continue;
     { 'TFoo.Bar' (an implementation header) and 'Bar<T>' key as 'bar', the call's identifier }
     Key:= LowerCase(S.Name);
     if Key.Contains('<') then Key:= Copy(Key, 1, Pos('<', Key) - 1);
     Key:= Copy(Key, LastDelimiter('.', Key) + 1, MaxInt);
     { lane EXT-B1F: a function's declared result class (a procedure / constructor has none) }
-    if ResultTypeOf(S.Signature) <> '' then Result.NoteDeclared(DF_DECL_RESULT, Key, ScalarClass(ResultTypeOf(S.Signature)));
+    if ResultTypeOf(S.Signature) <> '' then
+      Result.NoteDeclared(DF_DECL_RESULT, Scope, Key, ScalarClass(ResultTypeOf(S.Signature)), TDataFlowCallees.BareTypeName(ResultTypeOf(S.Signature)));
     Mask:= VarOutMask(S.Signature);
     if Result.TryGetValue(Key, Old) then
     begin

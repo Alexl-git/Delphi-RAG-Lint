@@ -32,8 +32,12 @@ unit DRagLint.Index.DataFlowExc;
 /// not walked, and neither is the `else` part of an except block (the walk's own limits:
 /// DRagLint.Analysis.Cfg emits no item for either).
 /// State: one process-wide cache of the except contexts of the routine being walked
-/// (GCache). It is a memo of the tree only, so the hooks stay deterministic; NOT
-/// thread-safe, like the walk it serves (the indexer's per-file loop is single-threaded).
+/// (GCache), keyed on the WALK (TDataFlowSite.WalkId) and the routine's byte range. A walk
+/// id is never reused in a process, so the memo cannot outlive the tree it was built from
+/// (FIXR-B, REV-1 #2: the earlier key -- tree address, node id, range -- matched a later
+/// parse whose tree reused the address, and then served that parse the contexts and the
+/// nodes of a freed tree). NOT thread-safe, like the walk it serves (the indexer's
+/// per-file loop is single-threaded).
 /// This unit is under src\index: any change to it is an extractor change. All .pas
 /// source: strict 7-bit ASCII, CRLF, no BOM.
 /// </remarks>
@@ -104,13 +108,12 @@ type
     the cache was built for, or the tree root for a program's main block), in document
     order: an enclosing context comes before the contexts inside it. }
   TExcCache = record
-    Valid        : Boolean;
-    Tree         : Pointer;
-    TopId        : Pointer;
-    TopStart     : UInt32;
-    TopEnd       : UInt32;
-    LastRecording: Boolean;
-    Ctxs         : TArray<TExcCtx>;
+    Valid   : Boolean;
+    { the walk the contexts were collected for; its tree is alive while that walk runs }
+    WalkId  : UInt64;
+    TopStart: UInt32;
+    TopEnd  : UInt32;
+    Ctxs    : TArray<TExcCtx>;
   end;
 
 var
@@ -218,8 +221,7 @@ end;
 procedure Rebuild(pSite: TDataFlowSite; const pTop: TTSNode);
 begin
   GCache.Valid   := True;
-  GCache.Tree    := pTop.tree;
-  GCache.TopId   := pTop.id;
+  GCache.WalkId  := pSite.WalkId;
   GCache.TopStart:= pTop.StartByte;
   GCache.TopEnd  := pTop.EndByte;
   GCache.Ctxs    := nil;
@@ -227,29 +229,18 @@ begin
   if ContainsText(pSite.NodeText(pTop), DFX_EXCEPT_WORD) then CollectCtxs(pSite, pTop);
 end;
 
-{ Makes GCache describe the routine pNode is in. A node outside the cached range is
-  another routine. A node inside it may still be another one -- the next file's tree can
-  reuse the address and the range -- and a new walk shows as "the last call recorded, this
-  one does not": then the routine is looked up again and compared.
+{ Makes GCache describe the routine pNode is in. The memo is good for ONE walk: another
+  walk (the next routine, the next file, a second parse of this file) has another WalkId
+  and rebuilds, whatever addresses its tree landed on. Inside one walk a node outside the
+  cached range is another routine (a main block next to its nested routines).
   Returns False when the routine has no except context (the common case, kept cheap). }
 function Ensure(pSite: TDataFlowSite; const pNode: TTSNode): Boolean;
 var
-  Recording, Hit: Boolean;
-  Sim           : Boolean;
-  At            : UInt32;
-  Top           : TTSNode;
+  At: UInt32;
 begin
-  Recording:= pSite.IsRecording;
   At:= pNode.StartByte;
-  Sim:= GetEnvironmentVariable('DRAGLINT_DFX_TEST_REUSE') = '1';
-  Hit:= GCache.Valid and (Sim or (pNode.tree = GCache.Tree)) and (At >= GCache.TopStart) and (At < GCache.TopEnd);
-  if (not Hit) or (GCache.LastRecording and not Recording) then
-  begin
-    Top:= RoutineOf(pNode);
-    if not (Hit and (Sim or (Top.id = GCache.TopId)) and (Top.StartByte = GCache.TopStart) and (Top.EndByte = GCache.TopEnd)) then
-      Rebuild(pSite, Top);
-  end;
-  GCache.LastRecording:= Recording;
+  if not (GCache.Valid and (GCache.WalkId = pSite.WalkId) and (At >= GCache.TopStart) and (At < GCache.TopEnd)) then
+    Rebuild(pSite, RoutineOf(pNode));
   Result:= GCache.Ctxs <> nil;
 end;
 

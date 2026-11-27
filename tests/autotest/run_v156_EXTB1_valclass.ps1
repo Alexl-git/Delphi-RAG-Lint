@@ -19,8 +19,9 @@
         function the unit declares -- keeps its pre-1.56 row (val_class '') and gains a value row of
         the declared class: (a) GLastTotal := FTotal, (b) IntToStr(FQty), (c) SetQty(Twice(pCount)),
         (d) a paren-less method call (the result is a source, not only the object); a scalar unit
-        variable types what is written to it. NEGATIVE: a string pair, and a field name that has two
-        types in the unit, gain nothing.
+        variable types what is written to it. NEGATIVE: a string pair gains nothing. A field name that
+        two classes of the unit declare with different types takes the class of its OWN class
+        (fix lane FIXR-B, REV-1 #6: the lookup is by declaring scope; run_v156_FIXRB.ps1 section C).
   Positive control: run with -Exe <the base engine> -- V1 FAILS (no value rows at all); with
   -Exe <the EXT-B1 engine, 7cfa2be7a> V6 FAILS (5 checks) and the rest passes.
 
@@ -149,7 +150,7 @@ try {
   Check 'Untyped: a Currency unit variable types what is written to it (param row, val_class currency)' ((Has $t { $_.val_class -eq '' }) -and (Has $t { $_.val_class -eq 'currency' })) "classes=[$(($t | ForEach-Object { $_.val_class }) -join ',')]"
   $t = @((Of 'Ambiguous') | Where-Object { $_.dst_line -eq $M.'M-F-AMBIG' })
   Check 'Ambiguous: POSITIVE CONTROL -- the FCode argument row exists' (Has $t { $_.dst_kind -eq 'arg' -and $_.src_kind -eq 'field' -and $_.src_name -eq 'FCode' -and $_.val_class -eq '' })
-  Check 'NEGATIVE: a field name with two declared types in the unit gets no class' (-not (Has $t { $_.val_class -ne '' }))
+  Check 'FIXR-B #6: FCode is Integer in THIS class (a string in TOtherStub): the row takes its owner''s class, int' ((Has $t { $_.src_kind -eq 'field' -and $_.val_class -eq 'int' }) -and -not (Has $t { $_.val_class -notin @('', 'int') })) "classes=[$(($t | ForEach-Object { $_.val_class }) -join ',')]"
 
   if ($BaseExe -ne '') {
     Write-Host 'V4 the old row set is untouched' -ForegroundColor Cyan

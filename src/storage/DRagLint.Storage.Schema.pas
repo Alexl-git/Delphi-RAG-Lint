@@ -629,8 +629,9 @@ const
 
   /// <summary>1.56 lane EXT-S2: the index a ref-to-ref join on one source line needs
   /// (`a.file_id = b.file_id AND a.start_line = b.start_line`, the by-position joins of data_flows,
-  /// call_literal_args and the lock-site queries). Run by Migrate through TryExec on a writable
-  /// open.</summary>
+  /// call_literal_args and the lock-site queries). Built by TSQLiteSymbolStore.SetIndexerFingerprint,
+  /// that is by an index run: at once on a new DB, once by the first index run on an existing one;
+  /// a writable open by any other verb (Migrate) does not build it (FIXR-B, REV-1 #13).</summary>
   /// <remarks>ADDITIVE: no reader depends on it (an index built by an older engine answers the same
   /// rows, slower). Measured by lane THR-S on the drag-lint index (795k refs): 78 s to 2.8 s for the
   /// argument lookup. idx_refs_file (file_id alone) stays: SCHEMA_DDL is frozen.</remarks>
