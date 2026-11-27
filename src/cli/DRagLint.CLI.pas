@@ -1767,6 +1767,7 @@ begin
       Inc(i);
       Result.ConceptQuery:= ParamStr(i);  // dl:ok duplicate-code@33b9 -- the one-value flag shape every ParseArgs branch repeats; folding it is a ParseArgs refactor, not this lane
     end
+    { v156 CON-Q } else if ((A = '--place') or (A = '--links')) and (i < ParamCount) then Inc(i) { query --concept: DRagLint.Query.ConceptRepo reads the two values from ParamStr; this arm only keeps them from being taken as the path }
     else if (A = '--source') and (i < ParamCount) then begin Inc(i); Result.TextSource:= ParamStr(i); end
     else if A = '--any-order' then Result.TextAnyOrder := True
     else if A = '--substring' then Result.TextSubstring:= True
@@ -7333,6 +7334,7 @@ begin
       This is the site that reproduces: under --watch the loop below does NOT
       break, so without this the connection stays open indefinitely and a copy
       of the .sqlite alone is empty of everything this run just did. }
+    if (not AArgs.ResolveOnly) and IsProjectScopedTarget and (IdxDproj <> '') then TIndexPassHooks.RunRepoCopy(Store, ExpandFileName(IdxDproj)); { v156 CON-I: field repository copy + caption concepts, after the resolve stages }
     Store.Checkpoint;
     Elapsed:= StartTime.Elapsed.TotalSeconds;
     { F1 (deep review 2026-10-25): a file whose store phase raised was rolled
@@ -9113,6 +9115,8 @@ begin
   RepoQuery.Kinds:= AArgs.Kind;
   RepoQuery.Limit:= Lim;
   RepoQuery.AsJson:= AArgs.AsJson;
+  RepoQuery.OtherDbs:= Copy(PathsToScan, 1); { v156 CON-Q: the library index is one of the other resolved databases }
+  RepoQuery.ProjectFile:= AArgs.ProjectPath; { v156 CON-Q: named in the refresh command of the stale-copy note }
   if TryRunConceptRepoQuery(RepoQuery, RepoExit) then Exit(RepoExit);
   if not Store.ConceptSearchReady then
   begin
