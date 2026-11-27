@@ -155,6 +155,27 @@ type
     /// <param name="pName">Property name.</param>
     /// <exception cref="EDfmWriteError">The property shares its line with other text.</exception>
     procedure RemoveProp(pObject: Integer; const pName: string);
+    /// <summary>The in-place editor a DevExpress item (a grid column) states: `PropertiesClassName` and its
+    /// `Properties.*` lines.</summary>
+    /// <param name="pObject">Index in Objects; any other value = no editor.</param>
+    /// <param name="pClassName">Receives the class name without the quotes; '' when the block states none.</param>
+    /// <param name="pProperties">Receives the `Properties.*` lines in the form of TFrGridColumn.Properties (file
+    /// order, CRLF between lines, the indentation of the property removed from every line of its value, no blanks at
+    /// a line end, no CRLF after the last line); '' = none.</param>
+    /// <returns>True when the block states PropertiesClassName or a Properties.* line.</returns>
+    /// <remarks>Reads the bytes of the file; a recorded change does not show.</remarks>
+    function TryEditor(pObject: Integer; out pClassName, pProperties: string): Boolean;
+    /// <summary>Records: give a DevExpress item this in-place editor in place of the one it states.</summary>
+    /// <param name="pObject">Index in Objects.</param>
+    /// <param name="pClassName">Editor properties class (an identifier); '' with no pProperties = state no editor.</param>
+    /// <param name="pProperties">The `Properties.*` lines as TryEditor gives them (CRLF or LF between lines).</param>
+    /// <exception cref="EDfmWriteError">pObject is no index in Objects; pClassName is not an identifier; lines without a
+    /// class; a line that is neither a `Properties.NAME =` line nor an indented line of the value before it; a stated
+    /// editor line that shares its line with other text.</exception>
+    /// <remarks>The stated PropertiesClassName and Properties.* lines go; the new lines take the place of the first of
+    /// them, else they follow Tag, Caption, AlternateCaption and DataBinding.* (where the IDE writes them), with the
+    /// class name first: the form reader needs the class before its properties. No other byte changes.</remarks>
+    procedure SetEditor(pObject: Integer; const pClassName, pProperties: string);
     /// <summary>Records: add a child object.</summary>
     /// <param name="pParent">Index of the parent in Objects.</param>
     /// <param name="pBlock">Lines of the block, indented relative to the block (DfmBlockOfStream).</param>
@@ -326,6 +347,19 @@ function DfmStringLiteral(const pValue: string): string;
 /// <returns>The text TryProp gives for it.</returns>
 function DfmLiteralText(const pLiteral: string): string;
 
+/// <summary>Editor properties text in the one form it is compared and stored in (TFrGridColumn.Properties).</summary>
+/// <param name="pProperties">`Properties.*` lines, CRLF or LF between them.</param>
+/// <returns>The lines with CRLF between them, no blanks at a line end, no empty line after the last one.</returns>
+function DfmEditorText(const pProperties: string): string;
+
+/// <summary>The lines an in-place editor takes in the block of its item.</summary>
+/// <param name="pClassName">Editor properties class; '' with no pProperties = no line.</param>
+/// <param name="pProperties">`Properties.*` lines as TDfmDocument.TryEditor gives them.</param>
+/// <returns>`PropertiesClassName = 'CLASS'`, then the lines of DfmEditorText(pProperties); not indented.</returns>
+/// <exception cref="EDfmWriteError">pClassName is not an identifier; lines without a class; a line that is neither a
+/// `Properties.NAME =` line nor an indented line of the value before it.</exception>
+function DfmEditorBlock(const pClassName, pProperties: string): TArray<string>;
+
 /// <summary>The text block of a component as the RTL writes it.</summary>
 /// <param name="pBinary">A component stream (TStream.WriteComponent).</param>
 /// <returns>Lines without line breaks, from the `object` line to its `end`.</returns>
@@ -394,6 +428,12 @@ const
   MULTI_LINE_QUOTES = 3;
   STEP = '  '; // one nesting level of a DFM
   CRLF = #13#10;
+  PROP_EDITOR_CLASS = 'PropertiesClassName';
+  EDITOR_PREFIX = 'Properties.';
+  EDITOR_LINE = '^Properties\.[A-Za-z_][A-Za-z0-9_.]*\s*=';
+  BINDING_PREFIX = 'DataBinding.';
+  { what the IDE writes before the editor of a grid column }
+  BEFORE_EDITOR: array[0..2] of string = ('Tag', 'Caption', 'AlternateCaption');
   WORD_END = 'end';
   WORD_IMPLEMENTATION = 'implementation';
   RESOURCE_BYTE = $FF;
@@ -1038,6 +1078,128 @@ begin
   CheckWholeLine(VProp.Start, VProp.ValueEnd, pName);
   VStart := LineStart(VProp.Start);
   Edit(VStart, LineEnd(VProp.ValueEnd) - VStart, '');
+end;
+
+function DfmEditorText(const pProperties: string): string;
+var
+  VLine: string;
+  VLines: TArray<string>;
+begin
+  VLines := nil;
+  for VLine in pProperties.Replace(CRLF, Char(LF)).Split([Char(LF)]) do
+    VLines := VLines + [TrimRight(VLine)];
+  while (Length(VLines) > 0) and (VLines[High(VLines)] = '') do
+    SetLength(VLines, High(VLines));
+  Result := string.Join(CRLF, VLines);
+end;
+
+function IsEditorProp(const pName: string): Boolean;
+begin
+  Result := SameText(pName, PROP_EDITOR_CLASS) or StartsText(EDITOR_PREFIX, pName);
+end;
+
+function TDfmDocument.TryEditor(pObject: Integer; out pClassName, pProperties: string): Boolean;
+var
+  VProp: TDfmwProp;
+  VIndent, VLine: string;
+  VLines, VValue: TArray<string>;
+  VI: Integer;
+begin
+  pClassName := '';
+  pProperties := '';
+  if (pObject < 0) or (pObject > High(FObjects)) then
+    Exit(False);
+  Result := TryProp(pObject, PROP_EDITOR_CLASS, pClassName);
+  VLines := nil;
+  for VProp in FObjects[pObject].Props do
+    if StartsText(EDITOR_PREFIX, VProp.Name) then
+    begin
+      Result := True;
+      VIndent := IndentAt(VProp.Start);
+      VValue := DfmEditorText(Slice(VProp.Start, VProp.ValueEnd)).Split([CRLF]);
+      for VI := 0 to High(VValue) do
+      begin
+        VLine := VValue[VI];
+        if (VI > 0) and VLine.StartsWith(VIndent) then
+          VLine := VLine.Substring(Length(VIndent));
+        VLines := VLines + [VLine];
+      end;
+    end;
+  pProperties := string.Join(CRLF, VLines);
+end;
+
+function DfmEditorBlock(const pClassName, pProperties: string): TArray<string>;
+var
+  VLine: string;
+  VOpen: Boolean;
+begin
+  Result := nil;
+  if (pClassName <> '') and not IsValidIdent(pClassName) then
+    raise EDfmWriteError.Create('not an editor properties class name: ' + pClassName);
+  if pClassName <> '' then
+    Result := [PROP_EDITOR_CLASS + ' = ''' + pClassName + ''''];
+  if DfmEditorText(pProperties) = '' then
+    Exit;
+  if pClassName = '' then
+    raise EDfmWriteError.Create('editor properties without ' + PROP_EDITOR_CLASS);
+  VOpen := False;
+  for VLine in DfmEditorText(pProperties).Split([CRLF]) do
+  begin
+    if (VLine = '') or (if VLine[1] <= ' ' then not VOpen else not TRegEx.IsMatch(VLine, EDITOR_LINE, [roIgnoreCase])) then
+      raise EDfmWriteError.Create('not a line of ' + EDITOR_PREFIX + '*: ' + Trim(VLine));
+    VOpen := True;
+    Result := Result + [VLine];
+  end;
+end;
+
+procedure TDfmDocument.SetEditor(pObject: Integer; const pClassName, pProperties: string);
+var
+  VProp: TDfmwProp;
+  VEol, VText, VIndent, VLine: string;
+  VAt, VStart, VAfterStart, VAfterEnd: Integer;
+begin
+  if (pObject < 0) or (pObject > High(FObjects)) then
+  begin
+    Fail('no object ' + IntToStr(pObject));
+    Exit; // Fail raises; the Exit states the bound for a reader
+  end;
+  VEol := EolAt(FObjects[pObject].HeaderEnd);
+  if VEol = '' then
+    Fail('no line end after the header of ' + FObjects[pObject].Name);
+  VIndent := IndentAt(FObjects[pObject].Start) + STEP;
+  VText := '';
+  try
+    for VLine in DfmEditorBlock(pClassName, pProperties) do
+      VText := VText + VIndent + VLine + VEol;
+  except
+    on E: EDfmWriteError do
+      Fail(E.Message);
+  end;
+  VAt := -1;
+  VAfterStart := FObjects[pObject].Start;
+  VAfterEnd := FObjects[pObject].HeaderEnd;
+  for VProp in FObjects[pObject].Props do
+    if IsEditorProp(VProp.Name) then
+    begin
+      CheckWholeLine(VProp.Start, VProp.ValueEnd, VProp.Name);
+      VStart := LineStart(VProp.Start);
+      if VAt < 0 then
+        VAt := VStart;
+      Edit(VStart, LineEnd(VProp.ValueEnd) - VStart, '');
+    end
+    else if (VAt < 0) and (MatchText(VProp.Name, BEFORE_EDITOR) or StartsText(BINDING_PREFIX, VProp.Name)) then
+    begin
+      VAfterStart := VProp.Start;
+      VAfterEnd := VProp.ValueEnd;
+    end;
+  if VText = '' then
+    Exit;
+  if VAt < 0 then
+  begin
+    CheckWholeLine(VAfterStart, VAfterEnd, 'the text before ' + PROP_EDITOR_CLASS);
+    VAt := LineEnd(VAfterEnd);
+  end;
+  Edit(VAt, 0, VText);
 end;
 
 { Start of the line before which a new child goes. }

@@ -9,7 +9,9 @@ unit DRagLint.FieldRepo.DfmWritePlan;  // dl:ok unit-too-large@fa17 -- REVIEWED 
   dataset, and then in the unit too (the published field is what lets Delphi find the class when the form loads).
   Calc code is never written here. A field event the repository holds and the form lacks gets a new handler (1.55, Q1 A),
   and the grid and layout items bound to a removed field are removed with it (Q3(2)). A graphical row whose column the
-  form lacks becomes a TcxGridDBColumn with its GRID_* handlers, unchecked (Q3(1)). }
+  form lacks becomes a TcxGridDBColumn with its GRID_* handlers, unchecked (Q3(1)). The in-place editor of a grid column
+  (PropertiesClassName and its Properties.* lines, DL_GRID_COLUMNS of schema 5) is written as one change per column
+  (1.56 GC-W). }
 
 interface
 
@@ -44,7 +46,7 @@ type
   end;
 
   /// <summary>What a change does to the DFM text.</summary>
-  TDfmwAction = (dwaSet, dwaRemove, dwaKind, dwaInsert, dwaDelete, dwaEvent);
+  TDfmwAction = (dwaSet, dwaRemove, dwaKind, dwaInsert, dwaDelete, dwaEvent, dwaEditor);
 
   /// <summary>One change; parallel to the change set.</summary>
   TDfmwItem = record
@@ -52,7 +54,8 @@ type
     FileIndex: Integer;
     /// <summary>What to do.</summary>
     Action: TDfmwAction;
-    /// <summary>Dataset and field component names; a grid column (Q3(1)) and its handlers: the grid view and the column.</summary>
+    /// <summary>Dataset and field component names; a grid column (Q3(1)), its handlers and its editor (dwaEditor): the
+    /// grid view and the column.</summary>
     Dataset: string;
     Component: string;
     /// <summary>dwaDelete: FieldName of the removed field; dwaEvent: FieldName of the field the handler is for; a grid
@@ -60,9 +63,12 @@ type
     FieldName: string;
     /// <summary>Class of the field (its declaration in the unit, the order of its properties).</summary>
     FieldClass: string;
-    /// <summary>dwaSet, dwaRemove: the property; dwaSet: its DFM literal.</summary>
+    /// <summary>dwaSet, dwaRemove: the property; dwaSet: its DFM literal. dwaEditor: `Properties` and the editor
+    /// properties class; a new grid column with an editor: Literal = that class, else ''.</summary>
     PropName: string;
     Literal: string;
+    /// <summary>dwaEditor and a new grid column with an editor: its `Properties.*` lines as DfmEditorText gives them.</summary>
+    Editor: string;
     /// <summary>dwaKind: the new kind.</summary>
     Kind: TFrFieldKind;
     /// <summary>dwaInsert: the block's lines.</summary>
@@ -116,7 +122,12 @@ type
 /// to a removed field (the field's removal Requires them), new field-event handlers for code the repository holds (one of an
 /// added field Requires its insert), a new TcxGridDBColumn for a graphical row whose column the form lacks and its
 /// OnGetDisplayText / OnCustomDrawCell handlers (each Requires the column; the column goes where DL_GRID_COLUMNS puts it,
-/// else into the only TcxGridDBTableView of the dataset), hidden fields, changed kinds and the first persistent fields of a dataset. Blocked: everything that cannot be written so that the form still loads, a
+/// else into the only TcxGridDBTableView of the dataset; it carries the editor that row holds), hidden fields, changed kinds
+/// and the first persistent fields of a dataset, and an OnGetDisplayText / OnCustomDrawCell handler that the column of a
+/// graphical row lacks while the row holds its code (the column exists: no Requires). The in-place editor of a grid column: one change per column of a table or
+/// banded view of the dataset whose DL_GRID_COLUMNS row (schema 5) names a PROPERTIES_CLASS_NAME and whose
+/// PropertiesClassName / Properties.* lines differ from it; checked when the column keeps its class, another item of the
+/// form has the class or the unit uses the DevExpress unit that registers it, else unchecked with a warning. Blocked: everything that cannot be written so that the form still loads, a
 /// lookup whose current dataset has no known table, and a removed field that the form or its unit names.</returns>
 /// <exception cref="EDfmWriteError">A binary DFM, or one that Delphi or the readers do not understand.</exception>
 /// <exception cref="EDfmWriteSelection">pFields without exactly one dataset with a table.</exception>
@@ -234,7 +245,33 @@ const
   UNIT_CX_TABLE = 'cxGridCustomTableView';
   UNIT_CX_GRAPHICS = 'cxGraphics';
   SCHEMA_WITH_GRID = 3; // DL_GRID_COLUMNS
-  SQL_GRID_PLACES = 'SELECT "VIEW_NAME", "COLUMN_NAME", "COLUMN_INDEX" FROM "DL_GRID_COLUMNS" WHERE UPPER("FORM_NAME") = UPPER(:F) ' +
+  SCHEMA_WITH_EDITORS = 5; // DL_GRID_COLUMNS.PROPERTIES_CLASS_NAME, PROPERTIES
+  PROP_EDITOR = 'Properties';
+  PROP_EDITOR_CLASS = 'PropertiesClassName';
+  COL_VIEW_NAME = 'VIEW_NAME';
+  COL_COLUMN_NAME = 'COLUMN_NAME';
+  SQL_GRID_EDITORS = 'SELECT "VIEW_NAME", "COLUMN_NAME", "PROPERTIES_CLASS_NAME", "PROPERTIES" FROM "DL_GRID_COLUMNS" ' +
+    'WHERE UPPER("FORM_NAME") = UPPER(:F) AND "PROPERTIES_CLASS_NAME" <> '''' ORDER BY "VIEW_NAME", "COLUMN_INDEX", "COLUMN_NAME"';
+  { the DevExpress unit whose initialization registers an editor properties class: a form whose unit uses it loads the class }
+  EDITOR_UNITS: array[0..35] of array[0..1] of string = (('TcxTextEditProperties', 'cxTextEdit'),
+    ('TcxMaskEditProperties', 'cxMaskEdit'), ('TcxMemoProperties', 'cxMemo'), ('TcxDateEditProperties', 'cxCalendar'),
+    ('TcxButtonEditProperties', 'cxButtonEdit'), ('TcxCheckBoxProperties', 'cxCheckBox'),
+    ('TcxComboBoxProperties', 'cxDropDownEdit'), ('TcxPopupEditProperties', 'cxDropDownEdit'),
+    ('TcxImageComboBoxProperties', 'cxImageComboBox'), ('TcxSpinEditProperties', 'cxSpinEdit'),
+    ('TcxCalcEditProperties', 'cxCalc'), ('TcxHyperLinkEditProperties', 'cxHyperLinkEdit'),
+    ('TcxTimeEditProperties', 'cxTimeEdit'), ('TcxCurrencyEditProperties', 'cxCurrencyEdit'),
+    ('TcxImageProperties', 'cxImage'), ('TcxBlobEditProperties', 'cxBlobEdit'), ('TcxMRUEditProperties', 'cxMRUEdit'),
+    ('TcxLookupComboBoxProperties', 'cxDBLookupComboBox'), ('TcxExtLookupComboBoxProperties', 'cxDBExtLookupComboBox'),
+    ('TcxRadioGroupProperties', 'cxRadioGroup'), ('TcxProgressBarProperties', 'cxProgressBar'),
+    ('TcxTrackBarProperties', 'cxTrackBar'), ('TcxLabelProperties', 'cxLabel'),
+    ('TcxColorComboBoxProperties', 'cxColorComboBox'), ('TcxFontNameComboBoxProperties', 'cxFontNameComboBox'),
+    ('TcxCheckComboBoxProperties', 'cxCheckComboBox'), ('TcxCheckGroupProperties', 'cxCheckGroup'),
+    ('TcxRichEditProperties', 'cxRichEdit'), ('TcxShellComboBoxProperties', 'cxShellComboBox'),
+    ('TdxToggleSwitchProperties', 'dxToggleSwitch'), ('TdxSparklineProperties', 'dxSparkline'),
+    ('TdxLookupSparklineProperties', 'dxDBSparkline'), ('TdxRatingControlProperties', 'dxRatingControl'),
+    ('TdxTokenEditProperties', 'dxTokenEdit'), ('TdxBarCodeProperties', 'dxBarCode'),
+    ('TdxDateTimeWheelPickerProperties', 'dxDateTimeWheelPicker'));
+  SQL_GRID_PLACES = 'SELECT * FROM "DL_GRID_COLUMNS" WHERE UPPER("FORM_NAME") = UPPER(:F) ' +
     'AND UPPER("TABLE_NAME") = UPPER(:T) AND UPPER("FIELD_NAME") = UPPER(:N) ORDER BY "VIEW_NAME", "COLUMN_INDEX", "COLUMN_NAME"';
   { strings that are read by people or declare columns, not by-name bindings }
   UNBOUND_PROPS: array[0..4] of string = ('Caption', 'Hint', PROP_LABEL, 'Lines', 'FieldDefs');
@@ -352,6 +389,8 @@ type
     View: TDfmrGridView;
     Column: string;
     Index: Integer; // -1 = after the last column
+    EditorClass: string; // PROPERTIES_CLASS_NAME of the row, '' = none
+    Editor: string; // its PROPERTIES
   end;
 
   { A lookup's dataset. }
@@ -390,6 +429,7 @@ type
     FModulesRead: Boolean;
     FReads: TStringList; // file=hash of everything read from disk
     FGridTable: Boolean; // the repository has DL_GRID_COLUMNS
+    FEditorColumns: Boolean; // and its editor columns (schema 5)
     procedure LoadRows;
     procedure NoteRead(const pFile: string; const pBytes: TBytes);
     function PlanId: string;
@@ -445,9 +485,14 @@ type
     function HandlerClash(pIndex: Integer): string;
     function BdeBlockReason: string;
     function MissingUnit(const pUnits: TArray<string>): string;
-    function GridViewsOf: TArray<TDfmrGridView>;
+    function GridViewsOf(pBanded: Boolean): TArray<TDfmrGridView>;
+    function EditorLoads(const pClass: string): Boolean;
+    procedure WarnNewEditor(const pColumn, pClass: string);
+    procedure PlanGridEditor(const pView: TDfmrGridView; const pColumn, pClass, pProperties: string);
+    procedure PlanGridEditors;
     function GridPlaces(const pRow: TRepoField; const pViews: TArray<TDfmrGridView>): TArray<TGridPlace>;
-    procedure PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer);
+    procedure PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer; const pOnly: TArray<string>);
+    procedure PlanExistingColumnEvents(const pColumn: TDfmrGridColumn; const pPlace: TGridPlace; const pRow: TRepoField);
     procedure PlanGridColumn(const pRow: TRepoField; const pPlace: TGridPlace);
     procedure PlanGridColumns;
   public
@@ -633,6 +678,7 @@ begin
     dwaSet: pDoc.SetProp(VObject, pItem.PropName, pItem.Literal, StreamOrder(pItem.FieldClass));
     dwaRemove: pDoc.RemoveProp(VObject, pItem.PropName);
     dwaKind: ApplyKind(pDoc, VObject, pItem);
+    dwaEditor: pDoc.SetEditor(VObject, pItem.Literal, pItem.Editor);
     dwaEvent:
       begin
         pDoc.SetProp(VObject, pItem.PropName, pItem.Literal, StreamOrder(pItem.FieldClass));
@@ -1010,6 +1056,8 @@ begin
     FDoc.Output;
     if pItem.Action in [dwaInsert, dwaDelete] then
       CheckUnit(FUnit.Output, FPlan.Files[FFileIndex], [pItem]);
+    if (pItem.Action = dwaEditor) or ((pItem.Action = dwaInsert) and (pItem.Literal <> '')) then
+      CheckDfm(FDoc.Output, FPlan.Files[FFileIndex], [pItem]); // an editor is free text: Delphi must read it, and as planned
   except
     on E: EDfmWriteError do
       Block(Result, E.Message);
@@ -1879,15 +1927,15 @@ begin
         Exit('the interface section of the unit does not use ' + VUnit);
 end;
 
-{ The table views of the form whose data source is one of this form for the dataset. }
-function TDfmWritePlanner.GridViewsOf: TArray<TDfmrGridView>;
+{ The table views (pBanded: and the banded ones) of the form whose data source is one of this form for the dataset. }
+function TDfmWritePlanner.GridViewsOf(pBanded: Boolean): TArray<TDfmrGridView>;
 var
   VView: TDfmrGridView;
   VPair: TDfmrPair;
 begin
   Result := nil;
   for VView in FForm.Views do
-    if VView.Kind = dvkTable then
+    if (VView.Kind = dvkTable) or (pBanded and (VView.Kind = dvkBanded)) then
       for VPair in FForm.DataSources do
         if SameText(VPair.Name, VView.DataSource) and SameText(VPair.Value, FDataset.Name) then
           Result := Result + [VView];
@@ -1909,10 +1957,11 @@ var
   VPlace: TGridPlace;
   VView: TDfmrGridView;
   VNamed, VFound: Boolean;
-  VViewName, VColumnName, VColumnIndex: TField;
+  VViewName, VColumnName, VColumnIndex, VEditorClass, VEditor: TField;
 begin
   Result := nil;
   VNamed := False;
+  VPlace := Default(TGridPlace);
   if FGridTable then
   begin
     VQuery := TFDQuery.Create(nil);
@@ -1922,11 +1971,18 @@ begin
       VViewName := VQuery.FieldByName('VIEW_NAME');
       VColumnName := VQuery.FieldByName('COLUMN_NAME');
       VColumnIndex := VQuery.FieldByName('COLUMN_INDEX');
+      VEditorClass := VQuery.FindField(REPO_COL_PROPERTIES_CLASS_NAME); // schema 5
+      VEditor := VQuery.FindField(REPO_COL_PROPERTIES);
       while not VQuery.Eof do
       begin
         VNamed := True;
         VPlace.Column := VColumnName.AsString;
         VPlace.Index := if VColumnIndex.IsNull then -1 else VColumnIndex.AsInteger;
+        if (VEditorClass <> nil) and (VEditor <> nil) then
+        begin
+          VPlace.EditorClass := VEditorClass.AsString;
+          VPlace.Editor := VEditor.AsString;
+        end;
         VFound := False;
         for VView in pViews do
           if SameText(VView.Name, VViewName.AsString) then
@@ -1949,6 +2005,7 @@ begin
     Exit;
   if Length(pViews) = 1 then
   begin
+    VPlace := Default(TGridPlace);
     VPlace.View := pViews[0];
     VPlace.Column := pViews[0].Name + TRegEx.Replace(pRow.FieldName, '[^A-Za-z0-9_]', '');
     VPlace.Index := -1;
@@ -1959,8 +2016,10 @@ begin
       [ExtractFileName(FForm.FileName), FDataset.Name, pRow.FieldName, Length(pViews), ViewNames(pViews)]));
 end;
 
-{ One unchecked change per grid event the row holds code for; each needs the column. }
-procedure TDfmWritePlanner.PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer);
+{ One unchecked change per grid event the row holds code for; each needs the column (pColumnId, 0 = the form has it).
+  pOnly: the events to plan, nil = all. }
+procedure TDfmWritePlanner.PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer;
+  const pOnly: TArray<string>);
 var
   VI, VIndex: Integer;
   VEvent, VReason: string;
@@ -1970,7 +2029,7 @@ begin
   for VI := 0 to Min(High(FR_EVENT_COLUMNS), High(pRow.Events)) do
   begin
     VEvent := FR_EVENT_COLUMNS[VI].Event;
-    if not FR_EVENT_COLUMNS[VI].IsGrid or (Trim(pRow.Events[VI]) = '') then
+    if not FR_EVENT_COLUMNS[VI].IsGrid or (Trim(pRow.Events[VI]) = '') or ((pOnly <> nil) and not MatchText(VEvent, pOnly)) then
       Continue;
     VItem := NewItem(dwaEvent, pColumn.Component, CLASS_GRID_COLUMN);
     VItem.Dataset := pColumn.Dataset;
@@ -1978,7 +2037,8 @@ begin
     VItem.Literal := pColumn.Component + Copy(VEvent, Length(EVENT_PREFIX) + 1, MaxInt);
     VItem.FieldName := pRow.FieldName;
     VItem.MethodParams := GridEventSignature(VEvent);
-    VItem.Requires := [pColumnId];
+    if pColumnId > 0 then
+      VItem.Requires := [pColumnId];
     if not NewHandlerRegion(HandlerFields, pColumn.Component, VEvent, pRow.Events[VI], sLineBreak, VItem.MethodBody, VReason) then
       VItem.MethodBody := '';
     VIndex := AddItem(VItem, fcoInsert, '', VItem.Literal);
@@ -1995,17 +2055,43 @@ begin
   end;
 end;
 
+{ The grid events the row holds code for and a column the form has assigns no handler to: unchecked changes, never
+  applied by default; an assigned handler is never replaced (1.56 GC-H). }
+procedure TDfmWritePlanner.PlanExistingColumnEvents(const pColumn: TDfmrGridColumn; const pPlace: TGridPlace;
+  const pRow: TRepoField);
+var
+  VAssigned, VMissing: TArray<string>;
+  VPair: TDfmrPair;
+  VItem: TDfmwItem;
+begin
+  VAssigned := nil;
+  for VPair in pColumn.Events do
+    if VPair.Value <> '' then
+      VAssigned := VAssigned + [VPair.Name];
+  VMissing := MissingGridEvents(pRow.Events, VAssigned);
+  if VMissing = nil then
+    Exit;
+  VItem := Default(TDfmwItem);
+  VItem.Component := pColumn.Name;
+  VItem.Dataset := pPlace.View.Name;
+  VItem.FieldName := pRow.FieldName;
+  PlanColumnEvents(VItem, pRow, 0, VMissing);
+end;
+
 { A new TcxGridDBColumn for a graphical row, unchecked: the owner's second confirmation is its id in a --select file. }
 procedure TDfmWritePlanner.PlanGridColumn(const pRow: TRepoField; const pPlace: TGridPlace);
 var
   VColumn: TDfmrGridColumn;
   VItem: TDfmwItem;
   VIndex, VAt, VI: Integer;
-  VReason: string;
+  VReason, VEditorReason, VLine: string;
 begin
   for VColumn in pPlace.View.Columns do
     if SameText(VColumn.FieldName, pRow.FieldName) or SameText(VColumn.Name, pPlace.Column) then
+    begin
+      PlanExistingColumnEvents(VColumn, pPlace, pRow);
       Exit;
+    end;
   VAt := if (pPlace.Index < 0) or (pPlace.Index > Length(pPlace.View.Columns)) then Length(pPlace.View.Columns) else pPlace.Index;
   VItem := NewItem(dwaInsert, pPlace.Column, CLASS_GRID_COLUMN);
   VItem.Dataset := pPlace.View.Name;
@@ -2016,7 +2102,18 @@ begin
   VItem.Block := ['object ' + pPlace.Column + ': ' + CLASS_GRID_COLUMN];
   if pRow.DisplayLabel <> '' then
     VItem.Block := VItem.Block + ['  ' + PROP_CAPTION + ' =' + DfmStringLiteral(pRow.DisplayLabel)];
-  VItem.Block := VItem.Block + ['  ' + PROP_BINDING + ' =' + DfmStringLiteral(pRow.FieldName), 'end'];
+  VItem.Block := VItem.Block + ['  ' + PROP_BINDING + ' =' + DfmStringLiteral(pRow.FieldName)];
+  VEditorReason := '';
+  try
+    for VLine in DfmEditorBlock(pPlace.EditorClass, pPlace.Editor) do
+      VItem.Block := VItem.Block + ['  ' + VLine];
+    VItem.Literal := pPlace.EditorClass;
+    VItem.Editor := DfmEditorText(pPlace.Editor);
+  except
+    on E: EDfmWriteError do
+      VEditorReason := 'DL_GRID_COLUMNS ' + pPlace.Column + ': ' + E.Message;
+  end;
+  VItem.Block := VItem.Block + ['end'];
   if pPlace.View.ObjKind <> OBJECT_KIND then
     VReason := 'the grid view is inherited: its columns are in the ancestor''s DFM'
   else if (FDoc.FindObject(pPlace.Column, '') >= 0) or (FNewNames.IndexOf(pPlace.Column) >= 0) then
@@ -2025,6 +2122,8 @@ begin
     VReason := ExtractFileName(FPlan.Files[FFileIndex].PasName) + ': the unit already has ' + pPlace.Column
   else
     VReason := MissingUnit([UNIT_CX_DB_TABLE]);
+  if VReason = '' then
+    VReason := VEditorReason;
   { the view shows a BDE dataset the project's fieldrepo.bde closes: no new column, and so no handlers of it }
   if BdeBlockReason <> '' then
     VReason := BdeBlockReason;
@@ -2032,8 +2131,10 @@ begin
   VIndex := AddItem(VItem, fcoInsert, '', BlockSummary(CLASS_GRID_COLUMN + '; ' + pPlace.View.Name + ' index ' + IntToStr(VAt), VItem.Block));
   FChanges.List[VIndex].Checked := False;
   Block(VIndex, VReason);
+  if (FChanges[VIndex].Blocked = '') and (VItem.Literal <> '') and not EditorLoads(VItem.Literal) then
+    WarnNewEditor(pPlace.Column, VItem.Literal);
   if FChanges[VIndex].Blocked = '' then
-    PlanColumnEvents(VItem, pRow, VIndex + 1);
+    PlanColumnEvents(VItem, pRow, VIndex + 1, nil);
 end;
 
 { Every graphical row of the dataset's table whose column the form lacks. }
@@ -2045,11 +2146,129 @@ var
 begin
   if FSource.TableName = '' then
     Exit;
-  VViews := GridViewsOf;
+  VViews := GridViewsOf(False);
   for VRow in FOrder do
     if (VRow.Kind = frkGraphical) and SameText(VRow.TableName, FSource.TableName) then
       for VPlace in GridPlaces(VRow, VViews) do
         PlanGridColumn(VRow, VPlace);
+end;
+
+{ ---- grid column editors (1.56 GC-W) ---- }
+
+{ `TcxComboBoxProperties; Properties.DropDownRows = 12`: an editor on one line. }
+function EditorSummary(const pClass, pProperties: string): string;
+var
+  VLine: string;
+begin
+  Result := pClass;
+  if pProperties <> '' then
+    for VLine in pProperties.Split([sLineBreak]) do
+      Result := Result + (if (VLine <> '') and (VLine[1] <= ' ') then ' ' else '; ') + Trim(VLine);
+  Result := Result.TrimLeft([';', ' ']);
+end;
+
+function EditorUnitOf(const pClass: string): string;
+var
+  VI: Integer;
+begin
+  Result := '';
+  for VI := 0 to High(EDITOR_UNITS) do
+    if SameText(EDITOR_UNITS[VI][0], pClass) then
+      Exit(EDITOR_UNITS[VI][1]);
+end;
+
+{ True when the form as it is loads the class: another item of the DFM has it, or the unit uses the unit that registers it. }
+function TDfmWritePlanner.EditorLoads(const pClass: string): Boolean;
+var
+  VI: Integer;
+  VText: string;
+begin
+  for VI := 0 to High(FDoc.Objects) do
+    if FDoc.TryProp(VI, PROP_EDITOR_CLASS, VText) and SameText(VText, pClass) then
+      Exit(True);
+  VText := EditorUnitOf(pClass);
+  Result := (VText <> '') and (FUnit <> nil) and FUnit.UsesAny([VText]);
+end;
+
+procedure TDfmWritePlanner.WarnNewEditor(const pColumn, pClass: string);
+var
+  VUnit: string;
+begin
+  VUnit := EditorUnitOf(pClass);
+  FWarnings.Add(Format('%s %s: the editor %s is new to the form, which loads only when the unit that registers the class%s ' +
+    'is in the project: the change is unchecked', [ExtractFileName(FForm.FileName), pColumn, pClass,
+    if VUnit = '' then '' else ' (' + VUnit + ')']));
+end;
+
+{ One change that gives a column of the form the editor its DL_GRID_COLUMNS row holds; nothing when it has it. An
+  inherited column that states no editor has the ancestor's: it is left alone. }
+procedure TDfmWritePlanner.PlanGridEditor(const pView: TDfmrGridView; const pColumn, pClass, pProperties: string);
+var
+  VColumn: TDfmrGridColumn;
+  VFound: Boolean;
+  VObject, VIndex: Integer;
+  VOldClass, VOld: string;
+  VItem: TDfmwItem;
+begin
+  if FNewNames.IndexOf(pColumn) >= 0 then
+    Exit; // a new column carries its editor
+  VFound := False;
+  for VColumn in pView.Columns do
+    VFound := VFound or SameText(VColumn.Name, pColumn);
+  VObject := if VFound then FDoc.FindObject(pColumn, pView.Name) else -1;
+  if VObject < 0 then
+  begin
+    FWarnings.Add(Format('%s %s: the editor of %s is not written: %s has no such column', [ExtractFileName(FForm.FileName),
+      FDataset.Name, pColumn, pView.Name]));
+    Exit;
+  end;
+  if not FDoc.TryEditor(VObject, VOldClass, VOld) and (FDoc.Objects[VObject].Kind <> OBJECT_KIND) then
+    Exit;
+  VItem := NewItem(dwaEditor, FDoc.Objects[VObject].Name, FDoc.Objects[VObject].ObjClass);
+  VItem.Dataset := pView.Name;
+  VItem.Siblings := nil;
+  VItem.PropName := PROP_EDITOR;
+  VItem.Literal := pClass;
+  VItem.Editor := DfmEditorText(pProperties);
+  if SameText(VOldClass, pClass) and (VOld = VItem.Editor) then
+    Exit;
+  VIndex := AddItem(VItem, fcoUpdate, EditorSummary(VOldClass, VOld), EditorSummary(pClass, VItem.Editor));
+  if (FChanges[VIndex].Blocked = '') and not SameText(VOldClass, pClass) and not EditorLoads(pClass) then
+  begin
+    FChanges.List[VIndex].Checked := False;
+    WarnNewEditor(VItem.Component, pClass);
+  end;
+end;
+
+{ Every DL_GRID_COLUMNS row of the form that names an editor, for the table and banded views that show the dataset. }
+procedure TDfmWritePlanner.PlanGridEditors;
+var
+  VViews: TArray<TDfmrGridView>;
+  VView: TDfmrGridView;
+  VQuery: TFDQuery;
+  VViewName, VColumnName, VEditorClass, VEditor: TField;
+begin
+  VViews := if FEditorColumns then GridViewsOf(True) else nil;
+  if Length(VViews) = 0 then
+    Exit;
+  VQuery := TFDQuery.Create(nil);
+  try
+    VQuery.Connection := FRepo;
+    VQuery.Open(SQL_GRID_EDITORS, [FForm.FormName]);
+    VViewName := VQuery.FieldByName(COL_VIEW_NAME);
+    VColumnName := VQuery.FieldByName(COL_COLUMN_NAME);
+    VEditorClass := VQuery.FieldByName(REPO_COL_PROPERTIES_CLASS_NAME);
+    VEditor := VQuery.FieldByName(REPO_COL_PROPERTIES);
+    while not VQuery.Eof do
+    begin
+      for VView in VViews do
+        if SameText(VView.Name, VViewName.AsString) then
+          PlanGridEditor(VView, VColumnName.AsString, VEditorClass.AsString, VEditor.AsString);
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
+  end;
 end;
 
 { ---- removed fields ---- }
@@ -2328,6 +2547,7 @@ begin
       end;
     end;
   PlanGridColumns;
+  PlanGridEditors;
   if Length(pFields) = 0 then
     Exit;
   if FSource.TableName = '' then
@@ -2336,13 +2556,14 @@ begin
   PlanSelection(pFields);
   if (Length(FDataset.Fields) = 0) and (Length(FDataset.InheritedFields) = 0) then
     UncheckFirstFields(VFirst);
-  { a field that would be removed gets no property changes }
+  { a field that would be removed gets no property changes, and its grid items no editor }
   for VI := VFirst to FChanges.Count - 1 do
     if FItems[VI].Action = dwaDelete then
       for var VJ := 0 to VFirst - 1 do
         if SameText(FItems[VJ].Component, FItems[VI].Component) and (FItems[VJ].FileIndex = FFileIndex)
-          and SameText(FItems[VJ].Dataset, FDataset.Name) then
-          Block(VJ, 'the field is not in the selection');
+          and SameText(FItems[VJ].Dataset, FItems[VI].Dataset) then
+          Block(VJ, if FItems[VJ].Action = dwaEditor then 'the column shows a field that is not in the selection'
+            else 'the field is not in the selection');
 end;
 
 { Full paths; a file given twice stays once. }
@@ -2367,6 +2588,7 @@ begin
     raise EDfmWriteSelection.Create('a field selection needs one form and one dataset');
   LoadRows;
   FGridTable := RepoSchemaVersion(FRepo) >= SCHEMA_WITH_GRID;
+  FEditorColumns := RepoSchemaVersion(FRepo) >= SCHEMA_WITH_EDITORS;
   for VFile in UniquePaths(pFiles) do
   begin
     FBde := if Assigned(FRules.PolicyOf) then FRules.PolicyOf(VFile) else dbpFull;
@@ -2468,6 +2690,14 @@ begin
       [ExtractFileName(pFile.DfmName), pItem.Component, QuotedStr(pItem.FieldName), VPlaces]);
 end;
 
+{ True when the object states the editor the change gives it. }
+function EditorReadsBack(pDoc: TDfmDocument; pObject: Integer; const pItem: TDfmwItem): Boolean;
+var
+  VClass, VProperties: string;
+begin
+  Result := pDoc.TryEditor(pObject, VClass, VProperties) and (VClass = pItem.Literal) and (VProperties = pItem.Editor);
+end;
+
 { Reads the new DFM back: the RTL converts it and every planned change is there. }
 procedure CheckDfm(const pBytes: TBytes; const pFile: TDfmwFile; const pItems: TArray<TDfmwItem>);
 var
@@ -2486,7 +2716,9 @@ begin
       if VOk and (VItem.Action in [dwaSet, dwaEvent]) then
         VOk := VDoc.TryProp(VObject, VItem.PropName, VText) and (VText = DfmLiteralText(VItem.Literal))
       else if VOk and (VItem.Action = dwaRemove) then
-        VOk := not VDoc.TryProp(VObject, VItem.PropName, VText);
+        VOk := not VDoc.TryProp(VObject, VItem.PropName, VText)
+      else if VOk and ((VItem.Action = dwaEditor) or ((VItem.Action = dwaInsert) and (VItem.Literal <> ''))) then
+        VOk := EditorReadsBack(VDoc, VObject, VItem);
       if not VOk then
         raise EDfmWriteError.CreateFmt('%s: the change of %s does not read back', [ExtractFileName(pFile.DfmName), VItem.Component]);
       if VItem.Action = dwaDelete then
