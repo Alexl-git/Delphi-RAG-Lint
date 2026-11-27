@@ -19,6 +19,7 @@ uses
   , DRagLint.Parser  .DocComments
   , DRagLint.Preprocess         { PP-Task-9: in-process directive preprocessor }
   , DRagLint.Preprocess.Types   { TDefineProfile }
+  , TreeSitter                  { 1.56 EXT-S: TTSNode in TRoutineFactsCtx }
   ;
 
 type
@@ -85,6 +86,46 @@ type
     Sha  : string;
     Hosts: TArray<string>;
   end;
+
+  /// <summary>1.56 (lane EXT-S): what a routine-facts hook is told about ONE routine body (or a
+  /// program's main block) while its file transaction is open.</summary>
+  /// <remarks>The same inputs TDataFlowFacts.Collect gets, from the same matched tree (no second
+  /// parse). Sym carries its real Id / FileId / ParentId (symbols.id values); FileSymbols is the
+  /// parser's array (ParentId = an index into it) and SymbolIdx is Sym's index there. For a main block
+  /// Proc and Body are both the tree's root node and OwnerFields is nil.</remarks>
+  TRoutineFactsCtx = record
+    /// <summary>The routine (or the program symbol), ids resolved.</summary>
+    Sym        : TSymbol;
+    /// <summary>Index of Sym in FileSymbols.</summary>
+    SymbolIdx  : Integer;
+    /// <summary>Full path of the file being indexed.</summary>
+    FilePath   : string;
+    /// <summary>The routine's defProc node (main block: the root node).</summary>
+    Proc       : TTSNode;
+    /// <summary>The routine's body node (main block: the root node).</summary>
+    Body       : TTSNode;
+    /// <summary>The source bytes the nodes index.</summary>
+    Src        : TBytes;
+    /// <summary>This file's fields of the routine's owning class, as written.</summary>
+    OwnerFields: TArray<string>;
+    /// <summary>This file's unit-level variables (main block: the program's variables).</summary>
+    Globals    : TArray<string>;
+    /// <summary>Every symbol the parser emitted for the file, in emission order.</summary>
+    FileSymbols: TArray<TSymbol>;
+    /// <summary>True for a program's main block.</summary>
+    IsMainBlock: Boolean;
+  end;
+
+  /// <summary>1.56 (lane EXT-S): a per-routine extraction hook, run by the indexer right after
+  /// TDataFlowFacts.Collect and before the routine's data_flows rows are written.</summary>
+  /// <param name="ACtx">The routine.</param>
+  /// <param name="AFlows">The routine's data_flows rows so far; the hook may APPEND rows (B4 raise /
+  /// except rows, B14 dsfield rows) and must not change or remove an existing one.</param>
+  /// <param name="AFacts">The FILE's 1.56 facts so far; the hook appends ds_field_accesses,
+  /// loop_facts, call_literal_args or symbol_extras rows (see TExtFileFacts: append only).</param>
+  /// <remarks>Runs inside the file transaction: an exception rolls the whole file back.</remarks>
+  TRoutineFactsHook = procedure(const ACtx: TRoutineFactsCtx; var AFlows: TArray<TDataFlowRow>;
+    var AFacts: TExtFileFacts);
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -775,6 +816,37 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ApplyInheritedFieldFacts: Integer;
+    strict private
+      class var FRoutineHookNames: TArray<string>;
+      class var FRoutineHooks    : TArray<TRoutineFactsHook>;
+      { 1.56 EXT-S: DRAGLINT_TEST_V156_STORE=1 -- seed one row per 1.56 fact and read it back (tests only) }
+      FStoreSelfCheck: Boolean;
+      /// <summary>1.56: runs every registered routine-facts hook for one routine, in registration order.</summary>
+      /// <param name="ACtx">The routine.</param>
+      /// <param name="AFlows">Its data_flows rows; hooks append.</param>
+      /// <param name="AFacts">The file's 1.56 facts; hooks append.</param>
+      class procedure RunRoutineFactsHooks(const ACtx: TRoutineFactsCtx; var AFlows: TArray<TDataFlowRow>;
+        var AFacts: TExtFileFacts); static;
+      /// <summary>1.56 store self-check: reads the file's 1.56 facts back through the store and compares
+      /// them with what was written.</summary>
+      /// <param name="AFileId">files.id of the file just written.</param>
+      /// <param name="AFilePath">Its path (for the report line).</param>
+      /// <param name="AFacts">The facts PutExtFacts was given.</param>
+      /// <param name="ASymbolIds">Parse index -> symbols.id.</param>
+      /// <exception cref="EInvalidOpException">A table reads back differently.</exception>
+      procedure VerifyStoreSelfCheck(AFileId: Int64; const AFilePath: string; const AFacts: TExtFileFacts;
+        const ASymbolIds: TDictionary<Integer, Int64>);
+    public
+      /// <summary>1.56 (lane EXT-S): installs a per-routine extraction hook for every indexer of the
+      /// process. Called from the `initialization` of the unit that owns the extraction
+      /// (DRagLint.Index.FieldLineage, DRagLint.Index.DataFlowExc ...).</summary>
+      /// <param name="AName">A short unique name ('field-lineage'); registering a name again replaces its hook.</param>
+      /// <param name="AHook">The hook; nil removes the name.</param>
+      /// <remarks>Not thread-safe: unit initialization only. Hooks run in registration order.</remarks>
+      class procedure RegisterRoutineFactsHook(const AName: string; AHook: TRoutineFactsHook); static;
+      /// <summary>1.56: the names of the installed routine-facts hooks, in run order.</summary>
+      /// <returns>Empty when none is installed.</returns>
+      class function RoutineFactsHookNames: TArray<string>; static;
   end;
 
 /// <summary>True when a folder walk with AFilter prunes ADir by its own
@@ -1053,6 +1125,223 @@ begin
   end;
 end;
 
+{ ---- 1.56 lane EXT-S: routine-facts hooks + the store self-check ---------------- }
+
+class procedure TIndexer.RegisterRoutineFactsHook(const AName: string; AHook: TRoutineFactsHook);
+var
+  I: Integer;
+begin
+  for I:= 0 to High(FRoutineHookNames) do
+    if SameText(FRoutineHookNames[I], AName) then
+    begin
+      if Assigned(AHook) then FRoutineHooks[I]:= AHook
+      else
+      begin
+        Delete(FRoutineHookNames, I, 1);
+        Delete(FRoutineHooks, I, 1);
+      end;
+      Exit;
+    end;
+  if not Assigned(AHook) then Exit;
+  FRoutineHookNames:= FRoutineHookNames + [AName];
+  FRoutineHooks    := FRoutineHooks + [AHook];
+end;
+
+class function TIndexer.RoutineFactsHookNames: TArray<string>;
+begin
+  Result:= Copy(FRoutineHookNames);
+end;
+
+class procedure TIndexer.RunRoutineFactsHooks(const ACtx: TRoutineFactsCtx; var AFlows: TArray<TDataFlowRow>;
+  var AFacts: TExtFileFacts);
+var
+  Hook: TRoutineFactsHook;
+begin
+  for Hook in FRoutineHooks do Hook(ACtx, AFlows, AFacts);
+end;
+
+const
+  SELF_CHECK_ENV      = 'DRAGLINT_TEST_V156_STORE';
+  SELF_CHECK_HOOK     = 'v156-store-selfcheck';
+  SELF_CHECK_CALLEE   = 'SelfCheckCall';
+  SELF_CHECK_MUST     = 'Result';
+  SELF_CHECK_ARGS     = 2;
+
+var
+  { the routine the self-check's indirect-edges pass links to itself (tests only) }
+  GSelfCheckRoutineId: Int64 = 0;
+
+{ The self-check hook: one synthetic row of every 1.56 per-file fact per routine, keyed on the
+  routine's own position so a reader can tell the rows apart. Tests only (SELF_CHECK_ENV). }
+procedure StoreSelfCheckHook(const ACtx: TRoutineFactsCtx; var AFlows: TArray<TDataFlowRow>; var AFacts: TExtFileFacts);
+var
+  A: TDsFieldAccessRow;
+  L: TLoopFactRow;
+  C: TCallLiteralArgRow;
+  X: TSymbolExtraRow;
+  F: TDataFlowRow;
+begin
+  if ACtx.IsMainBlock then Exit;
+  GSelfCheckRoutineId:= ACtx.Sym.Id;
+  A:= Default(TDsFieldAccessRow);
+  A.SymbolId   := ACtx.Sym.Id;
+  A.Mode       := DSFA_MODE_WRITE;
+  A.Line       := ACtx.Sym.ImplStartLine;
+  A.Col        := 1;
+  A.Shape      := DSFA_SHAPE_BYNAME;
+  A.DatasetText:= 'tblSelf';
+  A.FieldName  := ACtx.Sym.Name;
+  A.NameKind   := DSFA_NAME_LITERAL;
+  A.Accessor   := 'AsInteger';
+  A.RootKind   := DSFA_ROOT_OTHER;
+  A.RootName   := 'tblSelf';
+  A.RootIndex  := -1;
+  A.StmtLine   := ACtx.Sym.ImplStartLine;
+  A.StmtCol    := 1;
+  AFacts.DsFieldAccesses:= AFacts.DsFieldAccesses + [A];
+  L:= Default(TLoopFactRow);
+  L.SymbolId := ACtx.Sym.Id;
+  L.Parent   := -1;
+  L.Kind     := LOOP_KIND_WHILE;
+  L.StartLine:= ACtx.Sym.ImplStartLine;
+  L.EndLine  := ACtx.Sym.ImplEndLine;
+  AFacts.LoopFacts:= AFacts.LoopFacts + [L];
+  C:= Default(TCallLiteralArgRow);
+  C.SymbolId  := ACtx.Sym.Id;
+  C.CallLine  := ACtx.Sym.ImplStartLine;
+  C.CallCol   := 1;
+  C.CalleeName:= SELF_CHECK_CALLEE;
+  C.ArgIndex  := 1;
+  C.ArgCount  := SELF_CHECK_ARGS;
+  C.LitLine   := ACtx.Sym.ImplStartLine;
+  C.LitCol    := 1;
+  C.LitKind   := CLA_KIND_STRING;
+  C.Value     := ACtx.Sym.Name;
+  AFacts.CallLiteralArgs:= AFacts.CallLiteralArgs + [C];
+  X:= Default(TSymbolExtraRow);
+  X.SymbolIdx  := ACtx.SymbolIdx;
+  X.NoReturn   := NORETURN_DIRECTIVE;
+  X.VariantPart:= 0;
+  X.ParamMode  := PARAM_MODE_OUT;
+  X.ParamIndex := -1;
+  AFacts.SymbolExtras:= AFacts.SymbolExtras + [X];
+  F:= Default(TDataFlowRow);
+  F.SymbolId:= ACtx.Sym.Id;
+  F.DstKind := DF_DST_DSFIELD;
+  F.DstLine := ACtx.Sym.ImplStartLine;
+  F.DstCol  := 1;
+  F.DstIndex:= -1;
+  F.DstName := ACtx.Sym.Name;
+  F.SrcKind := DF_SRC_EXCEPT;
+  F.SrcIndex:= -1;
+  F.ValClass:= DF_VAL_INT;
+  AFlows:= AFlows + [F];
+end;
+
+{ The self-check's indirect-edges pass: prints what the reader sees from the PREVIOUS run, then
+  returns one edge (the last routine indexed -> itself). Tests only. }
+function StoreSelfCheckIndirect(const AStore: ISymbolStore; const AExtraStores: TArray<ISymbolStore>): TArray<TIndirectEdgeRow>;
+var
+  E: TIndirectEdgeRow;
+begin
+  Writeln(Format('%s: indirect-read=%d', [SELF_CHECK_HOOK, Length(AStore.GetIndirectEdges(0, 0))]));
+  Result:= nil;
+  if GSelfCheckRoutineId <= 0 then Exit;
+  E:= Default(TIndirectEdgeRow);
+  E.CallerId  := GSelfCheckRoutineId;
+  E.TargetId  := GSelfCheckRoutineId;
+  E.Kind      := IE_KIND_METHOD_POINTER;
+  E.ViaText   := 'FSelfCheck';
+  E.Confidence:= IE_CONF_RESOLVED;
+  Result:= [E];
+end;
+
+{ The comparable text of one row: every field the store round-trips, ids and ordinals left out. }
+function SelfCheckSig(const R: TDsFieldAccessRow): string; overload;
+begin
+  Result:= string.Join('|', [IntToStr(R.SymbolId), R.Mode, IntToStr(R.Line), IntToStr(R.Col), R.Shape, R.DatasetText,
+    R.FieldText, R.FieldName, R.NameKind, R.NameText, R.Accessor, R.RootKind, R.RootName, IntToStr(R.RootIndex),
+    R.WithCtx, IntToStr(R.RhsStartLine), IntToStr(R.RhsEndLine), IntToStr(R.StmtLine), IntToStr(R.StmtCol)]);
+end;
+
+function SelfCheckSig(const R: TLoopFactRow): string; overload;
+begin
+  Result:= string.Join('|', [IntToStr(R.SymbolId), IntToStr(R.Parent), R.Kind, IntToStr(R.StartLine), IntToStr(R.StartCol),
+    IntToStr(R.EndLine), IntToStr(R.EndCol), IntToStr(R.CondStartLine), IntToStr(R.CondEndLine)]);
+end;
+
+function SelfCheckSig(const R: TCallLiteralArgRow): string; overload;
+begin
+  Result:= string.Join('|', [IntToStr(R.SymbolId), IntToStr(R.CallLine), IntToStr(R.CallCol), R.CalleeName, R.ReceiverText,
+    IntToStr(R.ArgIndex), IntToStr(R.ArgCount), IntToStr(R.LitLine), IntToStr(R.LitCol), R.LitKind, R.Value]);
+end;
+
+function SelfCheckSig(const R: TSymbolExtraRow): string; overload;
+begin
+  Result:= string.Join('|', [IntToStr(R.NoReturn), IntToStr(R.VariantPart), BoolToStr(R.VariantTag, True), R.ParamMode,
+    IntToStr(R.ParamIndex)]);
+end;
+
+procedure SelfCheckExpect(ACond: Boolean; const AWhat, AFilePath: string);
+begin
+  if not ACond then
+    raise EInvalidOpException.CreateFmt('%s: %s reads back differently for %s', [SELF_CHECK_HOOK, AWhat, AFilePath]);
+end;
+
+{ The by-routine and by-name readers, for the routine one seeded ds_field_accesses row belongs to. }
+procedure SelfCheckRoutineReaders(const AStore: ISymbolStore; AFileId: Int64; const AFilePath: string;
+  const ASeed: TDsFieldAccessRow);
+var
+  Flows: TArray<TDataFlowRow>;
+begin
+  SelfCheckExpect(Length(AStore.GetDsFieldAccesses(0, ASeed.SymbolId)) = 1, 'ds_field_accesses by routine', AFilePath);
+  SelfCheckExpect(Length(AStore.GetLoopFacts(0, ASeed.SymbolId)) = 1, 'loop_facts by routine', AFilePath);
+  SelfCheckExpect(Length(AStore.GetCallLiteralArgs(AFileId, ASeed.Line, ASeed.Col)) >= 1, 'call_literal_args by call', AFilePath);
+  SelfCheckExpect(Length(AStore.FindCallLiteralArgs(SELF_CHECK_CALLEE, ASeed.FieldName)) >= 1, 'call_literal_args by name', AFilePath);
+  SelfCheckExpect(AStore.GetSymbolFacts(ASeed.SymbolId).MustWrites = SELF_CHECK_MUST, 'symbol_facts.must_writes', AFilePath);
+  Flows:= AStore.GetDataFlowsOf(ASeed.SymbolId, DF_DST_DSFIELD);
+  SelfCheckExpect(Length(Flows) = 1, 'data_flows dsfield count', AFilePath);
+  SelfCheckExpect(Flows[0].ValClass = DF_VAL_INT, 'data_flows.val_class', AFilePath);
+  SelfCheckExpect(Flows[0].SrcKind = DF_SRC_EXCEPT, 'data_flows.src_kind', AFilePath);
+end;
+
+procedure TIndexer.VerifyStoreSelfCheck(AFileId: Int64; const AFilePath: string; const AFacts: TExtFileFacts;
+  const ASymbolIds: TDictionary<Integer, Int64>);
+var
+  Dfa  : TArray<TDsFieldAccessRow>;
+  Loops: TArray<TLoopFactRow>;
+  Cla  : TArray<TCallLiteralArgRow>;
+  Sid  : Int64;
+  I    : Integer;
+begin
+  SelfCheckExpect(FStore.HasV156Facts, 'HasV156Facts', AFilePath);
+  Dfa  := FStore.GetDsFieldAccesses(AFileId, 0);
+  Loops:= FStore.GetLoopFacts(AFileId, 0);
+  Cla  := FStore.GetCallLiteralArgs(AFileId, 0, 0);
+  SelfCheckExpect(Length(Dfa) = Length(AFacts.DsFieldAccesses), 'ds_field_accesses count', AFilePath);
+  SelfCheckExpect(Length(Loops) = Length(AFacts.LoopFacts), 'loop_facts count', AFilePath);
+  SelfCheckExpect(Length(Cla) = Length(AFacts.CallLiteralArgs), 'call_literal_args count', AFilePath);
+  SelfCheckExpect(Length(FStore.GetSymbolExtras(AFileId)) = Length(AFacts.SymbolExtras), 'symbol_extras count', AFilePath);
+  for I:= 0 to High(Dfa) do
+  begin
+    SelfCheckExpect(Dfa[I].Ordinal = I, 'ds_field_accesses ordinal', AFilePath);
+    SelfCheckExpect(SelfCheckSig(Dfa[I]) = SelfCheckSig(AFacts.DsFieldAccesses[I]), 'ds_field_accesses row', AFilePath);
+    SelfCheckRoutineReaders(FStore, AFileId, AFilePath, AFacts.DsFieldAccesses[I]);
+  end;
+  for I:= 0 to High(Loops) do
+    SelfCheckExpect(SelfCheckSig(Loops[I]) = SelfCheckSig(AFacts.LoopFacts[I]), 'loop_facts row', AFilePath);
+  for I:= 0 to High(Cla) do
+    SelfCheckExpect(SelfCheckSig(Cla[I]) = SelfCheckSig(AFacts.CallLiteralArgs[I]), 'call_literal_args row', AFilePath);
+  for I:= 0 to High(AFacts.SymbolExtras) do
+  begin
+    SelfCheckExpect(ASymbolIds.TryGetValue(AFacts.SymbolExtras[I].SymbolIdx, Sid), 'symbol_extras id', AFilePath);
+    SelfCheckExpect(SelfCheckSig(FStore.GetSymbolExtra(Sid)) = SelfCheckSig(AFacts.SymbolExtras[I]), 'symbol_extras row', AFilePath);
+  end;
+  SelfCheckExpect(FStore.GetSymbolExtra(-1).ParamIndex = -1, 'symbol_extras default', AFilePath);
+  Writeln(Format('%s: ok file=%s dfa=%d loops=%d cla=%d syx=%d', [SELF_CHECK_HOOK, ExtractFileName(AFilePath),
+    Length(Dfa), Length(Loops), Length(Cla), Length(AFacts.SymbolExtras)]));
+end;
+
 constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
 var
   P: IParser;
@@ -1079,6 +1368,13 @@ begin
   { v0.45: default filter preserves prior behaviour -- only MS*.SQL indexed. }
   FWalkFilter:= TWalkFilter.Create;
   FTestFailFileName:= GetEnvironmentVariable('DRAGLINT_INDEX_TEST_FAIL_FILE');
+  { 1.56 EXT-S: the store self-check of tests\autotest\run_v156_EXTS_schema.ps1 (never set in production) }
+  FStoreSelfCheck:= GetEnvironmentVariable(SELF_CHECK_ENV) = '1';
+  if FStoreSelfCheck then
+  begin
+    RegisterRoutineFactsHook(SELF_CHECK_HOOK, StoreSelfCheckHook);
+    TIndexPassHooks.RegisterIndirectEdges(StoreSelfCheckIndirect);
+  end;
   for P in AParsers do FParsers.Add(P);
 end;
 
@@ -2156,6 +2452,9 @@ var
   Facts         : TSymbolFacts               ; { v(ADP2 T2) }
   FactsBody     : TArray<string>             ; { v(ADP2 T2) }
   FactsAst      : TSymbolFactsAst            ; { taint T1 }
+  ExtFacts      : TExtFileFacts              ; { 1.56 EXT-S: the file's 1.56 facts (parser rows + routine-facts hooks), written by PutExtFacts }
+  DfRows        : TArray<TDataFlowRow>       ; { 1.56 EXT-S: one routine's data_flows rows, between Collect and the hooks }
+  HookCtx       : TRoutineFactsCtx           ; { 1.56 EXT-S }
   DfFieldsByParent: TDictionary<Integer, TArray<string>>; { taint T1: field names per in-array parent index, built once per file }
   DfGlobals     : TArray<string>             ; { taint T1: this file's unit-level variables }
   DfCallees     : TDataFlowCallees           ; { lane ARGOUT: this file's routine var/out masks, built lazily, freed below }
@@ -2544,6 +2843,12 @@ begin
           ParseRes.DfmProperties, ParseRes.CommentFacts, IdxToId, ParseRes.Attributes);
         { 150 Y2: every parsed .dfm replaces its navigation tree (a binary one deletes it). }
         if SameText(ExtractFileExt(AFilePath), '.dfm') then FStore.PutDfmNav(Token, ParseRes.DfmNavNodes, ParseRes.DfmNavProps);
+        { 1.56 EXT-S: the file's 1.56 facts start from the parser's rows (B1 / B2 / B8 symbol extras,
+          C-1 call literal arguments); the routine-facts hooks below append; PutExtFacts writes them
+          once, before the commit. }
+        ExtFacts:= Default(TExtFileFacts);
+        ExtFacts.SymbolExtras   := ParseRes.SymbolExtras;
+        ExtFacts.CallLiteralArgs:= ParseRes.CallLiteralArgs;
         { 150 EX3: a program / package root carries its project's unit scopes (the sibling
           .dproj's DCC_Namespace), replaced every parse of the .dpr / .dpk. }
         if MatchText(ExtractFileExt(AFilePath), ['.dpr', '.dpk']) then
@@ -2641,6 +2946,7 @@ begin
           FactsBody:= SliceBodyLines(SourceLines, Sym.ImplStartLine, Sym.ImplEndLine);
           Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore, FactsAst);
           Facts.SymbolId:= NewSymId;
+          if FStoreSelfCheck and (Facts.MustWrites = '') then Facts.MustWrites:= SELF_CHECK_MUST;
           FStore.PutSymbolFacts(Facts);
           // taint T1 (2026-10-27): the routine's data_flows rows, from the SAME
           // matched defProc (no second AST lookup). Field names: this file's
@@ -2673,7 +2979,20 @@ begin
             if (OrigParent < 0) or not DfFieldsByParent.TryGetValue(Integer(OrigParent), OwnFields) then OwnFields:= nil;
             { lane ARGOUT: this file's routines decide which arguments get an argout source }
             if DfCallees = nil then DfCallees:= TDataFlowFacts.BuildCallees(ParseRes.Symbols);
-            FStore.PutDataFlows(Token, TDataFlowFacts.Collect(Sym, FactsAst.Proc, FactsAst.Body, FactsAst.Src, OwnFields, DfGlobals, DfCallees));
+            DfRows:= TDataFlowFacts.Collect(Sym, FactsAst.Proc, FactsAst.Body, FactsAst.Src, OwnFields, DfGlobals, DfCallees);
+            { 1.56 EXT-S: the registered extraction hooks (B4, B14 ...) see the same routine and append }
+            HookCtx:= Default(TRoutineFactsCtx);
+            HookCtx.Sym        := Sym;
+            HookCtx.SymbolIdx  := I;
+            HookCtx.FilePath   := AFilePath;
+            HookCtx.Proc       := FactsAst.Proc;
+            HookCtx.Body       := FactsAst.Body;
+            HookCtx.Src        := FactsAst.Src;
+            HookCtx.OwnerFields:= OwnFields;
+            HookCtx.Globals    := DfGlobals;
+            HookCtx.FileSymbols:= ParseRes.Symbols;
+            RunRoutineFactsHooks(HookCtx, DfRows, ExtFacts);
+            FStore.PutDataFlows(Token, DfRows);
           end;
           // v23 (spec F1): hold the candidates for the facts-inherited pass.
           // Only a routine with an owning class AND something unclassified is
@@ -2710,10 +3029,29 @@ begin
             if (ParseRes.Symbols[K].Kind = skVarDecl) and (ParseRes.Symbols[K].ParentId = I) then
               ProgGlobals:= ProgGlobals + [ParseRes.Symbols[K].Name];
           if DfCallees = nil then DfCallees:= TDataFlowFacts.BuildCallees(ParseRes.Symbols);
-          FStore.PutDataFlows(Token, TDataFlowFacts.CollectMainBlock(ProgSym, ProgPF.Tree.RootNode, ProgPF.Src,
-            ProgGlobals, DfCallees));
+          DfRows:= TDataFlowFacts.CollectMainBlock(ProgSym, ProgPF.Tree.RootNode, ProgPF.Src, ProgGlobals, DfCallees);
+          HookCtx:= Default(TRoutineFactsCtx);
+          HookCtx.Sym        := ProgSym;
+          HookCtx.SymbolIdx  := I;
+          HookCtx.FilePath   := AFilePath;
+          HookCtx.Proc       := ProgPF.Tree.RootNode;
+          HookCtx.Body       := ProgPF.Tree.RootNode;
+          HookCtx.Src        := ProgPF.Src;
+          HookCtx.Globals    := ProgGlobals;
+          HookCtx.FileSymbols:= ParseRes.Symbols;
+          HookCtx.IsMainBlock:= True;
+          RunRoutineFactsHooks(HookCtx, DfRows, ExtFacts);
+          FStore.PutDataFlows(Token, DfRows);
           Break;
         end;
+        { 1.56 EXT-S: a call literal the producer left without a routine gets the enclosing one by
+          line (the refs' own rule), then the file's 1.56 facts replace the old rows. }
+        for I:= 0 to High(ExtFacts.CallLiteralArgs) do
+          if (ExtFacts.CallLiteralArgs[I].SymbolId <= 0) and InRange(ExtFacts.CallLiteralArgs[I].CallLine, 0, High(EnclosingByLine))
+             and (EnclosingByLine[ExtFacts.CallLiteralArgs[I].CallLine] > 0) then
+            ExtFacts.CallLiteralArgs[I].SymbolId:= EnclosingByLine[ExtFacts.CallLiteralArgs[I].CallLine];
+        FStore.PutExtFacts(Token, ExtFacts, IdxToId);
+        if FStoreSelfCheck then VerifyStoreSelfCheck(Token.FileId, AFilePath, ExtFacts, IdxToId);
         Inc(GProfFacts, ProfNow - TProf);
         TProf:= ProfNow;
         if (FTestFailFileName <> '') and SameText(ExtractFileName(AFilePath), FTestFailFileName) then

@@ -176,13 +176,52 @@ TABLES = {
     'symbol_search_fts_docsize': (
         "lower(f.path), " + SK('s', 'f') + ", d.sz",
         "symbol_search_fts_docsize d JOIN symbols s ON s.id = d.id JOIN files f ON f.id = s.file_id", "lower(f.path)"),
+    # 1.56 lane EXT-S: the tables of the 1.56 extractor bump (DDL: SCHEMA_DDL_V156 in DRagLint.Storage.Schema).
+    'symbol_extras': (
+        "lower(f.path), " + SK('s', 'sf') + ", x.noreturn, x.variant_part, x.variant_tag, x.param_mode, x.param_index",
+        "symbol_extras x JOIN files f ON f.id = x.file_id " + SYM('s', 'sf', 'x.symbol_id'), "lower(f.path)"),
+    'ds_field_accesses': (
+        "lower(f.path), " + SK('s', 'sf') + ", x.ordinal, x.mode, x.line, x.col, x.shape, x.dataset_text, x.field_text, "
+        "x.field_name, x.name_kind, x.name_text, x.accessor, x.root_kind, x.root_name, x.root_index, x.with_ctx, "
+        "x.rhs_start_line, x.rhs_start_col, x.rhs_end_line, x.rhs_end_col, x.stmt_line, x.stmt_col",
+        "ds_field_accesses x JOIN files f ON f.id = x.file_id " + SYM('s', 'sf', 'x.symbol_id'), "lower(f.path)"),
+    'loop_facts': (
+        "lower(f.path), " + SK('s', 'sf') + ", x.ordinal, x.parent, x.kind, x.start_line, x.start_col, x.end_line, "
+        "x.end_col, x.cond_start_line, x.cond_start_col, x.cond_end_line, x.cond_end_col",
+        "loop_facts x JOIN files f ON f.id = x.file_id " + SYM('s', 'sf', 'x.symbol_id'), "lower(f.path)"),
+    'call_literal_args': (
+        "lower(f.path), " + SK('s', 'sf') + ", x.ordinal, x.call_line, x.call_col, x.callee_name, x.receiver_text, "
+        "x.arg_index, x.arg_count, x.lit_line, x.lit_col, x.lit_kind, x.value",
+        "call_literal_args x JOIN files f ON f.id = x.file_id " + SYM('s', 'sf', 'x.symbol_id'), "lower(f.path)"),
+    'indirect_edges': (
+        "lower(tf.path), " + SK('t', 'tf') + ", " + SK('c', 'cf') + ", r.kind, r.name_text, r.start_line, r.start_col, "
+        "x.kind, x.via_text, lower(bf.path), x.bind_line, x.bind_col, x.confidence",
+        "indirect_edges x JOIN symbols t ON t.id = x.target_symbol_id JOIN files tf ON tf.id = t.file_id "
+        + SYM('c', 'cf', 'x.caller_symbol_id') + " LEFT JOIN refs r ON r.id = x.ref_id "
+        "LEFT JOIN files bf ON bf.id = x.bind_file_id", "lower(tf.path)"),
+    # the *_unix stamps differ between two runs by design
+    'repo_copy': (
+        "'*', x.state, x.repo_path, x.repo_sha256, x.repo_size, x.repo_schema_version, x.copy_format, "
+        "x.derived_format, x.last_error", "repo_copy x", None),
+    'concept_links': (
+        "lower(f.path), x.link_kind, x.confidence, x.table_name, x.field_name, x.line, x.col, x.form_name, "
+        "x.form_class, x.component_name, x.dataset_name, " + SK('s', 'sf') + ", " + SK('e', 'ef') + ", x.via, x.caption",
+        "concept_links x JOIN files f ON f.id = x.file_id " + SYM('s', 'sf', 'x.symbol_id') + " "
+        + SYM('e', 'ef', 'x.enclosing_symbol_id'), "lower(f.path)"),
+    'concept_texts_fts_docsize': (
+        "'*', t.place, t.text_kind, t.table_name, t.field_name, t.text, d.sz",
+        "concept_texts_fts_docsize d JOIN concept_texts t ON t.id = d.id", None),
 }
+# 1.56: columns a 1.56 writer ALTERs onto an existing table; compared when the database has them
+# (a pair of pre-1.56 databases has neither).
+OPTIONAL_COLS = {'data_flows': ('x.val_class',), 'symbol_facts': ('x.must_writes',)}
 # Per-file tables with no id column but file_id: every other column, grouped by the file's path.
 FILE_GENERIC = ('file_includes', 'dfm_nav_nodes', 'dfm_nav_props', 'dfm_properties', 'pp_regions', 'pp_directives',
                 'project_settings')
 # Tables that hold no per-file rows on the corpora this is used for; compared
 # generically (every column except ids and *_at) so a non-empty one is not skipped.
-GENERIC = ('fb_columns', 'fb_datasets', 'fb_enum_values', 'fb_field_info', 'fb_relations', 'orm_links')
+GENERIC = ('fb_columns', 'fb_datasets', 'fb_enum_values', 'fb_field_info', 'fb_relations', 'orm_links',
+           'concept_fields', 'concept_texts')   # 1.56 CONCEPT: no per-file rows; ids are excluded
 # closure_cache (2026-10-14) is a cache of the compile-closure walk, not index
 # data: a fresh copy has none, a run that walked has it.
 SKIP = {'sqlite_stat1', 'sqlite_sequence', 'closure_cache'}
@@ -201,6 +240,10 @@ def fts_tables(conn):
 def query_for(conn, table):
     if table in TABLES:
         sel, frm, gexpr = TABLES[table]
+        have = {r[1] for r in conn.execute("PRAGMA table_info('%s')" % table)}
+        for col in OPTIONAL_COLS.get(table, ()):
+            if col.split('.')[1] in have:
+                sel += ", " + col
         return "SELECT %s FROM %s" % (sel, frm), gexpr
     if table in GENERIC:
         cols = [r[1] for r in conn.execute("PRAGMA table_info('%s')" % table)
@@ -217,6 +260,9 @@ def query_for(conn, table):
 
 
 def fts_query(fts):
+    if fts.startswith('concept_texts'):   # 1.56 CONCEPT: content_rowid = concept_texts.id, no per-file rows
+        return ("SELECT '*', t.place, t.text_kind, t.table_name, t.field_name, v.term, v.col, v.offset "
+                "FROM temp.v_%s v JOIN concept_texts t ON t.id = v.doc" % fts, None)
     if fts.startswith('symbol_search'):   # content_rowid = symbol_id, not a string_literals id
         return ("SELECT lower(f.path), s.kind, s.qualified_name, s.start_line, s.start_col, v.term, v.col, v.offset "
                 "FROM temp.v_%s v JOIN symbols s ON s.id = v.doc JOIN files f ON f.id = s.file_id" % fts,
