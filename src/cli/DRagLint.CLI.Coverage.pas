@@ -73,18 +73,6 @@ type
 /// <remarks>Writes only <db>.coverage.json. The summary goes to stdout (text, or one JSON document with --json).</remarks>
 function RunCoverageVerb: Integer;
 
-/// <summary>The sidecar file that holds the imported coverage of an index.</summary>
-/// <param name="pDbPath">The index file.</param>
-/// <returns>pDbPath + '.coverage.json'.</returns>
-function CoverageSidecarPath(const pDbPath: string): string;
-
-/// <summary>Reads a coverage report (emma or cobertura XML).</summary>
-/// <param name="pFile">The report; read as text.</param>
-/// <param name="pData">The records on success.</param>
-/// <param name="pError">Why it failed; '' on success.</param>
-/// <returns>True when at least one routine record was found.</returns>
-function ParseCoverageReport(const pFile: string; out pData: TCoverageData; out pError: string): Boolean;
-
 /// <summary>Reads the sidecar of an index.</summary>
 /// <param name="pDbPath">The index file.</param>
 /// <param name="pData">The stored records on success.</param>
@@ -144,6 +132,9 @@ type
     ShowHelp: Boolean;
   end;
 
+/// <summary>The sidecar file that holds the imported coverage of an index.</summary>
+/// <param name="pDbPath">The index file.</param>
+/// <returns>pDbPath + '.coverage.json'.</returns>
 function CoverageSidecarPath(const pDbPath: string): string;
 begin
   Result:= pDbPath + CSidecarSuffix;
@@ -199,6 +190,11 @@ begin
   pMethod:= Default(TMethodState);
 end;
 
+/// <summary>Reads a coverage report (emma or cobertura XML).</summary>
+/// <param name="pFile">The report; read as text.</param>
+/// <param name="pData">The records on success.</param>
+/// <param name="pError">Why it failed; '' on success.</param>
+/// <returns>True when at least one routine record was found.</returns>
 function ParseCoverageReport(const pFile: string; out pData: TCoverageData; out pError: string): Boolean;
 begin
   pData:= Default(TCoverageData);

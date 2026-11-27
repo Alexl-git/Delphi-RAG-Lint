@@ -46,7 +46,6 @@ const
   CFirstArg = 2; // ParamStr(1) is the verb
   CProjectDb = 0; // index of the project index in TSbomRun.FIndexes
   CNoFile = 0; // a NULL target_file_id
-  CNoUnit = -1;
   CNoLibrary = 'none';
   CCatalogueFile = 'rules\sbom-libraries.json';
   CJsonIndent = 2;
@@ -758,7 +757,7 @@ begin
       LDbs:= [LDefault];
   end;
   for LDb in LDbs do
-    if not pRun.LoadIndex(LDb, pError) then
+    if not pRun.LoadIndex(LDb, pError) then  // dl:ok query-in-loop@ecb4 -- LINTFIX-A: one iteration per --library-db (a handful); each LoadIndex opens a DIFFERENT database, so the schema check cannot be batched
       Exit(False);
   pRun.Model.LibraryIndexUsed:= Length(LDbs) > 0;
   if Length(LDbs) = 0 then

@@ -1011,7 +1011,11 @@ begin
   { `ask`, `protocol` and `mcp-config` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg,
     DRagLint.MCP.ClientConfig) and print nothing else: no defaults note on stderr }
   { 1.52.2: the no-config warning (TManifestIO.Load) stays off where stderr must stay clean. }
-  if Result.Command = MIGRATE_REPORTS_VERB then begin TManifestIO.QuietNoManifest:= True; Exit; end; { v156 QE-3: own flags, DRagLint.CLI.MigrateReports }
+  if Result.Command = MIGRATE_REPORTS_VERB then
+  begin { v156 QE-3: own flags, DRagLint.CLI.MigrateReports }
+    TManifestIO.QuietNoManifest:= True;
+    Exit;
+  end;
   var SelfParsing:= MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover',
     'metrics', 'sbom', 'happens-before', 'import-coverage' { v156 W2FRAME: DRagLint.CLI.Metrics / .Sbom / .HappensBefore }]);
   TManifestIO.QuietNoManifest:= SelfParsing or HasSwitch('--quiet') or JsonOutputRequested;
@@ -8928,7 +8932,7 @@ begin
   SeedFound:= False;
   for DbPath in PathsToScan do
   begin
-    if not (PlaceOfDb(DbPath) in TextPlaces) then Continue; { v156 TS-N }
+    if not (PlaceOfDb(DbPath) in TextPlaces) then Continue; { v156 TS-N }  // dl:ok nonminimal-bool@2db4 -- LINTFIX-A: Delphi has no `not in` operator; `not (A in S)` is the one spelling
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(DbPath, RoOk);
     if not RoOk then
@@ -8996,7 +9000,8 @@ begin
       if PlaceKeys[PK] = Format('%s|%d|%d|%s', [AllMatches[I].FilePath, AllMatches[I].StartLine, AllMatches[I].StartCol, AllMatches[I].Text]) then
         MatchPlaces[I]:= PlaceVals[PK];
   end;
-  for I:= 0 to High(RepoMatches) do MatchPlaces[Length(AllMatches) + I]:= PlaceName(spRepository);
+  var RepoPlaceName: string:= PlaceName(spRepository);
+  for I:= 0 to High(RepoMatches) do MatchPlaces[Length(AllMatches) + I]:= RepoPlaceName;
   AllMatches:= AllMatches + RepoMatches;
   var TextOrder: TArray<Integer>:= PlaceSortOrder(MatchPlaces);
   var OrderedMatches: TArray<TStringLitMatch>;
@@ -9919,7 +9924,7 @@ begin
 
   for DbPath in PathsToScan do
   begin
-    if not (PlaceOfDb(DbPath) in Places) then Continue; { v156 TS-N }
+    if not (PlaceOfDb(DbPath) in Places) then Continue; { v156 TS-N }  // dl:ok nonminimal-bool@fe5c -- LINTFIX-A: Delphi has no `not in` operator; `not (A in S)` is the one spelling
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(DbPath, RoOk);
     if not RoOk then
@@ -9962,7 +9967,7 @@ begin
     // Fuzzy fallback: hit each DB, accumulate, top-K overall.
     for DbPath in PathsToScan do
     begin
-      if not (PlaceOfDb(DbPath) in Places) then Continue; { v156 TS-N }
+      if not (PlaceOfDb(DbPath) in Places) then Continue; { v156 TS-N }  // dl:ok nonminimal-bool@fe5c -- LINTFIX-A: Delphi has no `not in` operator; `not (A in S)` is the one spelling
       var RoOk: Boolean;
       Store:= OpenReadOnlyStore(DbPath, RoOk);
       if not RoOk then
@@ -10016,8 +10021,7 @@ begin
   PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths, {AFuzzy=}False, '', RowPlaces, RepoRows, RepoAt);
   if (Length(AllSymbols) > 0) and (Length(PathsToScan) > 0) then
     LogReaderUsage('query', PathsToScan[0], Length(AllSymbols) * USAGE_TOKENS_PER_ROW, AllPaths);
-  if Length(AllSymbols) + Length(RepoRows) = 0 then Result:= 1
-  else Result:= 0;
+  Result:= if Length(AllSymbols) + Length(RepoRows) = 0 then 1 else 0;
 end; // function
 
 // v0.42: drag-lint outline --file <path.pas> [--db <path>] [--format text|json]
@@ -10760,7 +10764,7 @@ var
   { v156 IDX-U: one `  <group>: file:line:col` row per site of each non-empty group (--limit N caps each group). }
   procedure WriteUsageSites(const ANames: array of string; const AGroups: array of TJSONArray);
   begin
-    for var G: Integer:= 0 to High(AGroups) do
+    for var G: Integer:= 0 to Min(High(AGroups), High(ANames)) do
       for var I: Integer:= 0 to AGroups[G].Count - 1 do
       begin
         if (AArgs.Limit > 0) and (I >= AArgs.Limit) then Break;
@@ -19779,7 +19783,12 @@ begin
     finally Arr.Free; end;
     Exit(0);
   end; // if
-  if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Edits)); Writeln(Format('Dry run: add unit "%s". Pass --apply to write. place=%s', [ResolvedUnit, UnitPlace])); Exit(0); end;
+  if not AArgs.Apply then
+  begin
+    Writeln(TTextEditApplier.RenderDryRun(Edits));
+    Writeln(Format('Dry run: add unit "%s". Pass --apply to write. place=%s', [ResolvedUnit, UnitPlace]));
+    Exit(0);
+  end;
   var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
   Writeln(Format('Applied: added "%s" (%d file). place=%s', [ResolvedUnit, Touched, UnitPlace]));
   Result:= 0;
