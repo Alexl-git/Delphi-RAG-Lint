@@ -555,6 +555,7 @@ uses
   DRagLint.Charts.Q.Cycles in '..\charts\DRagLint.Charts.Q.Cycles.pas',
   DRagLint.Charts.MemberAccess in '..\charts\DRagLint.Charts.MemberAccess.pas',
   DRagLint.Charts.Q.MemberAccess in '..\charts\DRagLint.Charts.Q.MemberAccess.pas',
+  DRagLint.Charts.Q.ValueFlow in '..\charts\DRagLint.Charts.Q.ValueFlow.pas', { v156 FB-1 }
   DRagLint.Charts.Trace.FormA in '..\charts\DRagLint.Charts.Trace.FormA.pas',
   DRagLint.Charts.Trace.Shim in '..\charts\DRagLint.Charts.Trace.Shim.pas',
   DRagLint.Charts.Trace.Anchor in '..\charts\DRagLint.Charts.Trace.Anchor.pas',

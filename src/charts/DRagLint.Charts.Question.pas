@@ -411,7 +411,7 @@ function QuestionPhrase(const pId: string): string;
 
 /// <summary>Every question id the chart pipeline accepts (New-DiagramArtifact.ps1's
 /// ValidateSet), in the menu-caption order of the header-phrase table.</summary>
-/// <returns>The 27 ids, lower case (implementors is Delphi-only: no Emit-*.ps1), then each 1.56 question
+/// <returns>The 29 ids, lower case (implementors, value-origin and value-use are Delphi-only: no Emit-*.ps1), then each 1.56 question
 /// (class-diagram, sequence, control-flow, sent-not-handled, dependency-matrix, main-sequence) whose Q unit
 /// has registered its emitter; a 1.56 question without an emitter is not an id.</returns>
 /// <remarks>
@@ -520,7 +520,7 @@ const
   DEFAULT_DEPTHS: array[0..1] of TDepthDefault = (
     (Id: 'exception-paths'; Depth: 3),
     (Id: 'round-trip'; Depth: 4));
-  QUESTION_CAPTIONS: array[0..26] of array[0..1] of string = (
+  QUESTION_CAPTIONS: array[0..28] of array[0..1] of string = (
     ('butterfly', 'Callers and callees (butterfly chart)...'),
     ('who-calls', 'Who calls this routine...'),
     ('what-it-calls', 'What this routine calls...'),
@@ -547,8 +547,11 @@ const
     ('architecture', 'Project architecture (layered zones)...'),
     ('cycles', 'Circular unit dependencies...'),
     ('consumers', 'Who uses this table or column...'),
-    ('shown-where', 'Where this database column is shown...'));
-  QUESTION_VOCAB: array[0..26] of array[0..2] of string = (
+    ('shown-where', 'Where this database column is shown...'),
+    { v156 FB-1 }
+    ('value-origin', 'Where this value comes from...'),
+    ('value-use', 'Where this value goes...'));
+  QUESTION_VOCAB: array[0..28] of array[0..2] of string = (
     ('butterfly', 'callers', 'callees'),
     ('deps', 'used by', 'uses'),
     ('who-calls', 'call sites', 'cycle rows'),
@@ -575,9 +578,12 @@ const
     ('feeds-from', 'chain rows', 'controls in the index that resolve to one table'),
     ('lands-where', 'server DataService rows', 'triggers touching the column'),
     ('round-trip', 'steps', 'unresolved'),
-    ('path', 'shortest paths', 'calls on each path'));
+    ('path', 'shortest paths', 'calls on each path'),
+    { v156 FB-1 }
+    ('value-origin', 'sources', 'routines'),
+    ('value-use', 'destinations', 'routines'));
   { 1.56 tranche 2 (W2FRAME): the questions of lanes CHB-1, CHB-2 and CHA-1 -- id, menu caption, the two count
-    labels -- listed after the 27 in this order. A row is a question (QuestionIds, the ask verb's list,
+    labels -- listed after the 29 in this order. A row is a question (QuestionIds, the ask verb's list,
     QuestionPhrase, QuestionVocab) only once its Q unit has registered an emitter; until then the id is
     unknown, as before 1.56, so a lane that is cut leaves nothing on the surface. }
   V156_ID = 0;
