@@ -1,0 +1,1 @@
+fixture bytes standing for the delivered executable: sha-512 is taken of exactly this file

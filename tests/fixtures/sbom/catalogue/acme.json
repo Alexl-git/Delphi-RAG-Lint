@@ -1,0 +1,6 @@
+{
+  "libraries": [
+    { "key": "acme", "name": "Acme Widgets", "supplier": "Acme GmbH", "version": "4.2", "licenseName": "Acme EULA", "paths": ["\\AcmeWidgets\\"] },
+    { "key": "own-vendor", "name": "folded", "firstParty": true, "paths": ["\\proj\\vendor\\"] }
+  ]
+}

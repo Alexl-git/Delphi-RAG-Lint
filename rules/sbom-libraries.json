@@ -1,0 +1,175 @@
+{
+  "schema": 1,
+  "about": [
+    "Library catalogue of `drag-lint sbom`: which supplier, name, version and licence a group of units carries in the CycloneDX document.",
+    "EDIT THIS FILE (or pass your own with --catalogue). The first row that matches wins, so put the narrower row first.",
+    "paths: file masks (* and ?), case-insensitive, matched anywhere in the full path of a unit's source file.",
+    "units: unit-name patterns (a trailing * = prefix, else the whole name); consulted ONLY for a unit that has no source in any index. Such a match is name-only evidence and the component says so (drag-lint:attribution = unit-name).",
+    "version: a fixed version text. versionFromPath: a regular expression whose first group is the version, read from the unit paths (used when version is absent; two different results = no version).",
+    "licenseId: an SPDX licence id. licenseExpression: an SPDX expression. licenseName: free text for a licence SPDX does not list. Give one of the three.",
+    "firstParty: true folds the matching units into the application itself (your own shared source outside the project folder).",
+    "A unit group no row matches is still listed, with the supplier 'unknown supplier'. Check the versions and licences against what you actually ship."
+  ],
+  "libraries": [
+    {
+      "key": "embarcadero-firedac",
+      "name": "FireDAC",
+      "supplier": "Embarcadero Technologies, Inc.",
+      "versionFromPath": "\\\\Embarcadero\\\\Studio\\\\(\\d+\\.\\d+)\\\\",
+      "licenseName": "Embarcadero RAD Studio Software License and Support Agreement",
+      "paths": ["\\Embarcadero\\Studio\\*\\source\\data\\firedac\\"],
+      "units": ["FireDAC.*"]
+    },
+    {
+      "key": "embarcadero-datasnap",
+      "name": "DataSnap",
+      "supplier": "Embarcadero Technologies, Inc.",
+      "versionFromPath": "\\\\Embarcadero\\\\Studio\\\\(\\d+\\.\\d+)\\\\",
+      "licenseName": "Embarcadero RAD Studio Software License and Support Agreement",
+      "paths": ["\\Embarcadero\\Studio\\*\\source\\data\\datasnap\\"],
+      "units": ["Datasnap.*"]
+    },
+    {
+      "key": "embarcadero-data",
+      "name": "RAD Studio database RTL and data access (source\\data)",
+      "supplier": "Embarcadero Technologies, Inc.",
+      "versionFromPath": "\\\\Embarcadero\\\\Studio\\\\(\\d+\\.\\d+)\\\\",
+      "licenseName": "Embarcadero RAD Studio Software License and Support Agreement",
+      "paths": ["\\Embarcadero\\Studio\\*\\source\\data\\"],
+      "units": ["Data.*", "REST.*"]
+    },
+    {
+      "key": "embarcadero-rtl",
+      "name": "RAD Studio RTL",
+      "supplier": "Embarcadero Technologies, Inc.",
+      "versionFromPath": "\\\\Embarcadero\\\\Studio\\\\(\\d+\\.\\d+)\\\\",
+      "licenseName": "Embarcadero RAD Studio Software License and Support Agreement",
+      "paths": ["\\Embarcadero\\Studio\\*\\source\\rtl\\"],
+      "units": ["System", "SysInit", "System.*", "Winapi.*", "Posix.*", "Macapi.*"]
+    },
+    {
+      "key": "embarcadero-vcl",
+      "name": "RAD Studio VCL",
+      "supplier": "Embarcadero Technologies, Inc.",
+      "versionFromPath": "\\\\Embarcadero\\\\Studio\\\\(\\d+\\.\\d+)\\\\",
+      "licenseName": "Embarcadero RAD Studio Software License and Support Agreement",
+      "paths": ["\\Embarcadero\\Studio\\*\\source\\vcl\\"],
+      "units": ["Vcl.*"]
+    },
+    {
+      "key": "embarcadero-fmx",
+      "name": "RAD Studio FireMonkey",
+      "supplier": "Embarcadero Technologies, Inc.",
+      "versionFromPath": "\\\\Embarcadero\\\\Studio\\\\(\\d+\\.\\d+)\\\\",
+      "licenseName": "Embarcadero RAD Studio Software License and Support Agreement",
+      "paths": ["\\Embarcadero\\Studio\\*\\source\\fmx\\"],
+      "units": ["FMX.*"]
+    },
+    {
+      "key": "indy",
+      "name": "Indy (Internet Direct)",
+      "supplier": "Indy Project",
+      "licenseName": "Indy Modified BSD License (dual-licensed with MPL-1.1)",
+      "purl": "pkg:github/IndySockets/Indy",
+      "paths": ["\\Embarcadero\\Studio\\*\\source\\Indy10\\", "\\Indy10\\", "\\Indy\\Lib\\"]
+    },
+    {
+      "key": "dunitx",
+      "name": "DUnitX",
+      "supplier": "VSoft Technologies Pty Ltd",
+      "licenseId": "Apache-2.0",
+      "purl": "pkg:github/VSoftTechnologies/DUnitX",
+      "paths": ["\\DUnitX\\"],
+      "units": ["DUnitX.*"]
+    },
+    {
+      "key": "dunit",
+      "name": "DUnit",
+      "supplier": "DUnit project",
+      "licenseId": "MPL-1.1",
+      "paths": ["\\Embarcadero\\Studio\\*\\source\\DUnit\\"]
+    },
+    {
+      "key": "embarcadero-other",
+      "name": "RAD Studio (other shipped source)",
+      "supplier": "Embarcadero Technologies, Inc.",
+      "versionFromPath": "\\\\Embarcadero\\\\Studio\\\\(\\d+\\.\\d+)\\\\",
+      "licenseName": "Embarcadero RAD Studio Software License and Support Agreement",
+      "paths": ["\\Embarcadero\\Studio\\*\\source\\"],
+      "units": ["Soap.*", "Xml.*", "Web.*"]
+    },
+    {
+      "key": "devexpress-vcl",
+      "name": "DevExpress VCL",
+      "supplier": "Developer Express Inc.",
+      "licenseName": "DevExpress End-User License Agreement",
+      "paths": ["\\DevExpress\\VCL\\"],
+      "units": ["cx*", "dx*"]
+    },
+    {
+      "key": "spring4d",
+      "name": "Spring4D",
+      "supplier": "Spring4D Team",
+      "licenseId": "Apache-2.0",
+      "purl": "pkg:bitbucket/sglienke/spring4d",
+      "paths": ["\\Spring4D\\"],
+      "units": ["Spring", "Spring.*"]
+    },
+    {
+      "key": "jvcl",
+      "name": "JEDI Visual Component Library (JVCL)",
+      "supplier": "Project JEDI",
+      "licenseId": "MPL-1.1",
+      "purl": "pkg:github/project-jedi/jvcl",
+      "paths": ["\\jvcl\\"]
+    },
+    {
+      "key": "jcl",
+      "name": "JEDI Code Library (JCL)",
+      "supplier": "Project JEDI",
+      "licenseId": "MPL-1.1",
+      "purl": "pkg:github/project-jedi/jcl",
+      "paths": ["\\jcl\\"]
+    },
+    {
+      "key": "omnithreadlibrary",
+      "name": "OmniThreadLibrary",
+      "supplier": "Primoz Gabrijelcic",
+      "licenseId": "BSD-3-Clause",
+      "purl": "pkg:github/gabr42/OmniThreadLibrary",
+      "paths": ["\\OmniThreadLibrary\\"]
+    },
+    {
+      "key": "fastmm4",
+      "name": "FastMM4",
+      "supplier": "Pierre le Riche",
+      "licenseExpression": "MPL-1.1 OR LGPL-2.1-only",
+      "purl": "pkg:github/pleriche/FastMM4",
+      "paths": ["\\FastMM4\\"]
+    },
+    {
+      "key": "turbopack-orpheus",
+      "name": "TurboPack Orpheus",
+      "supplier": "TurboPack",
+      "licenseId": "MPL-1.1",
+      "purl": "pkg:github/TurboPack/Orpheus",
+      "paths": ["\\Orpheus\\"]
+    },
+    {
+      "key": "turbopack-systools",
+      "name": "TurboPack SysTools",
+      "supplier": "TurboPack",
+      "licenseId": "MPL-1.1",
+      "purl": "pkg:github/TurboPack/SysTools",
+      "paths": ["\\SysTools\\"]
+    },
+    {
+      "key": "turbopack-abbrevia",
+      "name": "TurboPack Abbrevia",
+      "supplier": "TurboPack",
+      "licenseId": "MPL-1.1",
+      "purl": "pkg:github/TurboPack/Abbrevia",
+      "paths": ["\\Abbrevia\\"]
+    }
+  ]
+}
