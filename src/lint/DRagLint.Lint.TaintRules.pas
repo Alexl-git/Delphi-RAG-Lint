@@ -454,6 +454,7 @@ type
     X       : TSymbol;
     Row     : TDataFlowRow;
     Rule    : string;
+    Cwe     : string;
     WeakSink: Boolean;
     Hits    : TArray<THit>;
   end;
@@ -567,7 +568,7 @@ type
     function  BaseMethods(const X: TSymbol): TArray<TSymbol>;
     function  SinkMatches(const AEntry: TTaintSinkEntry; const X: TSymbol; const ARow: TDataFlowRow; out AWeak: Boolean): Boolean;
     function  EvalSink(const X: TSymbol; const ARows: TArray<TDataFlowRow>): TSummary;
-    function  Findings(const X: TSymbol; const ARow: TDataFlowRow; const ARule: string; AWeakSink: Boolean;
+    function  Findings(const X: TSymbol; const ARow: TDataFlowRow; const ARule, ACwe: string; AWeakSink: Boolean;
                        const AHits: TArray<THit>): TArray<TLintFinding>;
   public
     constructor Create(const AStore, ALibStore: ISymbolStore; const ACfg: TTaintConfig);
@@ -630,6 +631,22 @@ begin
   else if SameText(ARule, TAINT_RULE_HTML) then Result:= 'CWE-79 cross-site scripting'
   else if SameText(ARule, TAINT_RULE_LOG) then Result:= 'CWE-117 log forging'
   else Result:= 'CWE-89 SQL injection';
+end;
+
+{ The CWE text of a sink row: the row's own cwe (an XPath row prints CWE-643, an LDAP row
+  CWE-90, not the rule's CWE-78); '' = the rule's default text. }
+function SinkCweText(const ACwe, ARule: string): string;
+begin
+  if ACwe = '' then Result:= RuleCweText(ARule)
+  else if SameText(ACwe, 'CWE-643') then Result:= 'CWE-643 XPath injection'
+  else if SameText(ACwe, 'CWE-90') then Result:= 'CWE-90 LDAP injection'
+  else if SameText(ACwe, 'CWE-89') then Result:= 'CWE-89 SQL injection'
+  else if SameText(ACwe, 'CWE-78') then Result:= 'CWE-78 OS command injection'
+  else if SameText(ACwe, 'CWE-22') then Result:= 'CWE-22 path traversal'
+  else if SameText(ACwe, 'CWE-502') then Result:= 'CWE-502 unsafe deserialization'
+  else if SameText(ACwe, 'CWE-79') then Result:= 'CWE-79 cross-site scripting'
+  else if SameText(ACwe, 'CWE-117') then Result:= 'CWE-117 log forging'
+  else Result:= ACwe;
 end;
 
 function RuleBaseSeverity(const ARule: string): string;
@@ -926,6 +943,30 @@ begin
   Result.Sanitizers := Sans;
 end;
 
+{ The walker's findings plus the exception check's: a site reached directly AND through an exception
+  is ONE finding (file, line, col, rule) -- the walker's, whose Paths gains the exception path. }
+function MergeExcFindings(const AWalker, AExc: TArray<TLintFinding>): TArray<TLintFinding>;
+var
+  E  : TLintFinding;
+  I  : Integer;
+  Hit: Integer;
+begin
+  Result:= Copy(AWalker);
+  for E in AExc do
+  begin
+    Hit:= -1;
+    for I:= 0 to High(AWalker) do
+      if (AWalker[I].FileId = E.FileId) and (AWalker[I].StartLine = E.StartLine) and (AWalker[I].StartCol = E.StartCol)
+         and SameText(AWalker[I].RuleId, E.RuleId) then Hit:= I;
+    if Hit < 0 then Result:= Result + [E]
+    else
+    begin
+      if Length(Result[Hit].Paths) = 0 then Result[Hit].Paths:= [Copy(Result[Hit].Path)];
+      Result[Hit].Paths:= Result[Hit].Paths + [E.Path];
+    end;
+  end;
+end;
+
 class function TTaintRules.Check(const AStore, ALibStore: ISymbolStore; const AScopeFileIds: TArray<Int64>;
                                  const ACfg: TTaintConfig; out AStats: TTaintStats): TArray<TLintFinding>;
 var
@@ -943,7 +984,8 @@ begin
   W:= TTaintWalker.Create(AStore, ALibStore, ACfg);
   try
     Result:= W.Run(AScopeFileIds);
-    Result:= Result + TV156TaintExc.Check(AStore, ALibStore, AScopeFileIds); { v156 TAINT-1.1: taint through exceptions (lane FA-2) }
+    TV156TaintExc.UseConfig(ACfg); { v156 FIX-TAINT: the exception check sees the run's merged config (FA-2 request) }
+    Result:= MergeExcFindings(Result, TV156TaintExc.Check(AStore, ALibStore, AScopeFileIds)); { v156 TAINT-1.1: taint through exceptions (lane FA-2) }
     AStats:= W.Stats;
   finally
     W.Free;
@@ -1430,11 +1472,27 @@ end;
 
 function TTaintWalker.RowsOf(AStore: Integer; ARoutine: Int64; const AKind: string): TArray<TDataFlowRow>;
 var
-  K: string;
+  K   : string;
+  Row : TDataFlowRow;
+  Rows: TArray<TDataFlowRow>;
+  Drop: Boolean;
 begin
   K:= Format('%d|%d|%s', [AStore, ARoutine, AKind]);
   if FRoutineRows.TryGetValue(K, Result) then Exit;
   Result:= FStores[AStore].GetDataFlowsOf(ARoutine, AKind);
+  { v156 FIX-TAINT: since 1.56 (B3) the extractor also emits VALUE rows (ValClass int / float /
+    bool ...: an Integer reaching a call argument, Length(S)); a value is not a taint carrier, and
+    ValClass '' is exactly the 1.55 row set. }
+  Drop:= False;
+  for Row in Result do
+    if Row.ValClass <> '' then Drop:= True;
+  if Drop then
+  begin
+    Rows:= nil;
+    for Row in Result do
+      if Row.ValClass = '' then Rows:= Rows + [Row];
+    Result:= Rows;
+  end;
   Inc(FStats.RowsRead, Length(Result));
   FRoutineRows.Add(K, Result);
 end;
@@ -2331,6 +2389,12 @@ begin
   Result:= SameText(AEntry.Name, ARow.DstName) and KindOk and ReceiverOk;
 end;
 
+{ A routine declared with the external directive: its body is the operating system's, not project code. }
+function IsExternalImport(const X: TSymbol): Boolean;
+begin
+  Result:= (X.ImplStartLine <= 0) and (' ' + X.Directives + ' ').Contains(' external ');
+end;
+
 function TTaintWalker.SinkMatches(const AEntry: TTaintSinkEntry; const X: TSymbol; const ARow: TDataFlowRow;
                                   out AWeak: Boolean): Boolean;
 var
@@ -2341,7 +2405,8 @@ begin
   if not SinkShapeMatches(AEntry, ARow) then Exit(False);
   R:= Resolve(STORE_PROJECT, X, ARow.FileId, ARow.DstLine, ARow.DstCol, ARow.DstName);
   { a resolved PROJECT routine of that name is project code, not the catalogued API }
-  if AEntry.TypeName = '' then Result:= not (R.Found and IsRoutine(R.Sym))
+  { an external import declared in the project IS the catalogued API (v156 FIX-TAINT) }
+  if AEntry.TypeName = '' then Result:= not (R.Found and IsRoutine(R.Sym) and not IsExternalImport(R.Sym))
   else if R.Found and IsRoutine(R.Sym) then
   begin
     P:= Sym(STORE_PROJECT, R.Sym.ParentId);
@@ -2378,7 +2443,7 @@ end;
 { The ONE finding of a sink site and rule (TAINTDEDUP 1.52; nil when no hit): the best path --
   certain before weak, then shorter -- names the message, which ends "(N sources, M paths)"
   when more than one distinct path reaches the site; Paths keeps every distinct path. }
-function TTaintWalker.Findings(const X: TSymbol; const ARow: TDataFlowRow; const ARule: string; AWeakSink: Boolean;
+function TTaintWalker.Findings(const X: TSymbol; const ARow: TDataFlowRow; const ARule, ACwe: string; AWeakSink: Boolean;
                                const AHits: TArray<THit>): TArray<TLintFinding>;
 var
   Hits   : TArray<THit>;
@@ -2452,7 +2517,7 @@ begin
       end;
     F.Message:= Format('%s %s from %s (%s) via %s (%d hops, %d via fields/globals%s) -- %s',
       [TAINT_MSG_PREFIX, ARow.DstName, Uniq[0].SrcName, Uniq[0].SrcKind, Names, Hops - 1,
-       Uniq[0].Fields, IfThen(Weak, ', weak'), RuleCweText(ARule)]);
+       Uniq[0].Fields, IfThen(Weak, ', weak'), SinkCweText(ACwe, ARule)]);
     if Length(Uniq) > 1 then
     begin
       F.Message:= F.Message + Format(' (%d %s, %d paths)',
@@ -2480,6 +2545,7 @@ var
   Entry   : TTaintSinkEntry;
   Rules   : TArray<string>;
   WeakSink: TArray<Boolean>;
+  Cwes    : TArray<string>;
   Weak    : Boolean;
   I, K    : Integer;
   Sum     : TSummary;
@@ -2513,6 +2579,7 @@ begin
           { the rules this site is a sink of (a certain entry wins over a weak one) }
           Rules:= nil;
           WeakSink:= nil;
+          Cwes:= nil;
           for Entry in FCfg.Sinks do
             if SinkMatches(Entry, S, Row, Weak) then
             begin
@@ -2523,6 +2590,7 @@ begin
               begin
                 Rules:= Rules + [Entry.Rule];
                 WeakSink:= WeakSink + [Weak];
+                Cwes:= Cwes + [Entry.Cwe];
               end
               else if not Weak then WeakSink[K]:= False;
             end;
@@ -2552,6 +2620,7 @@ begin
               Site.X       := S;
               Site.Row     := Row;
               Site.Rule    := Rules[I];
+              Site.Cwe     := Cwes[I];
               Site.WeakSink:= WeakSink[I];
               Site.Hits    := Sum.Hits;
               SiteIdx.Add(SiteKey, Sites.Count);
@@ -2561,7 +2630,7 @@ begin
         end;
       end;
     end;
-    for Site in Sites do Result:= Result + Findings(Site.X, Site.Row, Site.Rule, Site.WeakSink, Site.Hits);
+    for Site in Sites do Result:= Result + Findings(Site.X, Site.Row, Site.Rule, Site.Cwe, Site.WeakSink, Site.Hits);
   finally
     Sites.Free;
     SiteIdx.Free;
