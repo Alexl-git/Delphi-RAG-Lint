@@ -93,6 +93,7 @@ uses
 , DRagLint.Core.Encoding { EnsureUtf8Bytes -- ApplyLineMarkers reads a file the way the rules did }
   , DRagLint.Lint.MarkerHash { MarkerVerdict / ExpectedHash -- ApplyLineMarkers: versioned routine-metric markers (v1511 Y4) }
   , DRagLint.Query.SyntaxCountVerb { syntax-count verb (GAP-SYNTAXQ, 1.42) }
+  , DRagLint.Query.Regions { 1.56 IDX-U: outline region rows }
   , DRagLint.Query.ConceptRepo { 1.56 FRAME-1: query --concept over the field-repository copy (lane CON-Q) }
   , DRagLint.CLI.UsesRecover { uses-recover verb (148 HP): own flags, read-only }
   , DRagLint.CLI.Metrics { v156 W2FRAME: metrics verb (lane MET-1): own flags }
@@ -9515,10 +9516,40 @@ begin
         // v0.17: use context variant if --context N is provided
         if AArgs.ContextLines > 0 then Refs:= Store.FindCallersByNameWithContext(AArgs.Name, AArgs.ContextLines)
         else Refs:= Store.FindCallersByName(AArgs.Name);
+        { v156 IDX-U (INBOX-find-callers-field-write-sites): the plain WRITE sites of a field (refs.kind 'write') are
+          part of "who touches X". DropRefsThatCannotBeCallers drops every write (it is shared with the charts), so the
+          writes are read back from the same rows, minus those that hit a local variable / parameter of the enclosing
+          routine (the filter it applies to reads), and merged in by position. Each row says read or write. }
+        var RawRefs: TArray<TReference>:= Refs;
         Refs:= DropRefsThatCannotBeCallers(Store, Refs);
+        for var Wr: TReference in RawRefs do
+        begin
+          if not SameText(Wr.Kind, 'write') then Continue;
+          if Wr.EnclosingSymbolId > 0 then
+          begin
+            var Local: TSymbol:= Store.FindChildSymbolByName(Wr.EnclosingSymbolId, Wr.NameText);
+            if (Local.Id > 0) and (Local.Kind in [skLocalVar, skParam, skVarDecl, skConstDecl]) then Continue;
+          end;
+          Refs:= Refs + [Wr];
+        end;
+        TArray.Sort<TReference>(Refs, TComparer<TReference>.Construct(
+          function(const L, R: TReference): Integer
+          begin
+            Result:= CompareValue(L.FileId, R.FileId);
+            if Result = 0 then Result:= CompareValue(L.StartLine, R.StartLine);
+            if Result = 0 then Result:= CompareValue(L.StartCol, R.StartCol);
+          end));
         Refs:= CollapseRefsAtSameSite(Refs); { one row per call site -- see the note on the function }
         if AArgs.AsJson then AppendReferencesJson(Store, Refs, JRefs)
-        else PrintReferenceLines(Store, Refs, RefTally);
+        else
+          for var Rf: TReference in Refs do
+          begin
+            Writeln(Format('%s:%d:%d  %s%s%s', [Store.GetFilePath(Rf.FileId), Rf.StartLine, Rf.StartCol, Rf.NameText, ResolutionSuffix(Rf.Resolution),
+              if SameText(Rf.Kind, 'write') or SameText(Rf.Kind, 'read') then '  [' + LowerCase(Rf.Kind) + ']'
+              else if SameText(Rf.AccessMode, 'write') or SameText(Rf.AccessMode, 'read') then '  [' + LowerCase(Rf.AccessMode) + ']' else '']));
+            if Rf.ContextText <> '' then Writeln('  ' + StringReplace(Rf.ContextText, sLineBreak, sLineBreak + '  ', [rfReplaceAll]));
+            RefTally.Add(Rf.Resolution);
+          end;
         Inc(TotalRefs, Length(Refs));
         for var Rf: TReference in Refs do RefFiles:= RefFiles + [Store.GetFilePath(Rf.FileId)];
       end; // for
@@ -10068,6 +10099,10 @@ begin
   var CapNote: string:= '';
   if Length(Shown) < Matched then
     CapNote:= System.SysUtils.Format('outline: first %d of %d row(s) (--limit %d)', [Length(Shown), Matched, AArgs.Limit]);
+  { v156 IDX-U: the REGION / ENDREGION directive pairs of the file, listed after the symbols as kind `region`
+    (the index stores no directives; they are read from the source). A --kind list without `region` leaves them out. }
+  var Regions: TArray<TRegionSpan>:= nil;
+  if (Length(KindSet) = 0) or (IndexText('region', KindSet) >= 0) then Regions:= FindRegionsInFile(ExpandFileName(AArgs.InFile));
 
   if (AArgs.AsJson or SameText(AArgs.Format, 'json')) then
   begin
@@ -10095,6 +10130,17 @@ begin
         if StubOf[Idx] >= 0 then JObj.AddPair('forward_target_line', TJSONNumber.Create(Syms[StubOf[Idx]].StartLine));
         JArr.AddElement(JObj);
       end;
+      for var Rg: TRegionSpan in Regions do
+      begin
+        JObj:= TJSONObject.Create;
+        JObj.AddPair('kind', 'region');
+        JObj.AddPair('name', Rg.Id);
+        JObj.AddPair('qname', Rg.Id);
+        JObj.AddPair('line', TJSONNumber.Create(Rg.StartLine));
+        JObj.AddPair('end_line', TJSONNumber.Create(Rg.EndLine));
+        JObj.AddPair('depth', TJSONNumber.Create(Rg.Depth));
+        JArr.AddElement(JObj);
+      end;
       WriteStdoutDocument(JArr.Format(2) + sLineBreak); // after every stderr byte (T2i R18)
     finally
       JArr.Free;
@@ -10110,6 +10156,8 @@ begin
       if StubOf[Idx] >= 0 then Row:= Row + System.SysUtils.Format('  [forward -> line %d]', [Syms[StubOf[Idx]].StartLine]);  // dl:ok concat-in-loop@edfd -- Row is a fresh per-iteration inline local, not an accumulator: at most ONE suffix is appended per row, so there is no O(n^2) growth
       Writeln(Row);
     end;
+    for var Rg: TRegionSpan in Regions do
+      Writeln(System.SysUtils.Format('%-10s %-40s %d-%d', ['region', Rg.Id, Rg.StartLine, Rg.EndLine]));
     if CapNote <> '' then Writeln(CapNote);
   end;
   Result:= 0;
@@ -10582,6 +10630,19 @@ var
     while AArr.Count > AArgs.Limit do AArr.Remove(AArr.Count - 1).Free;
   end;
 
+  { v156 IDX-U: one `  <group>: file:line:col` row per site of each non-empty group (--limit N caps each group). }
+  procedure WriteUsageSites(const ANames: array of string; const AGroups: array of TJSONArray);
+  begin
+    for var G: Integer:= 0 to High(AGroups) do
+      for var I: Integer:= 0 to AGroups[G].Count - 1 do
+      begin
+        if (AArgs.Limit > 0) and (I >= AArgs.Limit) then Break;
+        var O: TJSONObject:= AGroups[G].Items[I] as TJSONObject;
+        Writeln(Format('  %-10s %s:%s:%s%s', [ANames[G], O.GetValue<string>('file'), O.GetValue<string>('line'), O.GetValue<string>('col'),
+          if O.GetValue('resolution') <> nil then '  [' + O.GetValue<string>('resolution') + ']' else '']));
+      end;
+  end;
+
 var
   S    : TSymbol     ;
   R    : TReference  ;
@@ -10824,6 +10885,10 @@ begin
           '  reads: %d  writes: %d  calls: %d  types: %d  attributes: %d  events: %d  raises: %d  handles: %d',
           [JReads.Count, JWrites.Count, JCalls.Count, JTypes.Count, JAttrs.Count, JEvents.Count, JRaises.Count, JHandles.Count]));
       if JImpact.Count > 0 then Writeln(Format('  impact (transitive): %d', [JImpact.Count]));
+      { v156 IDX-U: wide / very-wide name every site (file:line:col), as --json does; narrow keeps the counts-only summary. }
+      if (Width = 'wide') or (Width = 'very-wide') then
+        WriteUsageSites(['reads', 'writes', 'calls', 'types', 'attributes', 'events', 'raises', 'handles'],
+          [JReads, JWrites, JCalls, JTypes, JAttrs, JEvents, JRaises, JHandles]);
     end;
     Result:= 0;
   finally
