@@ -41,6 +41,8 @@
     "consumers":        { "emitter": "charts\\src\\Emit-Consumers.ps1" },
     "shown-where":      { "emitter": "charts\\src\\Emit-ShownWhere.ps1" },
     "class-diagram":    { "aliases": ["uml class diagram", "has-a links"] },
-    "sequence":         { "aliases": ["sequence diagram", "call sequence"] }
+    "sequence":         { "aliases": ["sequence diagram", "call sequence"] },
+    "dependency-matrix": { "aliases": ["uses matrix", "dsm", "unit dependency matrix"] },
+    "main-sequence":    { "aliases": ["abstractness", "instability", "zone of pain"] }
   }
 }
