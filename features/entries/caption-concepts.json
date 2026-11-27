@@ -1,0 +1,68 @@
+{
+  "id": "caption-concepts",
+  "title": "query --concept: captions, places and field links",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "Find a database field by its screen caption; every hit says which place it came from and where the field is shown, edited and used",
+  "intro": "Read this when you know what the screen calls a field but not its table or column. query --concept searches the project index, the copy of the field repository inside it and the library index, ranks exact caption words above fuzzy identifier matches, and lists the persistent fields, grid columns, edit controls, forms and code of each field.",
+  "wikiPage": "caption-concepts",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "example": "drag-lint query --concept \"customer name\" --db <db>",
+      "usage": "drag-lint query --concept \"<words>\" [--place library,project,repository] [--links N] [--limit N] [--kind k,...] [--json] --db <db>",
+      "flags": [
+        {
+          "name": "--concept",
+          "arg": "<words>"
+        },
+        {
+          "name": "--place",
+          "arg": "<list>"
+        },
+        {
+          "name": "--links",
+          "arg": "N"
+        },
+        {
+          "name": "--limit",
+          "arg": "N"
+        },
+        {
+          "name": "--kind",
+          "arg": "<k,...>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--db"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "pitfalls": ["the repository is searched through the copy made by index --project; a changed repository file prints a stale note until the next index run.", "by name only = a FieldByName literal whose dataset has no known table; it is listed under every table that has a field of that name and never raises a rank.", "the library place is the resolved database named library-*.sqlite; --place project,repository skips it.", "no stemming in captions: name does not find names."],
+  "questions": [
+    {
+      "ask": "Which field does the screen call \"customer name\"?",
+      "command": "drag-lint query --concept \"customer name\" --db <db>"
+    },
+    {
+      "ask": "Where is a field shown, edited and used in code?",
+      "command": "drag-lint query --concept \"<caption words>\" --kind repo-field --links 20 --db <db>"
+    },
+    {
+      "ask": "How do I search only the field repository?",
+      "command": "drag-lint query --concept \"<words>\" --place repository --db <db>"
+    },
+    {
+      "ask": "Which place did a hit come from?",
+      "command": "drag-lint query --concept \"<words>\" --json --db <db>"
+    }
+  ]
+}
