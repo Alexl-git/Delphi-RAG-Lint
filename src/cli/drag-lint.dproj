@@ -408,6 +408,8 @@
         <DCCReference Include="..\lint\v156\DRagLint.V156.OOB1.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.OOB2.Support.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.OOB2.pas"/>
+        <DCCReference Include="..\lint\v156\DRagLint.V156.DFMR.Support.pas"/>
+        <DCCReference Include="..\lint\v156\DRagLint.V156.DFMR.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.THR.Support.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.THR.pas"/>
         <DCCReference Include="..\lint\v156\DRagLint.V156.TAINTEXC.Support.pas"/>

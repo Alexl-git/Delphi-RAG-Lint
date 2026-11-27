@@ -237,6 +237,8 @@ uses
   DRagLint.V156.OOB1 in '..\lint\v156\DRagLint.V156.OOB1.pas',
   DRagLint.V156.OOB2.Support in '..\lint\v156\DRagLint.V156.OOB2.Support.pas',
   DRagLint.V156.OOB2 in '..\lint\v156\DRagLint.V156.OOB2.pas',
+  DRagLint.V156.DFMR.Support in '..\lint\v156\DRagLint.V156.DFMR.Support.pas',
+  DRagLint.V156.DFMR in '..\lint\v156\DRagLint.V156.DFMR.pas',
   DRagLint.V156.THR.Support in '..\lint\v156\DRagLint.V156.THR.Support.pas',
   DRagLint.V156.THR in '..\lint\v156\DRagLint.V156.THR.pas',
   DRagLint.V156.TAINTEXC.Support in '..\lint\v156\DRagLint.V156.TAINTEXC.Support.pas',
