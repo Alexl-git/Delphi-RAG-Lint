@@ -4,7 +4,7 @@ program GridCopyTests;
   DRagLint.FieldRepo.GridCopy on the bytes of tests\fixtures\fieldrepo\gridcopy (a form with a table view, a banded
   table view and a card view). Every applied plan is compared byte for byte with the fixture plus the expected lines
   and is converted to a binary DFM by the RTL. One PASS/FAIL line per case, a summary line, exit code 1 on any
-  failure. Usage: GridCopyTests.exe [fixture folder]. }
+  failure. Usage: GridCopyTests.exe [fixture folder]  |  GridCopyTests.exe --apply DIR SOURCEVIEW TARGETVIEW. }
 
 {$APPTYPE CONSOLE}
 
@@ -20,6 +20,12 @@ uses
 const
   NL = #13#10;
   PLAN_ID_LENGTH = 16;
+  APPLY_SWITCH_AT = 1;
+  APPLY_DIR_AT = 2;
+  APPLY_SOURCE_AT = 3;
+  APPLY_TARGET_AT = 4;
+  CODE_COLUMN_CHANGE = 7; // ids in the plan EVERYTHING_TEXT
+  CODE_EVENT_CHANGE = 8;
   VIEW_COUNT = 3;
   TV_COLUMNS = 3;
   TV_EVENTS = 12;
@@ -132,10 +138,8 @@ begin
     Result := 'no exception';
   except
     on E: Exception do
-      if (E.ClassType = pClass) and ((pPart = '') or E.Message.Contains(pPart)) then
-        Result := ''
-      else
-        Result := E.ClassName + ': ' + E.Message;
+      Result := if (E.ClassType = pClass) and ((pPart = '') or E.Message.Contains(pPart)) then ''
+        else E.ClassName + ': ' + E.Message;
   end;
 end;
 
@@ -338,6 +342,327 @@ begin
     end, EGridCopyError, 'no handler for the event OnKeyDown');
 end;
 
+const
+  EVERYTHING_TEXT =
+    'copy tvMain (TcxGridDBTableView) -> bvMain (TcxGridDBBandedTableView) in uCopy.dfm: 14 changes, 0 blocked, 2 unchecked'
+    + '|[1] insert uCopy.dfm bvMain OnCustomDrawCell:  -> tvMainCustomDrawCell'
+    + '|[2] insert uCopy.dfm bvMain DataController.OnCompare:  -> tvMainDataControllerCompare'
+    + '|[3] insert uCopy.dfm bvMain OnColumnHeaderClick:  -> tvMainColumnHeaderClick'
+    + '|[4] insert uCopy.dfm bvMain OnCustomization:  -> tvMainCustomization'
+    + '|[5] insert uCopy.dfm bvMain Styles.OnGetContentStyle:  -> tvMainStylesGetContentStyle'
+    + '|[6] insert uCopy.dfm bvMain Bands:  -> one band'
+    + '|[7] insert uCopy.dfm bvMainCODE:  -> TcxGridDBBandedColumn CODE'
+    + '|[8] insert uCopy.dfm bvMainCODE Properties.OnChange:  -> tvMainCODEPropertiesChange'
+    + '|[9] insert uCopy.dfm bvMainCODE OnGetDisplayText:  -> tvMainCODEGetDisplayText'
+    + '|[10] update uCopy.dfm bvMainNAME OnGetDisplayText: bvMainNAMEGetDisplayText -> tvMainNAMEGetDisplayText'
+    + '|  (unchecked)|  NOTE: replaces the handler bvMainNAMEGetDisplayText'
+    + '|[11] insert uCopy.dfm bvMainNAME OnHeaderClick:  -> tvMainNAMEHeaderClick'
+    + '|[12] insert uCopy.dfm bvMainQTY:  -> TcxGridDBBandedColumn QTY'
+    + '|[13] insert uCopy.dfm bvMainQTY OnCustomDrawCell:  -> tvMainQTYCustomDrawCell'
+    + '|  (unchecked)|  NOTE: the handler names tvMainQTY of the source'
+    + '|[14] insert uCopy.dfm bvMainQTY OnGetDisplayText:  -> tvMainCODEGetDisplayText';
+  BAND_OLD =
+    '      DataController.Summary.SummaryGroups = <>' + NL +
+    '      object bvMainNAME: TcxGridDBBandedColumn' + NL +
+    '        DataBinding.FieldName = ''Name''' + NL +
+    '        OnGetDisplayText = bvMainNAMEGetDisplayText' + NL +
+    '        Position.BandIndex = -1' + NL +
+    '        Position.ColIndex = -1' + NL +
+    '        Position.RowIndex = -1' + NL +
+    '      end' + NL;
+  BAND_NEW =
+    '      DataController.Summary.SummaryGroups = <>' + NL +
+    '      OnCustomDrawCell = tvMainCustomDrawCell' + NL +
+    '      DataController.OnCompare = tvMainDataControllerCompare' + NL +
+    '      OnColumnHeaderClick = tvMainColumnHeaderClick' + NL +
+    '      OnCustomization = tvMainCustomization' + NL +
+    '      Styles.OnGetContentStyle = tvMainStylesGetContentStyle' + NL +
+    '      Bands = <' + NL +
+    '        item' + NL +
+    '        end>' + NL +
+    '      object bvMainNAME: TcxGridDBBandedColumn' + NL +
+    '        DataBinding.FieldName = ''Name''' + NL +
+    '        OnGetDisplayText = bvMainNAMEGetDisplayText' + NL +
+    '        Position.BandIndex = -1' + NL +
+    '        Position.ColIndex = -1' + NL +
+    '        Position.RowIndex = -1' + NL +
+    '        OnHeaderClick = tvMainNAMEHeaderClick' + NL +
+    '      end' + NL +
+    '      object bvMainCODE: TcxGridDBBandedColumn' + NL +
+    '        Caption = ''Code''' + NL +
+    '        DataBinding.FieldName = ''CODE''' + NL +
+    '        PropertiesClassName = ''TcxComboBoxProperties''' + NL +
+    '        Properties.Items.Strings = (' + NL +
+    '          ''A''' + NL +
+    '          ''B'')' + NL +
+    '        Properties.OnChange = tvMainCODEPropertiesChange' + NL +
+    '        OnGetDisplayText = tvMainCODEGetDisplayText' + NL +
+    '        Width = 80' + NL +
+    '        Position.BandIndex = 0' + NL +
+    '        Position.ColIndex = 1' + NL +
+    '        Position.RowIndex = 0' + NL +
+    '      end' + NL +
+    '      object bvMainQTY: TcxGridDBBandedColumn' + NL +
+    '        Caption = ''Quantity''' + NL +
+    '        DataBinding.FieldName = ''QTY''' + NL +
+    '        OnGetDisplayText = tvMainCODEGetDisplayText' + NL +
+    '        Position.BandIndex = 0' + NL +
+    '        Position.ColIndex = 2' + NL +
+    '        Position.RowIndex = 0' + NL +
+    '      end' + NL;
+  UNIT_OLD = '    bvMainNAME: TcxGridDBBandedColumn;' + NL;
+  UNIT_NEW = UNIT_OLD + '    bvMainCODE: TcxGridDBBandedColumn;' + NL + '    bvMainQTY: TcxGridDBBandedColumn;' + NL;
+  CARD_OLD = '      DataController.Summary.SummaryGroups = <>' + NL + '    end' + NL + '    object cxGrid1Level1';
+  CARD_NEW =
+    '      DataController.Summary.SummaryGroups = <>' + NL +
+    '      OnCellDblClick = tvMainCellDblClick' + NL +
+    '      OnCustomDrawCell = tvMainCustomDrawCell' + NL +
+    '      DataController.OnCompare = tvMainDataControllerCompare' + NL +
+    '      Styles.OnGetContentStyle = tvMainStylesGetContentStyle' + NL +
+    '      object cvMainCODE: TcxGridDBCardViewRow' + NL +
+    '        Caption = ''Code''' + NL +
+    '        DataBinding.FieldName = ''CODE''' + NL +
+    '        PropertiesClassName = ''TcxComboBoxProperties''' + NL +
+    '        Properties.Items.Strings = (' + NL +
+    '          ''A''' + NL +
+    '          ''B'')' + NL +
+    '        Properties.OnChange = tvMainCODEPropertiesChange' + NL +
+    '        OnGetDisplayText = tvMainCODEGetDisplayText' + NL +
+    '      end' + NL +
+    '      object cvMainNAME: TcxGridDBCardViewRow' + NL +
+    '        DataBinding.FieldName = ''NAME''' + NL +
+    '        OnGetDisplayText = tvMainNAMEGetDisplayText' + NL +
+    '      end' + NL +
+    '      object cvMainQTY: TcxGridDBCardViewRow' + NL +
+    '        Caption = ''Quantity''' + NL +
+    '        DataBinding.FieldName = ''QTY''' + NL +
+    '        OnGetDisplayText = tvMainCODEGetDisplayText' + NL +
+    '      end' + NL +
+    '    end' + NL + '    object cxGrid1Level1';
+  MIXED = 'object F: TF' + NL +
+    '  object G: TcxGrid' + NL +
+    '    object bv: TcxGridDBBandedTableView' + NL +
+    '      Bands = <' + NL +
+    '        item' + NL +
+    '          Caption = ''One''' + NL +
+    '        end' + NL +
+    '        item' + NL +
+    '          Caption = ''Two''' + NL +
+    '        end>' + NL +
+    '      object bvA: TcxGridDBBandedColumn' + NL +
+    '        DataBinding.FieldName = ''A''' + NL +
+    '        Width = 50' + NL +
+    '        OnGetDisplayText = bvAGetDisplayText' + NL +
+    '        Position.BandIndex = 1' + NL +
+    '        Position.ColIndex = 0' + NL +
+    '        Position.RowIndex = 0' + NL +
+    '      end' + NL +
+    '      object bvA2: TcxGridDBBandedColumn' + NL +
+    '        DataBinding.FieldName = ''A''' + NL +
+    '      end' + NL +
+    '    end' + NL +
+    '    object tv: TcxGridDBTableView' + NL +
+    '    end' + NL +
+    '    object b2: TcxGridDBBandedTableView' + NL +
+    '    end' + NL +
+    '    object uv: TcxGridTableView' + NL +
+    '    end' + NL +
+    '    object lv: TcxGridDBLayoutView' + NL +
+    '    end' + NL +
+    '  end' + NL +
+    '  object tvA: TDataSource' + NL +
+    '  end' + NL +
+    'end' + NL;
+  MIXED_UNIT = 'unit F;' + NL + 'interface' + NL + 'uses Vcl.Forms;' + NL + 'type' + NL +
+    '  TF = class(TForm)' + NL +
+    '    bv: TcxGridDBBandedTableView;' + NL +
+    '    bvA: TcxGridDBBandedColumn;' + NL +
+    '    tv: TcxGridDBTableView;' + NL +
+    '    tvA: TDataSource;' + NL +
+    '    procedure bvAGetDisplayText(Sender: TObject);' + NL +
+    '  end;' + NL + 'implementation' + NL +
+    'procedure TF.bvAGetDisplayText(Sender: TObject);' + NL + 'begin' + NL + '  tvA1 := nil;' + NL + 'end;' + NL + 'end.' + NL;
+
+function MixedForm(const pDfm: string = MIXED): TGridCopyForm;
+begin
+  Result := TextForm(pDfm);
+  Result.UnitFile := 'F.pas';
+  Result.UnitBytes := ToBytes(MIXED_UNIT);
+end;
+
+function Everything(const pForm: TGridCopyForm; const pSource, pTarget: string): TGridCopyPlan;
+begin
+  Result := PlanGridCopy(pForm, TGridCopyRequest.Everything(pSource, pTarget));
+end;
+
+{ Both new texts of an applied plan: DFM, then unit ('' = the unit is not changed). }
+procedure ApplyBoth(const pPlan: TGridCopyPlan; const pIds: TArray<Integer>; out pDfm, pUnit: string);
+var
+  VOut: TArray<TDfmwOutput>;
+begin
+  pDfm := '';
+  pUnit := '';
+  VOut := ApplyGridCopy(pPlan, pIds);
+  if Length(VOut) > 0 then
+  begin
+    pDfm := ToText(VOut[0].NewBytes);
+    DfmTextToBinary(VOut[0].NewBytes);
+  end;
+  if (Length(VOut) > 1) and (VOut[1].FileName = pPlan.Form.UnitFile)
+    and (ToText(VOut[1].OldBytes) = ToText(pPlan.Form.UnitBytes)) then
+    pUnit := ToText(VOut[1].NewBytes);
+end;
+
+function Block(const pDfm, pView: string): string;
+var
+  VStart, VEnd: Integer;
+begin
+  VStart := pDfm.IndexOf('    object ' + pView + ':');
+  if VStart < 0 then
+    Exit('(no block)');
+  VEnd := pDfm.IndexOf(NL + '    end' + NL, VStart);
+  Result := if VEnd < 0 then '(no end)' else pDfm.Substring(VStart, VEnd - VStart).Replace(NL, '|');
+end;
+
+function PlanLines(const pPlan: TGridCopyPlan): string;
+begin
+  Result := string.Join('|', Copy(RenderGridCopyText(pPlan), 1, MaxInt));
+end;
+
+procedure TestEverything;
+var
+  VPlan, VAgain: TGridCopyPlan;
+  VForm: TGridCopyForm;
+  VDfm, VUnit, VDfm2, VUnit2: string;
+begin
+  VPlan := Everything(Fixture, 'tvMain', 'bvMain');
+  CheckText('A1 table view -> banded table view: the plan', PlanLines(VPlan), EVERYTHING_TEXT);
+  Check('A1b the columns the plan adds, as repository rows', (Length(VPlan.Columns) = 2)
+    and (VPlan.Columns[0].FormName = 'frmCopy') and (VPlan.Columns[0].ViewName = 'bvMain')
+    and (VPlan.Columns[0].ColumnName = 'bvMainCODE') and (VPlan.Columns[0].FieldName = 'CODE')
+    and (VPlan.Columns[0].ColumnIndex = 1) and (VPlan.Columns[0].PropertiesClassName = 'TcxComboBoxProperties')
+    and VPlan.Columns[0].Properties.StartsWith('Properties.Items.Strings = (') and (VPlan.Columns[1].ColumnName = 'bvMainQTY')
+    and (VPlan.Columns[1].ColumnIndex = 2) and not VPlan.Columns[1].HasEditor);
+  ApplyBoth(VPlan, GridCopyDefaultIds(VPlan), VDfm, VUnit);
+  CheckText('A2 the DFM bytes of the default choice', VDfm, FixtureText.Replace(BAND_OLD, BAND_NEW));
+  Check('A2b the anchors of A2 and A2c are in the fixture once', (Length(FixtureText.Split([BAND_OLD])) = 2)
+    and (Length(ToText(Fixture.UnitBytes).Split([UNIT_OLD])) = 2));
+  CheckText('A2c the unit bytes: the two declarations after the view''s last column', VUnit,
+    ToText(Fixture.UnitBytes).Replace(UNIT_OLD, UNIT_NEW));
+  VForm := Fixture;
+  VForm.DfmBytes := ToBytes(VDfm);
+  VForm.UnitBytes := ToBytes(VUnit);
+  VAgain := Everything(VForm, 'tvMain', 'bvMain');
+  CheckText('A3 round trip: only the two unchecked changes are left', PlanLines(VAgain),
+    'copy tvMain (TcxGridDBTableView) -> bvMain (TcxGridDBBandedTableView) in uCopy.dfm: 2 changes, 0 blocked, 2 unchecked'
+    + '|[1] update uCopy.dfm bvMainNAME OnGetDisplayText: bvMainNAMEGetDisplayText -> tvMainNAMEGetDisplayText'
+    + '|  (unchecked)|  NOTE: replaces the handler bvMainNAMEGetDisplayText'
+    + '|[2] insert uCopy.dfm bvMainQTY OnCustomDrawCell:  -> tvMainQTYCustomDrawCell'
+    + '|  (unchecked)|  NOTE: the handler names tvMainQTY of the source');
+  ApplyBoth(VAgain, [1, 2], VDfm2, VUnit2);
+  ApplyBoth(VPlan, SelectGridCopy(VPlan, ['all']), VDfm, VUnit);
+  Check('A3b every change at once has the unchecked event in its source place; two runs end with the same lines',
+    (VUnit2 = '') and VDfm.Contains('        DataBinding.FieldName = ''QTY''' + NL
+    + '        OnCustomDrawCell = tvMainQTYCustomDrawCell' + NL + '        OnGetDisplayText = tvMainCODEGetDisplayText' + NL)
+    and VDfm2.Contains('        Position.RowIndex = 0' + NL + '        OnCustomDrawCell = tvMainQTYCustomDrawCell' + NL
+    + '      end') and (Length(VDfm) = Length(VDfm2)), Block(VDfm, 'bvMain') + ' <> ' + Block(VDfm2, 'bvMain'));
+  VForm.DfmBytes := ToBytes(VDfm);
+  VAgain := Everything(VForm, 'tvMain', 'bvMain');
+  Check('A3c after everything nothing is left', (Length(VAgain.Changes) = 0) and (Length(VAgain.Remarks) = 1)
+    and (VAgain.Remarks[0] = 'bvMain has every event and column of tvMain already'), Describe(VAgain));
+
+  ApplyBoth(VPlan, [CODE_COLUMN_CHANGE], VDfm, VUnit);
+  Check('A4 a column without its events and without the band', VDfm.Contains('          ''B'')' + NL + '        Width = 80' + NL
+    + '        Position.BandIndex = 0') and not VDfm.Contains('Bands = <') and not VDfm.Contains('bvMainQTY')
+    and VUnit.Contains('    bvMainCODE: TcxGridDBBandedColumn;' + NL) and not VUnit.Contains('bvMainQTY'), Block(VDfm, 'bvMain'));
+  CheckRaises('A4b an event of a new column without the column', procedure begin ApplyGridCopy(VPlan, [CODE_EVENT_CHANGE]); end,
+    EGridCopyError, 'change 8 is an event of the column that change 7 adds');
+  ApplyBoth(VPlan, [1], VDfm, VUnit);
+  Check('A4c events only: the unit is not an output', (VUnit = '') and (Length(ApplyGridCopy(VPlan, [1])) = 1));
+
+  VPlan := Everything(Fixture, 'tvMain', 'cvMain');
+  CheckText('A5 table view -> card view: the plan', PlanLines(VPlan),
+    'copy tvMain (TcxGridDBTableView) -> cvMain (TcxGridDBCardView) in uCopy.dfm: 15 changes, 2 blocked, 2 unchecked'
+    + '|[1] insert uCopy.dfm cvMain OnCellDblClick:  -> tvMainCellDblClick'
+    + '|[2] insert uCopy.dfm cvMain OnCustomDrawCell:  -> tvMainCustomDrawCell'
+    + '|[3] insert uCopy.dfm cvMain DataController.OnCompare:  -> tvMainDataControllerCompare'
+    + '|[4] insert uCopy.dfm cvMain OnColumnHeaderClick:  -> tvMainColumnHeaderClick'
+    + '|  BLOCKED: TcxGridDBCardView has no event OnColumnHeaderClick'
+    + '|[5] insert uCopy.dfm cvMain OnCustomization:  -> tvMainCustomization'
+    + '|  (unchecked)|  NOTE: TcxGridDBTableView and TcxGridDBCardView declare OnCustomization separately: compare the handler''s parameters'
+    + '|[6] insert uCopy.dfm cvMain Styles.OnGetContentStyle:  -> tvMainStylesGetContentStyle'
+    + '|[7] insert uCopy.dfm cvMainCODE:  -> TcxGridDBCardViewRow CODE|  NOTE: not copied: Width'
+    + '|[8] insert uCopy.dfm cvMainCODE Properties.OnChange:  -> tvMainCODEPropertiesChange'
+    + '|[9] insert uCopy.dfm cvMainCODE OnGetDisplayText:  -> tvMainCODEGetDisplayText'
+    + '|[10] insert uCopy.dfm cvMainNAME:  -> TcxGridDBCardViewRow NAME|  NOTE: not copied: Width'
+    + '|[11] insert uCopy.dfm cvMainNAME OnGetDisplayText:  -> tvMainNAMEGetDisplayText'
+    + '|[12] insert uCopy.dfm cvMainNAME OnHeaderClick:  -> tvMainNAMEHeaderClick'
+    + '|  BLOCKED: TcxGridDBCardViewRow has no event OnHeaderClick'
+    + '|[13] insert uCopy.dfm cvMainQTY:  -> TcxGridDBCardViewRow QTY'
+    + '|[14] insert uCopy.dfm cvMainQTY OnCustomDrawCell:  -> tvMainQTYCustomDrawCell'
+    + '|  (unchecked)|  NOTE: the handler names tvMainQTY of the source'
+    + '|[15] insert uCopy.dfm cvMainQTY OnGetDisplayText:  -> tvMainCODEGetDisplayText');
+  ApplyBoth(VPlan, GridCopyDefaultIds(VPlan), VDfm, VUnit);
+  CheckText('A5b the DFM bytes', VDfm, FixtureText.Replace(CARD_OLD, CARD_NEW));
+  Check('A5c the anchor of A5b is in the fixture once', Length(FixtureText.Split([CARD_OLD])) = 2);
+  CheckText('A5d the unit bytes: after the view when it has no column', VUnit, ToText(Fixture.UnitBytes).Replace(
+    '    cvMain: TcxGridDBCardView;' + NL, '    cvMain: TcxGridDBCardView;' + NL + '    cvMainCODE: TcxGridDBCardViewRow;' + NL
+    + '    cvMainNAME: TcxGridDBCardViewRow;' + NL + '    cvMainQTY: TcxGridDBCardViewRow;' + NL));
+
+  VPlan := Everything(MixedForm, 'bv', 'tv');
+  CheckText('A6 banded -> table: two columns of one field, a taken name', PlanLines(VPlan),
+    'copy bv (TcxGridDBBandedTableView) -> tv (TcxGridDBTableView) in F.dfm: 3 changes, 0 blocked, 0 unchecked'
+    + '|[1] insert F.dfm tvA2:  -> TcxGridDBColumn A|  NOTE: not copied: Position.BandIndex, Position.ColIndex, Position.RowIndex'
+    + '|[2] insert F.dfm tvA2 OnGetDisplayText:  -> bvAGetDisplayText'
+    + '|[3] insert F.dfm tvA21:  -> TcxGridDBColumn A');
+  ApplyBoth(VPlan, GridCopyDefaultIds(VPlan), VDfm, VUnit);
+  CheckText('A6b the block', Block(VDfm, 'tv'), '    object tv: TcxGridDBTableView|      object tvA2: TcxGridDBColumn'
+    + '|        DataBinding.FieldName = ''A''|        Width = 50|        OnGetDisplayText = bvAGetDisplayText|      end'
+    + '|      object tvA21: TcxGridDBColumn|        DataBinding.FieldName = ''A''|      end');
+  Check('A6c declared after the view', VUnit.Contains('    tv: TcxGridDBTableView;' + NL + '    tvA2: TcxGridDBColumn;' + NL
+    + '    tvA21: TcxGridDBColumn;' + NL + '    tvA: TDataSource;'), VUnit);
+
+  VPlan := Everything(MixedForm, 'bv', 'b2');
+  ApplyBoth(VPlan, GridCopyDefaultIds(VPlan), VDfm, VUnit);
+  CheckText('A7 banded -> banded without bands: the source''s bands, the positions kept', Block(VDfm, 'b2'),
+    '    object b2: TcxGridDBBandedTableView|      Bands = <|        item|          Caption = ''One''|        end|        item'
+    + '|          Caption = ''Two''|        end>|      object b2A: TcxGridDBBandedColumn|        DataBinding.FieldName = ''A'''
+    + '|        Width = 50|        OnGetDisplayText = bvAGetDisplayText|        Position.BandIndex = 1|        Position.ColIndex = 0'
+    + '|        Position.RowIndex = 0|      end|      object b2A2: TcxGridDBBandedColumn|        DataBinding.FieldName = ''A''|      end');
+  Check('A7b the band change says where the bands are from', VPlan.Changes[0].NewValue = 'the bands of bv', Describe(VPlan));
+
+  VPlan := Everything(MixedForm, 'bv', 'uv');
+  ApplyBoth(VPlan, GridCopyDefaultIds(VPlan), VDfm, VUnit);
+  Check('A8 to an unbound view the data binding is not copied', (VPlan.Changes[0].NewValue = 'TcxGridColumn')
+    and VPlan.Notes[0].StartsWith('not copied: DataBinding.FieldName, Position.BandIndex')
+    and (VPlan.Columns[0].FieldName = '') and Block(VDfm, 'uv').StartsWith(
+    '    object uv: TcxGridTableView|      object uvA: TcxGridColumn|        Width = 50|        OnGetDisplayText'),
+    Describe(VPlan) + Block(VDfm, 'uv'));
+
+  VPlan := Everything(MixedForm, 'bv', 'lv');
+  Check('A9 a layout view gets no item', (Length(VPlan.Changes) = 2) and VPlan.Changes[0].Blocked.Contains('layout item')
+    and VPlan.Changes[1].Blocked.Contains('layout item') and (Length(VPlan.Columns) = 0), Describe(VPlan));
+
+  VPlan := Everything(TextForm(MIXED), 'bv', 'tv');
+  Check('A10 without a unit a column is blocked', (Length(VPlan.Changes) = 2)
+    and VPlan.Changes[0].Blocked.StartsWith('no unit'), Describe(VPlan));
+  VForm := MixedForm;
+  VForm.UnitBytes := ToBytes(MIXED_UNIT.Replace('TF = class', 'TOther = class'));
+  VPlan := Everything(VForm, 'bv', 'tv');
+  Check('A10b a unit without the form class blocks it too', (Length(VPlan.Changes) = 2)
+    and VPlan.Changes[0].Blocked.Contains('TF'), Describe(VPlan));
+
+  VPlan := Everything(MixedForm(MIXED.Replace('Width = 50', 'Hint = ''' + #233 + '''')), 'bv', 'tv');
+  Check('A11 a column with text that is not ASCII is blocked, the next one is not', (Length(VPlan.Changes) = 2)
+    and VPlan.Changes[0].Blocked.Contains('not ASCII') and (VPlan.Changes[1].Blocked = ''), Describe(VPlan));
+  VPlan := Everything(MixedForm(MIXED.Replace('        Position.RowIndex = 0' + NL, '        Position.RowIndex = 0' + NL
+    + '        object X: TThing' + NL + '        end' + NL)), 'bv', 'tv');
+  Check('A11b a column with a nested object is blocked', VPlan.Changes[0].Blocked.Contains('nested object'), Describe(VPlan));
+
+  CheckRaises('A12 a view onto itself', procedure begin Everything(Fixture, 'tvMain', 'tvMain'); end, EGridCopyError,
+    'the same view tvMain');
+end;
+
 procedure TestRendering;
 var
   VPlan, VOther: TGridCopyPlan;
@@ -384,7 +709,34 @@ begin
   Check('T12 `all` takes an unchecked change', (Length(VIds) = 1) and (VIds[0] = 1));
 end;
 
+{ `--apply DIR SOURCE TARGET`: writes every change that is not blocked into DIR\uCopy.dfm and DIR\uCopy.pas (with
+  backups), for the compiled-form part of run_v156_GCPM.ps1. }
+procedure ApplyTo(const pDir, pSource, pTarget: string);
+var
+  VPlan: TGridCopyPlan;
+  VLine: string;
 begin
+  GFixtures := pDir;
+  try
+    VPlan := PlanGridCopy(Fixture, TGridCopyRequest.Everything(pSource, pTarget));
+    for VLine in RenderGridCopyText(VPlan) do
+      Writeln(VLine);
+    Writeln('WRITTEN ', Length(WriteOutputs(ApplyGridCopy(VPlan, SelectGridCopy(VPlan, ['all'])))));
+  except
+    on E: Exception do
+    begin
+      Writeln('FAILED ', E.ClassName, ': ', E.Message);
+      ExitCode := 1;
+    end;
+  end;
+end;
+
+begin
+  if (ParamCount = APPLY_TARGET_AT) and (ParamStr(APPLY_SWITCH_AT) = '--apply') then
+  begin
+    ApplyTo(ParamStr(APPLY_DIR_AT), ParamStr(APPLY_SOURCE_AT), ParamStr(APPLY_TARGET_AT));
+    Exit;
+  end;
   GFixtures := if ParamCount >= 1 then ParamStr(1)
     else TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), '..\fixtures\fieldrepo\gridcopy'));
   try
@@ -392,6 +744,7 @@ begin
     TestOneEvent;
     TestRefusals;
     TestRendering;
+    TestEverything;
   except
     on E: Exception do
     begin

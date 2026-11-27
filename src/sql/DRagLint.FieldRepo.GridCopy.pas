@@ -89,7 +89,9 @@ type
     /// <summary>gskInsertColumn: component name and class of the new column.</summary>
     Name: string;
     ItemClass: string;
-    /// <summary>gskInsertColumn: the property lines of the block, indented relative to its `object` line.</summary>
+    /// <summary>gskInsertColumn: the property lines of the block in the order of the source column, indented relative
+    /// to its `object` line; an entry is one property (CRLF between the lines of a value of several lines). An entry
+    /// `@N` stands for the event of change N: its line is written when N is chosen.</summary>
     Lines: TArray<string>;
   end;
 
@@ -172,13 +174,24 @@ function GridViewColumns(const pForm: TGridCopyForm; const pView: string): TArra
 /// <param name="pForm">The form: DFM bytes, and the unit's bytes when there is a unit.</param>
 /// <param name="pRequest">What to copy.</param>
 /// <returns>The plan. One event: one change, or none when the target already has that handler (Remarks says so).
-/// A change is BLOCKED when the target's class has no such event, or when a `Properties.*` event goes to a column
-/// with another editor class. It is UNCHECKED when the target already has another handler (an update), when the two
-/// classes declare the event separately or the model does not know the event, and when the handler's body names the
-/// source view or one of its columns.</returns>
+/// Everything: the events of the view; then per source column, in order: its events onto the target column that shows
+/// the same field (DataBinding.FieldName, case-insensitive; a target column is used once), else a new column (an
+/// insert with Prop = '', NewValue = `CLASS FIELD`) followed by one change per event of it. The new column is named
+/// after the target view (source view name replaced, else prefixed; a number is added until no component and no
+/// identifier of the unit has the name) and declared in the form class after the view's columns. Its properties are
+/// copied as the source DFM has them, except: `Position.*` only between views of one layout, `DataBinding.*` only
+/// between two data-bound or two unbound views, and between different kinds of view (table or banded table / card)
+/// only the properties every column kind has (caption, binding, editor, visibility, sorting, the common options);
+/// Notes lists what was not copied. A banded target without bands gets, before its first new column, a change that
+/// adds the source's bands, else one band; a column from a view that is not banded goes to band 0.
+/// A change is BLOCKED when the target's class has no such event, when a `Properties.*` event goes to a column
+/// with another editor class, and for a new column: without a unit that declares the form class, in a layout view
+/// (its items need layout items), with nested objects or with text that is not 7-bit ASCII. It is UNCHECKED when the
+/// target already has another handler (an update), when the two classes declare the event separately or the model
+/// does not know the event, and when the handler's body names the source view or one of its columns.</returns>
 /// <exception cref="EGridCopyError">A view is missing, is not a grid view this model knows, or lives in a frame
-/// instance; source and target are the same component; the source has no handler for the named event; no target
-/// column shows the source column's field.</exception>
+/// instance; source and target are the same component; one event: the source has no handler for the named event, or
+/// no target column shows the source column's field.</exception>
 /// <exception cref="EDfmWriteError">The DFM is binary or cannot be read.</exception>
 /// <remarks>Both views are in ONE form. An event is a property whose last name part is On + a capital letter and
 /// whose value is one identifier.</remarks>
@@ -269,6 +282,17 @@ const
   PREFIX_DATA_CONTROLLER = 'DataController.';
   KIND_INLINE = 'inline';
   ROOT_ITEM_CLASS = 'TcxCustomGridTableItem';
+  PROP_BANDS = 'Bands';
+  PREFIX_POSITION = 'Position.';
+  PREFIX_BINDING = 'DataBinding.';
+  STEP = '  ';
+  EVENT_MARK = '@';
+  BANDS_ONE = '<' + CRLF + '    item' + CRLF + '    end>';
+  { What a column of every kind of view has (TcxCustomGridTableItem and its options); `Properties.*`, `Position.*`
+    and `DataBinding.*` have rules of their own. }
+  COMMON_ITEM_PROPS: array[0..14] of string = ('Caption', 'PropertiesClassName', 'RepositoryItem', 'Visible', 'Tag',
+    'SortIndex', 'SortOrder', 'BestFitMaxWidth', 'DateTimeGrouping', 'Options.Editing', 'Options.Filtering',
+    'Options.Focusing', 'Options.IncSearch', 'Options.ShowEditButtons', 'Styles.Content');
   OP_NAMES: array[TFrChangeOp] of string = ('insert', 'update', 'delete');
 
   GC_VIEWS: array[0..7] of TGcView = (
@@ -477,10 +501,20 @@ begin
   end;
 end;
 
+function IndexOfId(const pIds: TArray<Integer>; pId: Integer): Integer;
+var
+  VI: Integer;
+begin
+  Result := -1;
+  for VI := 0 to High(pIds) do
+    if pIds[VI] = pId then
+      Exit(VI);
+end;
+
 { ---- the planner ---- }
 
 type
-  TGridCopyPlanner = class
+  TGridCopyPlanner = class  // dl:ok god-class@43e5, high-response@43e5 -- GCP-M: one planner per copy: reader of the DFM, the plan under construction and its naming state; a split would pass all three around; GCP-M: the planner is the only caller of the DFM reader in this unit; see god-class
   strict private
     FForm: TGridCopyForm;
     FDoc: TDfmDocument;
@@ -492,6 +526,23 @@ type
     FSrcView: TGcView;
     FDstView: TGcView;
     FSourceNames: TArray<string>;
+    FUnitDoc: TDfmUnitDocument;
+    FUnitChecked: Boolean;
+    FUnitProblem: string;
+    FTaken: TArray<string>;
+    FUsedTargets: TArray<Integer>;
+    FBandsDone: Boolean;
+    FNextColumn: Integer;
+    function UnitProblem: string;
+    function NameTaken(const pName: string): Boolean;
+    function NewColumnName(const pSourceName: string): string;
+    function KeepsProp(const pName: string): Boolean;
+    function PropLines(const pProp: TDfmwProp): TArray<string>;
+    function EditorLines(pItem: Integer): string;
+    function ColumnBlocked(pItem: Integer): string;
+    procedure EnsureBands;
+    procedure AddColumn(pItem: Integer);
+    procedure PlanEverything;
     function Raw(pFrom, pTo: Integer): string;
     function IndentOf(pPos: Integer): string;
     function TargetOf(const pComponent: string): string;
@@ -503,6 +554,7 @@ type
     function SideOf(pObject: Integer; pBound: Boolean): TGcSide;
     function HandlerNamesSource(const pHandler: string): string;
     function AddChange(pOp: TFrChangeOp; const pComponent, pProp, pOld, pNew: string): Integer;
+    function AddEventChange(const pSrc, pDst: TGcSide; const pStep: TGridCopyStep; const pComponent, pOld: string): Integer;
     procedure AddEvent(pSrcObject, pDstObject: Integer; const pPath, pHandler: string);
     procedure PlanOneEvent;
     procedure Seal;
@@ -538,6 +590,7 @@ end;
 
 destructor TGridCopyPlanner.Destroy;
 begin
+  FUnitDoc.Free;
   FDoc.Free;
   inherited;
 end;
@@ -665,9 +718,7 @@ end;
 function TGridCopyPlanner.Columns(pView: Integer): TArray<TFrGridColumn>;
 var
   VItem: Integer;
-  VProp: TDfmwProp;
   VColumn: TFrGridColumn;
-  VLine, VIndent, VText: string;
 begin
   Result := nil;
   for VItem in Items(pView) do
@@ -679,18 +730,249 @@ begin
     VColumn.FieldName := FieldOf(VItem);
     VColumn.ColumnIndex := Length(Result);
     VColumn.PropertiesClassName := EditorOf(VItem);
-    VText := '';
-    for VProp in FDoc.Objects[VItem].Props do
-      if StartsText(PREFIX_EDITOR, VProp.Name) then
-      begin
-        VIndent := IndentOf(VProp.Start);
-        for VLine in Raw(VProp.Start, VProp.ValueEnd).Split([#10]) do
-          VText := VText + (if VText = '' then '' else CRLF)
-            + (if VLine.StartsWith(VIndent) then VLine.Substring(Length(VIndent)) else VLine).TrimRight([#13]);
-      end;
-    VColumn.Properties := VText;
+    VColumn.Properties := EditorLines(VItem);
     Result := Result + [VColumn];
   end;
+end;
+
+{ The lines of a property without the indentation of its first line; the first line starts at the name. }
+function TGridCopyPlanner.PropLines(const pProp: TDfmwProp): TArray<string>;
+var
+  VLine, VIndent: string;
+begin
+  Result := nil;
+  VIndent := IndentOf(pProp.Start);
+  for VLine in Raw(pProp.Start, pProp.ValueEnd).Split([#10]) do
+    Result := Result + [(if VLine.StartsWith(VIndent) then VLine.Substring(Length(VIndent)) else VLine).TrimRight([#13])];
+end;
+
+function TGridCopyPlanner.EditorLines(pItem: Integer): string;
+var
+  VProp: TDfmwProp;
+begin
+  Result := '';
+  for VProp in FDoc.Objects[pItem].Props do
+    if StartsText(PREFIX_EDITOR, VProp.Name) then
+      Result := Result + (if Result = '' then '' else CRLF) + string.Join(CRLF, PropLines(VProp));
+end;
+
+{ Why no column can be declared; '' = the unit declares the form class. Opens the unit once. }
+function TGridCopyPlanner.UnitProblem: string;
+begin
+  if not FUnitChecked then
+  begin
+    FUnitChecked := True;
+    if Length(FForm.UnitBytes) = 0 then
+      FUnitProblem := 'no unit: a new column needs its declaration in the form class'
+    else
+      try
+        FUnitDoc := TDfmUnitDocument.Create(FForm.UnitBytes, FForm.UnitFile);
+        FUnitDoc.Declarations(FFormClass);
+      except  // dl:ok try-except-swallowed@4259 -- GCP-M: not swallowed -- the message becomes the Blocked reason of every new column of the plan (UnitProblem)
+        on E: EDfmWriteError do
+          FUnitProblem := E.Message;
+      end;
+  end;
+  Result := FUnitProblem;
+end;
+
+function TGridCopyPlanner.NameTaken(const pName: string): Boolean;
+var
+  VObject: TDfmwObject;
+begin
+  Result := MatchText(pName, FTaken) or ((FUnitDoc <> nil) and (FUnitDoc.Mentions(pName) > 0));
+  if not Result then
+    for VObject in FDoc.Objects do
+      if SameText(VObject.Name, pName) then
+        Exit(True);
+end;
+
+function TGridCopyPlanner.NewColumnName(const pSourceName: string): string;
+var
+  VBase, VSource, VTarget: string;
+  VNumber: Integer;
+begin
+  VSource := FDoc.Objects[FSrc].Name;
+  VTarget := FDoc.Objects[FDst].Name;
+  VBase := VTarget + (if StartsText(VSource, pSourceName) then pSourceName.Substring(Length(VSource)) else pSourceName);
+  Result := VBase;
+  VNumber := 0;
+  while NameTaken(Result) do
+  begin
+    Inc(VNumber);
+    Result := VBase + VNumber.ToString;
+  end;
+  FTaken := FTaken + [Result];
+end;
+
+{ Does a property of a source column (not an event) go to a column of the target view? }
+function TGridCopyPlanner.KeepsProp(const pName: string): Boolean;
+begin
+  if StartsText(PREFIX_POSITION, pName) then
+    Exit(FSrcView.Layout = FDstView.Layout);
+  if StartsText(PREFIX_BINDING, pName) then
+    Exit(FSrcView.DataBound = FDstView.DataBound);
+  Result := ((FSrcView.Layout in [gclTable, gclBanded]) and (FDstView.Layout in [gclTable, gclBanded]))
+    or (FSrcView.Layout = FDstView.Layout) or StartsText(PREFIX_EDITOR, pName) or MatchText(pName, COMMON_ITEM_PROPS);
+end;
+
+function TGridCopyPlanner.ColumnBlocked(pItem: Integer): string;
+var
+  VI: Integer;
+  VChar: Char;
+begin
+  if FDstView.Layout = gclLayout then
+    Exit('an item of a layout view needs its layout item: add the item in the designer, then copy its events');
+  for VI := pItem + 1 to High(FDoc.Objects) do
+    if FDoc.Objects[VI].Parent = pItem then
+      Exit(FDoc.Objects[pItem].Name + ' has a nested object (' + FDoc.Objects[VI].Name + ')');
+  for VChar in Raw(FDoc.Objects[pItem].Start, FDoc.Objects[pItem].Finish) do
+    if VChar > LAST_ASCII then
+      Exit(FDoc.Objects[pItem].Name + ' has text that is not ASCII');
+  Result := UnitProblem;
+end;
+
+{ Before the first new column of a banded target that has no bands: the source's bands, else one band. }
+procedure TGridCopyPlanner.EnsureBands;
+var
+  VOld, VValue, VNew, VIndent, VLine: string;
+  VProp: TDfmwProp;
+  VStep: TGridCopyStep;
+  VChar: Char;
+  VAscii: Boolean;
+begin
+  if FBandsDone or (FDstView.Layout <> gclBanded) then
+    Exit;
+  FBandsDone := True;
+  if FDoc.TryProp(FDst, PROP_BANDS, VOld) then
+    Exit;
+  VValue := BANDS_ONE;
+  VNew := 'one band';
+  if FSrcView.Layout = gclBanded then
+    for VProp in FDoc.Objects[FSrc].Props do
+      if SameText(VProp.Name, PROP_BANDS) then
+      begin
+        VAscii := True;
+        for VChar in Raw(VProp.ValueStart, VProp.ValueEnd) do
+          VAscii := VAscii and (VChar <= LAST_ASCII);
+        if not VAscii then
+          Continue;
+        VIndent := IndentOf(FDoc.Objects[FSrc].Start);
+        VValue := '';
+        for VLine in Raw(VProp.ValueStart, VProp.ValueEnd).Split([#10]) do
+          VValue := VValue + (if VValue = '' then '' else CRLF)
+            + (if VLine.StartsWith(VIndent) then VLine.Substring(Length(VIndent)) else VLine).TrimRight([#13]);
+        VNew := 'the bands of ' + FDoc.Objects[FSrc].Name;
+      end;
+  VStep := Default(TGridCopyStep);
+  VStep.ChangeId := FPlan.Changes[AddChange(fcoInsert, FDoc.Objects[FDst].Name, PROP_BANDS, '', VNew)].Id;
+  VStep.Kind := gskSetProp;
+  VStep.ObjectIndex := FDst;
+  VStep.Prop := PROP_BANDS;
+  VStep.Value := VValue;
+  FPlan.Steps := FPlan.Steps + [VStep];
+end;
+
+{ A source column no target column stands for: a new column and its events. }
+procedure TGridCopyPlanner.AddColumn(pItem: Integer);
+var
+  VSource: TDfmwObject;
+  VProp: TDfmwProp;
+  VBlocked, VDropped, VHandler, VField: string;
+  VIdx, VEvent, VStepIndex: Integer;
+  VStep, VEventStep: TGridCopyStep;
+  VColumn: TFrGridColumn;
+  VTarget: TGcSide;
+begin
+  VSource := FDoc.Objects[pItem];
+  VBlocked := ColumnBlocked(pItem);
+  if VBlocked = '' then
+    EnsureBands;
+  VStep := Default(TGridCopyStep);
+  VStep.Kind := gskInsertColumn;
+  VStep.ObjectIndex := FDst;
+  VStep.Name := NewColumnName(VSource.Name);
+  VStep.ItemClass := FDstView.ItemClass;
+  VField := if FSrcView.DataBound = FDstView.DataBound then FieldOf(pItem) else '';
+  VIdx := AddChange(fcoInsert, VStep.Name, '', '', VStep.ItemClass + (if VField = '' then '' else ' ' + VField));
+  VStep.ChangeId := FPlan.Changes[VIdx].Id;
+  FPlan.Changes[VIdx].Blocked := VBlocked;
+  FPlan.Changes[VIdx].Checked := VBlocked = '';
+  if VBlocked <> '' then
+    Exit;
+  FPlan.Steps := FPlan.Steps + [VStep];
+  VStepIndex := High(FPlan.Steps);
+  VTarget.ObjClass := VStep.ItemClass;
+  VTarget.Bound := FDstView.DataBound;
+  VTarget.Editor := EditorOf(pItem);
+  VDropped := '';
+  for VProp in VSource.Props do
+    if IsEvent(VProp, VHandler) then
+    begin
+      VEventStep := Default(TGridCopyStep);
+      VEventStep.Kind := gskSetProp;
+      VEventStep.ObjectIndex := -1;
+      VEventStep.DependsOn := VStep.ChangeId;
+      VEventStep.Prop := VProp.Name;
+      VEventStep.Value := VHandler;
+      VEvent := AddEventChange(SideOf(pItem, FSrcView.DataBound), VTarget, VEventStep, VStep.Name, '');
+      if FPlan.Changes[VEvent].Blocked = '' then
+        VStep.Lines := VStep.Lines + [EVENT_MARK + FPlan.Changes[VEvent].Id.ToString];
+    end
+    else if KeepsProp(VProp.Name) then
+      VStep.Lines := VStep.Lines + [STEP + string.Join(CRLF + STEP, PropLines(VProp))]
+    else
+      VDropped := VDropped + (if VDropped = '' then '' else ', ') + VProp.Name;
+  if (FDstView.Layout = gclBanded) and (FSrcView.Layout <> gclBanded) then
+    VStep.Lines := VStep.Lines + [STEP + 'Position.BandIndex = 0', STEP + 'Position.ColIndex = ' + FNextColumn.ToString,
+      STEP + 'Position.RowIndex = 0'];
+  FPlan.Steps[VStepIndex] := VStep;
+  if VDropped <> '' then
+    FPlan.Notes[VIdx] := 'not copied: ' + VDropped;
+  VColumn := Default(TFrGridColumn);
+  VColumn.FormName := FDoc.Objects[0].Name;
+  VColumn.ViewName := FDoc.Objects[FDst].Name;
+  VColumn.ColumnName := VStep.Name;
+  VColumn.FieldName := VField;
+  VColumn.ColumnIndex := FNextColumn;
+  VColumn.PropertiesClassName := VTarget.Editor;
+  VColumn.Properties := EditorLines(pItem);
+  FPlan.Columns := FPlan.Columns + [VColumn];
+  Inc(FNextColumn);
+end;
+
+procedure TGridCopyPlanner.PlanEverything;
+var
+  VProp: TDfmwProp;
+  VHandler: string;
+  VItem, VMatch, VTarget: Integer;
+begin
+  if FSrc = FDst then
+    raise EGridCopyError.Create(FForm.DfmFile + ': source and target are the same view ' + FDoc.Objects[FSrc].Name);
+  UnitProblem;
+  FNextColumn := Length(Items(FDst));
+  for VProp in FDoc.Objects[FSrc].Props do
+    if IsEvent(VProp, VHandler) then
+      AddEvent(FSrc, FDst, VProp.Name, VHandler);
+  for VItem in Items(FSrc) do
+  begin
+    VMatch := -1;
+    if FieldOf(VItem) <> '' then
+      for VTarget in Items(FDst) do
+        if (VMatch < 0) and SameText(FieldOf(VTarget), FieldOf(VItem)) and (IndexOfId(FUsedTargets, VTarget) < 0) then
+          VMatch := VTarget;
+    if VMatch < 0 then
+    begin
+      AddColumn(VItem);
+      Continue;
+    end;
+    FUsedTargets := FUsedTargets + [VMatch];
+    for VProp in FDoc.Objects[VItem].Props do
+      if IsEvent(VProp, VHandler) then
+        AddEvent(VItem, VMatch, VProp.Name, VHandler);
+  end;
+  if Length(FPlan.Changes) = 0 then
+    FPlan.Remarks := [FDoc.Objects[FDst].Name + ' has every event and column of ' + FDoc.Objects[FSrc].Name + ' already'];
 end;
 
 { The first name of the source view (the view, its columns) that the body of the handler mentions; '' = none, no
@@ -735,43 +1017,54 @@ begin
   Result := High(FPlan.Changes);
 end;
 
-{ One event of an existing source object to an existing target object. }
-procedure TGridCopyPlanner.AddEvent(pSrcObject, pDstObject: Integer; const pPath, pHandler: string);
+{ The change and the step of one event (pStep: Prop = the event, Value = the handler, the target); the index of the
+  change. pOld = the handler the target component pComponent has now. }
+function TGridCopyPlanner.AddEventChange(const pSrc, pDst: TGcSide; const pStep: TGridCopyStep;
+  const pComponent, pOld: string): Integer;
 var
-  VOld, VWhy, VNamed, VNote: string;
-  VIdx: Integer;
+  VWhy, VNamed, VNote: string;
   VStep: TGridCopyStep;
-  VDst: TDfmwObject;
 begin
-  VDst := FDoc.Objects[pDstObject];
-  FDoc.TryProp(pDstObject, pPath, VOld);
-  if SameText(VOld, pHandler) then
-  begin
-    FPlan.Remarks := FPlan.Remarks + [VDst.Name + '.' + pPath + ' is ' + pHandler + ' already'];
-    Exit;
-  end;
-  VIdx := AddChange(if VOld = '' then fcoInsert else fcoUpdate, VDst.Name, pPath, VOld, pHandler);
+  Result := AddChange(if pOld = '' then fcoInsert else fcoUpdate, pComponent, pStep.Prop, pOld, pStep.Value);
   VNote := '';
-  case EventVerdict(SideOf(pSrcObject, FSrcView.DataBound), SideOf(pDstObject, FDstView.DataBound), pPath, VWhy) of
+  case EventVerdict(pSrc, pDst, pStep.Prop, VWhy) of
     gvBlocked:
-      FPlan.Changes[VIdx].Blocked := VWhy;
+      FPlan.Changes[Result].Blocked := VWhy;
     gvUnchecked:
       VNote := VWhy;
   end;
-  if VOld <> '' then
-    VNote := VNote + (if VNote = '' then '' else '; ') + 'replaces the handler ' + VOld;
-  VNamed := HandlerNamesSource(pHandler);
+  if pOld <> '' then
+    VNote := VNote + (if VNote = '' then '' else '; ') + 'replaces the handler ' + pOld;
+  VNamed := HandlerNamesSource(pStep.Value);
   if VNamed <> '' then
     VNote := VNote + (if VNote = '' then '' else '; ') + 'the handler names ' + VNamed + ' of the source';
-  FPlan.Notes[VIdx] := VNote;
-  FPlan.Changes[VIdx].Checked := (FPlan.Changes[VIdx].Blocked = '') and (VNote = '');
+  FPlan.Notes[Result] := VNote;
+  FPlan.Changes[Result].Checked := (FPlan.Changes[Result].Blocked = '') and (VNote = '');
+  VStep := pStep;
+  VStep.ChangeId := FPlan.Changes[Result].Id;
+  FPlan.Steps := FPlan.Steps + [VStep];
+end;
+
+{ One event of an existing source object to an existing target object. }
+procedure TGridCopyPlanner.AddEvent(pSrcObject, pDstObject: Integer; const pPath, pHandler: string);
+var
+  VOld: string;
+  VStep: TGridCopyStep;
+begin
+  FDoc.TryProp(pDstObject, pPath, VOld);
+  if SameText(VOld, pHandler) then
+  begin
+    if FPlan.Request.EventName <> '' then
+      FPlan.Remarks := FPlan.Remarks + [FDoc.Objects[pDstObject].Name + '.' + pPath + ' is ' + pHandler + ' already'];
+    Exit;
+  end;
   VStep := Default(TGridCopyStep);
-  VStep.ChangeId := FPlan.Changes[VIdx].Id;
   VStep.Kind := gskSetProp;
   VStep.ObjectIndex := pDstObject;
   VStep.Prop := pPath;
   VStep.Value := pHandler;
-  FPlan.Steps := FPlan.Steps + [VStep];
+  AddEventChange(SideOf(pSrcObject, FSrcView.DataBound), SideOf(pDstObject, FDstView.DataBound), VStep,
+    FDoc.Objects[pDstObject].Name, VOld);
 end;
 
 procedure TGridCopyPlanner.PlanOneEvent;
@@ -852,7 +1145,7 @@ begin
   if pRequest.EventName <> '' then
     PlanOneEvent
   else
-    raise EGridCopyError.Create('copying every event and column is not built yet');
+    PlanEverything;
   Seal;
   Result := FPlan;
 end;
@@ -969,16 +1262,6 @@ begin
     Result := Result + [VChange.Id];
 end;
 
-function IndexOfId(const pIds: TArray<Integer>; pId: Integer): Integer;
-var
-  VI: Integer;
-begin
-  Result := -1;
-  for VI := 0 to High(pIds) do
-    if pIds[VI] = pId then
-      Exit(VI);
-end;
-
 procedure CheckIds(const pPlan: TGridCopyPlan; const pIds: TArray<Integer>);
 var
   VId: Integer;
@@ -997,29 +1280,87 @@ begin
         [VStep.ChangeId, VStep.DependsOn]);
 end;
 
+{ The block of a new column: its lines, the events among them only when their change is chosen. }
+function ColumnBlock(const pPlan: TGridCopyPlan; const pColumn: TGridCopyStep; const pIds: TArray<Integer>): TArray<string>;
+var
+  VLine: string;
+  VStep: TGridCopyStep;
+  VId: Integer;
+begin
+  Result := ['object ' + pColumn.Name + ': ' + pColumn.ItemClass];
+  for VLine in pColumn.Lines do
+    if not VLine.StartsWith(EVENT_MARK) then
+      Result := Result + VLine.Split([CRLF])
+    else
+    begin
+      VId := VLine.Substring(Length(EVENT_MARK)).ToInteger;
+      if IndexOfId(pIds, VId) >= 0 then
+        for VStep in pPlan.Steps do
+          if VStep.ChangeId = VId then
+            Result := Result + [STEP + VStep.Prop + ' = ' + VStep.Value];
+    end;
+  Result := Result + ['end'];
+end;
+
+{ The new columns of the chosen changes: their blocks after the view's columns, their declarations after them too. }
+function InsertColumns(const pPlan: TGridCopyPlan; const pIds: TArray<Integer>; pDoc: TDfmDocument;
+  pUnit: TDfmUnitDocument): Boolean;
+var
+  VStep: TGridCopyStep;
+  VSiblings: TArray<string>;
+  VI: Integer;
+begin
+  Result := False;
+  for VStep in pPlan.Steps do
+    if (VStep.Kind = gskInsertColumn) and (IndexOfId(pIds, VStep.ChangeId) >= 0) then
+    begin
+      VSiblings := nil;
+      for VI := VStep.ObjectIndex + 1 to High(pDoc.Objects) do
+        if (pDoc.Objects[VI].Parent = VStep.ObjectIndex) and IsItemClass(pDoc.Objects[VI].ObjClass) then
+          VSiblings := VSiblings + [pDoc.Objects[VI].Name];
+      pDoc.InsertChild(VStep.ObjectIndex, ColumnBlock(pPlan, VStep, pIds), VSiblings);
+      pUnit.AddField(pDoc.Objects[0].ObjClass, VStep.Name, VStep.ItemClass,
+        VSiblings + [pDoc.Objects[VStep.ObjectIndex].Name]);
+      Result := True;
+    end;
+end;
+
 function ApplyGridCopy(const pPlan: TGridCopyPlan; const pIds: TArray<Integer>): TArray<TDfmwOutput>;
 var
   VDoc: TDfmDocument;
+  VUnit: TDfmUnitDocument;
   VStep: TGridCopyStep;
-  VOutput: TDfmwOutput;
+  VOutput, VUnitOutput: TDfmwOutput;
+  VColumns: Boolean;
 begin
   Result := nil;
   CheckIds(pPlan, pIds);
   if Length(pIds) = 0 then
     Exit;
+  VUnit := nil;
   VDoc := TDfmDocument.Create(pPlan.Form.DfmBytes, pPlan.Form.DfmFile);
   try
+    if Length(pPlan.Form.UnitBytes) > 0 then
+      VUnit := TDfmUnitDocument.Create(pPlan.Form.UnitBytes, pPlan.Form.UnitFile);
     for VStep in pPlan.Steps do
       if (VStep.Kind = gskSetProp) and (VStep.ObjectIndex >= 0) and (IndexOfId(pIds, VStep.ChangeId) >= 0) then
         VDoc.SetProp(VStep.ObjectIndex, VStep.Prop, VStep.Value, nil);
+    VColumns := InsertColumns(pPlan, pIds, VDoc, VUnit);
     VOutput.FileName := pPlan.Form.DfmFile;
     VOutput.OldBytes := pPlan.Form.DfmBytes;
     VOutput.NewBytes := VDoc.Output;
+    VUnitOutput.FileName := pPlan.Form.UnitFile;
+    VUnitOutput.OldBytes := pPlan.Form.UnitBytes;
+    if VColumns then
+      VUnitOutput.NewBytes := VUnit.Output;
   finally
+    VUnit.Free;
     VDoc.Free;
   end;
   DfmTextToBinary(VOutput.NewBytes);
   Result := [VOutput];
+  if VColumns then
+    Result := Result + [VUnitOutput];
 end;
 
 function CountOf(const pPlan: TGridCopyPlan; pBlocked: Boolean): Integer;
