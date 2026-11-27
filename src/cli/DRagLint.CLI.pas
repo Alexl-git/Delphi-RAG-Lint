@@ -24922,6 +24922,7 @@ var
   WantJson    : Boolean                            ;
   LibStore    : ISymbolStore                       ; { forced candidates only; opened on first need }
   LibTried    : Boolean                            ;
+  Why1        : string                             ; { v156 USESFIX: TryEdit's reason for the entry in hand }
 
   function UnitStemOf(const APath: string): string;
   begin
@@ -24956,8 +24957,130 @@ var
       if SameText(Sym.Kind.ToText, 'initialization') or SameText(Sym.Kind.ToText, 'finalization') then Exit(True);
   end;
 
+{ v156 USESFIX: the entry shapes CommentEntry's one-unit-per-line test cannot take -- the LAST
+    entry of a clause (`Unit;`) and an entry that shares its line with `uses` or with other
+    entries (`uses A, Unit;`). Before this, both were refused BEFORE any compile and reported as
+    "did not verify", so a sole `uses AppMain;` could never move. The unit is taken out of the
+    line as a whole token with one adjoining comma; a clause left without entries is commented
+    out with its `uses`. Returns False, Work untouched, when the line carries a comment, a
+    directive or a quoted path (no safe token edit), or the unit is not a whole token on it. }
+  function RemoveSharedEntry(AEntryLine: Integer; const AUnitName: string): Boolean;
+  const
+    MARK_OPEN = '   { drag-lint:';
+    MARK_FMT  = '   { drag-lint: moved/removed %s }';
+    MARK_LINE = '   { drag-lint: moved/removed }';
+    COMMENT_OPENERS: array[0..3] of string = ('{', '//', '(*', '''');
+  var
+    Head: string ;
+    Tail: string ;
+    P   : Integer;
+    E   : Integer;
+    Pre : string ;
+    Post: string ;
+
+    function IsNamePart(const AText: string; AIndex: Integer): Boolean;
+    begin
+      Result:= InRange(AIndex, 1, Length(AText)) and CharInSet(AText[AIndex], ['a'..'z', '0'..'9', '_', '.']);
+    end;
+
+    function HasComment(const AText: string): Boolean;
+    begin
+      Result:= False;
+      for var Opener in COMMENT_OPENERS do
+        if AText.Contains(Opener) then Exit(True);
+    end;
+
+    { comment a whole line out, keeping its indentation }
+    procedure CommentLine(ALine: Integer);
+    var
+      Q: Integer;
+    begin
+      Q:= 1;
+      while (Q <= Length(Work[ALine])) and (Work[ALine][Q] = ' ') do Inc(Q);
+      Work[ALine]:= Copy(Work[ALine], 1, Q - 1) + '// ' + Copy(Work[ALine], Q, MaxInt) + MARK_LINE;
+    end;
+
+    { the unit as a WHOLE token of AText: AFirst = its first char, AAfter = the char after it }
+    function FindToken(const AText: string; out AFirst, AAfter: Integer): Boolean;
+    var
+      LowText: string ;
+      Tok    : string ;
+      From   : Integer;
+    begin
+      LowText:= LowerCase(AText);
+      Tok:= LowerCase(AUnitName);
+      From:= 1;
+      repeat
+        AFirst:= PosEx(Tok, LowText, From);
+        AAfter:= AFirst + Length(Tok);
+        From:= AFirst + 1;
+      until (AFirst = 0) or ((not IsNamePart(LowText, AFirst - 1)) and (not IsNamePart(LowText, AAfter)));
+      Result:= AFirst > 0;
+    end;
+
+    { `Unit;` on its own line: the clause's `;` moves up to the entry before it, or the
+      clause goes altogether when this was its only entry. }
+    function CloseClauseAbove: Boolean;
+    var
+      J    : Integer;
+      Prev : string ;
+      PrevT: string ;
+    begin
+      J:= AEntryLine - 1;
+      while (J >= 0) and (Trim(Work[J]) = '') do Dec(J);
+      if (J < 0) or HasComment(Work[J]) then Exit(False);
+      Prev:= Work[J];
+      PrevT:= Trim(Prev);
+      Result:= True;
+      if SameText(PrevT, 'uses') then CommentLine(J)
+      else if PrevT.EndsWith(',') then Work[J]:= Copy(Prev, 1, LastDelimiter(',', Prev) - 1) + ';'
+      else if IsNamePart(LowerCase(PrevT), Length(PrevT)) then Work[J]:= TrimRight(Prev) + ';' { leading-comma list }
+      else Result:= False;
+      if Result then CommentLine(AEntryLine);
+    end;
+
+  begin
+    Result:= False;
+    if not InRange(AEntryLine, 0, Work.Count - 1) then Exit;
+    { an earlier edit of this run may have marked the line already: the marker is ours, not a comment to fear }
+    Head:= Work[AEntryLine];
+    Tail:= '';
+    P:= Pos(MARK_OPEN, Head);
+    if P > 0 then
+    begin
+      Tail:= Copy(Head, P, MaxInt);
+      Head:= Copy(Head, 1, P - 1);
+    end;
+    { no token on the line = the index line is stale, or the clause is written another way }
+    if HasComment(Head) or not FindToken(Head, P, E) then Exit;
+
+    Pre := TrimRight(Copy(Head, 1, P - 1));
+    Post:= TrimLeft(Copy(Head, E, MaxInt));
+    Tail:= Tail + Format(MARK_FMT, [AUnitName]);
+
+    if Post.StartsWith(',') then { first or middle entry: the unit and the comma after it go }
+    begin
+      Work[AEntryLine]:= Copy(Head, 1, P - 1) + TrimLeft(Post.Substring(1)) + Tail;
+      Result:= True;
+    end
+    else if (Post <> '') and not Post.StartsWith(';') then Result:= False
+    else if Pre.EndsWith(',') then { last entry of a shared line: the comma before it goes, `;` stays }
+    begin
+      Work[AEntryLine]:= TrimRight(Copy(Pre, 1, Length(Pre) - 1)) + Post + Tail;
+      Result:= True;
+    end
+    else if Post = '' then Result:= False { a bare `Unit` line is CommentEntry's own shape }
+    else if SameText(Trim(Pre), 'uses') then { `uses Unit;` -- the whole clause is this line }
+    begin
+      CommentLine(AEntryLine);
+      Result:= True;
+    end
+    else if Trim(Pre) = '' then Result:= CloseClauseAbove;
+  end; // function
+
 { comment out the unit on AEntryLine and repair a dangling comma so the list
-    stays valid. Returns False if the line isn't a clean single-unit entry. }
+    stays valid. Returns False if the line isn't a clean single-unit entry and
+    RemoveSharedEntry cannot take the unit out of it either. }
   function CommentEntry(AEntryLine: Integer; const AUnitName: string): Boolean;
   var
     raw : string ;
@@ -24972,7 +25095,7 @@ var
     var Core:= Body;
     if Core.StartsWith(',') then Core:= Trim(Core.Substring(1));
     if Core.EndsWith(',') then Core:= Trim(Core.Substring(0, Core.Length - 1));
-    if not SameText(Core, AUnitName) then Exit; { not a clean one-per-line entry }
+    if not SameText(Core, AUnitName) then Exit(RemoveSharedEntry(AEntryLine, AUnitName)); { not a clean one-per-line entry }
 
     var hadTrailingComma:= Body.EndsWith  (',');
     var hadLeadingComma := Body.StartsWith(',');
@@ -25061,8 +25184,10 @@ var
   end; // procedure
 
 { try one edit on a fresh copy, compile it, accept into Work only if it adds
-    no new error vs the baseline. AKind: 'move' | 'remove'. }
-  function TryEdit(const AUnitName: string; AEntryLine: Integer; const AKind: string): Boolean;
+    no new error vs the baseline. AKind: 'move' | 'remove'. AWhy says which half
+    refused it (v156 USESFIX): the entry SHAPE, before any compile, or the VERIFY,
+    with the compiler message that decided it; empty when the edit was accepted. }
+  function TryEdit(const AUnitName: string; AEntryLine: Integer; const AKind: string; out AWhy: string): Boolean;
   const
     USESFIX_GUID_CHARS = 8; { hex chars of the GUID kept in the per-edit shadow dir name }
   var
@@ -25074,6 +25199,7 @@ var
     NewErr   : Boolean            ;
   begin
     Result:= False;
+    AWhy:= '';
     Trial:= TStringList.Create;
     try
       Trial.Assign(Work);
@@ -25081,7 +25207,11 @@ var
       var Saved:= Work;
       Work:= Trial;
       try
-        if not CommentEntry(AEntryLine, AUnitName) then Exit;
+        if not CommentEntry(AEntryLine, AUnitName) then
+        begin
+          AWhy:= Format('not a clean entry: line %d carries a comment or is not a plain uses entry -- nothing was compiled', [AEntryLine + 1]);
+          Exit;
+        end;
         if AKind = 'move' then AddToImplUses(AUnitName);
       finally
         Work:= Saved;
@@ -25111,7 +25241,11 @@ var
         false-pass that let a bad move through: the same fatal appeared in both
         baseline and after, so the diff saw "no new error"). Reject = inconclusive. }
       for var Ft in Res.Findings do
-        if SameText(Ft.Severity, 'Fatal') then Exit; { Result stays False -> skipped }
+        if SameText(Ft.Severity, 'Fatal') then
+        begin
+          AWhy:= Format('%s did not verify: the compile aborted -- %s %s', [AKind, Ft.Code, Ft.Message]);
+          Exit; { Result stays False -> skipped }
+        end;
 
       AfterSig:= ErrorSignatures(Res);
 
@@ -25121,7 +25255,12 @@ var
         var Found:= False;
         var B: string;
         for B in Baseline do if B = sg then begin Found:= True; Break; end;
-        if not Found then begin NewErr:= True; Break; end;
+        if not Found then
+        begin
+          NewErr:= True;
+          AWhy:= Format('%s did not verify: new compile error %s', [AKind, sg]);
+          Break;
+        end;
       end;
 
       if not NewErr then
@@ -25436,7 +25575,7 @@ begin
           AddItem(Uo.UnitName, 'move', Uo.StartLine, 'deselected', 'not in --only');
           if not WantJson then Writeln(Format('  -      %s  (deselected by --only)', [Uo.UnitName]));
         end
-        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'move') then
+        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'move', Why1) then
         begin
           Inc(nMove);
           AddItem(Uo.UnitName, 'move', Uo.StartLine, 'verified', '');
@@ -25445,8 +25584,8 @@ begin
         else
         begin
           Inc(nSkip);
-          AddItem(Uo.UnitName, 'move', Uo.StartLine, 'skipped', 'move did not verify / not a clean entry');
-          if not WantJson then Writeln(Format('  skip   %s  (move did not verify / not a clean entry)', [Uo.UnitName]));
+          AddItem(Uo.UnitName, 'move', Uo.StartLine, 'skipped', Why1);
+          if not WantJson then Writeln(Format('  skip   %s  (%s)', [Uo.UnitName, Why1]));
         end;
       end
       { REMOVE: never referenced, only with --remove-unused, and only if it has
@@ -25465,7 +25604,7 @@ begin
           AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'deselected', 'not in --only');
           if not WantJson then Writeln(Format('  -      %s  (deselected by --only)', [Uo.UnitName]));
         end
-        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove') then
+        else if TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove', Why1) then
         begin
           Inc(nRemove);
           AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'verified', '');
@@ -25474,8 +25613,8 @@ begin
         else
         begin
           Inc(nSkip);
-          AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'skipped', 'remove did not verify / not a clean entry');
-          if not WantJson then Writeln(Format('  skip   %s  (remove did not verify / not a clean entry)', [Uo.UnitName]));
+          AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'skipped', Why1);
+          if not WantJson then Writeln(Format('  skip   %s  (%s)', [Uo.UnitName, Why1]));
         end;
       end; // if
     end; // for
@@ -25502,6 +25641,7 @@ begin
         if not Selected(Uo.UnitName) or ItemListed(Uo.UnitName) then Continue;
         var IsIntf: Boolean:= Uo.Section = uusInterface;
         var FKind : string := if IsIntf then 'move' else 'remove';
+        Why1:= ''; { TryEdit may not be reached for this unit }
         var HasInit: Boolean;
         if not ForcedInitKnown(Uo.UnitName, HasInit) then
         begin
@@ -25511,13 +25651,13 @@ begin
           if not WantJson then Writeln(Format('  skip   %s  (initialization section unknown -- not touched)', [Uo.UnitName]));
           Continue;
         end;
-        if (not HasInit) and AArgs.RemoveUnused and TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove') then
+        if (not HasInit) and AArgs.RemoveUnused and TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove', Why1) then
         begin
           Inc(nRemove);
           AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'verified', '');
           if not WantJson then Writeln(Format('  REMOVE %s  commented out (line %d)', [Uo.UnitName, Uo.StartLine]));
         end
-        else if IsIntf and TryEdit(Uo.UnitName, Uo.StartLine - 1, 'move') then
+        else if IsIntf and TryEdit(Uo.UnitName, Uo.StartLine - 1, 'move', Why1) then
         begin
           Inc(nMove);
           AddItem(Uo.UnitName, 'move', Uo.StartLine, 'verified',
@@ -25533,6 +25673,7 @@ begin
           else if HasInit then Why:= 'has an initialization section, and moving it to the implementation did not verify'
           else if IsIntf then Why:= 'neither removing it nor moving it to the implementation verified / not a clean entry' + NeedsFlag
           else Why:= 'removing it did not verify / not a clean entry' + NeedsFlag;
+          if Why1 <> '' then Why:= Why + ' -- ' + Why1; { which half refused the last attempt }
           AddItem(Uo.UnitName, FKind, Uo.StartLine, 'skipped', Why);
           if not WantJson then Writeln(Format('  skip   %s  (%s)', [Uo.UnitName, Why]));
         end;
