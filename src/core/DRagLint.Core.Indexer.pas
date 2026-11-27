@@ -2946,7 +2946,7 @@ begin
           FactsBody:= SliceBodyLines(SourceLines, Sym.ImplStartLine, Sym.ImplEndLine);
           Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore, FactsAst);
           Facts.SymbolId:= NewSymId;
-          if FStoreSelfCheck and (Facts.MustWrites = '') then Facts.MustWrites:= SELF_CHECK_MUST;
+          if FStoreSelfCheck then Facts.MustWrites:= SELF_CHECK_MUST; { test seed REPLACES the analysed value: the read-back check compares the value actually written }
           FStore.PutSymbolFacts(Facts);
           // taint T1 (2026-10-27): the routine's data_flows rows, from the SAME
           // matched defProc (no second AST lookup). Field names: this file's
