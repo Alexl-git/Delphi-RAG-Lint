@@ -117,6 +117,24 @@ const
 /// </remarks>
 function CheckInit(const pDbPath, pTarget, pAt: string; const pOptions: THbOptions): THbAnswer;
 
+/// <summary>1.56 lane HB5: the ordered-root solve of check-init over ANY two site sets -- "has some
+/// site of pMarks completed before pQueries[i] runs, on every path from every root that reaches
+/// it?" (initialization chain, program block, handler order, call chains).</summary>
+/// <param name="pDbPath">The project index; must exist and be readable.</param>
+/// <param name="pMarks">The sites of the earlier event. Every one counts as DEFINITE: the caller
+/// leaves out a site where the event may not happen. A site in a program block may carry RoutineId 0;
+/// a site in an initialization section carries the section symbol.</param>
+/// <param name="pQueries">The sites to judge, same rules.</param>
+/// <param name="pMaxRoutines">Routine bodies to solve; 0 = HB_DEFAULT_MAX_ROUTINES.</param>
+/// <returns>JudgedUses[i] answers pQueries[i]: hvSet = proven, hvMayBeUnset = not proven (Why and
+/// Reasons say why, in check-init's words: "writer" = a mark, "use" = the query). Budget is filled;
+/// an exhausted or timed-out solve proves nothing (no hvSet). Target, Writers and Summary are not
+/// filled.</returns>
+/// <remarks>Read-only. Not thread-safe. Does NOT start the wall clock: it honours the one the caller
+/// started (HbStartClock). A proof can lean on the handler-order heuristic or on indirect-call
+/// edges: the use then carries hrReliedOnHandlerOrder / hrReliedOnIndirectEdges.</remarks>
+function HbOrderSolve(const pDbPath: string; const pMarks, pQueries: TArray<THbSite>; pMaxRoutines: Integer): THbAnswer;
+
 implementation
 
 uses
@@ -1902,6 +1920,55 @@ begin
   var Prof:= HbProfileText;
   if (Prof <> '') and IsConsole then
     Writeln(ErrOutput, Format('  CHECK-INIT PROFILE %s total %d ms | %s', [Result.Target.QName, Result.Budget.Ms, Prof]));
+end;
+
+{ ---------------------------------------------------------------------------------------------- }
+{ v156 HB5: the generic order solve                                                               }
+
+const
+  ORDER_TARGET = 'A';
+
+function HbOrderSolve(const pDbPath: string; const pMarks, pQueries: TArray<THbSite>; pMaxRoutines: Integer): THbAnswer;
+begin
+  Result:= Default(THbAnswer);
+  var Index:= TChartsIndex.Create(pDbPath);
+  try
+    var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDbPath, {AReadOnly=}True);
+    var Events:= Default(THbEvents);
+    Events.Target.QName:= ORDER_TARGET;
+    for var M in pMarks do
+    begin
+      var W:= Default(THbWriter);
+      W.Site:= M;
+      W.How:= hwAssign;
+      W.Resolved:= True;
+      W.Counts:= True;
+      Events.Writers:= Events.Writers + [W];
+    end;
+    for var Q in pQueries do
+    begin
+      var U:= Default(THbUse);
+      U.Site:= Q;
+      Events.UseSites:= Events.UseSites + [U];
+    end;
+    PlaceMainBlockSites(Index, Events);
+    var Solver:= TSolver.Create(Index, Store, if pMaxRoutines > 0 then pMaxRoutines else HB_DEFAULT_MAX_ROUTINES, Events);
+    try
+      Solver.Run(Result);
+    finally
+      Solver.Free;
+    end;
+    if HbTimedOut or Result.Budget.Exhausted then
+    begin
+      { a solve that ran out proves nothing }
+      Result.Budget.Exhausted:= True;
+      Result.Budget.TimedOut:= HbTimedOut;
+      for var I:= 0 to High(Result.JudgedUses) do
+        if Result.JudgedUses[I].Verdict = hvSet then Result.JudgedUses[I].Verdict:= hvMayBeUnset;
+    end;
+  finally
+    Index.Free;
+  end;
 end;
 
 end.
