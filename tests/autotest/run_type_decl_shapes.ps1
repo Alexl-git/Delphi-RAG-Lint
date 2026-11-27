@@ -88,7 +88,7 @@ $indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 function Row([string]$Name) {
-  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name $Name --db $db --json 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name $Name --db $db --json 2>$null | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
            Where-Object { $_ -notmatch 'loaded defaults' }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return $null }

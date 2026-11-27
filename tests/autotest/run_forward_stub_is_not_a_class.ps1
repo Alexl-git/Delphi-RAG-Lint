@@ -201,7 +201,8 @@ try {
   $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name TFoo --exact --db $db 2>$null } | Out-String)
   $fooLines = @($txt -split "`r?`n" | Where-Object { $_ -match '\bfwstub\.TFoo\b' -and $_ -notmatch 'fwstub\.TFoo\.' })
   Check 'text: one fwstub.TFoo row' ($fooLines.Count -eq 1) "rows=$($fooLines.Count)"
-  if ($fooLines.Count -ge 1) { Check "text: row ends with 'forward at line $stubLine'" ($fooLines[0] -match "forward at line $stubLine\s*$") "got: [$($fooLines[0])]" }
+  # 1.56 TS-N: every text row ends in the place token (` place=<p>`), so the forward marker is the last field before it.
+if ($fooLines.Count -ge 1) { Check "text: row ends with 'forward at line $stubLine place=project'" ($fooLines[0] -match "forward at line $stubLine place=project\s*$") "got: [$($fooLines[0])]" }
   $txtEmpty = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name TEmpty --exact --db $db 2>$null } | Out-String)
   Check 'text: no forward marker on TEmpty' ($txtEmpty -notmatch 'forward at line')
 
