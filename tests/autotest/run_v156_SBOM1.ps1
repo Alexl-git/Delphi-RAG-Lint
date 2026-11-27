@@ -247,5 +247,11 @@ Check 'P5 a missing catalogue: exit 1, no document' (($r.Code -eq 1) -and ($r.Ou
 Write-Host '-- P6: read-only' -ForegroundColor Cyan
 Check 'P6 the project index is byte-identical after every run' ((Get-FileHash -Algorithm SHA256 $ProjDb).Hash -eq $hashBefore)
 
+Write-Host '-- P7: catalogue purls follow the purl spec' -ForegroundColor Cyan
+$cat = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\..\rules\sbom-libraries.json') | ConvertFrom-Json
+$purls = @($cat.PSObject.Properties.Value | ForEach-Object { $_ } | ForEach-Object { $_.purl } | Where-Object { $_ })
+$badPurl = @($purls | Where-Object { $_ -cmatch '^pkg:(github|bitbucket)/' -and $_ -cne $_.ToLowerInvariant() })
+Check 'P7 github/bitbucket purls are lowercase (purl spec: type, namespace and name)' (($purls.Count -gt 0) -and ($badPurl.Count -eq 0)) ($badPurl -join ' ')
+
 Write-Host ("run_v156_SBOM1: {0} passed, {1} failed" -f $script:Pass, $script:Fail)
 if ($script:Failed) { exit 1 } else { exit 0 }

@@ -35,6 +35,7 @@ const
   DEFAULT_CAP = 20;
   FULL_RATIO = 1.0;
   NO_RATIO = 0.0;
+  NO_COVERAGE_NOTE = 'no coverage imported -- complexity only'; // said in the chart and in the meta when import-coverage was never run
   PERCENT = 100;
   GAP_EXPONENT = 3;
   HOT_FILL = '#FDECEE';
@@ -120,6 +121,8 @@ begin
   var Csv:= TStringBuilder.Create;
   try
     Sb.AppendLine('digraph risk {');
+    if not Imported then
+      Sb.AppendLine('  label="' + NO_COVERAGE_NOTE + '"; labelloc=t;');
     Sb.AppendLine('  rankdir=TB; bgcolor="transparent"; nodesep=0.1; ranksep=0.15;');
     Sb.AppendLine('  node [shape=box, style="rounded,filled", fontname="Consolas", fontsize=12];');
     Csv.AppendLine('rank,routine,file,line,cc,coverage,has_data,score');
@@ -138,8 +141,8 @@ begin
         Url:= Format(', URL="%s"', [RowHref(R.Path, R.Line)]);
       end;
       Sb.AppendLine(Format('  r%d [fillcolor="%s", label="%s\ncc %d  coverage %s%%%s  risk %s", tooltip="%s"%s];',
-        [K, if R.Score >= HOT_SCORE then HOT_FILL else COOL_FILL, XmlText(R.Name), R.Cyclomatic, Pct(R.Coverage),
-         if R.HasData then '' else ' (no data)', Num(R.Score), XmlText(R.Name), Url]));
+        [K, if R.Score >= HOT_SCORE then HOT_FILL else COOL_FILL, XmlText(R.Name), R.Cyclomatic, if Imported then Pct(R.Coverage) else 'n/a',
+         if R.HasData or not Imported then '' else ' (no data)', Num(R.Score), XmlText(R.Name), Url]));
       if K > 0 then
         Sb.AppendLine(Format('  r%d -> r%d [style=invis];', [K - 1, K]));
     end;
@@ -156,6 +159,7 @@ begin
       TMetaField.Int('WithCoverage', WithData), TMetaField.Int('WithoutCoverage', Length(All) - WithData),
       TMetaField.Int('UnmatchedRecords', Length(Match.UnmatchedRoutines)), TMetaField.Int('UnmatchedFiles', Length(Match.UnmatchedFiles)),
       TMetaField.Bool('CoverageImported', Imported), TMetaField.Str('CoverageSource', Cov.Source),
+      TMetaField.Str('Note', if Imported then '' else NO_COVERAGE_NOTE),
       TMetaField.Int('ClickTargets', Result.Layout.Anchors), TMetaField.Int('Expected', Expected),
       TMetaField.Bool('AllClickable', Result.AllClickable)];
   finally

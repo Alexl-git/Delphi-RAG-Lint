@@ -63,6 +63,8 @@ const
   SQL_INPUT_ALIASES = 'SELECT "ALIAS" FROM "DL_FIELD_INPUTS" WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F ' +
     'AND "BINDING" = ''''';
   MSG_SKIPPED = 'lineage: skipped (%s)';
+  MSG_OLD_SCHEMA = 'lineage: skipped (the repository is schema %d: derived fields need schema %d; run repo migrate --apply)';
+  SCHEMA_WITH_DERIVED = 5; // DL_FIELDS_INFO.DERIVED_KIND exists (GC-S)
   MSG_PREFIX = 'lineage: '; // ELineageError messages start with it
   MSG_NOT_INDEXED = 'lineage: %s is not in the index: its %d fields without a table column are not looked at';
   MSG_STALE = 'lineage: %s: nothing proposed for its %d fields without a table column (reindex, then read again)';
@@ -538,6 +540,13 @@ begin
     // a note about work NOT done: said only when a dataset has a field the lineage would have looked at
     if HasCandidates(pHost) then
       pHost.Warn(NO_INDEX_LINE);
+    Exit;
+  end;
+  if RepoSchemaVersion(pHost.Repo) < SCHEMA_WITH_DERIVED then
+  begin
+    // DERIVED_KIND is not a column of a schema-4 repository: say so once, read nothing (no exception)
+    if HasCandidates(pHost) then
+      pHost.Warn(Format(MSG_OLD_SCHEMA, [RepoSchemaVersion(pHost.Repo), SCHEMA_WITH_DERIVED]));
     Exit;
   end;
   try
