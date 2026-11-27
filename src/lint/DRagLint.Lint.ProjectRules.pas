@@ -4423,15 +4423,16 @@ const
   CStemSep                 = ';';
 
 type
-  { One unit's inline routines. Triggers / OwnerOf are filled by the scan; NeedsOf by Load. }
+  { One unit's inline routines. FTriggers / FOwnerOf are filled by the scan; FNeedsOf by Load. }
   TInlineUnitFacts = class
+  private
+    FStore   : ISymbolStore;                        { the store that holds the unit; nil = not indexed }
+    FFileId  : Int64;
+    FTriggers: TDictionary<string, TArray<Int64>>;  { lowercase caller-side name -> inline routine ids }
+    FOwnerOf : TDictionary<Int64, Int64>;           { inline routine id -> its class / record id, 0 = unit level }
+    FNeedsOf : TDictionary<Int64, string>;          { inline routine id -> ';stem;stem;' of the units its text reaches }
+    FLoaded  : Boolean;
   public
-    Store   : ISymbolStore;                        { the store that holds the unit; nil = not indexed }
-    FileId  : Int64;
-    Triggers: TDictionary<string, TArray<Int64>>;  { lowercase caller-side name -> inline routine ids }
-    OwnerOf : TDictionary<Int64, Int64>;           { inline routine id -> its class / record id, 0 = unit level }
-    NeedsOf : TDictionary<Int64, string>;          { inline routine id -> ';stem;stem;' of the units its text reaches }
-    Loaded  : Boolean;
     constructor Create;
     destructor Destroy; override;
   end;
@@ -4462,16 +4463,16 @@ end;
 constructor TInlineUnitFacts.Create;
 begin
   inherited Create;
-  Triggers:= TDictionary<string, TArray<Int64>>.Create;
-  OwnerOf := TDictionary<Int64, Int64>.Create;
-  NeedsOf := TDictionary<Int64, string>.Create;
+  FTriggers:= TDictionary<string, TArray<Int64>>.Create;
+  FOwnerOf := TDictionary<Int64, Int64>.Create;
+  FNeedsOf := TDictionary<Int64, string>.Create;
 end;
 
 destructor TInlineUnitFacts.Destroy;
 begin
-  Triggers.Free;
-  OwnerOf.Free;
-  NeedsOf.Free;
+  FTriggers.Free;
+  FOwnerOf.Free;
+  FNeedsOf.Free;
   inherited;
 end;
 
@@ -4498,7 +4499,7 @@ begin
   Result:= TInlineUnitFacts.Create;
   FFacts.Add(Key, Result);
   Scan(FStore, pUnitName, Result);
-  if Result.Store = nil then Scan(FLibStore, pUnitName, Result);
+  if Result.FStore = nil then Scan(FLibStore, pUnitName, Result);
 end;
 
 procedure TInlineNeeds.Scan(const pFrom: ISymbolStore; const pUnitName: string; pFacts: TInlineUnitFacts);
@@ -4508,8 +4509,8 @@ procedure TInlineNeeds.Scan(const pFrom: ISymbolStore; const pUnitName: string; 
     Ids: TArray<Int64>;
   begin
     if pName = '' then Exit;
-    if not pFacts.Triggers.TryGetValue(pName, Ids) then Ids:= nil;
-    pFacts.Triggers.AddOrSetValue(pName, Ids + [pId]);
+    if not pFacts.FTriggers.TryGetValue(pName, Ids) then Ids:= nil;
+    pFacts.FTriggers.AddOrSetValue(pName, Ids + [pId]);
   end;
 
   function IsInlineRoutine(const pSym: TSymbol): Boolean;
@@ -4532,7 +4533,7 @@ procedure TInlineNeeds.Scan(const pFrom: ISymbolStore; const pUnitName: string; 
     for M in Members do
     begin
       if not IsInlineRoutine(M) then Continue;
-      pFacts.OwnerOf.AddOrSetValue(M.Id, pOwner.Id);
+      pFacts.FOwnerOf.AddOrSetValue(M.Id, pOwner.Id);
       AddTrigger(LowerCase(M.Name), M.Id);
       Prefix:= Copy(M.Name, 1, CInlineAccessorPrefixLen);
       if (Length(M.Name) <= CInlineAccessorPrefixLen) or not (SameText(Prefix, 'Get') or SameText(Prefix, 'Set')) then Continue;
@@ -4549,8 +4550,8 @@ begin
   for U in pFrom.FindSymbolsByExactName(pUnitName) do
   begin
     if U.Kind <> skUnit then Continue;
-    pFacts.Store := pFrom;
-    pFacts.FileId:= U.FileId;
+    pFacts.FStore := pFrom;
+    pFacts.FFileId:= U.FileId;
     for Ch in pFrom.FindAllChildSymbols(U.Id) do
     begin
       if not SameText(Ch.Section, 'interface') then Continue;
@@ -4558,7 +4559,7 @@ begin
         AddMembers(Ch)
       else if IsInlineRoutine(Ch) then
       begin
-        pFacts.OwnerOf.AddOrSetValue(Ch.Id, 0);
+        pFacts.FOwnerOf.AddOrSetValue(Ch.Id, 0);
         AddTrigger(LowerCase(Ch.Name), Ch.Id);
       end;
     end;
@@ -4575,9 +4576,9 @@ var
   { '' for the unit itself and for an unknown file: neither is a unit the caller must add. }
   function StemOf(pFileId: Int64): string;
   begin
-    if (pFileId <= 0) or (pFileId = pFacts.FileId) then Exit('');
+    if (pFileId <= 0) or (pFileId = pFacts.FFileId) then Exit('');
     if StemOfFile.TryGetValue(pFileId, Result) then Exit;
-    Result:= LowerCase(ChangeFileExt(ExtractFileName(pFacts.Store.GetFilePath(pFileId)), ''));
+    Result:= LowerCase(ChangeFileExt(ExtractFileName(pFacts.FStore.GetFilePath(pFileId)), ''));
     StemOfFile.Add(pFileId, Result);
   end;
 
@@ -4586,8 +4587,8 @@ var
     Cur: string;
   begin
     if pStem = '' then Exit;
-    if not pFacts.NeedsOf.TryGetValue(pRoutine, Cur) then Cur:= CStemSep;
-    if not Cur.Contains(CStemSep + pStem + CStemSep) then pFacts.NeedsOf.AddOrSetValue(pRoutine, Cur + pStem + CStemSep);
+    if not pFacts.FNeedsOf.TryGetValue(pRoutine, Cur) then Cur:= CStemSep;
+    if not Cur.Contains(CStemSep + pStem + CStemSep) then pFacts.FNeedsOf.AddOrSetValue(pRoutine, Cur + pStem + CStemSep);
   end;
 
   { ';stem;stem;' of the units that declare the type's resolved ancestors. }
@@ -4598,7 +4599,7 @@ var
   begin
     if StemsOfType.TryGetValue(pTypeId, Result) then Exit;
     Result:= CStemSep;
-    for Anc in pFacts.Store.GetTransitiveAncestors(pTypeId) do
+    for Anc in pFacts.FStore.GetTransitiveAncestors(pTypeId) do
     begin
       Stem:= StemOf(Anc.FileId);
       if (Stem <> '') and not Result.Contains(CStemSep + Stem + CStemSep) then Result:= Result + Stem + CStemSep;
@@ -4612,22 +4613,22 @@ var
   Pair  : TPair<Int64, Int64>;
   Stem  : string;
 begin
-  pFacts.Loaded:= True;
+  pFacts.FLoaded:= True;
   StemOfFile := TDictionary<Int64, string>.Create;
   FileOfSym  := TDictionary<Int64, Int64>.Create;
   StemsOfType:= TDictionary<Int64, string>.Create;
   try
-    for Ref in pFacts.Store.GetReferencesFromFile(pFacts.FileId) do
+    for Ref in pFacts.FStore.GetReferencesFromFile(pFacts.FFileId) do
     begin
-      if (Ref.SymbolId <= 0) or not pFacts.OwnerOf.ContainsKey(Ref.EnclosingSymbolId) then Continue;
+      if (Ref.SymbolId <= 0) or not pFacts.FOwnerOf.ContainsKey(Ref.EnclosingSymbolId) then Continue;
       if not FileOfSym.TryGetValue(Ref.SymbolId, Target) then
       begin
-        Target:= pFacts.Store.GetSymbolById(Ref.SymbolId).FileId;
+        Target:= pFacts.FStore.GetSymbolById(Ref.SymbolId).FileId;
         FileOfSym.Add(Ref.SymbolId, Target);
       end;
       Need(Ref.EnclosingSymbolId, StemOf(Target));
     end;
-    for Pair in pFacts.OwnerOf do
+    for Pair in pFacts.FOwnerOf do
     begin
       if Pair.Value <= 0 then Continue;
       for Stem in AncestorStems(Pair.Value).Split([CStemSep], TStringSplitOptions.ExcludeEmpty) do
@@ -4655,17 +4656,17 @@ begin
   begin
     if SameText(U.UnitName, pCandidate) then Continue;
     Facts:= FactsFor(U.UnitName);
-    for Pair in Facts.Triggers do
+    for Pair in Facts.FTriggers do
     begin
       if not pRefNames.ContainsKey(Pair.Key) then Continue;
-      if not Facts.Loaded then Load(Facts);
+      if not Facts.FLoaded then Load(Facts);
       for Id in Pair.Value do
-        if Facts.NeedsOf.TryGetValue(Id, Needs) and Needs.Contains(Key) then Exit(True);
+        if Facts.FNeedsOf.TryGetValue(Id, Needs) and Needs.Contains(Key) then Exit(True);
     end;
   end;
 end;
 
-class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@486a, method-too-long@868a, cyclomatic-complexity@d985, cognitive-complexity@a935 -- REVIEWED 2026-11-21 SLZ-S05: 661 lines (INT-FINAL 1.52.3 re-stamp: 659 lines, 53 locals); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@4bb0, method-too-long@f9e0, cyclomatic-complexity@649d, cognitive-complexity@3e9d -- REVIEWED 2026-11-21 SLZ-S05: 661 lines (v156 FP-PR re-stamp: 677 lines, 54 locals); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
   const AOptInRules: TArray<string>; const AOnlyFileId: Int64;
   const AWholeGraph: TFunc<string, TArray<TLintFinding>>; const ASiblingNames: TSiblingProjectLister): TArray<TLintFinding>;
