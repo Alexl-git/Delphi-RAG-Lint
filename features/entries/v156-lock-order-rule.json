@@ -1,0 +1,19 @@
+{
+  "id": "v156-lock-order-rule",
+  "title": "Lock order inversion rule",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "One project-wide lint rule: two places take the same two locks in opposite order, directly or through a called routine, so two threads can deadlock",
+  "intro": "Read this when a threaded program hangs with no exception and no log, or before you add a second lock to a class. Run `drag-lint lint-all --db <project.sqlite> --rule lock-order-inversion`; the rule reads the project index, so it sees both places even when they are in different units. It is ON by default.",
+  "wikiPage": "v156-lock-order-rule",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule lock-order-inversion"
+    }
+  ],
+  "audience": "both"
+}
