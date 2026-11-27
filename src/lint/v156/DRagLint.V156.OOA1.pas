@@ -15,12 +15,6 @@ uses
   , DRagLint.V151.Api
   ;
 
-const
-  /// <summary>Rule id of G-06; not in the catalog until Catalog declares it.</summary>
-  RULE_AMBIGUOUS_UNIT_REFERENCE = 'ambiguous-unit-reference';
-  /// <summary>Rule id of G-15; not in the catalog until Catalog declares it.</summary>
-  RULE_ASSIGNMENT_NARROWS = 'assignment-narrows';
-
 type
   /// <summary>Checker entry points of v156 lane OOA-1; every method is called by TV151Dispatch.</summary>
   /// <remarks>Stateless; class methods only. A method that has nothing to check returns nil.
@@ -54,32 +48,34 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V156.OOA1.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V156.OOA1.Support
+  ;
 
 class procedure TV156OOA1Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_AMBIGUOUS_UNIT_REFERENCE, 'bug-patterns', 'warning', 'Name declared by two used units: the last one in the uses list wins'));
+  ADecls.Add(V151Rule(RULE_ASSIGNMENT_NARROWS, 'bug-patterns', 'warning', 'Wider integer assigned to a narrower integer variable'));
 end;
 
 class function TV156OOA1Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 begin
-  Result:= nil;
+  Result:= CheckAssignmentNarrows(ACtx);
 end;
 
-class function TV156OOA1Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV156OOA1Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@934c -- REVIEWED 2026-11-26 v156 OOA-1: fixed frame hook signature, OOA-1 has no per-file DFM or raw-byte rule
 begin
   Result:= nil;
 end;
 
-class function TV156OOA1Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV156OOA1Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@6736 -- REVIEWED 2026-11-26 v156 OOA-1: fixed frame hook signature, OOA-1 has no per-file DFM or raw-byte rule
 begin
   Result:= nil;
 end;
 
 class function TV156OOA1Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
 begin
-  Result:= nil;
+  Result:= CheckAmbiguousUnitReference(ACtx);
 end;
 
 end.
