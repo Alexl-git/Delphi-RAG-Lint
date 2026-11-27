@@ -61,6 +61,7 @@ type
     Written, Unchanged: Integer;
     Pages: TArray<string>;
     Stale: TArray<string>;
+    Refused: TArray<string>; // hand-written pages of a generated name: left untouched
   end;
 
 function IsRepoWikiSub(const pSub: string): Boolean;
@@ -221,10 +222,13 @@ begin
   if pJson then
   begin
     Writeln('{"dryRun":', LowerCase(BoolToStr(pDry, True)), ',"written":', pRun.Written, ',"unchanged":', pRun.Unchanged,
-      ',"stale":', JsonList(pRun.Stale), ',"pages":', JsonList(pRun.Pages), '}');
+      ',"stale":', JsonList(pRun.Stale), ',"refused":', JsonList(pRun.Refused), ',"pages":', JsonList(pRun.Pages), '}');
     Exit;
   end;
   for VFile in pRun.Stale do Writeln('stale page: ', VFile);
+  for VFile in pRun.Refused do
+    Writeln('refused page: ', VFile, ' (not written: the existing file is not a generated page -- it has no ', WIKI_PAGE_MARK,
+      '... first line; move it or choose another --out)');
   Writeln(if pDry then 'dry run: ' else '', pRun.Written, if pDry then ' would be written, ' else ' written, ',
     pRun.Unchanged, ' unchanged');
 end;
@@ -238,6 +242,7 @@ var
   VOnly: TArray<string>;
   VRun: TWikiRun;
   VDry: Boolean;
+  VFile: string;
 begin
   VDry := FlagGiven('--dry-run');
   VOnly := SplitTables(FlagValue('--table'));
@@ -254,7 +259,10 @@ begin
   for VPage in VPages do
   begin
     VRun.Pages := VRun.Pages + [VPage.FileName];
-    if WriteIfChanged(TPath.Combine(pOut, VPage.FileName), VPage.Text, VDry) then Inc(VRun.Written)
+    VFile := TPath.Combine(pOut, VPage.FileName);
+    // only a page this verb generated (marker on its first line) is overwritten; a hand-written one survives
+    if TFile.Exists(VFile) and not IsGeneratedPage(VFile) then VRun.Refused := VRun.Refused + [VPage.FileName]
+    else if WriteIfChanged(VFile, VPage.Text, VDry) then Inc(VRun.Written)
     else Inc(VRun.Unchanged);
   end;
   if (Length(VOnly) = 0) and TDirectory.Exists(pOut) then FindStale(pOut, VPages, VRun);
