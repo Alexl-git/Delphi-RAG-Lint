@@ -30,6 +30,13 @@ unit DRagLint.Index.DataFlowFacts;  // dl:ok unit-too-large@5e9c -- REVIEWED 1.5
 /// The class is the scalar class the value had where it FIRST became a scalar; a later
 /// conversion (`IntToStr`) does not change it. Rows with ValClass '' are therefore the
 /// pre-1.56 row set, and value rows are additions with their own DF_ROW_CAP budget.
+/// Lane EXT-B1F: a source whose scalar type is DECLARED in the unit -- a field, a unit
+/// variable, the result of a function or method (also called without parentheses) --
+/// had a pre-1.56 row because the old walk did not know its type. That row is kept
+/// (ValClass ''), and the same flow is emitted once more as a value row of the declared
+/// class; a field / unit variable of declared scalar class also types what is written
+/// to it, and IntToStr types its argument. So ValClass '' means "a pre-1.56 flow", NOT
+/// "not numeric": a consumer that wants numeric flows reads ValClass <> ''.
 /// Lanes EXT-B2 / EXT-B3 extend the walk through TDataFlowFacts.RegisterExprHook /
 /// RegisterWriteHook / RegisterStmtHook (TDataFlowSite).
 /// This unit is under src\index, so the extractor version guard hashes it: any change
@@ -49,6 +56,12 @@ const
   /// <summary>A routine whose CFG has more blocks than this takes the flow-insensitive
   /// fallback (cost guard; a stderr note names it).</summary>
   DF_CFG_BLOCK_CAP = 2000;
+  /// <summary>TDataFlowCallees.DeclaredClass group: a class / record field.</summary>
+  DF_DECL_FIELD = 'f';
+  /// <summary>TDataFlowCallees.DeclaredClass group: a unit variable.</summary>
+  DF_DECL_GLOBAL = 'g';
+  /// <summary>TDataFlowCallees.DeclaredClass group: the result of a function or method.</summary>
+  DF_DECL_RESULT = 'r';
 
 type
   /// <summary>The routines one unit declares, keyed by lower-case name: per argument
@@ -59,11 +72,30 @@ type
   /// Owned by the caller of BuildCallees. Name-keyed on purpose: the
   /// extractor sees one file, so overloads and same-named methods of different
   /// classes are merged (any var/out at a position keeps that position).
+  /// 1.56 (lane EXT-B1F): the same object also carries the DECLARED scalar classes of the
+  /// unit's fields, unit variables and function results (DeclaredClass), which is why it
+  /// is a class of its own and no longer a bare dictionary alias; the dictionary part is
+  /// unchanged.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Index.DataFlowFacts.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Index.DataFlowFacts.TCollector.Create (DRagLint.Index.DataFlowFacts.pas) ?, DRagLint.Index.DataFlowFacts.TDataFlowFacts.BuildCallees (DRagLint.Index.DataFlowFacts.pas), DRagLint.Index.DataFlowFacts.TDataFlowFacts.Collect (DRagLint.Index.DataFlowFacts.pas) ? (+1 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TDataFlowCallees = TDictionary<string, TArray<Boolean>>;
+  TDataFlowCallees = class(TDictionary<string, TArray<Boolean>>)
+    private
+      FDeclCls: TDictionary<string, string>;
+      procedure NoteDeclared(AGroup: Char; const ALowerName, ACls: string);
+    public
+      /// <summary>Frees the declared-class table with the dictionary.</summary>
+      destructor Destroy; override;
+      /// <summary>The DF_VAL_* class every declaration of one name in the unit agrees on.</summary>
+      /// <param name="AGroup">DF_DECL_FIELD ('f', a class / record field), DF_DECL_GLOBAL ('g', a
+      /// unit variable) or DF_DECL_RESULT ('r', the result of a function or method).</param>
+      /// <param name="ALowerName">The bare name, lower case.</param>
+      /// <returns>The class; '' when the unit declares no such name, when its type is no scalar
+      /// (TAINT_SCALAR_TYPES), or when two declarations of the name in the unit differ in class
+      /// (the table is name-keyed like the var/out masks, so a disagreement claims nothing).</returns>
+      function DeclaredClass(AGroup: Char; const ALowerName: string): string;
+  end;
 
   /// <summary>1.56: the value of one expression as the data-flow walk sees it: the sources
   /// that may / must reach it and its inferred scalar class.</summary>
@@ -182,6 +214,8 @@ type
       /// emits VALUE rows (ValClass = a DF_VAL_* class; 1.56 B3); every other row keeps
       /// ValClass '' and is the row the pre-1.56 walk emitted. At most DF_ROW_CAP value
       /// (and hook) rows are added on top of the DF_ROW_CAP pre-1.56 rows.
+      /// A field, unit variable or function result whose scalar type ACallees knows
+      /// (TDataFlowCallees.DeclaredClass) emits BOTH its pre-1.56 row and a value row.
       /// Identifiers the var table cannot classify are refs (by position).
       /// An argument variable gets an 'argout' source (the callee may write it) only
       /// when the callee may have a var / out parameter at that position: a callee
@@ -240,7 +274,9 @@ type
                                       const AGlobals: TArray<string>;
                                       const ACallees: TDataFlowCallees): TArray<TDataFlowRow>; static;
       /// <summary>The var/out masks of every routine ASymbols declares (parsed from
-      /// TSymbol.Signature), for Collect.</summary>
+      /// TSymbol.Signature), for Collect; 1.56: also the declared scalar classes of the
+      /// fields, unit variables and function results among ASymbols
+      /// (TDataFlowCallees.DeclaredClass).</summary>
       /// <param name="ASymbols">One file's parsed symbols; non-routine kinds are skipped.</param>
       /// <returns>A new dictionary the CALLER frees (never nil).</returns>
       /// <remarks>
@@ -636,6 +672,12 @@ type
     procedure RunExprHooks(var St: TTaintVal; const N: TTSNode; var AV: TExprVal);
     procedure RunWriteHooks(var St: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
     procedure RunStmtHooks(var St: TTaintVal; const N: TTSNode);
+    function DeclCls(AGroup: Char; const ALowerName: string): string;
+    function TokDeclCls(const ATok: TSrcTok): string;
+    function TypedTokVal(const AKind: string; ALine, ACol: Integer; const AName: string; AGroup: Char): TExprVal;
+    procedure RecordTypedDst(const AKind: string; AGroup: Char; const APos: TTSNode; const AV: TExprVal);
+    procedure RecordArgs(const ANameN: TTSNode; const ARecvText, ACallee: string; ABare: Boolean;
+                         const AArgVals: TArray<TExprVal>);
   public
     constructor Create(const ASym: TSymbol; const AProc, ABody: TTSNode; const ASrc: TBytes;
                        const AOwnerFields, AGlobals: TArray<string>; const ACallees: TDataFlowCallees);
@@ -729,6 +771,63 @@ end;
 function IsOldRowKind(const ADstKind, ASrcKind: string): Boolean;
 begin
   Result:= InList(ADstKind, DF_OLD_DST_KINDS) and InList(ASrcKind, DF_OLD_SRC_KINDS);
+end;
+
+{ ---- 1.56 lane EXT-B1F: declared scalar classes ---------------------------- }
+
+{ The declared result type (lower case) of signature text ASig ('(const A: string): Integer',
+  ': Currency'); '' for a procedure. The parameter list is skipped by bracket depth. }
+function ResultTypeOf(const ASig: string): string;
+var
+  I, Depth: Integer;
+  Rest    : string;
+begin
+  Result:= '';
+  Rest:= Trim(ASig);
+  if Rest.StartsWith('(') then
+  begin
+    Depth:= 0;
+    for I:= 1 to Length(Rest) do
+      if CharInSet(Rest[I], ['(', '[']) then Inc(Depth)
+      else if CharInSet(Rest[I], [')', ']']) then
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+        begin
+          Rest:= Trim(Copy(Rest, I + 1, MaxInt));
+          Break;
+        end;
+      end;
+    if Depth <> 0 then Exit;
+  end;
+  if not Rest.StartsWith(':') then Exit;
+  Rest:= Copy(Rest, 2, MaxInt);
+  if Rest.Contains(';') then Rest:= Copy(Rest, 1, Pos(';', Rest) - 1);
+  Result:= LowerCase(Trim(Rest));
+end;
+
+destructor TDataFlowCallees.Destroy;
+begin
+  FDeclCls.Free;
+  inherited;
+end;
+
+{ One declaration of ALowerName in group AGroup has class ACls ('' = not a scalar). A second
+  declaration with another class leaves '' for good: the name claims nothing. }
+procedure TDataFlowCallees.NoteDeclared(AGroup: Char; const ALowerName, ACls: string);
+var
+  Key, Old: string;
+begin
+  if ALowerName = '' then Exit;
+  if FDeclCls = nil then FDeclCls:= TDictionary<string, string>.Create;
+  Key:= AGroup + ALowerName;
+  if FDeclCls.TryGetValue(Key, Old) and (Old <> ACls) then FDeclCls[Key]:= ''
+  else FDeclCls.AddOrSetValue(Key, ACls);
+end;
+
+function TDataFlowCallees.DeclaredClass(AGroup: Char; const ALowerName: string): string;
+begin
+  if (FDeclCls = nil) or not FDeclCls.TryGetValue(AGroup + ALowerName, Result) then Result:= '';
 end;
 
 function IsDottedIdentChain(const N: TTSNode): Boolean;
@@ -1016,11 +1115,20 @@ end;
 { 1.56 B3: AV as a value of scalar class ACls. Every source that still has no class (a pre-1.56
   flow that the old walk dropped at this point) becomes the same source WITH the class; a source
   that already has one keeps it (the class is the FIRST scalar the value became). The result
-  never holds a class-less source, so no pre-1.56 row can come out of it. }
+  never holds a class-less source, so no pre-1.56 row can come out of it.
+  Lane EXT-B1F: a source whose DECLARED type is a scalar (TokDeclCls) takes that class, not ACls --
+  a Currency field compared with 0 is a currency source of a Boolean, as a Currency parameter is. }
 function TCollector.Reclass(const AV: TExprVal; const ACls: string): TExprVal;
 var
   I, T: Integer;
   K   : TSrcTok;
+
+  function ClsFor(const ATok: TSrcTok): string;
+  begin
+    Result:= TokDeclCls(ATok);
+    if Result = '' then Result:= ACls;
+  end;
+
 begin
   Result.Cls:= ACls;
   if ACls = '' then
@@ -1034,7 +1142,7 @@ begin
   begin
     T:= AV.May[I] shr 1;
     K:= FToks[T];
-    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ACls);
+    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ClsFor(K));
     Result.May[I]:= T * 2 + (AV.May[I] and 1);
   end;
   SetLength(Result.Must, Length(AV.Must));
@@ -1042,11 +1150,71 @@ begin
   begin
     T:= AV.Must[I];
     K:= FToks[T];
-    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ACls);
+    if K.Cls = '' then T:= Tok(K.Kind, K.Index, K.Line, K.Col, K.Name, ClsFor(K));
     Result.Must[I]:= T;
   end;
   Result.May := SetNorm(Result.May);
   Result.Must:= SetNorm(Result.Must);
+end;
+
+{ ---- 1.56 lane EXT-B1F: declared scalar types ------------------------------
+  A field, a unit variable or the result of a function THIS unit declares with a scalar type is
+  typed at the source. Its pre-1.56 source (no class) is kept wherever the old walk made it, so the
+  rows with ValClass '' stay the pre-1.56 set; a twin source carrying the declared class travels
+  with it and gives the value rows. Types come from TDataFlowCallees.DeclaredClass (name-keyed, one
+  unit): an inherited field of another unit, a property and a routine of another unit stay untyped. }
+
+function TCollector.DeclCls(AGroup: Char; const ALowerName: string): string;
+begin
+  Result:= if Assigned(FCallees) then FCallees.DeclaredClass(AGroup, ALowerName) else '';
+end;
+
+{ The declared class of a class-less source token: a field, a unit variable, or a ref whose name
+  is a function of this unit (a call, with or without parentheses). }
+function TCollector.TokDeclCls(const ATok: TSrcTok): string;
+begin
+  if ATok.Kind = DF_SRC_FIELD then Result:= DeclCls(DF_DECL_FIELD, LowerCase(ATok.Name))
+  else if ATok.Kind = DF_SRC_GLOBAL then Result:= DeclCls(DF_DECL_GLOBAL, LowerCase(ATok.Name))
+  else if ATok.Kind = DF_SRC_REF then Result:= DeclCls(DF_DECL_RESULT, LowerCase(ATok.Name))
+  else Result:= '';
+end;
+
+{ The value of one source read: the pre-1.56 token and, when group AGroup declares AName with a
+  scalar class, its classed twin. }
+function TCollector.TypedTokVal(const AKind: string; ALine, ACol: Integer; const AName: string; AGroup: Char): TExprVal;
+var
+  Cls: string;
+begin
+  Result:= TokVal(Tok(AKind, -1, ALine, ACol, AName));
+  Cls:= DeclCls(AGroup, LowerCase(AName));
+  if Cls = '' then Exit;
+  Result:= ExprUnion(Result, TokVal(Tok(AKind, -1, ALine, ACol, AName, Cls)));
+  Result.Cls:= Cls;
+end;
+
+{ A write to the field / unit variable at APos. A destination of declared scalar class types what
+  reaches it: every class-less source gains a value row of that class beside its pre-1.56 row. }
+procedure TCollector.RecordTypedDst(const AKind: string; AGroup: Char; const APos: TTSNode; const AV: TExprVal);
+var
+  Cls: string;
+  V  : TExprVal;
+begin
+  V:= AV;
+  Cls:= DeclCls(AGroup, LowerCase(Text(APos)));
+  if Cls <> '' then V:= ExprUnion(AV, Reclass(AV, Cls));
+  RecordDst(AKind, APos, -1, Text(APos), '', V);
+end;
+
+{ The 'arg' rows of one call. Lane EXT-B1F: a bare IntToStr's argument IS an integer, whatever the
+  walk knows of its type -- each class-less source gains a value row beside its pre-1.56 row. }
+procedure TCollector.RecordArgs(const ANameN: TTSNode; const ARecvText, ACallee: string; ABare: Boolean;
+                                const AArgVals: TArray<TExprVal>);
+var
+  I: Integer;
+begin
+  for I:= 0 to High(AArgVals) do RecordDst(DF_DST_ARG, ANameN, I, Text(ANameN), ARecvText, AArgVals[I]);
+  if ABare and (ACallee = DF_INTTOSTR) then
+    for I:= 0 to High(AArgVals) do RecordDst(DF_DST_ARG, ANameN, I, Text(ANameN), ARecvText, Reclass(AArgVals[I], DF_VAL_INT));
 end;
 
 function TCollector.SlotOf(const N: TTSNode): Integer;
@@ -1296,9 +1464,9 @@ begin
   if (Nm = '') or (Nm = 'self') then Exit;
   Slot:= SlotOf(N);
   if Slot >= 0 then Exit(ReadSlot(St, Slot));
-  if FFields.ContainsKey(Nm) then Exit(TokVal(Tok(DF_SRC_FIELD, -1, 0, 0, Text(N))));
-  if FGlobals.ContainsKey(Nm) then Exit(TokVal(Tok(DF_SRC_GLOBAL, -1, 0, 0, Text(N))));
-  Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(N.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, N.StartByte, N.StartPoint.Column) + 1, Text(N)));
+  if FFields.ContainsKey(Nm) then Exit(TypedTokVal(DF_SRC_FIELD, 0, 0, Text(N), DF_DECL_FIELD));
+  if FGlobals.ContainsKey(Nm) then Exit(TypedTokVal(DF_SRC_GLOBAL, 0, 0, Text(N), DF_DECL_GLOBAL));
+  Result:= TypedTokVal(DF_SRC_REF, Integer(N.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, N.StartByte, N.StartPoint.Column) + 1, Text(N), DF_DECL_RESULT);
 end;
 
 function TCollector.EvalDot(var St: TTaintVal; const N: TTSNode): TExprVal;
@@ -1306,24 +1474,34 @@ var
   L, R, Base: TTSNode;
   LV        : TExprVal;
   Member, BN: string;
+  MCls      : string;
 begin
   L:= N.ChildByField('lhs');
   R:= N.ChildByField('rhs');
   if (not L.IsNull) and (L.NodeType = 'identifier') and SameText(Text(L), 'Self') then
   begin
     if R.IsNull or (R.NodeType <> 'identifier') then Exit(Eval(St, R));
-    if FFields.ContainsKey(LowerCase(Text(R))) then Exit(TokVal(Tok(DF_SRC_FIELD, -1, 0, 0, Text(R))));
-    Exit(TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R))));
+    if FFields.ContainsKey(LowerCase(Text(R))) then Exit(TypedTokVal(DF_SRC_FIELD, 0, 0, Text(R), DF_DECL_FIELD));
+    Exit(TypedTokVal(DF_SRC_REF, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R), DF_DECL_RESULT));
   end;
   LV:= Eval(St, L);
   Member:= '';
   if (not R.IsNull) and (R.NodeType = 'identifier') then Member:= LowerCase(Text(R));
   Base:= BaseIdent(L);
+  { lane EXT-B1F: the member is a function of this unit with a scalar result (a call without parentheses) }
+  MCls:= if Member <> '' then DeclCls(DF_DECL_RESULT, Member) else '';
   { a member of a local / param reads that variable }
-  if SlotOf(Base) >= 0 then Result:= LV
+  if SlotOf(Base) >= 0 then
+  begin
+    Result:= LV;
+    { lane EXT-B1F: ... and the method's result is a value source of its own. Only the classed
+      source: the pre-1.56 walk made no ref here, so no class-less row may appear }
+    if MCls <> '' then
+      Result:= ExprUnion(Result, TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R), MCls)));
+  end
   else if (Member <> '') and RefShapeOk(L, SameText(Text(L), 'Self')) then
   begin
-    Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R)));
+    Result:= TypedTokVal(DF_SRC_REF, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R), DF_DECL_RESULT);
     BN:= LowerCase(Text(Base));
     if ((BN <> '') and (FFields.ContainsKey(BN) or FGlobals.ContainsKey(BN))) or IsHardCastRooted(L) then Result:= ExprUnion(Result, LV); { a cast keeps its operand's taint }
   end
@@ -1331,7 +1509,7 @@ begin
   { 1.56 B3: a numeric member (`L.Count`) was no flow at all; now it is an integer derived from its
     receiver. An accessor (`F.AsFloat`) keeps its pre-1.56 sources and only states its class. }
   if InList(Member, TAINT_NUMERIC_MEMBERS) then Result:= Reclass(Result, DF_VAL_INT)
-  else Result.Cls:= AccessorClass(Member);
+  else Result.Cls:= if AccessorClass(Member) <> '' then AccessorClass(Member) else MCls;
 end;
 
 function TCollector.EvalCall(var St: TTaintVal; const N: TTSNode): TExprVal;
@@ -1376,7 +1554,7 @@ begin
   if Recv.IsNull and (Callee = 'exit') then Exit;
   CallLine:= Integer(NameN.StartPoint.Row) + 1;
   CallCol := Utf8ByteColToCharCol(FSrc, NameN.StartByte, NameN.StartPoint.Column) + 1;
-  for I:= 0 to High(ArgVals) do RecordDst(DF_DST_ARG, NameN, I, Text(NameN), RecvText, ArgVals[I]);
+  RecordArgs(NameN, RecvText, Callee, Recv.IsNull, ArgVals);
   { receive: X.Add(e) and friends }
   if (not Recv.IsNull) and InList(Callee, TAINT_RECEIVER_MUTATORS) then
   begin
@@ -1397,7 +1575,7 @@ begin
       St.Must[Slot]:= SetUnion(St.Must[Slot], [T]);
     end;
   if InList(Callee, TAINT_NOFLOW_RESULT) then Exit(EvalNoFlowCall(St, Callee, Args, ArgVals, Recv.IsNull));
-  Result:= TokVal(Tok(DF_SRC_REF, -1, CallLine, CallCol, Text(NameN)));
+  Result:= TypedTokVal(DF_SRC_REF, CallLine, CallCol, Text(NameN), DF_DECL_RESULT);
   { a method of a string-typed local/param (`S.Trim`, `S.Substring(1)`) derives from it }
   Slot:= SlotOf(BaseIdent(Recv));
   if (Slot >= 0) and FSlotString[Slot] then Result:= ExprUnion(Result, RecvVal);
@@ -1615,7 +1793,7 @@ begin
   if (not Recv.IsNull) and (Recv.NodeType = 'identifier') and SameText(Text(Recv), 'Self') then
   begin
     if (not Member.IsNull) and (Member.NodeType = 'identifier') then
-      RecordDst(DF_DST_FIELD, Member, -1, Text(Member), '', AV);
+      RecordTypedDst(DF_DST_FIELD, DF_DECL_FIELD, Member, AV);
     Exit;
   end;
   Base:= BaseIdent(Recv);
@@ -1660,8 +1838,8 @@ begin
       Exit;
     end;
     Nm:= LowerCase(Text(Lhs));
-    if FFields.ContainsKey(Nm) then RecordDst(DF_DST_FIELD, Lhs, -1, Text(Lhs), '', V)
-    else if FGlobals.ContainsKey(Nm) then RecordDst(DF_DST_GLOBAL, Lhs, -1, Text(Lhs), '', V)
+    if FFields.ContainsKey(Nm) then RecordTypedDst(DF_DST_FIELD, DF_DECL_FIELD, Lhs, V)
+    else if FGlobals.ContainsKey(Nm) then RecordTypedDst(DF_DST_GLOBAL, DF_DECL_GLOBAL, Lhs, V)
     else RecordDst(DF_DST_WRITE, Lhs, -1, Text(Lhs), '', V);
     Exit;
   end;
@@ -2125,11 +2303,16 @@ begin
   Result:= TDataFlowCallees.Create;
   for S in ASymbols do
   begin
+    { lane EXT-B1F: a field's / unit variable's Signature is its declared type }
+    if S.Kind = skField then Result.NoteDeclared(DF_DECL_FIELD, LowerCase(S.Name), ScalarClass(LowerCase(Trim(S.Signature))))
+    else if S.Kind = skVarDecl then Result.NoteDeclared(DF_DECL_GLOBAL, LowerCase(S.Name), ScalarClass(LowerCase(Trim(S.Signature))));
     if S.Kind not in [skFunction, skProcedure, skMethod, skConstructor, skDestructor] then Continue;
     { 'TFoo.Bar' (an implementation header) and 'Bar<T>' key as 'bar', the call's identifier }
     Key:= LowerCase(S.Name);
     if Key.Contains('<') then Key:= Copy(Key, 1, Pos('<', Key) - 1);
     Key:= Copy(Key, LastDelimiter('.', Key) + 1, MaxInt);
+    { lane EXT-B1F: a function's declared result class (a procedure / constructor has none) }
+    if ResultTypeOf(S.Signature) <> '' then Result.NoteDeclared(DF_DECL_RESULT, Key, ScalarClass(ResultTypeOf(S.Signature)));
     Mask:= VarOutMask(S.Signature);
     if Result.TryGetValue(Key, Old) then
     begin
