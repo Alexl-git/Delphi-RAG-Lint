@@ -1,0 +1,19 @@
+{
+  "id": "lint-changed-since",
+  "title": "Lint only what changed since a revision",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "lint-all --changed-since <rev> keeps the findings on lines changed since a git or hg revision; unknown revision or no working copy is refused with exit 2",
+  "intro": "Read this when a lint gate should judge only new work. The whole project is linted, then the report, the exit code and the baseline see only findings on lines that changed since the revision you name, in a git or a Mercurial working copy. The engine refuses with the reason instead of guessing.",
+  "wikiPage": "lint-changed-since",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <db> --changed-since <rev>"
+    }
+  ],
+  "audience": "both"
+}
