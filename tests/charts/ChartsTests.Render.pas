@@ -294,7 +294,7 @@ begin
     Assert.AreEqual('who-writes', Old.GetValue<string>('question'));
     var New:= ObjOf(O, 'new');
     Assert.AreEqual('1.27.0', New.GetValue<string>('engine'));
-    Assert.AreEqual('who-writes -Target "OPERAT.NAME" -Project "C:\P\A.dproj" -Depth 3', New.GetValue<string>('command'));
+    Assert.AreEqual('who-writes --target "OPERAT.NAME" --project "C:\P\A.dproj" --depth 3', New.GetValue<string>('command'));
     var Ix:= TJSONObject(ArrOf(New, 'indexes').Items[0]);
     Assert.AreEqual('2026-10-10 09:01', Ix.GetValue<string>('indexed_at'));
     Assert.IsFalse(Ix.GetValue<Boolean>('stale'));

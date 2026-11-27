@@ -3,7 +3,10 @@ unit DRagLint.Charts.ReportHeader;
 { The header contract of a dl-charts answer (spec H1-H4): the sentence line
     <Phrase> (drag-lint report <id>) for <target>, asked on <yyyy-MM-dd HH:mm>, engine <v>.
   and the COMMAND line that names the exact question that produced it
+    COMMAND <id> [--target "v"] [--to "v"] (--project "v" | --in "v") [--depth n] ...
+  (CLI style, what BuildCommandLine prints since 1.56; the PowerShell style written before it,
     COMMAND <id> [-Target "v"] [-To "v"] (-Project "v" | -In "v") [-Depth n] ...
+  is still READ by ParseCommandLine, and both styles parse to the same TReportCommand)
   in both the plain form (Ask-Report.ps1 -Plain) and the DocInsight form
   (DRagLint.Charts.DocInsight, `drag-lint ask`), plus the legacy header that has no time, engine
   or COMMAND. Pure string work: no IO, no VCL, no engine dependency. }
@@ -27,7 +30,10 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCommandArg = record
-    /// <summary>Argument name WITHOUT the leading '-', as written.</summary>
+    /// <summary>Argument name WITHOUT the leading '-' or '--'. A known argument carries its
+    /// canonical spelling whatever style it was written in ('-target', '--target' and
+    /// '-Target' all give 'Target'; '--surface-cap' gives 'SurfaceCap'); an unknown one is
+    /// kept as written.</summary>
     Name : string;
     /// <summary>Argument value, quotes removed; '' for a name with no value.</summary>
     Value: string;
@@ -35,9 +41,11 @@ type
 
   /// <summary>A parsed COMMAND line: the question id and its explicit arguments.</summary>
   /// <remarks>
-  /// Names compare case-insensitively (SameText). PS trap handled: PowerShell
-  /// parameter names and -eq are case-insensitive, so '-target' and '-Target' are one
-  /// argument here too. Args never holds two entries with the same name.
+  /// Names compare case-insensitively and ignore '-' inside the name, so the
+  /// PowerShell spelling and the CLI spelling of one argument are one name ('SurfaceCap' =
+  /// 'surface-cap' = 'surfacecap'). PS trap handled: PowerShell parameter names and -eq are
+  /// case-insensitive, so '-target' and '-Target' are one argument here too. Args never
+  /// holds two entries with the same name.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ParseCommandLine (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.Compare.CompareBuildCommand (DRagLint.CLI.Compare.pas) (+26 more)</para>
   /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Question, DRagLint.Charts.Render, DRagLint.Charts.ReportHeader, DRagLint.CLI.Compare</para>
@@ -49,7 +57,8 @@ type
     /// <summary>The arguments in the order they were written.</summary>
     Args    : TArray<TCommandArg>;
     /// <summary>Whether an argument of this name is present.</summary>
-    /// <param name="pName">Name without '-'; compared with SameText.</param>
+    /// <param name="pName">Name without the leading '-' / '--', in either spelling
+    /// ('SurfaceCap' or 'surface-cap'); case and inner '-' are ignored.</param>
     /// <returns>True when present (even with an empty value).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -64,7 +73,8 @@ type
     /// </remarks>
     function Has(const pName: string): Boolean;
     /// <summary>The value of the named argument.</summary>
-    /// <param name="pName">Name without '-'; compared with SameText.</param>
+    /// <param name="pName">Name without the leading '-' / '--', in either spelling
+    /// ('SurfaceCap' or 'surface-cap'); case and inner '-' are ignored.</param>
     /// <returns>The value, or '' when the argument is absent.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -92,6 +102,15 @@ type
     /// </remarks>
     function IsEmpty: Boolean;
   end;
+
+  /// <summary>Which argument style a COMMAND line is written in.</summary>
+  /// <remarks>
+  /// csNone: no argument name at all (or no question). csPowerShell: every name has
+  /// ONE leading '-' (what the engine printed up to 1.55). csCli: every name has TWO
+  /// (printed since 1.56). csMixed: both occur in one line -- nothing the engine ever
+  /// printed, so a migration must leave such a line alone.
+  /// </remarks>
+  TCommandStyle = (csNone, csPowerShell, csCli, csMixed);
 
   /// <summary>The parsed header of an answer.</summary>
   /// <remarks>
@@ -162,16 +181,21 @@ type
 /// </remarks>
 function ParseReportHeader(const pLines: TArray<string>; out pHeader: TReportHeader): Boolean;
 
-/// <summary>Parses a COMMAND line.</summary>
+/// <summary>Parses a COMMAND line in either style: CLI ('--target "t" --surface-cap 40',
+/// printed since 1.56) or PowerShell ('-Target "t" -SurfaceCap 40', printed before).</summary>
 /// <param name="pText">The line, with or without the 'COMMAND ' prefix (ordinal).</param>
 /// <param name="pCmd">The command; empty when the result is False.</param>
 /// <returns>False when there is no question token.</returns>
 /// <remarks>
+/// Both styles give the SAME command: a known argument is stored under its canonical
+/// name (Target, To, Project, In, Depth, Cap, SurfaceCap, Control, Mode, MaxRows) whichever
+/// way it was spelled; an unknown name is stored as written, without its dashes. A line
+/// that mixes the styles parses too (DetectCommandStyle tells them apart).
 /// Tokens split on spaces outside double quotes; quotes are removed and have no
-/// escape. An unquoted token of '-' followed by a letter is a name; its value is the next
-/// token unless that is itself a name (value ''). A quoted token is always a value, and
-/// '-3' is a value. A repeated name keeps its first position and takes the last value; a
-/// value with no name before it is ignored.
+/// escape. An unquoted token of '-' or '--' followed by a letter is a name; its value is
+/// the next token unless that is itself a name (value ''). A quoted token is always a
+/// value, and '-3' is a value. A repeated name (in any spelling) keeps its first position
+/// and takes the last value; a value with no name before it is ignored.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.Compare.CompareBuildCommand (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: Default, DRagLint.Charts.ReportHeader.ArgIndex, DRagLint.Charts.ReportHeader.IsName, DRagLint.Charts.ReportHeader.Tokenise</para>
@@ -185,16 +209,21 @@ function ParseReportHeader(const pLines: TArray<string>; out pHeader: TReportHea
 /// </remarks>
 function ParseCommandLine(const pText: string; out pCmd: TReportCommand): Boolean;
 
-/// <summary>Builds the canonical COMMAND line, WITHOUT the 'COMMAND ' prefix.</summary>
+/// <summary>Builds the canonical COMMAND line in CLI style, WITHOUT the 'COMMAND '
+/// prefix: the one grammar every carrier prints (report header, ask output, doc-comment
+/// embed, compare's JSON).</summary>
 /// <param name="pCmd">The command.</param>
-/// <returns>The question id, then the known arguments in the order Target, To, Project,
-/// In, Depth, Cap, SurfaceCap, Control, Mode, MaxRows with their canonical spelling, then
-/// unknown arguments in input order with their own spelling.</returns>
+/// <returns>The question id, then the known arguments in the order --target, --to,
+/// --project, --in, --depth, --cap, --surface-cap, --control, --mode, --max-rows (the flag
+/// names of `drag-lint ask`), then unknown arguments in input order as '--' + their name in
+/// lower-case kebab form ('FooBar' gives '--foo-bar').</returns>
 /// <remarks>
-/// Target, To, Project, In and Control are always double-quoted; the other known
-/// values are bare. An unknown value is quoted when it holds a space or starts with '-'
-/// (so it re-parses as a value); an unknown name with an empty value is written alone.
-/// Values never contain '"' (IsValidReportTarget), so no escaping is done.
+/// --target, --to, --project, --in and --control are always double-quoted; the other
+/// known values are bare. An unknown value is quoted when it holds a space or starts with
+/// '-' (so it re-parses as a value); an unknown name with an empty value is written alone.
+/// Values never contain '"' (IsValidReportTarget), so no escaping is done. The output
+/// re-parses (ParseCommandLine) to a command SameQuestion calls equal to pCmd, and building
+/// that again gives the same text. The PowerShell style is never written.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Render.CommandText (DRagLint.Charts.Render.pas)</para>
 /// <para>Calls: DRagLint.Charts.ReportHeader.IndexOfName, DRagLint.Charts.ReportHeader.NeedsQuotes, DRagLint.Charts.ReportHeader.TReportCommand.Get, DRagLint.Charts.ReportHeader.TReportCommand.Has</para>
@@ -207,6 +236,16 @@ function ParseCommandLine(const pText: string; out pCmd: TReportCommand): Boolea
 /// </remarks>
 function BuildCommandLine(const pCmd: TReportCommand): string;
 
+/// <summary>Which argument style a COMMAND line is written in.</summary>
+/// <param name="pText">The line, with or without the 'COMMAND ' prefix (ordinal).</param>
+/// <returns>csPowerShell when every argument name has one leading '-', csCli when every
+/// one has two, csMixed when both occur, csNone when the line names no argument.</returns>
+/// <remarks>
+/// Uses ParseCommandLine's own token rules, so a quoted token and '-3' are values,
+/// never names. Pure; thread-safe.
+/// </remarks>
+function DetectCommandStyle(const pText: string): TCommandStyle;
+
 /// <summary>Whether two commands ask the same question (H4).</summary>
 /// <param name="pA">The old answer's command.</param>
 /// <param name="pB">The new answer's command.</param>
@@ -215,7 +254,9 @@ function BuildCommandLine(const pCmd: TReportCommand): string;
 /// Question ids are compared but never listed here.</param>
 /// <returns>True when the ids are equal (SameText) and every argument matches.</returns>
 /// <remarks>
-/// Order and quoting never matter. Names compare case-insensitively; two values
+/// Order, quoting and argument style never matter: a command read from a
+/// PowerShell-style line equals the same command read from a CLI-style line. Names compare
+/// case-insensitively and ignore '-' inside the name; two values
 /// that both parse as integers compare numerically ('03' = '3'), any other pair with
 /// SameText (targets are Delphi identifiers, projects are Windows paths). An explicit
 /// argument against an absent one IS a difference. PS trap handled: PowerShell -eq is
@@ -272,6 +313,12 @@ const
   ABSENT = '(absent)';
   QUOTE = '"';
   NAME_MARK = '-';
+  /// What BuildCommandLine writes before a name (CLI style).
+  CLI_NAME_MARK = '--';
+  /// Leading marks of a PowerShell-style name ('-Target') and of a CLI-style one ('--target').
+  MARKS_NONE = 0;
+  MARKS_POWERSHELL = 1;
+  MARKS_CLI = 2;
   /// EmitWrapped indents a continuation line two spaces more than the line it continues.
   CONTINUATION_INDENT = 2;
   SENTENCE_PATTERN = '^(.*?) \(drag-lint report ([a-z0-9-]+)\) for (.+?), asked on ' +
@@ -284,6 +331,9 @@ const
   /// Canonical order and spelling of the COMMAND arguments (header contract).
   KNOWN_NAMES: array[0..9] of string = ('Target', 'To', 'Project', 'In', 'Depth', 'Cap',
     'SurfaceCap', 'Control', 'Mode', 'MaxRows');
+  /// The CLI spelling of KNOWN_NAMES, index for index: the flag names of `drag-lint ask`.
+  KNOWN_CLI_NAMES: array[0..9] of string = ('target', 'to', 'project', 'in', 'depth', 'cap',
+    'surface-cap', 'control', 'mode', 'max-rows');
   /// The known arguments whose value is always double-quoted.
   QUOTED_NAMES: array[0..4] of string = ('Target', 'To', 'Project', 'In', 'Control');
   ENTITIES: array[0..3] of string = ('&lt;', '&gt;', '&amp;', '&quot;');
@@ -295,22 +345,59 @@ type
     Quoted: Boolean;
   end;
 
+{ What two spellings of one argument name share: 'SurfaceCap', 'surface-cap' and 'SURFACECAP'
+  all give 'surfacecap'. PS trap handled: hashtable keys and parameter names are
+  case-insensitive in PowerShell, so the key is lower-cased, never compared with '='. }
+function NameKey(const pName: string): string;
+begin
+  Result:= pName.Replace(NAME_MARK, '').ToLowerInvariant;
+end;
+
+function SameName(const pA, pB: string): Boolean;
+begin
+  Result:= NameKey(pA) = NameKey(pB);
+end;
+
 function IndexOfName(const pNames: array of string; const pName: string): Integer;
 begin
   for var I:= Low(pNames) to High(pNames) do
-    if SameText(pNames[I], pName) then
+    if SameName(pNames[I], pName) then
       Exit(I);
   Result:= NOT_FOUND;
 end;
 
-{ PS trap handled: hashtable keys and parameter names are case-insensitive in PowerShell,
-  so the lookup is SameText, never '='. }
 function ArgIndex(const pArgs: TArray<TCommandArg>; const pName: string): Integer;
 begin
   for var I:= 0 to High(pArgs) do
-    if SameText(pArgs[I].Name, pName) then
+    if SameName(pArgs[I].Name, pName) then
       Exit(I);
   Result:= NOT_FOUND;
+end;
+
+{ 'FooBar' -> 'foo-bar', 'foo-bar' -> 'foo-bar', 'ABC' -> 'abc': a '-' goes before an upper-case
+  letter that follows a lower-case letter or a digit. }
+function KebabOf(const pName: string): string;
+begin
+  var SB:= TStringBuilder.Create(Length(pName) + Length(pName) div 2);
+  try
+    for var I:= 1 to Length(pName) do
+    begin
+      var C:= pName[I];
+      if C.IsUpper and (I > 1) and (pName[I - 1].IsLower or pName[I - 1].IsDigit) then
+        SB.Append(NAME_MARK);
+      SB.Append(C.ToLower);
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ The CLI spelling a name is written with: the `drag-lint ask` flag for a known one. }
+function CliName(const pName: string): string;
+begin
+  var K:= IndexOfName(KNOWN_NAMES, pName);
+  Result:= if K = NOT_FOUND then KebabOf(pName) else KNOWN_CLI_NAMES[K];
 end;
 
 function DisplayName(const pName: string): string;
@@ -326,9 +413,20 @@ begin
     Inc(Result);
 end;
 
+{ How many '-' open a name: MARKS_POWERSHELL for '-Target', MARKS_CLI for '--target',
+  MARKS_NONE for anything that is not a name ('-3', '---x', 'x', '-'). }
+function NameMarks(const pText: string): Integer;
+begin
+  Result:= MARKS_NONE;
+  while (Result < MARKS_CLI) and (Result < Length(pText)) and (pText[Result + 1] = NAME_MARK) do
+    Inc(Result);
+  if (Result >= Length(pText)) or not pText[Result + 1].IsLetter then
+    Result:= MARKS_NONE;
+end;
+
 function LooksLikeName(const pText: string): Boolean;
 begin
-  Result:= (Length(pText) >= 2) and (pText[1] = NAME_MARK) and pText[2].IsLetter;
+  Result:= NameMarks(pText) <> MARKS_NONE;
 end;
 
 function IsName(const pToken: TToken): Boolean;
@@ -475,15 +573,40 @@ begin
   end;
 end;
 
-function ParseCommandLine(const pText: string; out pCmd: TReportCommand): Boolean;
+{ The tokens after the optional 'COMMAND ' prefix. }
+function CommandTokens(const pText: string): TArray<TToken>;
 begin
-  pCmd:= Default(TReportCommand);
   var S:= pText.Trim;
   if S.StartsWith(COMMAND_PREFIX) then
     S:= S.Substring(Length(COMMAND_PREFIX))
   else if S = COMMAND_PREFIX.TrimRight then
     S:= '';
-  var Tokens:= Tokenise(S);
+  Result:= Tokenise(S);
+end;
+
+function DetectCommandStyle(const pText: string): TCommandStyle;
+begin
+  var Tokens:= CommandTokens(pText);
+  var Seen: array[MARKS_POWERSHELL..MARKS_CLI] of Boolean;
+  Seen[MARKS_POWERSHELL]:= False;
+  Seen[MARKS_CLI]:= False;
+  for var I:= 1 to High(Tokens) do
+    if IsName(Tokens[I]) then
+      Seen[NameMarks(Tokens[I].Text)]:= True;
+  if Seen[MARKS_POWERSHELL] and Seen[MARKS_CLI] then
+    Result:= csMixed
+  else if Seen[MARKS_CLI] then
+    Result:= csCli
+  else if Seen[MARKS_POWERSHELL] then
+    Result:= csPowerShell
+  else
+    Result:= csNone;
+end;
+
+function ParseCommandLine(const pText: string; out pCmd: TReportCommand): Boolean;
+begin
+  pCmd:= Default(TReportCommand);
+  var Tokens:= CommandTokens(pText);
   if (Length(Tokens) = 0) or IsName(Tokens[0]) or (Tokens[0].Text = '') then
     Exit(False);
   pCmd.Question:= Tokens[0].Text;
@@ -495,7 +618,7 @@ begin
       if IsName(Tokens[I]) then
       begin
         var Arg: TCommandArg;
-        Arg.Name:= Tokens[I].Text.Substring(1);
+        Arg.Name:= DisplayName(Tokens[I].Text.Substring(NameMarks(Tokens[I].Text)));
         Arg.Value:= '';
         if (I + 1 < Length(Tokens)) and not IsName(Tokens[I + 1]) then
         begin
@@ -528,7 +651,7 @@ begin
       if pCmd.Has(Known) then
       begin
         var V:= pCmd.Get(Known);
-        SB.Append(' ').Append(NAME_MARK).Append(Known);
+        SB.Append(' ').Append(CLI_NAME_MARK).Append(CliName(Known));
         if (IndexOfName(QUOTED_NAMES, Known) <> NOT_FOUND) or NeedsQuotes(V) then
           SB.Append(' ').Append(QUOTE).Append(V).Append(QUOTE)
         else if V <> '' then
@@ -537,7 +660,7 @@ begin
     for var Arg in pCmd.Args do
       if IndexOfName(KNOWN_NAMES, Arg.Name) = NOT_FOUND then
       begin
-        SB.Append(' ').Append(NAME_MARK).Append(Arg.Name);
+        SB.Append(' ').Append(CLI_NAME_MARK).Append(CliName(Arg.Name));
         if NeedsQuotes(Arg.Value) then
           SB.Append(' ').Append(QUOTE).Append(Arg.Value).Append(QUOTE)
         else if Arg.Value <> '' then
@@ -557,29 +680,30 @@ begin
   var Names: TList<string>:= nil;
   var Diff: TList<string>:= nil;
   try
-    // PS trap handled: hashtable keys are case-insensitive, so the maps and the name list are too.
-    InA:= TDictionary<string, string>.Create(TIStringComparer.Ordinal);
-    InB:= TDictionary<string, string>.Create(TIStringComparer.Ordinal);
+    // PS trap handled: hashtable keys are case-insensitive, so the maps are keyed by NameKey (which
+    // also makes 'SurfaceCap' and 'surface-cap' one name) and the name list sorts without case.
+    InA:= TDictionary<string, string>.Create;
+    InB:= TDictionary<string, string>.Create;
     Names:= TList<string>.Create(TIStringComparer.Ordinal);
     Diff:= TList<string>.Create;
     for var Arg in pA.Args do
     begin
-      InA.AddOrSetValue(Arg.Name, Arg.Value);
-      if not Names.Contains(Arg.Name) then
+      if not InA.ContainsKey(NameKey(Arg.Name)) then
         Names.Add(Arg.Name);
+      InA.AddOrSetValue(NameKey(Arg.Name), Arg.Value);
     end;
     for var Arg in pB.Args do
     begin
-      InB.AddOrSetValue(Arg.Name, Arg.Value);
-      if not Names.Contains(Arg.Name) then
+      if not InA.ContainsKey(NameKey(Arg.Name)) and not InB.ContainsKey(NameKey(Arg.Name)) then
         Names.Add(Arg.Name);
+      InB.AddOrSetValue(NameKey(Arg.Name), Arg.Value);
     end;
     Names.Sort;
     for var N in Names do
     begin
       var VA, VB: string;
-      var HasA:= InA.TryGetValue(N, VA);
-      var HasB:= InB.TryGetValue(N, VB);
+      var HasA:= InA.TryGetValue(NameKey(N), VA);
+      var HasB:= InB.TryGetValue(NameKey(N), VB);
       if HasA and HasB and ValuesMatch(VA, VB) then
         Continue;
       Diff.Add(DisplayName(N) + ': ' + (if HasA then VA else ABSENT) + ' vs ' + (if HasB then VB else ABSENT));
