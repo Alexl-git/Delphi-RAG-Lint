@@ -3613,7 +3613,10 @@ begin
       GenerateRegion(Region.Id, pIsInterface, Code);
       Body:= OrmJoinLines(Code);
       OldBody:= Copy(pText, Region.Body.First, Region.Body.Last - Region.Body.First);
-      if OldBody <> Body then
+      { 1.55 R-155-ORMWS: a body that differs only in whitespace is the generated one: kept byte for byte, not listed }
+      if OrmContentHash(OldBody) = OrmContentHash(Body) then
+        Body:= OldBody
+      else
         FChangedRegions:= FChangedRegions + [Format('%s: %d', [Region.Id, DifferingLines(OldBody, Body)])];
       SB.Append(Copy(pText, Kept, Region.Start.Start - Kept)).Append(OrmStartMarker(Region.Start.RegionName, Body))
         .Append(Copy(pText, Region.Start.Finish, Region.Body.First - Region.Start.Finish)).Append(Body);

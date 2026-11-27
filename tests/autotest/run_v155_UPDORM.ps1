@@ -43,6 +43,11 @@ function WriteText($f, $t) { [IO.File]::WriteAllText($f, $t, $ansi) }
 function Hash($f) { (Get-FileHash -LiteralPath $f).Hash }
 # the text with the body of region 2 and the hash of its start marker removed (the marker lines stay)
 function Outside2($t) { [regex]::Replace($t, "(?s)(\{\`$REGION 'DB-RAD 2)(?: hash=[0-9a-f]{16})?('\}\r\n).*?\r\n( *\{\`$ENDREGION 'DB-RAD 2'\})", '$1$2$3') }
+# region 2 reformatted: indentation as tabs, a blank line after every line, trailing blanks -- whitespace only
+function Reformat2($t) {
+  [regex]::Replace($t, "(?s)(\{\`$REGION 'DB-RAD 2[^']*'\}\r\n)(.*?)(\r\n *\{\`$ENDREGION 'DB-RAD 2'\})", {
+      param($m) $m.Groups[1].Value + (($m.Groups[2].Value -split "`r`n" | ForEach-Object { ($_ -replace '^ {4}', "`t") + '  ' }) -join "`r`n`r`n") + $m.Groups[3].Value })
+}
 try {
   # a repository with one data field, made through the product's own text format
   $empty = Join-Path $work 'r.empty.dlrepo'
@@ -122,7 +127,23 @@ try {
   WriteText $iu ($inew -replace ' hash=[0-9a-f]{16}', '')
   $r = Update @()
   Check 'U11 dry run: a region whose body is current (only the hash is new) is not listed' (($r.Code -eq 0) -and ($r.Out -match '1 changed') -and ($r.Out -notmatch '(?m)^  region ')) $r.Out
-}
+  # 1.55 R-155-ORMWS (owner 2026-11-26): the region comparison and the hash ignore ALL whitespace
+  $fmt = Reformat2 $inew
+  WriteText $iu $fmt
+  $h = Hash $iu
+  $r = Update @()
+  Check 'U12a dry run: a region reformatted (whitespace only) is unchanged, not listed' (($fmt -cne $inew) -and ($r.Code -eq 0) -and ($r.Out -match '1 unchanged') -and
+    ($r.Out -notmatch '(?m)^  region ') -and ($r.Out -notmatch 'REFUSED')) $r.Out
+  $r = Update @('--apply')
+  Check 'U12b --apply: whitespace-only region kept byte for byte, hash still valid, exit 0' (($r.Code -eq 0) -and ($r.Out -notmatch 'REFUSED') -and ((Hash $iu) -eq $h)) $r.Out
+  $legacy = $fmt -replace ' hash=[0-9a-f]{16}', ''
+  WriteText $iu $legacy
+  $r = Update @()
+  Check 'U13a legacy region (no hash) differing only in whitespace: not listed' (($r.Code -eq 0) -and ($r.Out -match '1 changed') -and ($r.Out -notmatch '(?m)^  region ')) $r.Out
+  $r = Update @('--apply')
+  $after = ReadText $iu
+  Check 'U13b legacy: the whitespace-blind hash is stored, the body is kept byte for byte' (($r.Code -eq 0) -and ($after -match "REGION 'DB-RAD 2 hash=[0-9a-f]{16}'") -and
+    (($after -replace ' hash=[0-9a-f]{16}', '') -ceq $legacy) -and ($after -ceq $fmt)) $r.Out}
 catch { $script:fail++; Write-Host "[FAIL] exception: $_ $($_.ScriptStackTrace)" -ForegroundColor Red }
 finally { if ($script:fail -eq 0) { [IO.Directory]::Delete($work, $true) } else { Write-Host "kept: $work" } }
 if ($script:fail -gt 0) { Write-Host "V155 UPDORM: FAIL pass=$script:pass fail=$script:fail" -ForegroundColor Red; exit 1 }

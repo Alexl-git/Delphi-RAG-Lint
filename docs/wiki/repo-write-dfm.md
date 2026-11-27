@@ -86,7 +86,7 @@ overridden in an inherited form, datasets whose table the DFM does not state.
 
 **BLOCKED**, with the reason: a property the field class does not have; a class, length or lookup dataset the repository or
 the form does not settle; a column the SELECT does not return; a new field in an inherited
-dataset; on a BDE dataset (TTable, TQuery, TStoredProc, TBDE*) under the project setting `fieldrepo.bde` = `readonly` / `none` (see [[project-settings]]; default `full` = as any dataset, 1.55) every field insert, new event handler and grid / layout item removal (`BDE dataset: read only (project policy)` / `BDE not allowed in this project`); a unit that is missing, does not declare the form class or does not use Data.DB; a removed field that the
+dataset; on a BDE dataset (TTable, TQuery, TStoredProc, TBDE*) under the project setting `fieldrepo.bde` = `readonly` / `none` (see [[project-settings]]; default `full` = as any dataset, 1.55) every field insert, field deletion, new event handler and grid / layout item removal (`BDE dataset: read only (project policy)` / `BDE not allowed in this project`); a unit that is missing, does not declare the form class or does not use Data.DB; a removed field that the
 form or its unit still needs. "Needs" is wide: the component, or the field name as a word of any string of the DFM
 (`DataField`, `DataBinding.FieldName`, `KeyFields`, `LookupResultField`, `MasterFields`, `IndexFieldNames`, an
 expression or filter, a SQL parameter; captions and hints do not count), or as a word of any string in the unit (`Locate`, `Filter`, `IndexFieldNames`, a SQL

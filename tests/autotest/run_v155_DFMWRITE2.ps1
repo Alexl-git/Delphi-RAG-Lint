@@ -226,6 +226,17 @@ try {
   }
   $r = Write-Dfm $bn (NewBdeForms 'fdreadonly' 'readonly' 'TFDMemTable')
   Check 'B3 positive control: readonly leaves a FireDAC dataset alone' (($r.Code -eq 0) -and ($r.Out -match ($insPrice + '\[')) -and ($r.Out -notmatch 'BLOCKED: BDE')) $r.Out
+  # R-155-BDE (owner 2026-11-26): readonly / none also refuse DELETING a persistent field (OLDCOL: no grid item, so the
+  # 1.55 first cut allowed it); full (and no setting) still plans it
+  $bd5 = @('--dataset', 'memOrders', '--names', 'ID,QTY,NOTE,USEDCOL')
+  $delOld = 'delete uAllKinds\.dfm memOrdersOLDCOL: [^\n]*\n'
+  foreach ($case in @(@('bde5full', 'full', '\(unchecked\)'), @('bde5readonly', 'readonly', 'BLOCKED: BDE dataset: read only \(project policy\)'),
+      @('bde5none', 'none', 'BLOCKED: BDE not allowed in this project'))) {
+    $r = Write-Dfm $bd5 (NewBdeForms $case[0] $case[1])
+    Check "B5 BDE $($case[1]): deleting a persistent field is $($case[2])" (($r.Code -eq 0) -and ($r.Out -match ($delOld + '  ' + $case[2]))) $r.Out
+  }
+  $r = Write-Dfm $bd5 (NewBdeForms 'bde5fd' 'readonly' 'TFDMemTable')
+  Check 'B5c positive control: readonly leaves the field delete of a FireDAC dataset alone' (($r.Code -eq 0) -and ($r.Out -match ($delOld + '  \(unchecked\)'))) $r.Out
   $r = Write-Dfm $bn (NewBdeForms 'bdebad' 'readwrite')
   Check 'B4 an unknown fieldrepo.bde value is refused (exit 1, names the key)' (($r.Code -eq 1) -and ($r.Out -match 'fieldrepo\.bde')) $r.Out
 }

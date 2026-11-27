@@ -89,6 +89,11 @@ kept; the end marker does not change). A marker without a hash (every unit Table
 as unchanged: the region is regenerated and gets its hash on that write, so **the first 1.55 run changes every existing
 ORM unit once** (the start marker lines only, when the bodies are current).
 
+The hash and the comparison of a body with the generated one ignore ALL whitespace (spaces, tabs, line breaks), so any
+YADF or hand formatting keeps the hash valid: a region whose body differs from the generated body only in whitespace is
+unchanged -- kept byte for byte, not listed in the dry run, never `REFUSED` (a legacy marker without a hash gets the
+whitespace-blind hash on the first run).
+
 A region whose body no longer matches the hash of its marker was edited by hand. `update-orm` keeps it byte for byte,
 still updates the other regions of the unit, lists it as
 `<file>: REFUSED region <id>, hand-edited (...); kept -- --overwrite-edited <id> overwrites it` and (with `--apply`) exits 1. To overwrite:

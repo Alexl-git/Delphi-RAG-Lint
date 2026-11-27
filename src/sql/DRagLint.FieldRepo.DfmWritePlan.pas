@@ -2044,7 +2044,9 @@ var
   VRefs: TArray<string>;
   VDeclared: Integer;
 begin
-  Result := '';
+  Result := BdeBlockReason;
+  if Result <> '' then
+    Exit;
   if not IsOwn(pField) then
     Exit('the field is declared in the ancestor''s DFM');
   VRefs := FDoc.ReferencesTo(pField.CompName);

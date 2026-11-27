@@ -33,7 +33,7 @@ directory (same walk-up). None of them: exit 2, `no project`.
 | `lint.config` | path | the discovery chain | yes | yes | lint config file (relative to the project folder); `--config` overrides |
 | `lint.profile` | string | none | yes | yes | named lint profile when `--profile` is not given |
 | `taint.envSource` | bool | `true` | yes | yes | `false`: `GetEnvironmentVariable` is not a taint source in this project |
-| `fieldrepo.bde` | string | `full` | no | yes | `repo write-dfm` on a BDE dataset (TTable, TQuery, TStoredProc, TBDE*): `full` = as any dataset; `readonly` = no field insert, no new event handler, no grid / layout item removal (BLOCKED `BDE dataset: read only (project policy)`); `none` = no BDE in this project, the same three BLOCKED `BDE not allowed in this project` (1.55) |
+| `fieldrepo.bde` | string | `full` | no | yes | `repo write-dfm` on a BDE dataset (TTable, TQuery, TStoredProc, TBDE*): `full` = as any dataset; `readonly` = no field insert, no field deletion, no new event handler, no grid / layout item removal (BLOCKED `BDE dataset: read only (project policy)`); `none` = no BDE in this project, the same four BLOCKED `BDE not allowed in this project` (1.55) |
 
 `taint.envSource = false` only ever switches that one source OFF (it is added to the taint
 `disable` list of the effective config); it cannot switch ON a source your lint config disabled.

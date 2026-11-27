@@ -169,6 +169,13 @@ function FindOrmRegion(const pText, pOrmId: string; out pRegion: TDlfrRegion): B
 /// TableTools emptied it).</remarks>
 function ReadOrmRegions(const pText: string; const pKnown: TArray<string>; out pRegions: TArray<TDlfrRegion>): string;
 
+/// <summary>The hash a numbered ORM region carries: of its body with ALL whitespace removed (spaces, tabs, line breaks).</summary>
+/// <param name="pContent">The body.</param>
+/// <returns>16 lower-case hex digits; two bodies that differ only in whitespace give the same one.</returns>
+/// <remarks>1.55 R-155-ORMWS (owner 2026-11-26): any YADF or hand formatting keeps the hash valid. Handler (DLFR) regions
+/// keep their own, whitespace-sensitive hash.</remarks>
+function OrmContentHash(const pContent: string): string;
+
 /// <summary>The start marker of a numbered ORM region with the hash of its body.</summary>
 /// <param name="pName">The region name as the unit spells it (DB-RAD 4, DB-RADa 4, DLFR 4), an old hash or none.</param>
 /// <param name="pContent">The body: whole lines.</param>
@@ -228,6 +235,7 @@ uses
   System.Classes,
   System.StrUtils,
   System.Hash,
+  System.Character,
   System.IOUtils,
   System.RegularExpressions;
 
@@ -739,14 +747,30 @@ begin
   Result := if VMatch.Success then VMatch.Groups[1].Value.ToLower else '';
 end;
 
+function OrmContentHash(const pContent: string): string;
+var
+  VBuilder: TStringBuilder;
+  VChar: Char;
+begin
+  VBuilder := TStringBuilder.Create(Length(pContent));
+  try
+    for VChar in pContent do
+      if not VChar.IsWhiteSpace then
+        VBuilder.Append(VChar);
+    Result := THashSHA2.GetHashString(VBuilder.ToString).Substring(0, HASH_LEN).ToLower;
+  finally
+    VBuilder.Free;
+  end;
+end;
+
 function OrmStartMarker(const pName, pContent: string): string;
 begin
-  Result := Format('{$REGION ''%s hash=%s''}', [Rx(PAT_ORM_HASH).Replace(Trim(pName), ''), ContentHash(pContent)]);
+  Result := Format('{$REGION ''%s hash=%s''}', [Rx(PAT_ORM_HASH).Replace(Trim(pName), ''), OrmContentHash(pContent)]);
 end;
 
 function OrmRegionEdited(const pText: string; const pRegion: TDlfrRegion): Boolean;
 begin
-  Result := (pRegion.Hash <> '') and (pRegion.Hash <> ContentHash(pRegion.Content(pText)));
+  Result := (pRegion.Hash <> '') and (pRegion.Hash <> OrmContentHash(pRegion.Content(pText)));
 end;
 
 { '' or the generated region inside pRegion. }
