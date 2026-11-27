@@ -1574,6 +1574,16 @@ end; // function
 /// repo, at 0.02 / 0.05 / 0.01 s. Symbols-only -- no refs join -- so unlike the
 /// sibling global-only-uses-edge it needs no OptedIn gate and ships enabled.
 ///
+/// REFERENCED TYPES, ONE LEVEL DEEP (v156 RF-1, owner Q28). When the declaration TEXT
+/// matches but names other declarations (THold = array of TLeaf), each named
+/// declaration is looked up as every site sees it (its own file first) and their
+/// signatures are compared. A named type that differs escalates the message to
+/// THE DECLARATIONS DIFFER; all identical keeps the "identical" message; a name with no
+/// comparable declaration (undeclared, library, record / class body) keeps the
+/// "not proven identical" message. The finding is reported in every case (owner
+/// ruling 2026-09-16: same name in two units is a bug whether or not it differs);
+/// only the message changes. The named declarations' own references are not followed.
+///
 /// KNOWN CAVEAT: the finding is anchored at ONE site, so if that file is
 /// excluded by exclude_paths or ownership while its twin is owned, the finding
 /// vanishes with it. Accepted for v1 -- per-site findings would report the same
@@ -1607,8 +1617,11 @@ const
     duplicates measured on ORM3 carry two or three sites, so the cap only ever
     engages on the pathological cases it exists for. }
   CMaxDupSitesShown = 6;
+type
+  TRefCompare = (rrUnresolved, rrSame, rrDiffer);
 var
   Findings: TList<TLintFinding>;
+  Rows    : TArray<TDuplicateDeclSite>;
 
   { Lowercased, with whitespace significant ONLY between two word characters.
     See the tbltdistrcount note above -- this is the difference between an
@@ -1702,6 +1715,88 @@ var
       end;
     end;
   end;
+  { 1.56 RF-1 (owner Q28): the referenced names of a text-equal group, compared ONE LEVEL DEEP.
+    For each name ReferencedNames returns, the declaration every site of the group sees is looked
+    up (the one in the site's own file first, else the only normalized signature all declarations
+    of that name share); the names' own signatures are then compared across the sites. Returns
+    rrUnresolved when any name has no comparable declaration (undeclared here, a library type,
+    or a record / class that carries no signature) and no other name differs; rrDiffer as soon
+    as one name resolves to different declarations; rrSame when every name resolves identically.
+    The referenced declarations' OWN references are not followed (one level, by ruling). }
+  function CompareReferencedTypes(AFrom, ATo: Integer): TRefCompare;
+  var
+    AllSites  : TArray<TDuplicateDeclSite>;
+    Names     : TArray<string>;
+    NameText  : string;
+    N, K      : Integer;
+    Want, Got : string;
+    Found     : Boolean;
+    Unresolved: Boolean;
+
+    // The normalized signature of AName as seen from AFileId; '' when not comparable.
+    function SigSeenFrom(const AName: string; AFileId: Int64): string;
+    var
+      Cand, Own: string;
+      HasCand, HasOwn: Boolean;
+      Si: Integer;
+    begin
+      Result := '';
+      Cand   := '';
+      Own    := '';
+      HasCand:= False;
+      HasOwn := False;
+      for Si:= 0 to High(AllSites) do
+      begin
+        if not SameText(AllSites[Si].Name, AName) then Continue;
+        if Trim(AllSites[Si].Signature) = '' then Exit;
+        if AllSites[Si].FileId = AFileId then
+        begin
+          Own   := NormSig(AllSites[Si].Signature);
+          HasOwn:= True;
+        end
+        else if not HasCand then
+        begin
+          Cand   := NormSig(AllSites[Si].Signature);
+          HasCand:= True;
+        end
+        else if Cand <> NormSig(AllSites[Si].Signature) then
+          Cand:= #0;
+      end;
+      if HasOwn then Result:= Own
+      else if HasCand and (Cand <> #0) then Result:= Cand;
+    end;
+
+  begin
+    Result:= rrUnresolved;
+    AllSites:= AStore.FindGlobalDeclSites;
+    NameText:= ReferencedNames(Rows[AFrom].Signature);
+    if NameText = '' then Exit;
+    Names     := NameText.Split([', ']);
+    Unresolved:= False;
+    for N:= 0 to High(Names) do
+    begin
+      Want := '';
+      Found:= False;
+      for K:= AFrom to ATo - 1 do
+      begin
+        Got:= SigSeenFrom(Names[N], Rows[K].FileId);
+        if Got = '' then
+        begin
+          Unresolved:= True;
+          Break;
+        end;
+        if not Found then
+        begin
+          Want := Got;
+          Found:= True;
+        end
+        else if Got <> Want then
+          Exit(rrDiffer);
+      end;
+    end;
+    Result:= if Unresolved then rrUnresolved else rrSame;
+  end;
+
   { The library tier proper. Appends to AFindings; never raises.
 
     Which library units count as "used": every entry of the declaring file's
@@ -1884,7 +1979,7 @@ var
   end;
 
 var
-  Rows    : TArray<TDuplicateDeclSite>;
+  RefCmp  : TRefCompare               ;
   I, J, K : Integer                   ;
   Paths   : TArray<string>            ;
   Sites   : string                    ;
@@ -1976,14 +2071,25 @@ begin
           damage it has already done, which is a message concern. Escalating the
           SEVERITY on `Differ` would also make the rule's severity depend on
           NormSig being perfect, and NormSig has now been wrong once. }
-        if Differ then
+        RefCmp:= rrUnresolved;
+        if (not Differ) and (Trim(Rows[I].Signature) <> '') and (ReferencedNames(Rows[I].Signature) <> '') then
+          RefCmp:= CompareReferencedTypes(I, J);
+        if (not Differ) and (RefCmp = rrDiffer) then
+          F.Message:= Format(
+            '%s is declared at interface level in %d units as %s (%s) -- the declaration text ' +
+            'matches, but a type it names (%s) is declared differently in these units, so THE ' +
+            'DECLARATIONS DIFFER one level down and which one compiles depends on uses order. ' +
+            'Almost always the same name ported twice and then edited apart; decide which is ' +
+            'correct and delete the other rather than renaming it',
+            [Rows[I].Name, NFiles, Kinds, Sites, ReferencedNames(Rows[I].Signature)])
+        else if Differ then
           F.Message:= Format(
             '%s is declared at interface level in %d units as %s (%s) -- and THE DECLARATIONS ' +
             'DIFFER (%s), so you are compiling one of two different things and which one ' +
             'depends on uses order. Almost always the same name ported twice and then edited ' +
             'apart; decide which is correct and delete the other rather than renaming it',
             [Rows[I].Name, NFiles, Kinds, Sites, Sigs])
-        else if (Trim(Rows[I].Signature) = '') or (ReferencedNames(Rows[I].Signature) <> '') then
+        else if (Trim(Rows[I].Signature) = '') or ((ReferencedNames(Rows[I].Signature) <> '') and (RefCmp <> rrSame)) then
           F.Message:= Format(
             '%s is declared at interface level in %d units as %s (%s) -- the declaration text ' +
             'matches, but it names other declarations (%s) that are NOT compared and may differ ' +
