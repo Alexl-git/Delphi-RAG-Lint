@@ -555,6 +555,23 @@ begin
   end;
 end;
 
+procedure TestMissingGridEvents;
+var
+  VRow: TArray<string>;
+  VMissing: TArray<string>;
+begin
+  VRow := ['x', '', '', '', 'AText := ''a'';', 'ADone := True;'];
+  VMissing := MissingGridEvents(VRow, []);
+  Check('M1 both grid events missing, TField events never listed', (Length(VMissing) = 2) and (VMissing[0] = 'OnGetDisplayText') and (VMissing[1] = 'OnCustomDrawCell'));
+  VMissing := MissingGridEvents(VRow, ['onGetDisplayText']);
+  Check('M2 an assigned event (any case) is not missing', (Length(VMissing) = 1) and (VMissing[0] = 'OnCustomDrawCell'));
+  Check('M3 both assigned: nothing missing', Length(MissingGridEvents(VRow, ['OnGetDisplayText', 'OnCustomDrawCell'])) = 0);
+  VRow := ['', '', '', '', '   ', ''];
+  Check('M4 a blank stored body is not code: nothing missing', Length(MissingGridEvents(VRow, [])) = 0);
+  Check('M5 a short or empty row is safe', (Length(MissingGridEvents([], [])) = 0) and (Length(MissingGridEvents(['a', 'b'], [])) = 0));
+  Check('M6 TField event bodies alone list nothing', Length(MissingGridEvents(['a', 'b', 'c', 'd', '', ''], [])) = 0);
+end;
+
 procedure TestAscii;
 begin
   Check('A1 ASCII', FirstNonAscii([65, 13, 10]) = -1);
@@ -576,7 +593,7 @@ begin
 end;
 
 begin
-  Run([TestScan, TestRegions, TestRenumber, TestCalc, TestHandlers, TestMaxLen, TestAscii, TestSave]);
+  Run([TestScan, TestRegions, TestRenumber, TestCalc, TestHandlers, TestMaxLen, TestMissingGridEvents, TestAscii, TestSave]);
   Writeln(Format('Summary: pass=%d fail=%d', [GPass, GFail]));
   if GFail > 0 then
     Halt(1);
