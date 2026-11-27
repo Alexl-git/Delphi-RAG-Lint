@@ -18,12 +18,6 @@ const
   /// <summary>The registered question id.</summary>
   RISK_ID = 'risk';
 
-/// <summary>The CRAP-style risk score of one routine.</summary>
-/// <param name="pCyclomatic">Cyclomatic complexity, at least 1.</param>
-/// <param name="pCoverage">Covered fraction of the routine's lines, 0..1 (values outside are clamped).</param>
-/// <returns>cc^2 * (1 - coverage)^3 + cc; equals pCyclomatic at full coverage.</returns>
-function RiskScore(pCyclomatic: Integer; pCoverage: Double): Double;
-
 implementation
 
 uses
@@ -42,6 +36,7 @@ const
   COOL_FILL = '#E2F1EF';
   HOT_SCORE = 30.0;
 
+{ The CRAP-style risk score of one routine: cc^2 * (1 - coverage)^3 + cc, coverage clamped to 0..1; unit-private (the report rows call it). }
 function RiskScore(pCyclomatic: Integer; pCoverage: Double): Double;
 begin
   var Cov:= EnsureRange(pCoverage, NO_RATIO, FULL_RATIO);

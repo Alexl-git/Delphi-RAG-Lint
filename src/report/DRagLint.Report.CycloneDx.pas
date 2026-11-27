@@ -156,9 +156,15 @@ type
     property ExeIsPe: Boolean read FExeIsPe write FExeIsPe;    constructor Create;
     destructor Destroy; override;
     /// <summary>Adds one unit.</summary>
+    /// <param name="pName">The unit name.</param>
+    /// <param name="pPath">The source file path, or '' when the unit has none.</param>
+    /// <param name="pOrigin">Where the unit came from (project index, library index, or named in a uses clause only).</param>
+    /// <param name="pFirstParty">True for a unit of the project itself.</param>
     /// <returns>Its index, for AddEdge.</returns>
     function AddUnit(const pName, pPath: string; pOrigin: TSbomUnitOrigin; pFirstParty: Boolean): Integer;
     /// <summary>Adds one uses edge between two units added before.</summary>
+    /// <param name="pFromUnit">Index (from AddUnit) of the unit that names the other in its uses clause.</param>
+    /// <param name="pToUnit">Index (from AddUnit) of the used unit.</param>
     procedure AddEdge(pFromUnit, pToUnit: Integer);
     /// <summary>The units, in the order added.</summary>
     property Units: TList<TSbomUnit> read FUnits;
@@ -259,7 +265,7 @@ type
   end;
 
   { Groups the units of one model and renders the document. }
-  TSbomBuilder = class
+  TSbomBuilder = class  // dl:ok high-response@fa5f -- LINTFIX-A: one builder renders one document; its response set is the JSON-object calls of the component, dependency and metadata writers sharing the model and catalogue
   private
     FModel    : TSbomModel;
     FCatalogue: TSbomCatalogue;
