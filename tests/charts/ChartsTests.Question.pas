@@ -173,11 +173,11 @@ end;
 
 procedure TAskTests.CommandLineNamesOnlyGivenArguments;
 begin
-  Assert.AreEqual('COMMAND deps -Target "DRagLint.CLI"', ReportCommandText(Cmd('deps', ['Target', 'DRagLint.CLI'])));
-  Assert.AreEqual('COMMAND path -Target "A.B" -To "C.D" -Depth 3 -Cap 5 -Mode read -MaxRows 9',
+  Assert.AreEqual('COMMAND deps --target "DRagLint.CLI"', ReportCommandText(Cmd('deps', ['Target', 'DRagLint.CLI'])));
+  Assert.AreEqual('COMMAND path --target "A.B" --to "C.D" --depth 3 --cap 5 --mode read --max-rows 9',
     ReportCommandText(Cmd('path', ['MaxRows', '9', 'Mode', 'read', 'Cap', '5', 'Depth', '3', 'To', 'C.D', 'Target', 'A.B'])));
   { an empty -To is left out }
-  Assert.AreEqual('COMMAND x -Target "t"', ReportCommandText(Cmd('x', ['Target', 't', 'To', ''])));
+  Assert.AreEqual('COMMAND x --target "t"', ReportCommandText(Cmd('x', ['Target', 't', 'To', ''])));
 end;
 
 procedure TAskTests.HtmlDecodeAsWebUtility;
@@ -213,16 +213,16 @@ begin
     '  TARGET U.TFoo.Bar @U.pas:12|' +
     '  V.Baz @V.pas:7|' +
     '  Q   R @V.pas -- a & b <c>|' +
-    '  ... +3 more routines (+5 more sites) not shown (-Cap 20; raise -Cap to see them)|' +
+    '  ... +3 more routines (+5 more sites) not shown (--cap 20; raise --cap to see them)|' +
     '  ... Code-driven display is NOT SHOWN   here|' +
-    '  ... 1 more row(s) not printed here (-MaxRows 2): b\graph.dot', string.Join('|', Rows));
+    '  ... 1 more row(s) not printed here (--max-rows 2): b\graph.dot', string.Join('|', Rows));
 end;
 
 procedure TAskTests.DotRowsWithNoAnchoredRow;
 begin
   var Rows:= DotAnswerRows(['  n [label=<<TABLE><TR><TD><FONT>+2 more units not shown</FONT></TD></TR></TABLE>>];'],
     'drag-lint ask deps', DEFAULT_MAX_ROWS, 'g.dot', 'b\index.html');
-  Assert.AreEqual('  (no anchored result rows -- open b\index.html)|  ... +2 more units not shown (raise -Cap to see them)',
+  Assert.AreEqual('  (no anchored result rows -- open b\index.html)|  ... +2 more units not shown (raise --cap to see them)',
     string.Join('|', Rows));
 end;
 

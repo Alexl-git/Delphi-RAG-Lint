@@ -78,7 +78,7 @@ const
   { a plain answer in Ask-Report -Plain's shape }
   PLAIN_ANSWER =
     'Who reads this field (drag-lint report who-reads) for U.TA.FB, asked on 2026-10-14 09:30, engine 1.0.' + CRLF +
-    'COMMAND who-reads -Target "U.TA.FB"' + CRLF +
+    'COMMAND who-reads --target "U.TA.FB"' + CRLF +
     'BUNDLE C:\T\who-reads-U_TA_FB' + CRLF +
     'INDEX C:\T\x.sqlite' + CRLF +
     'CHART who-reads U.TA.FB -- 2 read sites / 1 routines' + CRLF +
@@ -363,7 +363,7 @@ begin
     var Code:= Run(['touches-tables', '--target', TT_TARGET, '--db', Db, '--allow-stale', '--plain', '--out-root', FTempDir], nil);
     Assert.AreEqual(0, Code, Joined(FErr));
     Assert.Contains(Joined(FOut), CRLF + 'CHART touches-tables ' + TT_TARGET + ' -- 5 tables read / 5 tables written' + CRLF);
-    Assert.AreEqual('COMMAND touches-tables -Target "' + TT_TARGET + '"', FOut[1]);
+    Assert.AreEqual('COMMAND touches-tables --target "' + TT_TARGET + '"', FOut[1]);
     Assert.AreEqual('INDEX ' + Db, FOut[INDEX_LINE_NO]);
   finally
     SetEnvironmentVariable(ASK_REPORT_ENV, if Prev = '' then nil else PChar(Prev));

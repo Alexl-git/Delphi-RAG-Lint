@@ -417,7 +417,7 @@ const
   TT_READS = 5;
   { the answer after the header sentence, with the BUNDLE line left out (it names the root) }
   TT_ANSWER =
-    'COMMAND touches-tables -Target "uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation"|' +
+    'COMMAND touches-tables --target "uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation"|' +
     'INDEX <db>|' +
     'CHART touches-tables uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation -- 5 tables read / 5 tables written|' +
     '  TARGET uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation @uPipeSessionBuilder.pas:1381|' +
@@ -861,7 +861,7 @@ const
   DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
-    'COMMAND shown-where -Target "FTRNAMESTR"|' +
+    'COMMAND shown-where --target "FTRNAMESTR"|' +
     'INDEX <db>|' +
     'CHART shown-where FTRNAMESTR -- 4 data bindings / 2 forms|' +
     '  grdFtrsColFtrName.DataBinding.FieldName = ''FTRNAMESTR'' @AssignGroups.dfm:59|' +
@@ -1702,7 +1702,7 @@ begin
   Assert.AreEqual<Integer>(DEPS_CLI_LINES, Length(Answer.Lines));
   Assert.AreEqual('CHART deps DRagLint.CLI -- 1 used by / 40 uses', Answer.Lines[DEPS_CHART_LINE]);
   Assert.AreEqual('  drag-lint @drag-lint.dpr:195', Answer.Lines[DEPS_FIRST_ROW]);
-  Assert.AreEqual('  ... +70 more units this uses not shown -- 40 of 110 drawn (display cap 40) (raise -Cap to see them)',
+  Assert.AreEqual('  ... +70 more units this uses not shown -- 40 of 110 drawn (display cap 40) (raise --cap to see them)',
     Answer.Lines[High(Answer.Lines)]);
 end;
 
@@ -1729,7 +1729,7 @@ begin
   Assert.AreEqual<Integer>(CS_LINES, Length(L));
   Assert.AreEqual('CHART class-surface ' + CS_TARGET + ' -- 392 members / 24 shown', L[CS_CHART_LINE]);
   Assert.AreEqual('  TARGET ' + CS_TARGET + ' @Blueprint4.ViewModel.pas:57', L[CS_CHART_LINE + 1]);
-  Assert.AreEqual('  ... +189 more members not shown (-SurfaceCap 12; raise -SurfaceCap to see them)', L[High(L)]);
+  Assert.AreEqual('  ... +189 more members not shown (--surface-cap 12; raise --surface-cap to see them)', L[High(L)]);
 end;
 
 procedure TClassSurfaceTests.UnitIsRefused;
@@ -1768,7 +1768,7 @@ begin
   { New-DiagramArtifact's slug takes the -Control too }
   var Answer:= AskChartQuestion(A);
   Assert.EndsWith('\event-wiring-uMain_TfrmMAIN_CauseList', Answer.BundleDir);
-  Assert.AreEqual('COMMAND event-wiring -Target "uMain.TfrmMAIN" -Control "CauseList"', Answer.Lines[1]);
+  Assert.AreEqual('COMMAND event-wiring --target "uMain.TfrmMAIN" --control "CauseList"', Answer.Lines[1]);
 end;
 
 procedure TEventWiringTests.AnswerMatchesPowerShell;
@@ -1779,7 +1779,7 @@ begin
     Exit;
   Assert.AreEqual<Integer>(EW_LINES, Length(L));
   Assert.AreEqual('  CauseList.OnClick = CauseListClick @uMain.dfm:3065', L[EW_FIRST_ROW]);
-  Assert.StartsWith('  ... 6 more row(s) not printed here (-MaxRows 80): ', L[High(L)]);
+  Assert.StartsWith('  ... 6 more row(s) not printed here (--max-rows 80): ', L[High(L)]);
 end;
 
 procedure TEventWiringTests.NonFormIsRefused;
@@ -1877,7 +1877,7 @@ begin
     Exit;
   Assert.AreEqual<Integer>(CI_LINES, Length(L));
   Assert.AreEqual('CHART change-impact ' + CI_TARGET + ' -- 9 routines affected / 1 units', L[CS_CHART_LINE]);
-  Assert.AreEqual('  ... +1 more routines not shown (raise -Cap to see them)', L[High(L)]);
+  Assert.AreEqual('  ... +1 more routines not shown (raise --cap to see them)', L[High(L)]);
 end;
 
 procedure TChangeImpactTests.LeafIsRefused;
@@ -2006,7 +2006,7 @@ begin
     Exit;
   Assert.AreEqual<Integer>(PT_LINES, Length(L));
   Assert.AreEqual('CHART protocol-trace cmdDelta -- 38 references / 2 zones', L[CS_CHART_LINE]);
-  Assert.AreEqual('  ... +17 more routines (+17 more sites) not shown (-Cap 20; raise -Cap to see them)', L[High(L)]);
+  Assert.AreEqual('  ... +17 more routines (+17 more sites) not shown (--cap 20; raise --cap to see them)', L[High(L)]);
 end;
 
 { ---- lifecycle ---- }
