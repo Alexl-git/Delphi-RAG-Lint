@@ -98,6 +98,42 @@ function RemoteNameProblem(const pConnection, pBackupName: string): string;
 /// <param name="pFile">The file name.</param>
 /// <returns>Folder + the separator the server's own path uses + file; nothing is looked up on this machine.</returns>
 function ServerBackupFile(const pDatabase, pFolder, pFile: string): string;  // dl:ok unused-public-symbol@ecf2 -- REVIEWED 2026-11-26 v155 INT: public as the test seam of the server path rule; BackupTests.dpr Q2 (outside the indexed project) calls it
+
+/// <summary>The IPv4 addresses of this computer: what its own name resolves to.</summary>
+/// <returns>Dotted addresses; empty when the name does not resolve or Winsock does not start.</returns>
+/// <remarks>Q16 A (1.55): a Server key holding one of them is this machine, like localhost.</remarks>
+function OwnAddresses: TArray<string>;  // dl:ok unused-public-symbol@0000 -- REVIEWED 2026-11-26 REVFIX: test seam; BackupTests.dpr (outside the indexed project) needs an own address for the Q16 positive control
+
+/// <summary>What the attachment check of an opened connection refuses.</summary>
+/// <param name="pHost">The host of the connection string, already found to be this machine ('' = none given).</param>
+/// <param name="pAttachment">"protocol|address" as MON$ATTACHMENTS reports the connection.</param>
+/// <returns>'' = the server is on this machine; else the address to refuse.</returns>
+/// <remarks>The server reports the address of the CLIENT. Through localhost that is a loopback address unless a tunnel forwards
+/// the port to another machine, which is what the check is for. Through the own name or an own IPv4 address of this computer it
+/// is that own address, on a local and on a remote server alike, so the check cannot tell and is not applied: the host itself
+/// is the evidence (Q16 A).</remarks>
+function RemoteAttachmentHost(const pHost, pAttachment: string): string;
+
+/// <summary>The path of a new automatically named backup on the disk of another machine.</summary>
+/// <param name="pDatabase">The database file as the server reports it.</param>
+/// <param name="pFolder">--backup-dir (a path on the server); '' = the folder of the database.</param>
+/// <param name="pNow">The local time of the backup.</param>
+/// <returns>ServerBackupFile of DLFR_BACKUP_&lt;database&gt;_&lt;yyyymmdd&gt;_&lt;hhnnss&gt;_&lt;1000 + milliseconds&gt;.fbk.</returns>
+/// <remarks>Nothing on the server can be looked at and gbak replaces a file of the same name, so the name carries the
+/// milliseconds: two backups of one second get different names. Two of the same millisecond would still collide; that is
+/// not checked. The purge recognises the name as an automatic one.</remarks>
+function RemoteBackupFile(const pDatabase, pFolder: string; pNow: TDateTime): string;
+
+/// <summary>The backup folder to use: the command line's, else the project's, else none.</summary>
+/// <param name="pConnection">The --connection value.</param>
+/// <param name="pChosen">--backup-dir; '' = not given. For a server on another machine it is a path on that server.</param>
+/// <param name="pProject">"backupDir" of the project settings, already made a full path on THIS machine; '' = not set.</param>
+/// <param name="pDropped">True when pProject was set and is not used.</param>
+/// <returns>pChosen; else pProject when the server is this machine; else '' = beside the database.</returns>
+/// <exception cref="EFrBackupError">As RemoteFbHost.</exception>
+/// <remarks>A project folder is a path of this machine: it is never sent to another machine as a path on its disk.</remarks>
+function EffectiveBackupDir(const pConnection, pChosen, pProject: string; out pDropped: Boolean): string;
+
 /// <summary>The database file a connection string names.</summary>
 /// <param name="pConnection">The --connection value.</param>
 /// <returns>MON$DATABASE_NAME, the name the list of backups records.</returns>
@@ -414,8 +450,7 @@ end;
 const
   WINSOCK_VERSION_2_2 = $0202;
 
-{ True when pHost is an IPv4 address of this computer (what its own name resolves to). }
-function IsOwnAddress(const pHost: string): Boolean;
+function OwnAddresses: TArray<string>;
 var
   VData: TWSAData;
   VEntry: PHostEnt;
@@ -423,8 +458,8 @@ var
   VAddress: TInAddr;
   VName: AnsiString;
 begin
-  Result := False;
-  if (pHost = '') or not CharInSet(pHost[1], ['0'..'9']) or (WSAStartup(WINSOCK_VERSION_2_2, VData) <> 0) then
+  Result := nil;
+  if WSAStartup(WINSOCK_VERSION_2_2, VData) <> 0 then
     Exit;
   try
     VName := AnsiString(GetEnvironmentVariable('COMPUTERNAME'));
@@ -432,15 +467,21 @@ begin
     if (VEntry = nil) or (VEntry.h_addrtype <> AF_INET) then
       Exit;
     VList := PPAnsiChar(VEntry.h_addr_list);
-    while (VList <> nil) and (VList^ <> nil) and not Result do
+    while (VList <> nil) and (VList^ <> nil) do
     begin
       VAddress := PInAddr(VList^)^;
-      Result := string(inet_ntoa(VAddress)) = pHost;
+      Result := Result + [string(inet_ntoa(VAddress))];
       Inc(VList);
     end;
   finally
     WSACleanup;
   end;
+end;
+
+{ True when pHost is an IPv4 address of this computer (what its own name resolves to). }
+function IsOwnAddress(const pHost: string): Boolean;
+begin
+  Result := (pHost <> '') and CharInSet(pHost[1], ['0'..'9']) and MatchStr(pHost, OwnAddresses);
 end;
 
 function RemoteTargetHost(const pTarget: TFbTarget): string;
@@ -538,6 +579,34 @@ begin
   Result := if VAddress = '' then VProtocol else VAddress;
 end;
 
+function RemoteAttachmentHost(const pHost, pAttachment: string): string;
+begin
+  Result := if ((pHost <> '') and SameText(pHost, GetEnvironmentVariable('COMPUTERNAME'))) or IsOwnAddress(pHost) then ''
+    else RemoteAddress(pAttachment);
+end;
+
+function RemoteBackupFile(const pDatabase, pFolder: string; pNow: TDateTime): string;
+const
+  MILLISECOND_SUFFIX_BASE = 1000;
+var
+  VName: string;
+begin
+  { the server's path may be a Unix one: '/' is no path delimiter for ExtractFileName here }
+  VName := Copy(pDatabase, Max(LastDelimiter('\', pDatabase), LastDelimiter('/', pDatabase)) + 1, MaxInt);
+  Result := ServerBackupFile(pDatabase, pFolder, BackupFileName(VName, pNow, MILLISECOND_SUFFIX_BASE + MilliSecondOf(pNow)));
+end;
+
+function EffectiveBackupDir(const pConnection, pChosen, pProject: string; out pDropped: Boolean): string;
+begin
+  pDropped := False;
+  Result := pChosen;
+  if (Result <> '') or (pProject = '') then
+    Exit;
+  pDropped := RemoteFbHost(pConnection) <> '';
+  if not pDropped then
+    Result := pProject;
+end;
+
 procedure PlainSql(pConn: TFDConnection);
 begin
   pConn.TxOptions.ReadOnly := True;
@@ -564,9 +633,7 @@ begin
     if pRemoteHost = '' then
     begin
       VReported := if Assigned(pAttachment) then pAttachment() else string(Result.ExecSQLScalar(SQL_ATTACHMENT));
-      { a connection to the own name of this machine does not come from a loopback address }
-      if not SameText(pTarget.Host, GetEnvironmentVariable('COMPUTERNAME')) or (pTarget.Host = '') then
-        RefuseRemote(RemoteAddress(VReported));
+      RefuseRemote(RemoteAttachmentHost(pTarget.Host, VReported));
     end;
   except
     Result.Free;
@@ -839,7 +906,7 @@ begin
   VNow := if Assigned(pRequest.Now) then pRequest.Now() else Now;
   VSuffix := 0;
   if pSource.RemoteHost <> '' then
-    Exit(ServerBackupFile(pSource.FileName, VFolder, BackupFileName(pSource.FileName, VNow)));
+    Exit(RemoteBackupFile(pSource.FileName, VFolder, VNow));
   Result := TPath.Combine(VFolder, BackupFileName(pSource.FileName, VNow));
   while TFile.Exists(Result) or TDirectory.Exists(Result) do
   begin
