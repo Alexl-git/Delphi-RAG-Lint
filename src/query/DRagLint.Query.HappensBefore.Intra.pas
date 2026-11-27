@@ -113,6 +113,19 @@ type
 function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;
   pEntryDone: Boolean): THbRoutineState;
 
+/// <summary>True when the index's stored must-write fact of a routine (symbol_facts.must_writes,
+/// 1.56 B5) lists pName: the routine assigns it on every path that returns normally.</summary>
+/// <param name="pStore">Read-only store over the index.</param>
+/// <param name="pRoutineId">symbols.id of the routine.</param>
+/// <param name="pName">`Result`, a var / out parameter, or an OWN field of the routine's class, as
+/// declared; compared without case.</param>
+/// <returns>False when the fact does not list the name, the routine has no fact row, or the index was
+/// written before 1.56. False is NOT a proof of the opposite: the fact leaves out a write through a
+/// var / out argument, a partial write and an inherited field (a caller then solves the routine).</returns>
+/// <remarks>The fact never lists a `:= nil` write, so it agrees with the engine's assign-nil rule
+/// (ruling HB4). Read-only; one store read per call.</remarks>
+function HbFactMustWrites(const pStore: ISymbolStore; pRoutineId: Int64; const pName: string): Boolean;
+
 /// <summary>True when the source position pSite lies inside the span of pNode.</summary>
 /// <param name="pSrc">The source bytes the tree was parsed from.</param>
 /// <param name="pNode">Any tree-sitter node; a null node contains nothing useful (its span is 0..0).</param>
@@ -562,6 +575,14 @@ begin
   finally
     Cfg.Free;
   end;
+end;
+
+function HbFactMustWrites(const pStore: ISymbolStore; pRoutineId: Int64; const pName: string): Boolean;
+begin
+  Result:= False;
+  if (pRoutineId = 0) or (pName = '') then Exit;
+  for var N: string in pStore.GetSymbolFacts(pRoutineId).MustWrites.Split([',']) do
+    if SameText(Trim(N), pName) then Exit(True);
 end;
 
 end.

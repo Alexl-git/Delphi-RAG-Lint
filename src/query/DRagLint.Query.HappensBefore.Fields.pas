@@ -28,6 +28,14 @@ unit DRagLint.Query.HappensBefore.Fields;
   (`Other.F := ..`, which the events lane reads as a use). The limits line always holds
   instance-by-constructors and names every assign-nil writer (use-after-free-not-judged <file>:<line>).
 
+  1.56 PHASE 3 (lane FB-2): MustF takes two shortcuts that cost no flow graph and none of the
+  --max-routines budget. (1) A method of C itself whose stored must-write fact
+  (symbol_facts.must_writes, HbFactMustWrites) lists F is in MustF at once; the fact covers OWN
+  fields and bare assignments only, so a descendant's method and a method the fact does not list
+  are still solved. (2) A method with no mark (no writer of F through Self, no call that sets it)
+  cannot have MustF and is not solved. On a class with many methods the answer therefore no longer
+  ends in `budget`; an index written before 1.56 has no fact and keeps shortcut (2) only.
+
   Read-only; nothing is persisted (no extractor change). Every doubt answers MAY-BE-UNSET. }
 
 interface
@@ -594,6 +602,11 @@ begin
   { least fixpoint over the instance methods of C and its descendants, in id order }
   var Ids:= FMethods.Keys.ToArray;
   TArray.Sort<Int64>(Ids);
+  { 1.56 phase 3: a method of F's own class whose stored must-write fact lists F is proven without a
+    flow graph (the fact covers own fields only, so a descendant's method is always solved) }
+  for var Id in Ids do
+    if (FMethods[Id].ClassId = FClassId) and (not FMethods[Id].IsClassMethod) and
+      HbFactMustWrites(FStore, Id, FFieldName) then FMustF.Add(Id);
   var Changed:= True;
   while Changed and not FExhausted do
   begin
@@ -602,6 +615,9 @@ begin
     begin
       var M:= FMethods[Id];
       if M.IsClassMethod or not FFamily.Contains(M.ClassId) or FMustF.Contains(Id) then Continue;
+      { 1.56 phase 3: with no writer of F and no call that sets it the exit bit cannot be set: such a
+        method costs no flow graph and none of the --max-routines budget }
+      if MarksOf(Id) = nil then Continue;
       var St:= Solve(Id);
       if St.Found and St.ExitDone then
       begin

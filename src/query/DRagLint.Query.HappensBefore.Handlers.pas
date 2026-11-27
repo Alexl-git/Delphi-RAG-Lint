@@ -289,6 +289,105 @@ type
     function OrderOf(pProgramBlockId, pRoutineId: Int64): THbHandlerOrder;
   end;
 
+  /// <summary>One call through a procedural slot (method pointer, event, callback parameter) that can
+  /// run a routine: an indirect_edges row with the position of its call ref (1.56 B5, phase 3).</summary>
+  /// <remarks>RefId 0 = the slot is never called in this index (a library event, a .dfm event the
+  /// framework fires, a slot that is only stored): CallerId, Line and Col are then 0 and FilePath is ''.
+  /// The row says "CAN run": every binding of a slot is paired with every call through it.</remarks>
+  THbIndirectSite = record
+    /// <summary>refs.id of the call through the slot; 0 = none.</summary>
+    RefId: Int64;
+    /// <summary>symbols.id of the routine that holds the call; 0 = none.</summary>
+    CallerId: Int64;
+    /// <summary>symbols.id of the routine that can run.</summary>
+    TargetId: Int64;
+    /// <summary>File of the call through the slot ('' when RefId is 0).</summary>
+    FilePath: string;
+    /// <summary>Line of the call through the slot (0 when RefId is 0).</summary>
+    Line: Integer;
+    /// <summary>Column of the call through the slot (0 when RefId is 0).</summary>
+    Col: Integer;
+    /// <summary>The name the call is written with (`FOnTick` of `FOnTick(Self)`); '' when RefId is 0.</summary>
+    SlotName: string;
+    /// <summary>indirect_edges.kind: method-pointer, event, callback-arg or dfm-event.</summary>
+    Kind: string;
+    /// <summary>The slot as written at the binding site.</summary>
+    ViaText: string;
+    /// <summary>files.id of the binding site; 0 = unknown.</summary>
+    BindFileId: Int64;
+    /// <summary>Line of the routine name at the binding site; 0 = unknown.</summary>
+    BindLine: Integer;
+    /// <summary>Column of the routine name at the binding site; 0 = unknown.</summary>
+    BindCol: Integer;
+    /// <summary>True for confidence `resolved`; False for a link matched by name only.</summary>
+    Resolved: Boolean;
+  end;
+
+  /// <summary>Reads the indirect-call edges of the index (table indirect_edges, 1.56 B5) for the
+  /// happens-before engine: who can run a routine through a procedural slot, which slots a routine
+  /// calls through, and whether a routine that is named as a value runs ONLY through such calls.</summary>
+  /// <remarks>
+  /// Read-only. Owns its caches, not the index. Not thread-safe. On an index without the table every
+  /// list is empty and OnlyThroughSlots is False, so a caller keeps its pre-1.56 answer.
+  /// OnlyThroughSlots is a PROOF fact; every doubt answers False. It holds when all of these do:
+  ///   1. every place that names the routine as a value is the binding site of an edge;
+  ///   2. every edge has a call site in the index and is resolved (not matched by name);
+  ///   3. the called slot is placed: a parameter or local of the calling routine, a field of its
+  ///      class or a variable of its unit, or the one unit variable of that name in the index;
+  ///   4. the slot is CLOSED: besides calls and assignments it is only read as `Assigned(Slot)`, no
+  ///      unresolved reference carries its name, and a property over a field slot is only written;
+  ///   5. the binding writes that very slot (the slot, a property over it, or the callee whose
+  ///      parameter it is), so the value did not travel through another slot;
+  ///   6. every call written with the slot's name (resolved to it, or unresolved) has an edge to the
+  ///      routine -- a call the index did not pair with the binding could run it unseen.
+  /// Not seen: a reference to the routine that the index could not resolve at all (the same blind
+  /// spot the escape classifier has).
+  /// </remarks>
+  THbIndirectFacts = class
+  strict private
+    FIndex: TChartsIndex;
+    FAvailable: Integer;
+    FOf: TDictionary<Int64, TArray<THbIndirectSite>>;
+    FIn: TDictionary<Int64, TArray<THbIndirectSite>>;
+    FWhyNot: TDictionary<Int64, string>;
+    FSlotWhy: TDictionary<Int64, string>;
+    function Count(const pSql: string): Integer;
+    function Ids(const pSql: string): TArray<Int64>;
+    function ReadSites(const pWhere: string): TArray<THbIndirectSite>;
+    function SlotOf(const pSite: THbIndirectSite): Int64;
+    function PropertiesOver(pSlotId: Int64; out pComplete: Boolean): TArray<Int64>;
+    function PropertyWhyNot(pPropertyId: Int64; const pSlotName: string): string;
+    function SlotWhyNot(pSlotId: Int64): string;
+    function BoundDirectly(const pSite: THbIndirectSite; pSlotId: Int64): Boolean;
+    function UnpairedCalls(pTargetId, pSlotId: Int64): Integer;
+    function UnboundNaming(pTargetId: Int64; const pSites: TArray<THbIndirectSite>): string;
+    function SiteWhyNot(const pSite: THbIndirectSite): string;
+    function ComputeWhyNot(pTargetId: Int64): string;
+  public
+    /// <summary>Binds the reader to an open index.</summary>
+    /// <param name="pIndex">The project index; not owned, must outlive this object.</param>
+    constructor Create(const pIndex: TChartsIndex);
+    /// <summary>Frees the caches (never the index).</summary>
+    destructor Destroy; override;
+    /// <summary>True when the index has the indirect_edges table (written by a 1.56 indexer).</summary>
+    /// <returns>False on an older index: every other method then answers empty / False.</returns>
+    function Available: Boolean;
+    /// <summary>Every edge that can run a routine, with and without a call site.</summary>
+    /// <param name="pTargetId">symbols.id of the routine that can run.</param>
+    /// <returns>Rows ordered by call position; empty when there is none.</returns>
+    function SitesOf(pTargetId: Int64): TArray<THbIndirectSite>;
+    /// <summary>Every call through a slot inside one routine, one row per routine it can run.</summary>
+    /// <param name="pCallerId">symbols.id of the routine that holds the calls.</param>
+    /// <returns>Rows ordered by call position; empty when there is none.</returns>
+    function SitesIn(pCallerId: Int64): TArray<THbIndirectSite>;
+    /// <summary>True when the routine, wherever it is named as a value, can run only through the
+    /// call sites SitesOf lists (the six conditions of the class remarks).</summary>
+    /// <param name="pTargetId">symbols.id of a routine.</param>
+    /// <param name="pWhyNot">'' when True; else the first condition that failed, as a sentence part.</param>
+    /// <returns>False on any doubt and on an index without the table.</returns>
+    function OnlyThroughSlots(pTargetId: Int64; out pWhyNot: string): Boolean;
+  end;
+
 /// <summary>True when an event property name belongs to the OnCreate family (HB_UNORDERED_EVENTS or a
 /// HB_UNORDERED_EVENT_PREFIXES prefix), or is empty / unknown ('?').</summary>
 /// <param name="pEvent">The property name as the form file writes it, e.g. 'OnClick'.</param>
@@ -720,6 +819,315 @@ begin
   Result.WhyNot:= Format('form class %s is not created by an unconditional Application.CreateForm before ' +
     'Application.Run in %s (created at run time or conditionally: its handlers are unordered in 1.52)',
     [Result.FormClass, P.Name]);
+end;
+
+{ ---------------------------------------------------------------------------------------------- }
+{ THbIndirectFacts (1.56 FB-2, happens-before phase 3)                                           }
+
+const
+  IE_KIND_POINTER = 'method-pointer';
+  IE_KIND_EVT = 'event';
+  IE_KIND_CALLBACK = 'callback-arg';
+  IE_CONFIDENCE_RESOLVED = 'resolved';
+  IE_UNPROBED = -1;
+  { `Assigned(` -- the distance from the call ref of Assigned to its argument }
+  ASSIGNED_ARG_OFFSET = 9;
+  SQL_COUNT_REFS = 'SELECT COUNT(*) AS n FROM refs r WHERE ';
+  SQL_UNRESOLVED_NAMED = SQL_COUNT_REFS + 'r.symbol_id IS NULL AND r.kind <> ''call'' AND r.name_text = %s COLLATE NOCASE';
+  SQL_SITES = 'SELECT COALESCE(e.ref_id, 0) AS rid, COALESCE(e.caller_symbol_id, 0) AS caller, ' +
+    'e.target_symbol_id AS target, e.kind, e.via_text AS via, COALESCE(e.bind_file_id, 0) AS bfid, ' +
+    'COALESCE(e.bind_line, 0) AS bl, COALESCE(e.bind_col, 0) AS bc, e.confidence AS conf, ' +
+    'COALESCE(f.path, '''') AS path, COALESCE(r.start_line, 0) AS ln, COALESCE(r.start_col, 0) AS col, ' +
+    'COALESCE(r.name_text, '''') AS nm FROM indirect_edges e LEFT JOIN refs r ON r.id = e.ref_id ' +
+    'LEFT JOIN files f ON f.id = r.file_id WHERE %s ORDER BY f.path, r.start_line, r.start_col, e.id';
+
+constructor THbIndirectFacts.Create(const pIndex: TChartsIndex);
+begin
+  inherited Create;
+  FIndex:= pIndex;
+  FAvailable:= IE_UNPROBED;
+  FOf:= TDictionary<Int64, TArray<THbIndirectSite>>.Create;
+  FIn:= TDictionary<Int64, TArray<THbIndirectSite>>.Create;
+  FWhyNot:= TDictionary<Int64, string>.Create;
+  FSlotWhy:= TDictionary<Int64, string>.Create;
+end;
+
+destructor THbIndirectFacts.Destroy;
+begin
+  FSlotWhy.Free;
+  FWhyNot.Free;
+  FIn.Free;
+  FOf.Free;
+  inherited;
+end;
+
+{ The column n of a one-row query; 0 when it returns nothing. Every caller builds pSql from ids
+  (Int64) and names that went through QuotedStr (Sq): read-only index queries. }
+function THbIndirectFacts.Count(const pSql: string): Integer;
+begin
+  var R:= FIndex.Query(pSql);
+  try
+    Result:= if R.Count > 0 then R[0].I('n') else 0;
+  finally
+    R.Free;
+  end;
+end;
+
+{ The column id of every row, in query order. }
+function THbIndirectFacts.Ids(const pSql: string): TArray<Int64>;
+begin
+  Result:= nil;
+  var R:= FIndex.Query(pSql);
+  try
+    for var Row in R do Result:= Result + [StrToInt64Def(Row.S('id'), 0)];
+  finally
+    R.Free;
+  end;
+end;
+
+function THbIndirectFacts.Available: Boolean;
+begin
+  if FAvailable = IE_UNPROBED then
+    FAvailable:= Count('SELECT COUNT(*) AS n FROM sqlite_master WHERE type = ''table'' AND name = ''indirect_edges''');
+  Result:= FAvailable > 0;
+end;
+
+function THbIndirectFacts.ReadSites(const pWhere: string): TArray<THbIndirectSite>;
+begin
+  Result:= nil;
+  if not Available then Exit;
+  var R:= FIndex.Query(Format(SQL_SITES, [pWhere]));
+  try
+    for var Row in R do
+    begin
+      var S:= Default(THbIndirectSite);
+      S.RefId:= StrToInt64Def(Row.S('rid'), 0);
+      S.CallerId:= StrToInt64Def(Row.S('caller'), 0);
+      S.TargetId:= StrToInt64Def(Row.S('target'), 0);
+      S.FilePath:= Row.S('path');
+      S.Line:= Row.I('ln');
+      S.Col:= Row.I('col');
+      S.SlotName:= Row.S('nm');
+      S.Kind:= Row.S('kind');
+      S.ViaText:= Row.S('via');
+      S.BindFileId:= StrToInt64Def(Row.S('bfid'), 0);
+      S.BindLine:= Row.I('bl');
+      S.BindCol:= Row.I('bc');
+      S.Resolved:= Row.S('conf') = IE_CONFIDENCE_RESOLVED;
+      Result:= Result + [S];
+    end;
+  finally
+    R.Free;
+  end;
+end;
+
+function THbIndirectFacts.SitesOf(pTargetId: Int64): TArray<THbIndirectSite>;
+begin
+  if FOf.TryGetValue(pTargetId, Result) then Exit;
+  Result:= ReadSites('e.target_symbol_id = ' + IntToStr(pTargetId));
+  FOf.Add(pTargetId, Result);
+end;
+
+function THbIndirectFacts.SitesIn(pCallerId: Int64): TArray<THbIndirectSite>;
+begin
+  if FIn.TryGetValue(pCallerId, Result) then Exit;
+  Result:= ReadSites('e.caller_symbol_id = ' + IntToStr(pCallerId) + ' AND e.ref_id IS NOT NULL');
+  FIn.Add(pCallerId, Result);
+end;
+
+{ The symbol a call through a slot is written with; 0 when it cannot be placed without doubt: a
+  parameter / local of the caller, else a field of the caller's class or a variable of the caller's
+  unit, else the ONE unit variable of that name in the index. A call with a receiver other than Self
+  is not placed. }
+function THbIndirectFacts.SlotOf(const pSite: THbIndirectSite): Int64;
+begin
+  Result:= 0;
+  if (pSite.RefId = 0) or (pSite.CallerId = 0) or (pSite.SlotName = '') then Exit;
+  if Count(SQL_COUNT_REFS + 'r.id = ' + IntToStr(pSite.RefId) +
+    ' AND LOWER(COALESCE(r.receiver_text, '''')) NOT IN ('''', ''self'')') > 0 then Exit;
+  var Found:= Ids('SELECT s.id FROM symbols s WHERE s.parent_id = ' + IntToStr(pSite.CallerId) +
+    ' AND s.name = ' + Sq(pSite.SlotName) + ' COLLATE NOCASE ORDER BY s.id');
+  if Found = nil then
+    Found:= Ids('SELECT s.id FROM symbols s JOIN symbols c ON c.id = ' + IntToStr(pSite.CallerId) +
+      ' WHERE s.parent_id = c.parent_id AND s.kind IN (''field'', ''var'') AND s.name = ' + Sq(pSite.SlotName) +
+      ' COLLATE NOCASE ORDER BY s.id');
+  if Found = nil then
+    Found:= Ids('SELECT s.id FROM symbols s JOIN symbols u ON u.id = s.parent_id WHERE s.kind = ''var'' ' +
+      'AND u.kind IN (''unit'', ''program'', ''library'') AND s.name = ' + Sq(pSite.SlotName) +
+      ' COLLATE NOCASE ORDER BY s.id');
+  if Length(Found) = 1 then Result:= Found[0];
+end;
+
+{ The properties declared over a field slot (a `property-spec` ref of the field sits inside the
+  declaration of the nearest property of the same class at or above its line). pComplete is False when
+  one such ref has no property: the slot then has a reader this unit cannot check. }
+function THbIndirectFacts.PropertiesOver(pSlotId: Int64; out pComplete: Boolean): TArray<Int64>;
+begin
+  Result:= nil;
+  pComplete:= True;
+  for var P in Ids('SELECT COALESCE((SELECT p.id FROM symbols p WHERE p.kind = ''property'' ' +
+    'AND p.parent_id = s.parent_id AND p.file_id = r.file_id AND p.start_line <= r.start_line ' +
+    'ORDER BY p.start_line DESC, p.id DESC LIMIT 1), 0) AS id FROM refs r JOIN symbols s ON s.id = r.symbol_id ' +
+    'WHERE r.symbol_id = ' + IntToStr(pSlotId) + ' AND r.kind = ''property-spec'' ORDER BY r.id') do
+    if P = 0 then pComplete:= False
+    else if not TArray.Contains<Int64>(Result, P) then Result:= Result + [P];
+end;
+
+{ '' when a property over a field slot is only ever written (a read of it copies the slot's value). }
+function THbIndirectFacts.PropertyWhyNot(pPropertyId: Int64; const pSlotName: string): string;
+begin
+  Result:= '';
+  var Prop:= FIndex.Query('SELECT name FROM symbols WHERE id = ' + IntToStr(pPropertyId));
+  try
+    var PropName:= if Prop.Count > 0 then Prop[0].S('name') else '';
+    if Count(SQL_COUNT_REFS + 'r.symbol_id = ' + IntToStr(pPropertyId) +
+      ' AND NOT (r.kind = ''write'' OR EXISTS (SELECT 1 FROM member_accesses m WHERE m.ref_id = r.id ' +
+      'AND m.member_symbol_id = r.symbol_id AND m.mode = ''write''))') > 0 then
+      Result:= 'property ' + PropName + ' over ' + pSlotName + ' is read'
+    else if Count(Format(SQL_UNRESOLVED_NAMED, [Sq(PropName)])) > 0 then
+      Result:= 'an unresolved reference is named ' + PropName + ' (a property over ' + pSlotName + ')';
+  finally
+    Prop.Free;
+  end;
+end;
+
+{ '' when the slot is closed (condition 4 of the class remarks), else why not. Cached per slot. }
+function THbIndirectFacts.SlotWhyNot(pSlotId: Int64): string;
+begin
+  if FSlotWhy.TryGetValue(pSlotId, Result) then Exit;
+  Result:= '';
+  var Slot:= FIndex.Query('SELECT s.name, s.kind, COALESCE(s.parent_id, 0) AS pid FROM symbols s WHERE s.id = ' +
+    IntToStr(pSlotId));
+  try
+    if Slot.Count = 0 then Result:= 'the slot is not in the index'
+    else
+    begin
+      var Name:= Slot[0].S('name');
+      var Scoped:= (Slot[0].S('kind') <> 'field') and (Slot[0].S('kind') <> 'var');
+      { a read that is not `Assigned(Slot)`, or any other use, can copy the value away }
+      if Count(SQL_COUNT_REFS + 'r.symbol_id = ' + IntToStr(pSlotId) +
+        ' AND r.kind NOT IN (''write'', ''call'', ''property-spec'') AND NOT (r.kind = ''read'' AND EXISTS (' +
+        'SELECT 1 FROM refs a WHERE a.file_id = r.file_id AND a.start_line = r.start_line AND a.kind = ''call'' ' +
+        'AND a.name_text = ''Assigned'' COLLATE NOCASE AND a.start_col + ' + IntToStr(ASSIGNED_ARG_OFFSET) +
+        ' = r.start_col))') > 0 then
+        Result:= Name + ' is read as a value (it can be copied or passed on)'
+      else if Count(Format(SQL_UNRESOLVED_NAMED, [Sq(Name)]) +
+        (if Scoped then ' AND r.enclosing_symbol_id = ' + Slot[0].S('pid') else '')) > 0 then
+        Result:= 'an unresolved reference is named ' + Name
+      else if not Scoped then
+      begin
+        var Complete: Boolean;
+        for var P in PropertiesOver(pSlotId, Complete) do
+          if Result = '' then Result:= PropertyWhyNot(P, Name);
+        if (Result = '') and not Complete then Result:= 'a property over ' + Name + ' could not be placed';
+      end;
+    end;
+  finally
+    Slot.Free;
+  end;
+  FSlotWhy.Add(pSlotId, Result);
+end;
+
+{ Condition 5: the binding statement writes pSlotId itself -- the slot (method-pointer), a property
+  over it (event), or it is an argument of a call to the routine whose parameter the slot is
+  (callback-arg). }
+function THbIndirectFacts.BoundDirectly(const pSite: THbIndirectSite; pSlotId: Int64): Boolean;
+begin
+  Result:= False;
+  var Where:= ' AND r.file_id = ' + IntToStr(pSite.BindFileId) + ' AND r.start_line = ' + IntToStr(pSite.BindLine) +
+    ' AND r.start_col < ' + IntToStr(pSite.BindCol);
+  if pSite.Kind = IE_KIND_POINTER then
+    Result:= Count(SQL_COUNT_REFS + 'r.kind = ''write'' AND r.symbol_id = ' + IntToStr(pSlotId) + Where) > 0
+  else if pSite.Kind = IE_KIND_EVT then
+  begin
+    var Complete: Boolean;
+    for var P in PropertiesOver(pSlotId, Complete) do
+      if Count(SQL_COUNT_REFS + 'r.symbol_id = ' + IntToStr(P) + Where) > 0 then Result:= True;
+  end
+  else if pSite.Kind = IE_KIND_CALLBACK then
+    Result:= Count('SELECT COUNT(*) AS n FROM refs r LEFT JOIN call_edges c ON c.ref_id = r.id ' +
+      'JOIN symbols s ON s.id = ' + IntToStr(pSlotId) + ' WHERE r.kind = ''call'' ' +
+      'AND COALESCE(c.target_symbol_id, r.symbol_id) = s.parent_id' + Where) > 0;
+end;
+
+{ Condition 6: the calls written with the slot's name that have no edge to pTargetId. A parameter or
+  local is looked for in its routine only, a field or unit variable in the whole index. }
+function THbIndirectFacts.UnpairedCalls(pTargetId, pSlotId: Int64): Integer;
+begin
+  Result:= 0;
+  var Slot:= FIndex.Query('SELECT s.name, s.kind, COALESCE(s.parent_id, 0) AS pid FROM symbols s WHERE s.id = ' +
+    IntToStr(pSlotId));
+  try
+    if Slot.Count = 0 then Exit(1);
+    var Scoped:= (Slot[0].S('kind') <> 'field') and (Slot[0].S('kind') <> 'var');
+    Result:= Count(SQL_COUNT_REFS + 'r.kind = ''call'' AND (r.symbol_id = ' + IntToStr(pSlotId) +
+      ' OR (r.symbol_id IS NULL AND r.name_text = ' + Sq(Slot[0].S('name')) + ' COLLATE NOCASE' +
+      (if Scoped then ' AND r.enclosing_symbol_id = ' + Slot[0].S('pid') else '') + ')) AND r.id NOT IN (' +
+      'SELECT e.ref_id FROM indirect_edges e WHERE e.target_symbol_id = ' + IntToStr(pTargetId) +
+      ' AND e.ref_id IS NOT NULL)');
+  finally
+    Slot.Free;
+  end;
+end;
+
+{ Condition 1: '' when every place that names the routine as a value is the binding site of an edge,
+  else the first place that is not. }
+function THbIndirectFacts.UnboundNaming(pTargetId: Int64; const pSites: TArray<THbIndirectSite>): string;
+begin
+  Result:= '';
+  var R:= FIndex.Query('SELECT r.file_id AS fid, r.start_line AS ln, r.start_col AS col, f.path FROM refs r ' +
+    'JOIN files f ON f.id = r.file_id LEFT JOIN call_edges c ON c.ref_id = r.id WHERE (r.symbol_id = ' +
+    IntToStr(pTargetId) + ' AND r.kind <> ''call'') OR (c.target_symbol_id = ' + IntToStr(pTargetId) +
+    ' AND c.confidence = ''callback'') ORDER BY f.path, r.start_line, r.start_col');
+  try
+    for var Row in R do
+    begin
+      var Bound:= False;
+      for var S in pSites do
+        if (S.BindFileId = StrToInt64Def(Row.S('fid'), 0)) and (S.BindLine = Row.I('ln')) and (S.BindCol = Row.I('col')) then
+          Bound:= True;
+      if not Bound then
+        Exit(Format('it is named as a value at %s:%d with no indirect-call edge', [ExtractFileName(Row.S('path')), Row.I('ln')]));
+    end;
+  finally
+    R.Free;
+  end;
+end;
+
+{ Conditions 2 to 6 for one edge: '' when they hold, else the first that does not. }
+function THbIndirectFacts.SiteWhyNot(const pSite: THbIndirectSite): string;
+begin
+  var Slot:= if (pSite.RefId <> 0) and pSite.Resolved then SlotOf(pSite) else 0;
+  Result:= if pSite.RefId = 0 then 'bound to ' + pSite.ViaText + ', which this index never calls'
+    else if not pSite.Resolved then 'the edge through ' + pSite.ViaText + ' is matched by name only'
+    else if Slot = 0 then 'the slot ' + pSite.SlotName + ' could not be placed'
+    else SlotWhyNot(Slot);
+  if (Result <> '') or (Slot = 0) then Exit;
+  if not BoundDirectly(pSite, Slot) then
+    Result:= 'it reaches ' + pSite.SlotName + ' through another slot (' + pSite.ViaText + ')'
+  else if UnpairedCalls(pSite.TargetId, Slot) > 0 then
+    Result:= 'a call written as ' + pSite.SlotName + ' has no edge to it';
+end;
+
+function THbIndirectFacts.ComputeWhyNot(pTargetId: Int64): string;
+begin
+  var Sites:= SitesOf(pTargetId);
+  Result:= if not Available then 'the index has no indirect-call edges (written by drag-lint 1.56 or later)'
+    else if Sites = nil then 'no indirect-call edge binds it'
+    else '';
+  for var S in Sites do
+    if Result = '' then Result:= SiteWhyNot(S);
+  if Result = '' then Result:= UnboundNaming(pTargetId, Sites);
+end;
+
+function THbIndirectFacts.OnlyThroughSlots(pTargetId: Int64; out pWhyNot: string): Boolean;
+begin
+  if not FWhyNot.TryGetValue(pTargetId, pWhyNot) then
+  begin
+    pWhyNot:= ComputeWhyNot(pTargetId);
+    FWhyNot.Add(pTargetId, pWhyNot);
+  end;
+  Result:= pWhyNot = '';
 end;
 
 end.
