@@ -90,6 +90,10 @@ const
   FOCUS_PARENT = -1;
   FIRST_TIER = 1;
   CLASS_TAG = '  [%s]';
+  { value-use: the far end is the DESTINATION, the class is the class of the VALUE that reaches it (the class
+    it had where it first became a scalar), so the tag must not read as the destination's type: a Boolean
+    field fed by 'FTotal > 0' is 'FPaid  [currency value]', never 'FPaid  [currency]' }
+  USE_CLASS_TAG = '  [%s value]';
   CONDITIONAL_STYLE = 'dashed';
   SOLID_STYLE = 'solid';
   END_SRC = 'src';
@@ -774,13 +778,16 @@ end;
 
 /// <summary>One drawn row.</summary>
 /// <param name="pHop">The hop.</param>
-/// <returns>An anchored row: the far end and its value class, the routine and what qualifies the flow as
-/// the note, the whole sentence as the tooltip.</returns>
-function HopRow(const pHop: THop): TDotRow;
+/// <param name="pOrigin">True = value-origin: the far end is the source and the tag is '[class]'. False =
+/// value-use: the far end is the destination and the tag is '[class value]', because the class belongs to
+/// the value (where it first became a scalar), not to the destination's declared type.</param>
+/// <returns>An anchored row: the far end and the row's value class, the routine and what qualifies the flow
+/// as the note, the whole sentence as the tooltip.</returns>
+function HopRow(const pHop: THop; pOrigin: Boolean): TDotRow;
 begin
   var Caption:= pHop.Node.Caption;
   if pHop.ValClass <> '' then
-    Caption:= Caption + Format(CLASS_TAG, [pHop.ValClass]);
+    Caption:= Caption + Format(if pOrigin then CLASS_TAG else USE_CLASS_TAG, [pHop.ValClass]);
   var Routine:= ShortName(pHop.Routine, UnitNameOf(pHop.Path));
   var Notes: TArray<string>:= ['in ' + Routine];
   if pHop.ViaLocal then
@@ -899,7 +906,7 @@ begin
         Break;
       var Rows: TArray<TDotRow>:= [];
       for var K in Idx do
-        Rows:= Rows + [HopRow(pWalk.Hops[K])];
+        Rows:= Rows + [HopRow(pWalk.Hops[K], pWalk.Origin)];
       Inc(Result, Length(Rows));
       var Hidden:= pWalk.HiddenOf(Tier);
       if Hidden > 0 then

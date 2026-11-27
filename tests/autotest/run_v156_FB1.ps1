@@ -10,11 +10,13 @@
         ValueRows / FlowRows / per-class counts; every row clickable; the two parameters are reported
         as not followed (--depth).
     B   --depth 4 follows the parameter to its caller's argument, to the function result that feeds
-        it and to that function's parameter; the one row WITHOUT a value class is counted in FlowRows
-        and nowhere else.
+        it and to that function's parameter; all six are value rows (a pre-1.56 row with a classed twin
+        is drawn once). B4 = the positive control of FlowRows: a string field's one class-less row.
     C   value-use of an Integer field: a field, a by-name callee that is NOT in the index (drawn, not
         followed), a string field reached as int; step 2 reaches a Boolean field, a unit variable and
-        a function result.
+        a function result, all three as CURRENCY values: val_class is the class the value had where it
+        first became a scalar (FTotal: Currency), so value-use tags a row '[currency value]' -- the
+        class of the value, not the type of the far end. C7: a string compared gives a bool value row.
     D   a field assigned only from a literal: zero rows, and the focus SAYS why (write sites, no row).
     E   value-use of a parameter: the callee's parameter, then the callee's result.
     F   REFUSAL: value-origin of a procedure exits 1 and says so; no bundle answer.
@@ -114,10 +116,10 @@ try {
   Check 'A1 answered, exit 0' (($r.Exit -eq 0) -and ($r.Out -match '(?m)^COMMAND value-origin ')) "exit=$($r.Exit) err=$($r.Err)"
   Check 'A2 step 1 = the two fields of the product' ((F $r 'Step1') -eq 2) "Step1=$(F $r 'Step1')"
   Check 'A3 four rows, all four VALUE rows, no pre-1.56 row' (((F $r 'Rows') -eq 4) -and ((F $r 'ValueRows') -eq 4) -and ((F $r 'FlowRows') -eq 0)) "Rows=$(F $r 'Rows') Value=$(F $r 'ValueRows') Flow=$(F $r 'FlowRows')"
-  Check 'A4 classes: 3 float (FQty, FPrice, pPrice), 1 int (pQty)' (((F $r 'FloatRows') -eq 3) -and ((F $r 'IntRows') -eq 1)) "float=$(F $r 'FloatRows') int=$(F $r 'IntRows')"
+  Check 'A4 classes follow the declarations: 2 float (FPrice, pPrice), 2 int (FQty, pQty)' (((F $r 'FloatRows') -eq 2) -and ((F $r 'IntRows') -eq 2)) "float=$(F $r 'FloatRows') int=$(F $r 'IntRows')"
   Check 'A5 the index tracks values; every row clickable' (((F $r 'ValueTracking') -eq $true) -and ((F $r 'AllClickable') -eq $true)) "tracking=$(F $r 'ValueTracking') clickable=$(F $r 'AllClickable')"
   Check 'A6 the two parameters are reported as not followed' ((F $r 'Unfollowed') -eq 2 -and $r.DotText -match 'stopped after 2 steps: 2 ends not followed') "Unfollowed=$(F $r 'Unfollowed')"
-  Check 'A7 rows name the far end and its class' (($r.DotText -match 'TOrder\.FQty  \[float\]') -and ($r.DotText -match 'TOrder\.SetQty\(pQty\)  \[int\]')) ''
+  Check 'A7 rows name the far end and its class' (($r.DotText -match 'TOrder\.FQty  \[int\]') -and ($r.DotText -match 'TOrder\.SetQty\(pQty\)  \[int\]')) ''
   Check 'A8 one edge per row, pointing at the selection' (((Edges $r.DotText) -eq 4) -and ($r.DotText -match '(?m)^\s+t1:p1 -> focus ')) "edges=$(Edges $r.DotText)"
   Check 'A9 no not-tracked note on a tracking index' ($r.DotText -notmatch 'NOT tracked') ''
 
@@ -125,16 +127,20 @@ try {
   $r = Lane-Ask $fx 'value-origin' 'uFb1.TOrder.FTotal' @('--depth', '4')
   Check 'B1 six rows' ((F $r 'Rows') -eq 6) "Rows=$(F $r 'Rows')"
   Check 'B2 the caller''s argument is the result of Twice, then its parameter' (($r.DotText -match 'result of Twice') -and ($r.DotText -match 'Twice\(pN\)  \[int\]')) ''
-  Check 'B3 the one row without a class is a FlowRow, the other five ValueRows' (((F $r 'FlowRows') -eq 1) -and ((F $r 'ValueRows') -eq 5)) "Flow=$(F $r 'FlowRows') Value=$(F $r 'ValueRows')"
+  Check 'B3 all six are ValueRows: the pre-1.56 row of Twice has a classed twin and is drawn once' (((F $r 'FlowRows') -eq 0) -and ((F $r 'ValueRows') -eq 6)) "Flow=$(F $r 'FlowRows') Value=$(F $r 'ValueRows')"
+  $r = Lane-Ask $fx 'value-origin' 'uFb1.TOrder.FName'
+  Check 'B4 POSITIVE CONTROL of FlowRows: a string field has one row, without a class' (((F $r 'Rows') -eq 1) -and ((F $r 'FlowRows') -eq 1) -and ((F $r 'ValueRows') -eq 0) -and ($r.DotText -notmatch 'pName\)  \[')) "Rows=$(F $r 'Rows') Flow=$(F $r 'FlowRows') Value=$(F $r 'ValueRows')"
 
   Write-Host 'C  value-use of an Integer field'
   $r = Lane-Ask $fx 'value-use' 'uFb1.TOrder.FQty'
   Check 'C1 answered, exit 0' (($r.Exit -eq 0) -and ($r.Out -match '(?m)^COMMAND value-use ')) "exit=$($r.Exit) err=$($r.Err)"
   Check 'C2 step 1 = FTotal, FLabel, the IntToStr argument' ((F $r 'Step1') -eq 3) "Step1=$(F $r 'Step1')"
-  Check 'C3 six rows: 4 value rows, 2 pre-1.56 rows' (((F $r 'Rows') -eq 6) -and ((F $r 'ValueRows') -eq 4) -and ((F $r 'FlowRows') -eq 2)) "Rows=$(F $r 'Rows') Value=$(F $r 'ValueRows') Flow=$(F $r 'FlowRows')"
-  Check 'C4 step 2 reaches a Boolean field and a Currency result' (((F $r 'BoolRows') -eq 1) -and ((F $r 'CurrencyRows') -eq 1) -and ($r.DotText -match 'TOrder\.FPaid  \[bool\]') -and ($r.DotText -match 'result of TOrder\.Total  \[currency\]')) "bool=$(F $r 'BoolRows') currency=$(F $r 'CurrencyRows')"
+  Check 'C3 six rows, all value rows (IntToStr argument and GLastTotal have classed twins)' (((F $r 'Rows') -eq 6) -and ((F $r 'ValueRows') -eq 6) -and ((F $r 'FlowRows') -eq 0)) "Rows=$(F $r 'Rows') Value=$(F $r 'ValueRows') Flow=$(F $r 'FlowRows')"
+  Check 'C4 step 2: three CURRENCY values (FTotal is Currency) reach a Boolean field, a unit variable and a result; the tag says VALUE, never the Boolean field''s type' (((F $r 'BoolRows') -eq 0) -and ((F $r 'CurrencyRows') -eq 3) -and ($r.DotText -match 'TOrder\.FPaid  \[currency value\]') -and ($r.DotText -notmatch 'TOrder\.FPaid  \[(currency|bool)\]') -and ($r.DotText -match 'result of TOrder\.Total  \[currency value\]')) "bool=$(F $r 'BoolRows') currency=$(F $r 'CurrencyRows')"
   Check 'C5 a callee outside the index is drawn by name and not followed' ($r.DotText -match 'argument 1 of IntToStr \(not in this index\)' -and $r.DotText -match 'not followed') ''
   Check 'C6 edges point away from the selection' ($r.DotText -match '(?m)^\s+focus -> t1:p1 ') ''
+  $r = Lane-Ask $fx 'value-use' 'uFb1.TOrder.FName'
+  Check 'C7 a string compared: one BOOL value row beside the int result and two class-less rows' (((F $r 'Rows') -eq 4) -and ((F $r 'BoolRows') -eq 1) -and ((F $r 'IntRows') -eq 1) -and ((F $r 'FlowRows') -eq 2) -and ($r.DotText -match 'TOrder\.FPaid  \[bool value\]')) "Rows=$(F $r 'Rows') bool=$(F $r 'BoolRows') int=$(F $r 'IntRows') Flow=$(F $r 'FlowRows')"
 
   Write-Host 'D  a field assigned only from a literal'
   $r = Lane-Ask $fx 'value-origin' 'uFb1.TOrder.FRate'
@@ -143,7 +149,7 @@ try {
 
   Write-Host 'E  value-use of a parameter'
   $r = Lane-Ask $fx 'value-use' 'uFb1.Feed.pCount'
-  Check 'E1 the callee''s parameter, then the callee''s result' (((F $r 'Step1') -eq 1) -and ((F $r 'Rows') -eq 2) -and ($r.DotText -match 'Twice\(pN\)  \[int\]') -and ($r.DotText -match 'result of Twice  \[int\]')) "Step1=$(F $r 'Step1') Rows=$(F $r 'Rows')"
+  Check 'E1 the callee''s parameter, then the callee''s result' (((F $r 'Step1') -eq 1) -and ((F $r 'Rows') -eq 2) -and ($r.DotText -match 'Twice\(pN\)  \[int value\]') -and ($r.DotText -match 'result of Twice  \[int value\]')) "Step1=$(F $r 'Step1') Rows=$(F $r 'Rows')"
 
   Write-Host 'F  refusal'
   $r = Lane-Ask $fx 'value-origin' 'uFb1.Feed'

@@ -79,6 +79,7 @@ end;
 procedure TOrder.Describe;
 begin
   FLabel := FName + ': ' + IntToStr(FQty);
+  FPaid := FName <> '';
 end;
 
 procedure TOrder.Reset;

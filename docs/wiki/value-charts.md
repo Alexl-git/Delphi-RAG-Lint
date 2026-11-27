@@ -33,6 +33,11 @@ A row carries the **value class** of the flow in brackets:
 | `[int]` `[float]` `[currency]` `[datetime]` `[bool]` | a value row of the 1.56 extractor: the class the value had where it first became a scalar |
 | no tag | a row every extractor since 1.26 writes: a string, an object, or a value the extractor could not class. It is NOT a claim that the value is text |
 
+The class belongs to the **value**, not to the row's far end. In value-origin the far end is the source, so the
+tag reads ` TOrder.FQty  [int] `. In value-use the far end is the destination and the tag says so:
+` TOrder.FPaid  [currency value] ` for `FPaid := FTotal > 0` means a Currency value reaches the field, not that
+the field is Currency. A flow the index holds twice (the pre-1.56 row and its classed twin) is drawn once, tagged.
+
 The emitter fields of `meta.json` keep the two sets apart: `ValueRows` counts tagged rows only,
 `FlowRows` untagged rows only, `IntRows` .. `BoolRows` one class each. `ValueTracking` is false when the
 index holds no value row at all.
