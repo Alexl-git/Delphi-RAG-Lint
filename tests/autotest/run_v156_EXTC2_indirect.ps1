@@ -17,6 +17,8 @@
         counted unproven.
     C   callback-arg: `RunCb(PlainOther)` / `RunCb(@PlainTarget)` reach the call of the parameter
         (`ACb(2)`) inside RunCb; a callee that only stores the parameter is no caller.
+    P   propagation: a slot copied into another slot (`GHook:= ACb`, `RunCb(ACb)`) carries its
+        bindings to the calls through that slot, over two hops; no stray no-call-site row.
     D   dfm-event: `OnClick = Button1Click` gives one row without call site, bound in the .dfm;
         an event of a component class of the index (TIndPanel.OnPing) reaches that class's call
         of the field behind the property.
@@ -139,12 +141,23 @@ Check 'T2 and it is counted unproven' ($r1.log -match '(?m)^indirect: .* unprove
 $c1 = Find-Edge $edges 'callback-arg' 'uIndB.RunCb' 'uIndA.PlainOther'
 $c2 = Find-Edge $edges 'callback-arg' 'uIndB.RunCb' 'uIndA.PlainTarget'
 Check 'C1 RunCb(PlainOther) reaches the call ACb(2) inside RunCb' ($c1.Count -eq 1) "($($c1.Count))"
-Check 'C2 RunCb(@PlainTarget) reaches it too' ($c2.Count -eq 1) "($($c2.Count))"
+$c2 = @($c2 | Where-Object { [int]$_.bind_line -eq 41 })
+Check 'C2 RunCb(@PlainTarget) (line 41) reaches it too' ($c2.Count -eq 1) "($($c2.Count))"
 if ($c1.Count -eq 1) {
   Check 'C1 the edge hangs on the call ref ACb (uIndB line 30), via ACb, bound at line 40' (($c1[0].ref_name -eq 'ACb') -and ([int]$c1[0].ref_line -eq 30) -and ($c1[0].via -eq 'ACb') -and ([int]$c1[0].bind_line -eq 40)) "($($c1[0].ref_name) $($c1[0].ref_line) via=$($c1[0].via) bind=$($c1[0].bind_line))"
 }
 $c3 = @($edges | Where-Object { $_.caller -eq 'uIndB.RunNoCall' })
 Check 'C3 a callee that only stores its parameter (RunNoCall) is no caller' ($c3.Count -eq 0) "($($c3.Count))"
+
+# ---- P: a slot copied into another slot --------------------------------------------------
+$p1 = Find-Edge $edges 'callback-arg' 'uIndA.FirePlain' 'uIndA.PlainOther'
+Check 'P1 RunNoCall(PlainOther) + `GHook:= ACb` inside RunNoCall reaches GHook(1) in FirePlain' (($p1.Count -eq 1) -and ($p1[0].ref_name -eq 'GHook') -and ($p1[0].via -eq 'ACb') -and ([int]$p1[0].bind_line -eq 65) -and ($p1[0].bind_path -like '*uIndB.pas')) "($($p1.Count))"
+$p2 = @(Find-Edge $edges 'callback-arg' 'uIndB.RunCb' 'uIndA.PlainTarget' | Where-Object { [int]$_.bind_line -eq 75 })
+Check 'P2 RelayCb(@PlainTarget) + RunCb(ACb) inside RelayCb (two hops) reaches ACb(2) in RunCb' (($p2.Count -eq 1) -and ($p2[0].ref_name -eq 'ACb') -and ([int]$p2[0].ref_line -eq 30)) "($($p2.Count))"
+$p3 = @($edges | Where-Object { ($_.caller -eq '') -and ($_.target -in 'uIndA.PlainOther', 'uIndA.PlainTarget') })
+Check 'P3 a binding that reaches a call through a copy has no extra no-call-site row' ($p3.Count -eq 0) "($($p3.Count))"
+$p4 = @($edges | Where-Object { ($_.caller -eq 'uIndA.TEmitter.Fire') -and ($_.target -like 'uIndA.Plain*') })
+Check 'P4 copies do not leak into unrelated slots (Fire runs no Plain* routine)' ($p4.Count -eq 0) "($($p4.Count))"
 
 # ---- D: .dfm events ----------------------------------------------------------------------
 $d1 = Find-Edge $edges 'dfm-event' '' 'uIndForm.TIndForm.Button1Click'

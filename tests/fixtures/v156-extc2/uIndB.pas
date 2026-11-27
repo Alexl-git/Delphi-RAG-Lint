@@ -59,4 +59,20 @@ begin
   FEmitter.OnChange:= nil;
 end;
 
+{ slot -> slot copies: RunNoCall stores its parameter in GHook; RelayCb hands its parameter on. }
+procedure UseStore;
+begin
+  RunNoCall(PlainOther);
+end;
+
+procedure RelayCb(ACb: TPlainProc);
+begin
+  RunCb(ACb);
+end;
+
+procedure UseRelay;
+begin
+  RelayCb(@PlainTarget);
+end;
+
 end.

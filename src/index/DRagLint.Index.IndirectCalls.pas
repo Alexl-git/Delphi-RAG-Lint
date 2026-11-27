@@ -25,9 +25,13 @@ unit DRagLint.Index.IndirectCalls;
 /// yields ONE row with RefId = 0 and CallerId = 0, so "is this routine reachable through a
 /// pointer" has an answer.
 ///
-/// Not followed (declined, never guessed): a slot copied into another slot (`FA:= FB`,
-/// `FOnX:= AParam`), a setter method behind an event property, anonymous methods, `with` scopes,
-/// an assignment or argument list that spans more than one line.
+/// A slot COPIED into another slot (`FOnX:= AParam`, `GHook:= FCallback`, a slot handed on as an
+/// argument) is followed: the bindings of the source slot also meet the calls through every slot
+/// it flows into (transitively, FLOW_MAX_DEPTH hops). via_text and the bind position stay those of
+/// the ORIGINAL binding site; the call ref (RefId) names the slot that is finally called.
+///
+/// Not followed (declined, never guessed): a setter method behind an event property, anonymous
+/// methods, `with` scopes, an assignment or argument list that spans more than one line.
 /// </remarks>
 
 interface
@@ -109,6 +113,8 @@ type
         Col     : Integer;
         ByName  : Boolean;
       end;
+      { How the argument list around a name could be read. }
+      TArgumentRead = (arUnread, arNotACall, arCall);
       { A call ref `Name(..)` whose name is a slot, with the symbol the name means there. }
       TCallSite = record
         RefId   : Int64;
@@ -128,6 +134,7 @@ type
       FRefFile   : Int64;
       FFileRefs  : TDictionary<Int64, TFileRef>;
       FCallsByName: TObjectDictionary<string, TList<TCallSite>>;
+      FFlows     : TObjectDictionary<Int64, TList<Int64>>;
       FBinds     : TList<TBind>;
       FEdges     : TList<TIndirectEdgeRow>;
       FEdgeKeys  : TDictionary<string, Boolean>;
@@ -153,7 +160,12 @@ type
     procedure SlotAliases(ASlotId: Int64; AIds: TList<Int64>; ANames: TList<string>);
     procedure LoadCandidates(ACands: TList<TCandidate>);
     procedure BindAssignment(const ACand: TCandidate; const ALine: string; AAssignAt: Integer; AHasAt: Boolean);
+    function ParamOfArgument(AFileId: Int64; ALineNo: Integer; const ALine: string; AArgAt: Integer;
+      out ACallee: string; out AParamId: Int64): TArgumentRead;
     procedure BindArgument(const ACand: TCandidate; const ALine: string; AArgAt: Integer; AHasAt: Boolean);
+    procedure AddFlowAt(AFromSlot, AFileId: Int64; ALineNo, ACol: Integer; const AName: string; AInto: TList<Int64>);
+    function FlowsOf(ASlotId: Int64): TList<Int64>;
+    procedure SlotClosure(ASlotId: Int64; AInto: TList<Int64>);
     procedure CollectBinds;
     function ClassNamed(const AName, APreferPath: string; out AByName: Boolean): Int64;
     function RoutineInChain(AClassId: Int64; const AName: string): Int64;
@@ -196,6 +208,7 @@ const
   CHAIN_MAX_DEPTH    = 64; // a deeper class / alias chain is a cycle in bad data
   ALIAS_MAX_DEPTH    = 4;  // `TMyEvent = TNotifyEvent` hops followed when typing a slot
   POS_COL_BITS       = 20; // FFileRefs key = line shl POS_COL_BITS or col
+  FLOW_MAX_DEPTH     = 8;  // slot -> slot copies followed from one binding
   INDIRECT_LOG_ENV   = 'DRAGLINT_INDIRECT_LOG';
   KIND_FIELD         = 'field';
   KIND_PROPERTY      = 'property';
@@ -280,6 +293,12 @@ const
   SQL_ROUTINE_NAMED =
     'SELECT id FROM symbols WHERE parent_id = :p AND name = :n COLLATE NOCASE ' +
     'AND kind IN (''method'', ''procedure'', ''function'') ORDER BY id';
+  { Where a slot's VALUE is read: the copies `Other:= Slot` and `Callee(.., Slot, ..)` start here. }
+  SQL_READS_OF =
+    'SELECT file_id, start_line, start_col, name_text FROM refs WHERE symbol_id = :s AND kind = ''read'' ORDER BY id';
+  SQL_MEMBER_READS_OF =
+    'SELECT r.file_id, r.start_line, r.start_col, r.name_text FROM member_accesses m JOIN refs r ON r.id = m.ref_id ' +
+    'WHERE m.member_symbol_id = :s AND m.mode = ''read'' ORDER BY r.id';
   SQL_TABLE =
     'SELECT 1 FROM sqlite_master WHERE type = ''table'' AND name = :n';
 
@@ -422,6 +441,7 @@ begin
   FProcTypes  := TDictionary<string, Boolean>.Create;
   FFileRefs   := TDictionary<Int64, TFileRef>.Create;
   FCallsByName:= TObjectDictionary<string, TList<TCallSite>>.Create([doOwnsValues]);
+  FFlows      := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   FBinds      := TList<TBind>.Create;
   FEdges      := TList<TIndirectEdgeRow>.Create;
   FEdgeKeys   := TDictionary<string, Boolean>.Create;
@@ -432,6 +452,7 @@ begin
   FEdgeKeys.Free;
   FEdges.Free;
   FBinds.Free;
+  FFlows.Free;
   FCallsByName.Free;
   FFileRefs.Free;
   FProcTypes.Free;
@@ -692,7 +713,6 @@ function TIndirectCallResolver.FieldOfProperty(const AProp: TSymInfo): Int64;
 var
   Q: TFDQuery;
 begin
-  Result:= 0;
   Q:= Query(SQL_PROP_FIELD);
   Q.ParamByName('f').AsLargeInt:= AProp.FileId;
   Q.ParamByName('a').AsInteger := AProp.Line;
@@ -721,7 +741,6 @@ function TIndirectCallResolver.LocalNamed(ARoutineId: Int64; const AName: string
 var
   Q: TFDQuery;
 begin
-  Result:= 0;
   Q:= Query(SQL_LOCAL_NAMED);
   Q.ParamByName('p').AsLargeInt  := ARoutineId;
   Q.ParamByName('n').AsWideString:= AName;
@@ -732,7 +751,6 @@ function TIndirectCallResolver.MemberNamed(AClassId: Int64; const AName: string)
 var
   Q: TFDQuery;
 begin
-  Result:= 0;
   Q:= Query(SQL_MEMBER_NAMED);
   Q.ParamByName('p').AsLargeInt  := AClassId;
   Q.ParamByName('n').AsWideString:= AName;
@@ -772,7 +790,6 @@ var
   Hits : Integer;
 begin
   AByName:= False;
-  Result := 0;
   Cur:= Sym(AEnclosingId);
   Depth:= 0;
   while (Cur.Id <> 0) and (Depth < CHAIN_MAX_DEPTH) and IsRoutineKind(Cur.Kind) do
@@ -971,22 +988,24 @@ begin
   AddBind(B);
 end;
 
-{ `Callee(.., [@]Routine, ..)`: AArgAt = index of the '(' or ',' before the argument on ALine. }
-procedure TIndirectCallResolver.BindArgument(const ACand: TCandidate; const ALine: string; AArgAt: Integer;
-  AHasAt: Boolean);
+{ Reads the argument list around position AArgAt (the '(' or ',' before an argument) of ALine:
+  the callee name, and the callee's parameter the argument is passed to (0 when the callee is not
+  a routine of this index or has no parameter at that position).
+  arUnread: the list opens on another line or is not a call ([A, B], Foo<T>(..));
+  arNotACall: a cast, a keyword, or a callee that only tests an address (Assigned). }
+function TIndirectCallResolver.ParamOfArgument(AFileId: Int64; ALineNo: Integer; const ALine: string;
+  AArgAt: Integer; out ACallee: string; out AParamId: Int64): TArgumentRead;
 var
   I, E, K : Integer;
   Depth   : Integer;
   ArgIndex: Integer;
-  Callee  : string;
   Skip    : string;
   CallRef : TFileRef;
   Q       : TFDQuery;
   Routine : Int64;
-  ParamId : Int64;
-  B       : TBind;
-  Proven  : Boolean;
 begin
+  ACallee := '';
+  AParamId:= 0;
   { back to the '(' that opens the argument list, counting the arguments before this one }
   I:= AArgAt;
   Depth:= 0;
@@ -1008,17 +1027,42 @@ begin
     Dec(I);
   end;
   E:= if I >= 1 then SkipBlanksBack(ALine, I - 1) else 0;
-  if (I < 1) or (ALine[I] <> '(') or (E < 1) or not IsIdentChar(ALine[E]) then
-  begin
-    Inc(FCounters.Unread); // the list opens on another line, or is not a call: [A, B], Foo<T>(..)
-    Exit;
-  end;
+  if (I < 1) or (ALine[I] <> '(') or (E < 1) or not IsIdentChar(ALine[E]) then Exit(arUnread);
   K:= E;
   while (K >= 1) and IsIdentChar(ALine[K]) do Dec(K);
-  Callee:= Copy(ALine, K + 1, E - K);
+  ACallee:= Copy(ALine, K + 1, E - K);
+  Result:= arNotACall;
   for Skip in NOT_A_CALLBACK_TAKER do
-    if SameText(Callee, Skip) then Exit;
-  if not FileRefAt(ACand.FileId, ACand.Line, K + 1, CallRef) then Exit; // a cast or a keyword, not a call
+    if SameText(ACallee, Skip) then Exit;
+  if not FileRefAt(AFileId, ALineNo, K + 1, CallRef) then Exit;
+  Result:= arCall;
+  Q:= Query(SQL_CALL_TARGET);
+  Q.ParamByName('r').AsLargeInt:= CallRef.Id;
+  Routine:= FirstId(Q);
+  if Routine = 0 then Exit;
+  Q:= Query(SQL_PARAM_AT);
+  Q.ParamByName('p').AsLargeInt:= Routine;
+  Q.ParamByName('o').AsInteger := ArgIndex;
+  AParamId:= FirstId(Q);
+end;
+
+{ `Callee(.., [@]Routine, ..)`: AArgAt = index of the '(' or ',' before the argument on ALine. }
+procedure TIndirectCallResolver.BindArgument(const ACand: TCandidate; const ALine: string; AArgAt: Integer;
+  AHasAt: Boolean);
+var
+  Callee : string;
+  ParamId: Int64;
+  B      : TBind;
+  Proven : Boolean;
+begin
+  case ParamOfArgument(ACand.FileId, ACand.Line, ALine, AArgAt, Callee, ParamId) of
+    arUnread:
+      begin
+        Inc(FCounters.Unread);
+        Exit;
+      end;
+    arNotACall: Exit;
+  end;
   B:= Default(TBind);
   B.Kind    := IE_KIND_CALLBACK_ARG;
   B.Via     := Callee;
@@ -1027,22 +1071,12 @@ begin
   B.Line    := ACand.Line;
   B.Col     := ACand.Col;
   Proven:= AHasAt or not RoutineHasResult(Sym(ACand.TargetId));
-  Q:= Query(SQL_CALL_TARGET);
-  Q.ParamByName('r').AsLargeInt:= CallRef.Id;
-  Routine:= FirstId(Q);
-  if Routine <> 0 then
+  if ParamId <> 0 then
   begin
-    Q:= Query(SQL_PARAM_AT);
-    Q.ParamByName('p').AsLargeInt:= Routine;
-    Q.ParamByName('o').AsInteger := ArgIndex;
-    ParamId:= FirstId(Q);
-    if ParamId <> 0 then
-    begin
-      { the parameter is the slot: its calls inside the callee are the call sites }
-      B.SlotId:= ParamId;
-      B.Via   := Sym(ParamId).Name;
-      if not Proven then Proven:= IsProceduralType(Sym(ParamId).Signature);
-    end;
+    { the parameter is the slot: its calls inside the callee are the call sites }
+    B.SlotId:= ParamId;
+    B.Via   := Sym(ParamId).Name;
+    if not Proven then Proven:= IsProceduralType(Sym(ParamId).Signature);
   end;
   if not Proven then
   begin
@@ -1050,6 +1084,109 @@ begin
     Exit;
   end;
   AddBind(B);
+end;
+
+{ One read of slot AFromSlot at a position: `Other:= Slot` adds Other's slot to AInto,
+  `Callee(.., Slot, ..)` the callee's parameter. Anything else (a call, a test) adds nothing. }
+procedure TIndirectCallResolver.AddFlowAt(AFromSlot, AFileId: Int64; ALineNo, ACol: Integer; const AName: string;
+  AInto: TList<Int64>);
+var
+  Lines : TArray<string>;
+  Line  : string;
+  HasAt : Boolean;
+  At, E, K: Integer;
+  Lhs   : TFileRef;
+  IsProp: Boolean;
+  Callee: string;
+  Slot  : Int64;
+begin
+  Lines:= LinesOf(AFileId);
+  if FStaleFiles.ContainsKey(AFileId) or (ALineNo < 1) or (ALineNo > Length(Lines)) then Exit;
+  Line:= Lines[ALineNo - 1];
+  if not SameText(Copy(Line, ACol, Length(AName)), AName) then Exit;
+  Slot:= 0;
+  case ClassifySite(Line, ACol, Length(AName), HasAt, At) of
+    ssAssign:
+      begin
+        E:= SkipBlanksBack(Line, At - 1);
+        K:= E;
+        while (K >= 1) and IsIdentChar(Line[K]) do Dec(K);
+        if (E >= 1) and (K < E) and FileRefAt(AFileId, ALineNo, K + 1, Lhs) then Slot:= CanonicalSlot(Lhs, IsProp);
+      end;
+    ssArgument: ParamOfArgument(AFileId, ALineNo, Line, At, Callee, Slot);
+  end;
+  if (Slot <> 0) and (Slot <> AFromSlot) and not AInto.Contains(Slot) then AInto.Add(Slot);
+end;
+
+{ The slots the value of ASlotId is copied into directly. Cached; the list is owned by FFlows. }
+function TIndirectCallResolver.FlowsOf(ASlotId: Int64): TList<Int64>;
+var
+  Ids  : TList<Int64>;
+  Names: TList<string>;
+  Reads: TList<TCandidate>;
+  C    : TCandidate;
+  Id   : Int64;
+  Pass : Integer;
+  Q    : TFDQuery;
+begin
+  if FFlows.TryGetValue(ASlotId, Result) then Exit;
+  Result:= TList<Int64>.Create;
+  FFlows.Add(ASlotId, Result);
+  Ids  := TList<Int64>.Create;
+  Names:= TList<string>.Create;
+  Reads:= TList<TCandidate>.Create;
+  try
+    SlotAliases(ASlotId, Ids, Names);
+    for Id in Ids do
+      for Pass:= 0 to 1 do
+      begin
+        if (Pass = 1) and not FHasMemberAccesses then Continue;
+        Q:= Query(if Pass = 0 then SQL_READS_OF else SQL_MEMBER_READS_OF);
+        Q.ParamByName('s').AsLargeInt:= Id;
+        Q.Open;
+        try
+          while not Q.Eof do
+          begin
+            C:= Default(TCandidate);
+            C.FileId:= Q.Fields[0].AsLargeInt;
+            C.Line  := Q.Fields[1].AsInteger;
+            C.Col   := Q.Fields[2].AsInteger;
+            C.Name  := Q.Fields[3].AsString;
+            Reads.Add(C);
+            Q.Next;
+          end;
+        finally
+          Q.Close;
+        end;
+      end;
+    for C in Reads do AddFlowAt(ASlotId, C.FileId, C.Line, C.Col, C.Name, Result);
+  finally
+    Reads.Free;
+    Names.Free;
+    Ids.Free;
+  end;
+end;
+
+{ ASlotId and every slot its value flows into, nearest first, each once. }
+procedure TIndirectCallResolver.SlotClosure(ASlotId: Int64; AInto: TList<Int64>);
+var
+  Head, LevelEnd, Depth: Integer;
+  Next: Int64;
+begin
+  AInto.Add(ASlotId);
+  Head:= 0;
+  Depth:= 0;
+  while (Head < AInto.Count) and (Depth < FLOW_MAX_DEPTH) do
+  begin
+    LevelEnd:= AInto.Count;
+    while Head < LevelEnd do
+    begin
+      for Next in FlowsOf(AInto[Head]) do
+        if not AInto.Contains(Next) then AInto.Add(Next);
+      Inc(Head);
+    end;
+    Inc(Depth);
+  end;
 end;
 
 { The class symbol named AName: the one declared in APreferPath when there is one, else the only
@@ -1290,30 +1427,35 @@ begin
   else if ABind.Kind = IE_KIND_CALLBACK_ARG   then Inc(FCounters.CallbackArg);
 end;
 
-{ Pairs every binding with every call through its slot; a binding without one yields the
-  RefId = 0 row. }
+{ Pairs every binding with every call through its slot and through the slots that slot is copied
+  into; a binding without any yields the RefId = 0 row. }
 procedure TIndirectCallResolver.EmitBinds;
 var
   B     : TBind;
+  Slots : TList<Int64>;
   Ids   : TList<Int64>;
   Names : TList<string>;
+  Slot  : Int64;
   Name  : string;
   Site  : TCallSite;
   NoSite: TCallSite;
   Before: Integer;
 begin
   NoSite:= Default(TCallSite);
+  Slots:= TList<Int64>.Create;
   Ids  := TList<Int64>.Create;
   Names:= TList<string>.Create;
   try
     for B in FBinds do
     begin
       Before:= FEdges.Count;
-      if B.SlotId <> 0 then
+      Slots.Clear;
+      if B.SlotId <> 0 then SlotClosure(B.SlotId, Slots);
+      for Slot in Slots do
       begin
         Ids.Clear;
         Names.Clear;
-        SlotAliases(B.SlotId, Ids, Names);
+        SlotAliases(Slot, Ids, Names);
         for Name in Names do
           for Site in CallsNamed(Name) do
             if (Site.SlotId <> 0) and Ids.Contains(Site.SlotId) then AddEdge(B, Site);
@@ -1327,6 +1469,7 @@ begin
   finally
     Names.Free;
     Ids.Free;
+    Slots.Free;
   end;
 end;
 
@@ -1336,6 +1479,7 @@ begin
   FBinds.Clear;
   FEdges.Clear;
   FEdgeKeys.Clear;
+  FFlows.Clear;
   FRefFile:= 0;
   FFileRefs.Clear;
   FHasMemberAccesses:= TableExists(TABLE_MEMBER_ACCESSES);
