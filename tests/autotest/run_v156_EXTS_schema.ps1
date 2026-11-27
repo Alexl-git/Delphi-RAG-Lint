@@ -6,7 +6,7 @@
     T1  the nine 1.56 tables exist after a fresh index (Migrate created them), and the FTS5
         mirror concept_texts_fts.
     T2  their columns are exactly the spec's, in order (an empty SELECT * reports the list).
-    T3  their indexes exist.
+    T3  their indexes exist, and (EXT-S2) idx_refs_file_line on refs(file_id, start_line).
     T4  data_flows.val_class and symbol_facts.must_writes exist.
     T5  a plain index run (no emitter is registered in S1) leaves the six fact tables as the
         registered extraction hooks fill them; with -ExpectEmpty all six must hold 0 rows.
@@ -14,17 +14,30 @@
         fact per routine body, writes them (PutExtFacts / PutDataFlows / PutSymbolFacts /
         ReplaceIndirectEdges) and reads them back through the Get* readers; a mismatch fails
         the file. Checked: exit 0, one `v156-store-selfcheck: ok` line per unit, the row counts
-        (4 routines), val_class / must_writes values, one indirect edge.
+        (4 routines), val_class values, one indirect edge. The syx figure is >= the seeded count:
+        the parser's own symbol_extras rows (parameters) ride along with the seed.
+        symbol_facts.must_writes is NOT seeded (EXT-S2): the value the REAL analysis wrote is
+        read back and pinned per routine (Fill = FTotal, the three functions = Result). Control:
+        Fill is not 'Result' (the retired seed wrote 'Result' everywhere).
     T7  a SECOND seeded run over a touched unit REPLACES the rows (same counts, no duplicate)
         and the indirect-edges reader sees the edge of run 1.
     T8  (-BaseExe <older engine>) an index built by the older engine is read by this engine
         without DDL (tables still absent after a read verb), and a writer run adds them.
+    T9  (EXT-S2) REAL emitters, no seed: an include parsed in two define contexts (hosts XsA with
+        COMPILE1, XsB without; the fixture is written into the scratch folder) keeps the parser's
+        facts of BOTH contexts -- the `out` parameter of the routine only context 0 declares (pA or
+        pB) AND of the routine only context 1 declares each have their symbol_extras row, and the
+        string literal of each context's call has its call_literal_args row, once.
+        Controls: both context-only routines are indexed (two contexts were parsed); the `var`
+        parameter of the routine both contexts declare has its row (the parser emitter is in
+        this engine). An engine WITHOUT the parser emitter (a lane branch that has not merged
+        EXT-A1) fails that control; pass -NoParserEmitter to skip T9 there, visibly.
   Positive control: run with -Exe <the 1.55 base engine> -- T1-T4, T6, T7 FAIL (no tables).
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = '', [string]$BaseExe = '', [switch]$ExpectEmpty, [switch]$KeepScratch)
+param([string]$Exe = '', [string]$BaseExe = '', [switch]$ExpectEmpty, [switch]$NoParserEmitter, [switch]$KeepScratch)
 
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) { Write-Host 'run_v156_EXTS_schema: needs pwsh 7' -ForegroundColor Red; exit 2 }
@@ -128,6 +141,9 @@ $inIdx  = ($wantIdx | ForEach-Object { "'$_'" }) -join ', '
 $idx    = @(Lane-Sql $db1 "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ($inIdx)")
 $miss   = @($wantIdx | Where-Object { $_ -notin @($idx | ForEach-Object name) })
 Check 'T3 the 15 indexes exist' ($miss.Count -eq 0) $(if ($miss.Count) { "(missing: $($miss -join ', '))" } else { '' })
+$refsIdx = @(Lane-Sql $db1 "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_refs_file_line'")
+$refsSql = if ($refsIdx.Count -eq 1) { ([string]$refsIdx[0].sql) -replace '\s+', '' } else { '' }
+Check 'T3 idx_refs_file_line is on refs(file_id, start_line)' ($refsSql -match 'ONrefs\(file_id,start_line\)$') "($refsSql)"
 
 # ---- T4 -------------------------------------------------------------------------
 Check 'T4 data_flows.val_class exists'      ((Lane-Cols $db1 'data_flows') -match '(^|,)val_class$')
@@ -149,25 +165,39 @@ $db2 = Join-Path $work 'seed.sqlite'
 $r2  = Lane-Index $fx2 $db2 'index-seed-1.log' $true
 $okLines = @([regex]::Matches($r2.log, 'v156-store-selfcheck: ok file=(\S+) dfa=(\d+) loops=(\d+) cla=(\d+) syx=(\d+)'))
 $perFile = @{}
-foreach ($m in $okLines) { $perFile[$m.Groups[1].Value] = "$($m.Groups[2].Value),$($m.Groups[3].Value),$($m.Groups[4].Value),$($m.Groups[5].Value)" }
+$perSyx  = @{}
+foreach ($m in $okLines) {
+  $perFile[$m.Groups[1].Value] = "$($m.Groups[2].Value),$($m.Groups[3].Value),$($m.Groups[4].Value)"
+  $perSyx[$m.Groups[1].Value]  = [int]$m.Groups[5].Value
+}
+# dfa / loops / cla = the seeded count exactly; syx >= it (the parser's parameter rows ride along).
+function Seeded-Ok([string]$File, [int]$N) {
+  return ($perFile[$File] -eq "$N,$N,$N") -and $perSyx.ContainsKey($File) -and ($perSyx[$File] -ge $N)
+}
 Check 'T6 seeded run ends with exit 0' ($r2.rc -eq 0) "(rc $($r2.rc))"
-Check 'T6 uExtsA.pas read back 3 rows of each fact' ($perFile['uExtsA.pas'] -eq '3,3,3,3') "($($perFile['uExtsA.pas']))"
-Check 'T6 uExtsB.pas read back 1 row of each fact'  ($perFile['uExtsB.pas'] -eq '1,1,1,1') "($($perFile['uExtsB.pas']))"
+Check 'T6 uExtsA.pas read back 3 rows of each fact (syx >= 3)' (Seeded-Ok 'uExtsA.pas' 3) "($($perFile['uExtsA.pas']),$($perSyx['uExtsA.pas']))"
+Check 'T6 uExtsB.pas read back 1 row of each fact (syx >= 1)'  (Seeded-Ok 'uExtsB.pas' 1) "($($perFile['uExtsB.pas']),$($perSyx['uExtsB.pas']))"
 Check 'T6 no read-back difference reported' ($r2.log -notmatch 'reads back differently')
+# must_writes: the REAL analysis, read back by the self-check and printed per routine.
+$mustLines = @([regex]::Matches($r2.log, 'v156-store-selfcheck: must file=(\S+) routine=(\S+) must_writes=\[([^\]]*)\]'))
+$mustGot   = (@($mustLines | ForEach-Object { "$($_.Groups[2].Value)=$($_.Groups[3].Value)" }) | Sort-Object) -join ' '
+Check 'T6 must_writes read back as the real analysis wrote it' ($mustGot -eq 'Fill=FTotal SumTo=Result Total=Result Twice=Result') "($mustGot)"
 function Seed-Counts([string]$Db) {
   return [ordered]@{
     dfa   = Lane-Count $Db 'ds_field_accesses'
     loops = Lane-Count $Db 'loop_facts'
-    cla   = Lane-Count $Db 'call_literal_args'
+    cla   = Lane-Count $Db "call_literal_args WHERE callee_name = 'SelfCheckCall'"
     syx   = Lane-Count $Db "symbol_extras WHERE noreturn = 1 AND param_mode = 'out'"
     flows = Lane-Count $Db "data_flows WHERE dst_kind = 'dsfield' AND src_kind = 'except' AND val_class = 'int'"
-    must  = Lane-Count $Db "symbol_facts WHERE must_writes = 'Result'"
+    must  = Lane-Count $Db "symbol_facts f JOIN symbols s ON s.id = f.symbol_id WHERE f.must_writes = CASE s.name WHEN 'Fill' THEN 'FTotal' ELSE 'Result' END"
     edges = Lane-Count $Db "indirect_edges WHERE kind = 'method-pointer' AND caller_symbol_id = target_symbol_id"
   }
 }
 $c2 = Seed-Counts $db2
 $c2Text = ($c2.Keys | ForEach-Object { "$_=$($c2[$_])" }) -join ' '
 Check 'T6 four rows of every per-file fact, one indirect edge' (($c2.dfa -eq 4) -and ($c2.loops -eq 4) -and ($c2.cla -eq 4) -and ($c2.syx -eq 4) -and ($c2.flows -eq 4) -and ($c2.must -eq 4) -and ($c2.edges -eq 1)) "($c2Text)"
+$fillMust = @(Lane-Sql $db2 "SELECT f.must_writes AS m FROM symbol_facts f JOIN symbols s ON s.id = f.symbol_id WHERE s.name = 'Fill'")
+Check 'T6 control: must_writes is not seeded (Fill stores FTotal, not Result)' (($fillMust.Count -eq 1) -and ($fillMust[0].m -eq 'FTotal')) "($(($fillMust | ForEach-Object m) -join ','))"
 $names = @(Lane-Sql $db2 "SELECT a.field_name AS f, s.name AS n FROM ds_field_accesses a JOIN symbols s ON s.id = a.symbol_id ORDER BY a.file_id, a.ordinal")
 Check 'T6 ds_field_accesses.symbol_id joins the routine that was seeded' (($names.Count -eq 4) -and (@($names | Where-Object { $_.f -ne $_.n }).Count -eq 0)) "($(($names | ForEach-Object f) -join ','))"
 $ords = @(Lane-Sql $db2 "SELECT ordinal FROM ds_field_accesses a JOIN files f ON f.id = a.file_id WHERE f.path LIKE '%uExtsA.pas' ORDER BY ordinal")
@@ -203,6 +233,39 @@ if ($BaseExe -ne '') {
   Check 'T8 and writes the facts of the re-emitted units' (($c5.dfa -ge 1) -and ($c5.must -ge 1) -and ($c5.flows -ge 1)) "(dfa=$($c5.dfa) must=$($c5.must) flows=$($c5.flows))"
 } else {
   Write-Host '  SKIP  T8 (no -BaseExe)' -ForegroundColor DarkGray
+}
+
+# ---- T9 include define contexts, REAL emitters (no seed) ----------------------------------
+$fx9 = Join-Path $work 'inc'; New-Item -ItemType Directory -Force $fx9 | Out-Null
+function Lane-Write([string]$Name, [string[]]$Lines) {
+  [IO.File]::WriteAllText((Join-Path $fx9 $Name), (($Lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+}
+foreach ($u in 'XsA', 'XsB') {
+  Lane-Write "$u.pas" @("unit $u;", $(if ($u -eq 'XsA') { '{$DEFINE COMPILE1}' } else { '' }), 'interface',
+    'function Tag(const pS: string): string;', 'implementation', 'function Tag(const pS: string): string;', 'begin',
+    '  Result := pS;', 'end;', '{$I XsBody.inc}', 'end.')
+}
+Lane-Write 'XsBody.inc' @('{$IFDEF COMPILE1}', 'procedure OnlyOne(out pA: Integer);', 'begin', "  pA := Length(Tag('one'));", 'end;',
+  '{$ELSE}', 'procedure OnlyTwo(out pB: Integer);', 'begin', "  pB := Length(Tag('two'));", 'end;', '{$ENDIF}',
+  'procedure Both(var pC: Integer);', 'begin', "  pC := Length(Tag('both'));", 'end;')
+Lane-Write 'XsProj.dpr' @('program XsProj;', 'uses', "  XsA in 'XsA.pas',", "  XsB in 'XsB.pas';", 'begin', 'end.')
+$db9 = Join-Path $work 'inc.sqlite'
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $fx9 'XsProj.dpr') --db $db9 --library-db none *> (Join-Path $work 'index-inc.log') }
+$rc9 = $LASTEXITCODE
+$incWhere = "JOIN files f ON f.id = s.file_id WHERE f.path LIKE '%XsBody.inc'"
+$routines = (@(Lane-Sql $db9 "SELECT s.name AS n FROM symbols s $incWhere AND s.name IN ('OnlyOne', 'OnlyTwo', 'Both') ORDER BY s.name") | ForEach-Object n) -join ','
+Check 'T9 VACUITY the include was parsed in both define contexts' (($rc9 -eq 0) -and ($routines -eq 'Both,OnlyOne,OnlyTwo')) "(rc $rc9, $routines)"
+$modes = @{}
+foreach ($r in @(Lane-Sql $db9 "SELECT s.name AS n, x.param_mode AS m FROM symbol_extras x JOIN symbols s ON s.id = x.symbol_id $incWhere AND s.name IN ('pA', 'pB', 'pC')")) { $modes[[string]$r.n] = [string]$r.m }
+$modeText = (@($modes.Keys | Sort-Object | ForEach-Object { "$_=$($modes[$_])" })) -join ' '
+if ($NoParserEmitter) {
+  Check 'T9 -NoParserEmitter: this engine really has no parser emitter' ($modes.Count -eq 0) "($modeText)"
+  Write-Host '  SKIP  T9 include-context facts (-NoParserEmitter: EXT-A1 is not in this engine)' -ForegroundColor Yellow
+} else {
+  Check 'T9 control: the parser emitter is in this engine (pC of Both is var)' ($modes['pC'] -eq 'var') "($modeText)"
+  Check 'T9 symbol_extras of the context-only routines: pA and pB are both out' (($modes['pA'] -eq 'out') -and ($modes['pB'] -eq 'out')) "($modeText)"
+  $lits = (@(Lane-Sql $db9 "SELECT c.value AS v FROM call_literal_args c JOIN files f ON f.id = c.file_id WHERE f.path LIKE '%XsBody.inc' AND c.callee_name = 'Tag' ORDER BY c.value") | ForEach-Object v) -join ','
+  Check 'T9 call_literal_args of both contexts, each literal once' ($lits -eq 'both,one,two') "($lits)"
 }
 
 if (-not $KeepScratch) { try { [IO.Directory]::Delete($work, $true) } catch { } } else { Write-Host "scratch: $work" }

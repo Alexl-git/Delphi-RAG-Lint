@@ -9125,6 +9125,7 @@ begin
   for I:= Low(SCHEMA_DDL_V156) to High(SCHEMA_DDL_V156) do TryExec(SCHEMA_DDL_V156[I]);
   TryExec(SCHEMA_DDL_V156_ALTER[V156_ALTER_VAL_CLASS]);
   if FFts5Available then TryExec(SCHEMA_DDL_V156_FTS5);
+  TryExec(SCHEMA_DDL_V156_REFS_LINE_INDEX); { 1.56 EXT-S2: refs(file_id, start_line), see the constant }
   FHasV156Facts       := -1;
   FHasIndirectEdges   := -1;
   FHasConceptTables   := -1;

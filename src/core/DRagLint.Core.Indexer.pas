@@ -1164,7 +1164,6 @@ const
   SELF_CHECK_ENV      = 'DRAGLINT_TEST_V156_STORE';
   SELF_CHECK_HOOK     = 'v156-store-selfcheck';
   SELF_CHECK_CALLEE   = 'SelfCheckCall';
-  SELF_CHECK_MUST     = 'Result';
   SELF_CHECK_ARGS     = 2;
 
 var
@@ -1288,6 +1287,15 @@ begin
     raise EInvalidOpException.CreateFmt('%s: %s reads back differently for %s', [SELF_CHECK_HOOK, AWhat, AFilePath]);
 end;
 
+{ symbol_facts.must_writes of one routine: what the analysis wrote must read back unchanged. Prints
+  the value, so the runner pins the REAL emitter's answer per routine. Tests only. }
+procedure SelfCheckMustWrites(const AStore: ISymbolStore; const ASym: TSymbol; const AWritten, AFilePath: string);
+begin
+  SelfCheckExpect(AStore.GetSymbolFacts(ASym.Id).MustWrites = AWritten, 'symbol_facts.must_writes', AFilePath);
+  Writeln(Format('%s: must file=%s routine=%s must_writes=[%s]', [SELF_CHECK_HOOK, ExtractFileName(AFilePath),
+    ASym.Name, AWritten]));
+end;
+
 { The by-routine and by-name readers, for the routine one seeded ds_field_accesses row belongs to. }
 procedure SelfCheckRoutineReaders(const AStore: ISymbolStore; AFileId: Int64; const AFilePath: string;
   const ASeed: TDsFieldAccessRow);
@@ -1298,7 +1306,6 @@ begin
   SelfCheckExpect(Length(AStore.GetLoopFacts(0, ASeed.SymbolId)) = 1, 'loop_facts by routine', AFilePath);
   SelfCheckExpect(Length(AStore.GetCallLiteralArgs(AFileId, ASeed.Line, ASeed.Col)) >= 1, 'call_literal_args by call', AFilePath);
   SelfCheckExpect(Length(AStore.FindCallLiteralArgs(SELF_CHECK_CALLEE, ASeed.FieldName)) >= 1, 'call_literal_args by name', AFilePath);
-  SelfCheckExpect(AStore.GetSymbolFacts(ASeed.SymbolId).MustWrites = SELF_CHECK_MUST, 'symbol_facts.must_writes', AFilePath);
   Flows:= AStore.GetDataFlowsOf(ASeed.SymbolId, DF_DST_DSFIELD);
   SelfCheckExpect(Length(Flows) = 1, 'data_flows dsfield count', AFilePath);
   SelfCheckExpect(Flows[0].ValClass = DF_VAL_INT, 'data_flows.val_class', AFilePath);
@@ -2146,10 +2153,61 @@ begin
   end;
 end;
 
+{ 1.56 EXT-S2: the 1.56 parser facts of an include parsed in N define contexts, merged into AMerged.
+  A symbol_extras row follows its symbol: it is taken from the parse the merged symbol row came
+  from (ASrcK), with SymbolIdx remapped through AMapIdx, so a symbol only context K > 0 declares
+  keeps its row. The call_literal_args rows are the union over the parses, one row per call
+  position / argument / literal: the first parse's rows in their order, then the rows only a
+  later context has. }
+procedure MergeIncVariantFacts(const AParses: TArray<TParseResult>; const AMapIdx: TArray<TArray<Integer>>;
+  const ASrcK: TList<Integer>; var AMerged: TParseResult);
+var
+  Extras: TList<TSymbolExtraRow>;
+  Args  : TList<TCallLiteralArgRow>;
+  Seen  : TDictionary<string, Boolean>;
+  X     : TSymbolExtraRow;
+  C     : TCallLiteralArgRow;
+  Key   : string;
+  K, I  : Integer;
+begin
+  Extras:= TList<TSymbolExtraRow>.Create;
+  Args  := TList<TCallLiteralArgRow>.Create;
+  Seen  := TDictionary<string, Boolean>.Create;
+  try
+    for K:= 0 to High(AParses) do
+    begin
+      for I:= 0 to High(AParses[K].SymbolExtras) do
+      begin
+        X:= AParses[K].SymbolExtras[I];
+        if not InRange(X.SymbolIdx, 0, High(AMapIdx[K])) then Continue;
+        X.SymbolIdx:= AMapIdx[K][X.SymbolIdx];
+        { a symbol every context declares came from the first parse, which carries its row }
+        if ASrcK[X.SymbolIdx] = K then Extras.Add(X);
+      end;
+      for I:= 0 to High(AParses[K].CallLiteralArgs) do
+      begin
+        C:= AParses[K].CallLiteralArgs[I];
+        Key:= string.Join('|', [IntToStr(C.CallLine), IntToStr(C.CallCol), IntToStr(C.ArgIndex), IntToStr(C.LitLine),
+          IntToStr(C.LitCol), C.LitKind, C.CalleeName, C.Value]);
+        if Seen.ContainsKey(Key) then Continue;
+        Seen.Add(Key, True);
+        Args.Add(C);
+      end;
+    end;
+    AMerged.SymbolExtras   := Extras.ToArray;
+    AMerged.CallLiteralArgs:= Args.ToArray;
+  finally
+    Seen.Free;
+    Args.Free;
+    Extras.Free;
+  end;
+end;
+
 { 1.52 EXTINC: merges the parses of one include in its N define contexts into AMerged. A symbol /
   ref every parse has is written once (variant 0, from the first parse); any other is written from
   the parse that has it, tagged with that parse's 1-based variant. In-array parent indices are
-  remapped onto the merged array. Everything else (chunks, literals, uses ...) stays the first
+  remapped onto the merged array. The 1.56 parser facts (symbol_extras, call_literal_args) are
+  merged by MergeIncVariantFacts. Everything else (chunks, literals, uses ...) stays the first
   parse's; diagnostics are the union. }
 procedure MergeIncVariantParses(const AParses: TArray<TParseResult>; var AMerged: TParseResult);
 var
@@ -2229,6 +2287,7 @@ begin
     AMerged.References    := Refs.ToArray;
     AMerged.RefIncVariants:= RefVar.ToArray;
     AMerged.Diagnostics   := Diags.ToArray;
+    MergeIncVariantFacts(AParses, MapIdx, SrcK, AMerged);
   finally
     Diags.Free;
     RefVar.Free;
@@ -2946,8 +3005,9 @@ begin
           FactsBody:= SliceBodyLines(SourceLines, Sym.ImplStartLine, Sym.ImplEndLine);
           Facts:= TSymbolFactsAnalyzer.Analyze(Sym, AFilePath, FactsBody, FStore, FactsAst);
           Facts.SymbolId:= NewSymId;
-          if FStoreSelfCheck then Facts.MustWrites:= SELF_CHECK_MUST; { test seed REPLACES the analysed value: the read-back check compares the value actually written }
           FStore.PutSymbolFacts(Facts);
+          { 1.56 EXT-S2: the self-check reads back the must_writes the REAL analysis wrote (no seed) }
+          if FStoreSelfCheck then SelfCheckMustWrites(FStore, Sym, Facts.MustWrites, AFilePath);
           // taint T1 (2026-10-27): the routine's data_flows rows, from the SAME
           // matched defProc (no second AST lookup). Field names: this file's
           // fields of the owning class (an ancestor's field from another unit is

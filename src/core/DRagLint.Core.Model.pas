@@ -1828,8 +1828,9 @@ type
   /// r.start_col = d.dst_col` finds the call / member-write ref of every 'arg' / 'write' row (and, with
   /// src_line/src_col, the feeding ref of every 'ref' / 'argout' row). Unused integers are -1 (indices)
   /// or 0 (positions); unused strings are ''. FileId is IGNORED by PutDataFlows (the file tx token
-  /// supplies it) and filled by the readers. Literals, constants, nil and numeric/boolean/ordinal-typed
-  /// values emit no row; an unknown type DOES emit (silence costs recall, a wrong drop costs trust).
+  /// supplies it) and filled by the readers. Literals, constants and nil emit no row; a numeric /
+  /// Boolean / date-time value emits a VALUE row (ValClass &lt;&gt; ''); an unknown type DOES emit (silence
+  /// costs recall, a wrong drop costs trust).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Core.Interfaces.pas) ?, declaration (DRagLint.Index.DataFlowFacts.pas) ?, DRagLint.Index.DataFlowFacts.TCollector.AddRow (DRagLint.Index.DataFlowFacts.pas), DRagLint.Index.DataFlowFacts.TCollector.Create (DRagLint.Index.DataFlowFacts.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ReadDataFlowRows (DRagLint.Storage.SQLite.pas) (+27 more)</para>
   /// <para>Used in units: DRagLint.Core.Interfaces, DRagLint.Index.DataFlowFacts, DRagLint.Lint.TaintRules, DRagLint.Storage.SQLite</para>
@@ -1873,7 +1874,8 @@ type
     /// <summary>True = the reaching path passed a branch/loop join with a differing state, or the routine
     /// took the flow-insensitive fallback. Explainability only: never used to drop a row.</summary>
     Cond       : Boolean;
-    /// <summary>1.56 B3: the value class of the flowing value, one of the DF_VAL_* constants; '' on every
+    /// <summary>1.56 B3: the value class of the flowing value, one of the DF_VAL_* constants: the class the
+    /// value had where it FIRST became a scalar (a later IntToStr does not change it); '' on every
     /// row written before 1.56 and on string / object / unknown-typed values (the pre-1.56 row set).
     /// Column data_flows.val_class; absent on an index not migrated by a 1.56 writer (reads '').</summary>
     ValClass   : string ;
@@ -1914,9 +1916,11 @@ const
   DF_VAL_DATETIME = 'datetime';
   /// <summary>B3 val_class: Boolean and its sized variants.</summary>
   DF_VAL_BOOL     = 'bool';
-  /// <summary>B3 val_class: an enumeration, a set, a Char or another ordinal that is not an integer.</summary>
+  /// <summary>B3 val_class: an enumeration, a set, a Char or another ordinal that is not an integer.
+  /// Reserved -- not emitted in 1.56 (enum / Char typed values are pre-1.56 rows and keep '').</summary>
   DF_VAL_ORD      = 'ord';
-  /// <summary>B3 val_class: Variant / OleVariant (a dataset `Value`, `FieldValues[..]`).</summary>
+  /// <summary>B3 val_class: Variant / OleVariant (a dataset `Value`, `FieldValues[..]`).
+  /// Reserved -- not emitted in 1.56 (Variant typed values are pre-1.56 rows and keep '').</summary>
   DF_VAL_VARIANT  = 'variant';
 
   /// <summary>ds_field_accesses.mode: the field value is read.</summary>
@@ -1993,6 +1997,10 @@ const
   /// <summary>call_literal_args.lit_kind: a numeric literal (value = the text as written).</summary>
   CLA_KIND_NUMBER = 'number';
   /// <summary>call_literal_args.lit_kind: a named constant or enum member (value = the identifier as written).</summary>
+  /// <remarks>The parser emits a CANDIDATE: an identifier / dotted-identifier argument whose root name
+  /// this file does not declare as parameter, local, variable, field, property, component or routine,
+  /// and that is not Self / Result / nil. A reader confirms the constant through the read ref at
+  /// (lit_line, lit_col).</remarks>
   CLA_KIND_CONST  = 'const';
   /// <summary>Longest call_literal_args.value stored; a longer literal is cut.</summary>
   CLA_VALUE_MAX   = 400;
@@ -2129,7 +2137,10 @@ type
   /// joins refs by (file_id, call_line, call_col).</summary>
   /// <remarks>Emitted by the Delphi parser into TParseResult.CallLiteralArgs or by a routine-facts hook
   /// into TExtFileFacts.CallLiteralArgs. SymbolId is resolved by the indexer (0 = no enclosing routine)
-  /// when the producer leaves it 0.</remarks>
+  /// when the producer leaves it 0. A subscript (`DS.FieldValues['X']`) is stored with CallLine /
+  /// CallCol = the index-access ref, CLA_KIND_STRING and CLA_KIND_CONST only. An include parsed in
+  /// several define contexts stores the union of its contexts' rows (one row per call position /
+  /// argument / literal).</remarks>
   TCallLiteralArgRow = record
     /// <summary>files.id; ignored on write, filled by the readers.</summary>
     FileId      : Int64  ;
