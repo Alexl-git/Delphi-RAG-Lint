@@ -13,14 +13,23 @@ unit DRagLint.Report.CycloneDx;
     5. any other unit without a path: one component per unit, supplier "unknown supplier".
   Nothing is dropped: every unit of the model lands in exactly one group.
 
-  v1 slice (owner ruling Q2, 2026-11-27): source closure only. No MAP input, no BSI profile, no VEX.
-  The document says so itself: lifecycle pre-build, a compositions entry "incomplete", and the
-  drag-lint:sbom:* metadata properties. }
+  v1 slice (owner ruling Q2, 2026-11-27): source closure only. The document says so itself: lifecycle
+  pre-build, a compositions entry "incomplete", and the drag-lint:sbom:* metadata properties.
+
+  SBOM-2 adds two optional inputs, both off by default (the plain document is byte-for-byte the v1 shape):
+    MAP (TSbomModel.MapFile / LinkedUnits): every component and the application gain drag-lint:linked =
+    yes | partial | no and one drag-lint:linkedUnit / drag-lint:notLinkedUnit property per unit. A unit the MAP
+    does not name is reported as not linked, never dropped. Units the MAP names that no indexed source reaches
+    are listed in the metadata (drag-lint:sbom:mapUnitNotInClosure).
+    BSI (TSbomModel.Bsi): the fields of BSI TR-03183-2 beyond plain CycloneDX (SBOM creator, bsi:component:*
+    file properties). A field that cannot be filled is NOT invented: it is left out and named as
+    drag-lint:bsi:unfilled = "field: reason" on its component, counted in the metadata, and the
+    "unknown supplier" placeholder is not written. }
 
 interface
 
 uses
-  System.JSON, System.Generics.Collections;
+  System.Classes, System.JSON, System.Generics.Collections;
 
 const
   /// <summary>The supplier name of a component no catalogue row describes.</summary>
@@ -110,6 +119,12 @@ type
     FTimestamp: string;
     FSerialNumber: string;
     FLibraryIndexUsed: Boolean;
+    FMapFile: string;
+    FLinkedUnits: TStringList;
+    FBsi: Boolean;
+    FCreatorName: string;
+    FCreatorEmail: string;
+    FExeIsPe: Boolean;
   public
     /// <summary>The application name (metadata.component.name).</summary>
     property AppName: string read FAppName write FAppName;
@@ -127,7 +142,18 @@ type
     property SerialNumber: string read FSerialNumber write FSerialNumber;
     /// <summary>True when a library index was read, so library units were walked transitively.</summary>
     property LibraryIndexUsed: Boolean read FLibraryIndexUsed write FLibraryIndexUsed;
-    constructor Create;
+    /// <summary>File name of the linker MAP that was read, or '' = no MAP input (no linked properties are written).</summary>
+    property MapFile: string read FMapFile write FMapFile;
+    /// <summary>The units the MAP links, compared without case. Owned by the model; filled by the caller.</summary>
+    property LinkedUnits: TStringList read FLinkedUnits;
+    /// <summary>True = write the BSI TR-03183-2 fields and name what cannot be filled.</summary>
+    property Bsi: Boolean read FBsi write FBsi;
+    /// <summary>The SBOM creator's name (metadata.authors), or '' = not given.</summary>
+    property CreatorName: string read FCreatorName write FCreatorName;
+    /// <summary>The SBOM creator's e-mail address (metadata.authors), or '' = not given.</summary>
+    property CreatorEmail: string read FCreatorEmail write FCreatorEmail;
+    /// <summary>True when the file named by ExeName starts with the PE "MZ" header (the caller checked).</summary>
+    property ExeIsPe: Boolean read FExeIsPe write FExeIsPe;    constructor Create;
     destructor Destroy; override;
     /// <summary>Adds one unit.</summary>
     /// <returns>Its index, for AddEdge.</returns>
@@ -145,15 +171,17 @@ type
 /// <param name="pCatalogue">The loaded library catalogue.</param>
 /// <param name="pUnknown">Receives one line per component that no catalogue row describes: the
 /// component's bom-ref, a tab, and the directory (or, for a unit without source, the unit name).</param>
+/// <param name="pUnfilled">Receives, in BSI mode only, one line per BSI field that could not be filled: the
+/// component's bom-ref (or "metadata"), a tab, and "field: reason". Empty otherwise.</param>
 /// <returns>The document; the caller frees it. One component per unit group, every component with
 /// a dependencies entry.</returns>
 function BuildCycloneDx(const pModel: TSbomModel; const pCatalogue: TSbomCatalogue;
-  out pUnknown: TArray<string>): TJSONObject;
+  out pUnknown, pUnfilled: TArray<string>): TJSONObject;
 
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.Masks, System.RegularExpressions,
+  System.SysUtils, System.IOUtils, System.Masks, System.RegularExpressions,
   System.Generics.Defaults;
 
 const
@@ -180,6 +208,18 @@ const
   CAttributionUnitName = 'unit-name';
   CAttributionNone = 'none';
   CAttributionFirstParty = 'first-party';
+  CScopeMapText = 'source closure of the project index, marked with the linker MAP (drag-lint:linked): units ' +
+    'linked from DCUs that no indexed source names are listed only as sbom:mapUnitNotInClosure; runtime ' +
+    'packages and DLLs are not listed';
+  CBsiProfile = 'BSI TR-03183-2 fields written; what could not be filled is named per component as ' +
+    'drag-lint:bsi:unfilled';
+  CBsiPrefix = 'bsi:component:';
+  CLinkedYes = 'yes';
+  CLinkedPartial = 'partial';
+  CLinkedNo = 'no';
+  CMetadataRef = 'metadata';
+  CReasonStatic = 'statically linked into the application: the component has no file of its own in the delivery';
+  CReasonNoExe = 'no delivered file given; pass --exe <file>';
   CScopeText = 'source closure of the project index; no MAP input: units linked from DCUs that no ' +
     'indexed source names, runtime packages and DLLs are not listed';
   CLibIndexYes = 'read: library units walked transitively';
@@ -227,7 +267,7 @@ type
     FByKey    : TDictionary<string, TSbomGroup>;
     FUnitGroup: TArray<TSbomGroup>;
     FUsedRefs : TDictionary<string, Boolean>;
-    function GroupFor(const pKey: string; pKind: TGroupKind; pRow: Integer): TSbomGroup;
+    FUnfilled : TList<string>;    function GroupFor(const pKey: string; pKind: TGroupKind; pRow: Integer): TSbomGroup;
     function Classify(const pUnit: TSbomUnit): TSbomGroup;
     function UniqueRef(const pRef: string): string;
     procedure AssignRefs;
@@ -236,10 +276,14 @@ type
     function ComponentJson(const pGroup: TSbomGroup): TJSONObject;
     function AppJson(const pGroup: TSbomGroup): TJSONObject;
     function MetadataJson(const pApp: TSbomGroup): TJSONObject;
+    procedure Unfilled(const pProps: TJSONArray; const pRef, pField, pReason: string);
+    procedure LibraryBsiProps(const pProps: TJSONArray; const pRef: string; const pRow: TSbomLibrary;
+      pHasVersion, pHasLicence: Boolean);
+    procedure AppBsiProps(const pProps: TJSONArray; const pRef: string);
   public
     constructor Create(const pModel: TSbomModel; const pCatalogue: TSbomCatalogue);
     destructor Destroy; override;
-    function Build(out pUnknown: TArray<string>): TJSONObject;
+    function Build(out pUnknown, pUnfilled: TArray<string>): TJSONObject;
   end;
 
 { ---- model ---- }
@@ -249,10 +293,15 @@ begin
   inherited Create;
   FUnits:= TList<TSbomUnit>.Create;
   FEdges:= TList<TSbomEdge>.Create;
+  FLinkedUnits:= TStringList.Create;
+  FLinkedUnits.CaseSensitive:= False;
+  FLinkedUnits.Sorted:= True;
+  FLinkedUnits.Duplicates:= dupIgnore;
 end;
 
 destructor TSbomModel.Destroy;
 begin
+  FLinkedUnits.Free;
   FEdges.Free;
   FUnits.Free;
   inherited;
@@ -476,10 +525,12 @@ begin
   FGroups:= TObjectList<TSbomGroup>.Create(True);
   FByKey:= TDictionary<string, TSbomGroup>.Create;
   FUsedRefs:= TDictionary<string, Boolean>.Create;
+  FUnfilled:= TList<string>.Create;
 end;
 
 destructor TSbomBuilder.Destroy;
 begin
+  FUnfilled.Free;
   FUsedRefs.Free;
   FByKey.Free;
   FGroups.Free;
@@ -627,9 +678,14 @@ begin
   end;
 end;
 
+function RawProp(const pName, pValue: string): TJSONObject;
+begin
+  Result:= TJSONObject.Create.AddPair(CJName, pName).AddPair(CJValue, pValue);
+end;
+
 function Prop(const pName, pValue: string): TJSONObject;
 begin
-  Result:= TJSONObject.Create.AddPair(CJName, CPropPrefix + pName).AddPair(CJValue, pValue);
+  Result:= RawProp(CPropPrefix + pName, pValue);
 end;
 
 procedure AddUnitProps(const pProps: TJSONArray; const pGroup: TSbomGroup);
@@ -639,6 +695,24 @@ begin
   pProps.Add(Prop('unitCount', IntToStr(pGroup.Units.Count)));
   for LUnit in pGroup.Units do
     pProps.Add(Prop('unit', LUnit));
+end;
+
+{ drag-lint:linked and one property per unit, from the MAP's linked-unit list. }
+procedure AddLinkProps(const pProps: TJSONArray; const pGroup: TSbomGroup; const pLinked: TStrings);
+var
+  LUnit: string;
+  LYes, LNo: Integer;
+begin
+  LYes:= 0;
+  LNo:= 0;
+  for LUnit in pGroup.Units do
+    if pLinked.IndexOf(LUnit) >= 0 then
+      Inc(LYes)
+    else
+      Inc(LNo);
+  pProps.Add(Prop('linked', if LNo = 0 then CLinkedYes else if LYes = 0 then CLinkedNo else CLinkedPartial));
+  for LUnit in pGroup.Units do
+    pProps.Add(Prop(if pLinked.IndexOf(LUnit) >= 0 then 'linkedUnit' else 'notLinkedUnit', LUnit));
 end;
 
 function EvidenceOf(const pGroup: TSbomGroup): string;
@@ -664,6 +738,7 @@ var
   LRow: TSbomLibrary;
   LProps: TJSONArray;
   LVersion, LSupplier, LName, LAttribution: string;
+  LHasLicence: Boolean;
 begin
   LRow:= Default(TSbomLibrary);
   LAttribution:= CAttributionNone;
@@ -683,12 +758,14 @@ begin
   LSupplier:= if LRow.Supplier <> '' then LRow.Supplier else SBOM_UNKNOWN_SUPPLIER;
   Result:= TJSONObject.Create;
   Result.AddPair(CJType, CTypeLibrary).AddPair(CJBomRef, pGroup.Ref);
-  Result.AddPair('supplier', TJSONObject.Create.AddPair(CJName, LSupplier));
+  if (not FModel.Bsi) or (LRow.Supplier <> '') then
+    Result.AddPair('supplier', TJSONObject.Create.AddPair(CJName, LSupplier));
   Result.AddPair(CJName, LName);
   LVersion:= GroupVersion(pGroup);
   if LVersion <> '' then
     Result.AddPair(CJVersion, LVersion);
-  if (LRow.LicenseExpression <> '') or (LRow.LicenseId <> '') or (LRow.LicenseName <> '') then
+  LHasLicence:= (LRow.LicenseExpression <> '') or (LRow.LicenseId <> '') or (LRow.LicenseName <> '');
+  if LHasLicence then
     Result.AddPair('licenses', LicensesJson(LRow));
   if LRow.Cpe <> '' then
     Result.AddPair('cpe', LRow.Cpe);
@@ -699,6 +776,10 @@ begin
   LProps.Add(Prop('attribution', LAttribution));
   LProps.Add(Prop('evidence', EvidenceOf(pGroup)));
   AddUnitProps(LProps, pGroup);
+  if FModel.MapFile <> '' then
+    AddLinkProps(LProps, pGroup, FModel.LinkedUnits);
+  if FModel.Bsi then
+    LibraryBsiProps(LProps, pGroup.Ref, LRow, LVersion <> '', LHasLicence);
 end;
 
 function TSbomBuilder.AppJson(const pGroup: TSbomGroup): TJSONObject;
@@ -718,26 +799,121 @@ begin
   if FModel.ExeName <> '' then
     LProps.Add(Prop('hashedFile', FModel.ExeName));
   AddUnitProps(LProps, pGroup);
+  if FModel.MapFile <> '' then
+    AddLinkProps(LProps, pGroup, FModel.LinkedUnits);
+  if FModel.Bsi then
+    AppBsiProps(LProps, pGroup.Ref);
+end;
+
+procedure TSbomBuilder.Unfilled(const pProps: TJSONArray; const pRef, pField, pReason: string);
+begin
+  pProps.Add(Prop('bsi:unfilled', pField + ': ' + pReason));
+  FUnfilled.Add(pRef + #9 + pField + ': ' + pReason);
+end;
+
+{ The BSI file properties of a library component. It is linked into the application, so no field of a
+  delivered file exists for it; supplier, version and licence come from the catalogue row or stay unfilled. }
+procedure TSbomBuilder.LibraryBsiProps(const pProps: TJSONArray; const pRef: string; const pRow: TSbomLibrary;
+  pHasVersion, pHasLicence: Boolean);
+begin
+  if pRow.Supplier = '' then
+    Unfilled(pProps, pRef, 'supplier', 'no catalogue row names a supplier for this component');
+  if not pHasVersion then
+    Unfilled(pProps, pRef, 'version', 'no version known: the catalogue row states none, or no catalogue row matches');
+  if not pHasLicence then
+    Unfilled(pProps, pRef, 'licence', 'no licence known: the catalogue row states none, or no catalogue row matches');
+  Unfilled(pProps, pRef, 'filename', CReasonStatic);
+  Unfilled(pProps, pRef, 'hash', CReasonStatic);
+  Unfilled(pProps, pRef, 'file-properties', 'executable / archive / structured: ' + CReasonStatic);
+end;
+
+{ The BSI fields of the application: what --exe / --app-version state, and what drag-lint cannot know. }
+procedure TSbomBuilder.AppBsiProps(const pProps: TJSONArray; const pRef: string);
+begin
+  if FModel.AppVersion = '' then
+    Unfilled(pProps, pRef, 'version', 'not given; pass --app-version <v>');
+  Unfilled(pProps, pRef, 'supplier', 'the manufacturer of the application is not known to drag-lint');
+  Unfilled(pProps, pRef, 'licence', 'the licence of the application is not known to drag-lint');
+  if FModel.ExeName = '' then
+  begin
+    Unfilled(pProps, pRef, 'filename', CReasonNoExe);
+    Unfilled(pProps, pRef, 'hash', CReasonNoExe);
+    Unfilled(pProps, pRef, 'file-properties', 'executable / archive / structured: ' + CReasonNoExe);
+    Exit;
+  end;
+  pProps.Add(RawProp(CBsiPrefix + 'filename', FModel.ExeName));
+  if FModel.ExeIsPe then
+  begin
+    pProps.Add(RawProp(CBsiPrefix + 'executable', 'executable'));
+    pProps.Add(RawProp(CBsiPrefix + 'archive', 'no archive'));
+    pProps.Add(RawProp(CBsiPrefix + 'structured', 'unstructured'));
+  end
+  else
+    Unfilled(pProps, pRef, 'file-properties', 'executable / archive / structured: ' + FModel.ExeName +
+      ' has no MZ header, so drag-lint does not claim it is an executable');
 end;
 
 function TSbomBuilder.MetadataJson(const pApp: TSbomGroup): TJSONObject;
 var
-  LTool: TJSONObject;
+  LTool, LAuthor: TJSONObject;
+  LProps: TJSONArray;
+  LClosure: TStringList;
+  LUnit: TSbomUnit;
+  LName, LSlice: string;
+  LApp: TJSONObject;
 begin
   LTool:= TJSONObject.Create.AddPair(CJType, CTypeApplication).AddPair(CJName, 'drag-lint')
     .AddPair(CJVersion, FModel.ToolVersion);
+  LApp:= AppJson(pApp);
   Result:= TJSONObject.Create;
   Result.AddPair('timestamp', FModel.Timestamp);
   Result.AddPair('lifecycles', TJSONArray.Create.Add(TJSONObject.Create.AddPair('phase', 'pre-build')));
   Result.AddPair('tools', TJSONObject.Create.AddPair('components', TJSONArray.Create.Add(LTool)));
-  Result.AddPair('component', AppJson(pApp));
-  Result.AddPair(CJProperties, TJSONArray.Create
-    .Add(Prop('sbom:slice', 'v1'))
-    .Add(Prop('sbom:scope', CScopeText))
-    .Add(Prop('sbom:libraryIndex', if FModel.LibraryIndexUsed then CLibIndexYes else CLibIndexNo)));
+  LProps:= TJSONArray.Create;
+  if (FModel.CreatorName <> '') or (FModel.CreatorEmail <> '') then
+  begin
+    LAuthor:= TJSONObject.Create;
+    if FModel.CreatorName <> '' then
+      LAuthor.AddPair(CJName, FModel.CreatorName);
+    if FModel.CreatorEmail <> '' then
+      LAuthor.AddPair('email', FModel.CreatorEmail);
+    Result.AddPair('authors', TJSONArray.Create.Add(LAuthor));
+  end;
+  Result.AddPair('component', LApp);
+  Result.AddPair(CJProperties, LProps);
+  LSlice:= 'v1';
+  if FModel.MapFile <> '' then
+    LSlice:= LSlice + '+map';
+  if FModel.Bsi then
+    LSlice:= LSlice + '+bsi';
+  LProps.Add(Prop('sbom:slice', LSlice));
+  LProps.Add(Prop('sbom:scope', if FModel.MapFile <> '' then CScopeMapText else CScopeText));
+  LProps.Add(Prop('sbom:libraryIndex', if FModel.LibraryIndexUsed then CLibIndexYes else CLibIndexNo));
+  if FModel.MapFile <> '' then
+  begin
+    LProps.Add(Prop('sbom:map', FModel.MapFile));
+    LClosure:= TStringList.Create;
+    try
+      LClosure.CaseSensitive:= False;
+      for LUnit in FModel.Units do
+        LClosure.Add(LUnit.Name);
+      for LName in FModel.LinkedUnits do
+        if LClosure.IndexOf(LName) < 0 then
+          LProps.Add(Prop('sbom:mapUnitNotInClosure', LName));
+    finally
+      LClosure.Free;
+    end;
+  end;
+  if FModel.Bsi then
+  begin
+    LProps.Add(Prop('sbom:profile', CBsiProfile));
+    if FModel.CreatorEmail = '' then
+      Unfilled(LProps, CMetadataRef, 'creator',
+        'the SBOM creator contact is not given; pass --creator <name> --creator-email <address>');
+    LProps.Add(Prop('sbom:bsiUnfilledCount', IntToStr(FUnfilled.Count)));
+  end;
 end;
-
-function TSbomBuilder.Build(out pUnknown: TArray<string>): TJSONObject;
+function TSbomBuilder.Build(out pUnknown, pUnfilled: TArray<string>): TJSONObject;
 var
   I: Integer;
   LGroup, LApp: TSbomGroup;
@@ -745,6 +921,7 @@ var
   LDep: string;
 begin
   pUnknown:= nil;
+  pUnfilled:= nil;
   { The application exists even when no unit is first-party. }
   LApp:= GroupFor(CKeyApp, gkApp, CNoRow);
   SetLength(FUnitGroup, FModel.Units.Count);
@@ -757,7 +934,6 @@ begin
   Result:= TJSONObject.Create;
   Result.AddPair('bomFormat', 'CycloneDX').AddPair('specVersion', SBOM_SPEC_VERSION);
   Result.AddPair('serialNumber', FModel.SerialNumber).AddPair(CJVersion, TJSONNumber.Create(1));
-  Result.AddPair('metadata', MetadataJson(LApp));
   Result.AddPair('components', LComponents);
   Result.AddPair('dependencies', LDependencies);
   Result.AddPair('compositions', TJSONArray.Create.Add(TJSONObject.Create
@@ -776,16 +952,19 @@ begin
       LDependsOn.Add(LDep);
     LDependencies.Add(TJSONObject.Create.AddPair('ref', LGroup.Ref).AddPair('dependsOn', LDependsOn));
   end;
+  { Last: the metadata counts the unfilled BSI fields of every component above. }
+  Result.AddPair('metadata', MetadataJson(LApp));
+  pUnfilled:= FUnfilled.ToArray;
 end;
 
 function BuildCycloneDx(const pModel: TSbomModel; const pCatalogue: TSbomCatalogue;
-  out pUnknown: TArray<string>): TJSONObject;
+  out pUnknown, pUnfilled: TArray<string>): TJSONObject;
 var
   LBuilder: TSbomBuilder;
 begin
   LBuilder:= TSbomBuilder.Create(pModel, pCatalogue);
   try
-    Result:= LBuilder.Build(pUnknown);
+    Result:= LBuilder.Build(pUnknown, pUnfilled);
   finally
     LBuilder.Free;
   end;
