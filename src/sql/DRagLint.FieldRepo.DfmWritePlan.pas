@@ -111,7 +111,8 @@ type
 /// added field Requires its insert), a new TcxGridDBColumn for a graphical row whose column the form lacks and its
 /// OnGetDisplayText / OnCustomDrawCell handlers (each Requires the column; the column goes where DL_GRID_COLUMNS puts it,
 /// else into the only TcxGridDBTableView of the dataset; it carries the editor that row holds), hidden fields, changed kinds
-/// and the first persistent fields of a dataset. The in-place editor of a grid column: one change per column of a table or
+/// and the first persistent fields of a dataset, and an OnGetDisplayText / OnCustomDrawCell handler that the column of a
+/// graphical row lacks while the row holds its code (the column exists: no Requires). The in-place editor of a grid column: one change per column of a table or
 /// banded view of the dataset whose DL_GRID_COLUMNS row (schema 5) names a PROPERTIES_CLASS_NAME and whose
 /// PropertiesClassName / Properties.* lines differ from it; checked when the column keeps its class, another item of the
 /// form has the class or the unit uses the DevExpress unit that registers it, else unchecked with a warning. Blocked: everything that cannot be written so that the form still loads, a
@@ -457,7 +458,8 @@ type
     procedure PlanGridEditor(const pView: TDfmrGridView; const pColumn, pClass, pProperties: string);
     procedure PlanGridEditors;
     function GridPlaces(const pRow: TRepoField; const pViews: TArray<TDfmrGridView>): TArray<TGridPlace>;
-    procedure PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer);
+    procedure PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer; const pOnly: TArray<string>);
+    procedure PlanExistingColumnEvents(const pColumn: TDfmrGridColumn; const pPlace: TGridPlace; const pRow: TRepoField);
     procedure PlanGridColumn(const pRow: TRepoField; const pPlace: TGridPlace);
     procedure PlanGridColumns;
   public
@@ -1966,8 +1968,10 @@ begin
       [ExtractFileName(FForm.FileName), FDataset.Name, pRow.FieldName, Length(pViews), ViewNames(pViews)]));
 end;
 
-{ One unchecked change per grid event the row holds code for; each needs the column. }
-procedure TDfmWritePlanner.PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer);
+{ One unchecked change per grid event the row holds code for; each needs the column (pColumnId, 0 = the form has it).
+  pOnly: the events to plan, nil = all. }
+procedure TDfmWritePlanner.PlanColumnEvents(const pColumn: TDfmwItem; const pRow: TRepoField; pColumnId: Integer;
+  const pOnly: TArray<string>);
 var
   VI, VIndex: Integer;
   VEvent, VReason: string;
@@ -1977,7 +1981,7 @@ begin
   for VI := 0 to Min(High(FR_EVENT_COLUMNS), High(pRow.Events)) do
   begin
     VEvent := FR_EVENT_COLUMNS[VI].Event;
-    if not FR_EVENT_COLUMNS[VI].IsGrid or (Trim(pRow.Events[VI]) = '') then
+    if not FR_EVENT_COLUMNS[VI].IsGrid or (Trim(pRow.Events[VI]) = '') or ((pOnly <> nil) and not MatchText(VEvent, pOnly)) then
       Continue;
     VItem := NewItem(dwaEvent, pColumn.Component, CLASS_GRID_COLUMN);
     VItem.Dataset := pColumn.Dataset;
@@ -1985,7 +1989,8 @@ begin
     VItem.Literal := pColumn.Component + Copy(VEvent, Length(EVENT_PREFIX) + 1, MaxInt);
     VItem.FieldName := pRow.FieldName;
     VItem.MethodParams := GridEventSignature(VEvent);
-    VItem.Requires := [pColumnId];
+    if pColumnId > 0 then
+      VItem.Requires := [pColumnId];
     if not NewHandlerRegion(HandlerFields, pColumn.Component, VEvent, pRow.Events[VI], sLineBreak, VItem.MethodBody, VReason) then
       VItem.MethodBody := '';
     VIndex := AddItem(VItem, fcoInsert, '', VItem.Literal);
@@ -2002,6 +2007,29 @@ begin
   end;
 end;
 
+{ The grid events the row holds code for and a column the form has assigns no handler to: unchecked changes, never
+  applied by default; an assigned handler is never replaced (1.56 GC-H). }
+procedure TDfmWritePlanner.PlanExistingColumnEvents(const pColumn: TDfmrGridColumn; const pPlace: TGridPlace;
+  const pRow: TRepoField);
+var
+  VAssigned, VMissing: TArray<string>;
+  VPair: TDfmrPair;
+  VItem: TDfmwItem;
+begin
+  VAssigned := nil;
+  for VPair in pColumn.Events do
+    if VPair.Value <> '' then
+      VAssigned := VAssigned + [VPair.Name];
+  VMissing := MissingGridEvents(pRow.Events, VAssigned);
+  if VMissing = nil then
+    Exit;
+  VItem := Default(TDfmwItem);
+  VItem.Component := pColumn.Name;
+  VItem.Dataset := pPlace.View.Name;
+  VItem.FieldName := pRow.FieldName;
+  PlanColumnEvents(VItem, pRow, 0, VMissing);
+end;
+
 { A new TcxGridDBColumn for a graphical row, unchecked: the owner's second confirmation is its id in a --select file. }
 procedure TDfmWritePlanner.PlanGridColumn(const pRow: TRepoField; const pPlace: TGridPlace);
 var
@@ -2012,7 +2040,10 @@ var
 begin
   for VColumn in pPlace.View.Columns do
     if SameText(VColumn.FieldName, pRow.FieldName) or SameText(VColumn.Name, pPlace.Column) then
+    begin
+      PlanExistingColumnEvents(VColumn, pPlace, pRow);
       Exit;
+    end;
   VAt := if (pPlace.Index < 0) or (pPlace.Index > Length(pPlace.View.Columns)) then Length(pPlace.View.Columns) else pPlace.Index;
   VItem := NewItem(dwaInsert, pPlace.Column, CLASS_GRID_COLUMN);
   VItem.Dataset := pPlace.View.Name;
@@ -2052,7 +2083,7 @@ begin
   if (FChanges[VIndex].Blocked = '') and (VItem.Literal <> '') and not EditorLoads(VItem.Literal) then
     WarnNewEditor(pPlace.Column, VItem.Literal);
   if FChanges[VIndex].Blocked = '' then
-    PlanColumnEvents(VItem, pRow, VIndex + 1);
+    PlanColumnEvents(VItem, pRow, VIndex + 1, nil);
 end;
 
 { Every graphical row of the dataset's table whose column the form lacks. }

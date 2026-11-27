@@ -18,6 +18,8 @@
     E7  a new grid column (graphical row) carries the editor its DL_GRID_COLUMNS row holds
     E8  refusals: PROPERTIES with a line that is not a Properties line is BLOCKED; a column of a field the selection
         removes gets no editor
+    E9  (GC-H wiring) a graphical row with GRID_* code whose column the form HAS without the handlers: one unchecked
+        new handler per missing event, no column; --select writes them; an assigned handler is never replaced
   Run: pwsh -File tests\autotest\run_v156_GCW.ps1 [-Exe <drag-lint.exe>] [-SkipUnit] [-SkipForm]
        -SkipForm leaves out E5 (a machine without DevExpress).
 #>
@@ -69,9 +71,9 @@ function GridRecord($column, $field, $index, $class, [string[]]$props) {
   $r + "`r`n"
 }
 # a repository restored from the base backup plus these DL_GRID_COLUMNS records
-function NewRepo($name, $records) {
+function NewRepo($name, $records, $from = $script:base) {
   $bk = Join-Path $work "$name.txt"
-  [IO.File]::WriteAllText($bk, (AddRecords $script:base 'DL_GRID_COLUMNS' $records))
+  [IO.File]::WriteAllText($bk, (AddRecords $from 'DL_GRID_COLUMNS' $records))
   $f = Join-Path $work "$name.dlrepo"
   $r = Run @('repo', 'restore', '--repo', $f, '--in', $bk)
   Check "E0 repository $name restored" ($r.Code -eq 0) $r.Out
@@ -234,6 +236,27 @@ try {
   Check 'E8a PROPERTIES with a line that is not a Properties line: BLOCKED' ($r.Out -match 'update uAllKinds\.dfm GridViewQTY Properties:[^\n]*\n  BLOCKED: uAllKinds\.dfm: not a line of Properties\.\*: Width = 9') $r.Out
   $r = Write-Dfm @('--dataset', 'memOrders', '--names', 'ID')
   Check 'E8b a column of a field the selection removes gets no editor' ($r.Out -match 'update uAllKinds\.dfm GridViewQTY Properties:[^\n]*\n  BLOCKED: the column shows a field that is not in the selection') $r.Out
+
+  # ---- E9 missing handlers of an existing column (GC-H) ----
+  $graphical = $status.Replace('FIELD_KIND=2', 'FIELD_KIND=10').Replace('ISCALCULATED=true', 'ISCALCULATED=false').Replace('[DL_FIELDS_INFO ORDERS|STATUS]', "[DL_FIELDS_INFO ORDERS|STATUS]`r`nGRID_DISPLAYTEXT_BODY:`r`n |AText := 'S';`r`nGRID_DRAWCELL_BODY:`r`n |ADone := False;")
+  $y5 = NewRepo 'y5' @() $script:base.Replace($status, $graphical)
+  $forms = NewForms 'events'
+  $script:dfm = Join-Path $forms 'uAllKinds.dfm'
+  $pas = Join-Path $forms 'uAllKinds.pas'
+  $null = Write-Dfm @('--apply') $script:dfm $y5
+  $r = Write-Dfm @() $script:dfm $y5
+  $evText = IdOf $r 'insert uAllKinds\.dfm GridViewSTATUS OnGetDisplayText:  -> GridViewSTATUSGetDisplayText\n  \(unchecked\)'
+  $evDraw = IdOf $r 'insert uAllKinds\.dfm GridViewSTATUS OnCustomDrawCell:  -> GridViewSTATUSCustomDrawCell\n  \(unchecked\)'
+  Check 'E9a the column exists: one unchecked handler per missing event, no column insert' (($evText -ne '') -and ($evDraw -ne '') -and ($r.Out -notmatch 'insert uAllKinds\.dfm GridViewSTATUS:')) $r.Out
+  $before = Text $script:dfm
+  $ra = Write-Dfm @('--apply') $script:dfm $y5
+  Check 'E9b --apply never writes them' (($ra.Code -eq 0) -and ((Text $script:dfm) -ceq $before)) $ra.Out
+  PutSel $sel $r @($evText)
+  $rs = Write-Dfm @('--select', $sel) $script:dfm $y5
+  $nd = Text $script:dfm; $np = Text $pas
+  Check 'E9c --select of one handler needs no column: the DFM assigns it, the unit declares and holds it' (($rs.Code -eq 0) -and $nd.Contains("      object GridViewSTATUS: TcxGridDBColumn`r`n        Caption = 'Status'`r`n        Width = 40`r`n        OnGetDisplayText = GridViewSTATUSGetDisplayText`r`n      end`r`n") -and ($np -match "(?s)procedure TfrmAllKinds\.GridViewSTATUSGetDisplayText\([^\r\n]*\r\nbegin\r\n.*AText := 'S';") -and ($np -notmatch 'GridViewSTATUSCustomDrawCell')) ($rs.Out + "`n" + $nd)
+  $r2 = Write-Dfm @() $script:dfm $y5
+  Check 'E9d the assigned handler is not planned again; the other one still is' (($r2.Out -notmatch 'GridViewSTATUS OnGetDisplayText') -and ($r2.Out -match 'insert uAllKinds\.dfm GridViewSTATUS OnCustomDrawCell:  -> GridViewSTATUSCustomDrawCell\n  \(unchecked\)')) $r2.Out
 }
 finally {
   try { [IO.Directory]::Delete($work, $true) } catch { }
