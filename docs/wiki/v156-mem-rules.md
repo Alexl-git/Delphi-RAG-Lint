@@ -81,11 +81,11 @@ anything.
 
 ## What the rule adds over the compiler
 
-dcc64 37.0 with all warnings and hints on (`-W+ -H+`) compiles both fixture units (`testsixtures156\MEMA`, 357 lines, six
+dcc64 37.0 with all warnings and hints on (`-W+ -H+`) compiles both fixture units (`tests/fixtures/v156/MEMA`, 357 lines, six
 leaking routines) without a single message. The compiler has no message about ownership of container items.
 
 ## Measured
 
 Not measured in the field yet: on 2026-11-26 the machine ran the 1.55 release battery and no real project index was allowed.
-The fixture run is `testsutotestun_v156_MEMA.ps1` (6 firing lines, 12 silent routines, with and without the index). The
+The fixture run is `tests/autotest/run_v156_MEMA.ps1` (6 firing lines, 14 silent routines, with and without the index). The
 false-positive step of 1.56 measures the rule on copies of the project indexes and decides whether it stays ON.
