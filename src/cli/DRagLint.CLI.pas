@@ -98,6 +98,7 @@ uses
   , DRagLint.Query.PlaceRows { v156 TS-N: place on query --name / --text and find-unit rows, repository rows, --place, notes }
   , DRagLint.CLI.UsesRecover { uses-recover verb (148 HP): own flags, read-only }
   , DRagLint.CLI.Metrics { v156 W2FRAME: metrics verb (lane MET-1): own flags }
+  , DRagLint.CLI.Coverage { v156 G51: import-coverage verb: own flags }
   , DRagLint.CLI.Sbom { v156 W2FRAME: sbom verb (lane SBOM-1): own flags }
   , DRagLint.CLI.HappensBefore { v156 W2FRAME: happens-before verb (lane HB4): own flags }
   , DRagLint.CLI.ChangedSince { v156 W2FRAME: lint-all --changed-since (lane VCS-1) }
@@ -1012,7 +1013,7 @@ begin
   { 1.52.2: the no-config warning (TManifestIO.Load) stays off where stderr must stay clean. }
   if Result.Command = MIGRATE_REPORTS_VERB then begin TManifestIO.QuietNoManifest:= True; Exit; end; { v156 QE-3: own flags, DRagLint.CLI.MigrateReports }
   var SelfParsing:= MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover',
-    'metrics', 'sbom', 'happens-before' { v156 W2FRAME: DRagLint.CLI.Metrics / .Sbom / .HappensBefore }]);
+    'metrics', 'sbom', 'happens-before', 'import-coverage' { v156 W2FRAME: DRagLint.CLI.Metrics / .Sbom / .HappensBefore }]);
   TManifestIO.QuietNoManifest:= SelfParsing or HasSwitch('--quiet') or JsonOutputRequested;
   if SelfParsing then Exit;
   LoadConfigDefaults(Result);
@@ -30454,6 +30455,7 @@ begin
     else if Args.Command = 'syntax-count'      then Result:= RunSyntaxCountVerb { GAP-SYNTAXQ: own flags, DRagLint.Query.SyntaxCountVerb }
     else if Args.Command = 'uses-recover'      then Result:= RunUsesRecoverVerb { 148 HP: own flags, DRagLint.CLI.UsesRecover }
     else if Args.Command = 'metrics'           then Result:= RunMetricsVerb { v156 W2FRAME: own flags, DRagLint.CLI.Metrics (lane MET-1) }
+    else if Args.Command = 'import-coverage'   then Result:= RunCoverageVerb { v156 G51: own flags, DRagLint.CLI.Coverage }
     else if Args.Command = 'sbom'              then Result:= RunSbomVerb { v156 W2FRAME: own flags, DRagLint.CLI.Sbom (lane SBOM-1) }
     else if Args.Command = 'happens-before'    then Result:= RunHappensBeforeVerb { v156 W2FRAME: own flags, DRagLint.CLI.HappensBefore (lane HB4) }
     else if Args.Command = 'migrate-reports'   then Result:= RunMigrateReportsVerb { literal: the docs-sync guard reads the dispatch by literal; = MIGRATE_REPORTS_VERB. v156 QE-3: own flags, DRagLint.CLI.MigrateReports }

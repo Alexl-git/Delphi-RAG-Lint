@@ -47,6 +47,7 @@
     "dependency-matrix": { "wikiPage": "ask-dependency-matrix", "aliases": ["uses matrix", "dsm", "unit dependency matrix"] },
     "main-sequence":    { "wikiPage": "ask-main-sequence", "aliases": ["abstractness", "instability", "zone of pain"] },
     "control-flow":    { "wikiPage": "ask-control-flow", "aliases": ["flow graph", "basic blocks"] },
-    "sent-not-handled": { "wikiPage": "ask-sent-not-handled", "aliases": ["unhandled commands", "commands never handled"] }
+    "sent-not-handled": { "wikiPage": "ask-sent-not-handled", "aliases": ["unhandled commands", "commands never handled"] },
+    "risk":             { "aliases": ["crap", "untested complexity", "coverage risk"] }
   }
 }

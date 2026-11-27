@@ -446,6 +446,8 @@
         <DCCReference Include="..\charts\DRagLint.Charts.Q.MainSequence.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.Q.ArchDelta.pas"/>
         <DCCReference Include="DRagLint.CLI.Metrics.pas"/>
+        <DCCReference Include="DRagLint.CLI.Coverage.pas"/>
+        <DCCReference Include="..\charts\DRagLint.Charts.Q.Risk.pas"/>
         <DCCReference Include="DRagLint.CLI.Sbom.pas"/>
         <DCCReference Include="DRagLint.CLI.HappensBefore.pas"/>
         <DCCReference Include="DRagLint.CLI.ChangedSince.pas"/>

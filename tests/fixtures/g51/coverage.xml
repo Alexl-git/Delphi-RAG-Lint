@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report>
+  <stats>
+    <packages value="2"/>
+    <classes value="3"/>
+    <methods value="6"/>
+    <srcfiles value="2"/>
+    <srclines value="26"/>
+  </stats>
+  <data>
+    <all name="all classes">
+      <coverage type="class, %" value="100% (3/3)"/>
+      <package name="Calc">
+        <coverage type="class, %" value="100% (2/2)"/>
+        <srcfile name="Calc.pas">
+          <coverage type="class, %" value="100% (2/2)"/>
+          <class name="Calc">
+            <coverage type="method, %" value="100% (1/1)"/>
+            <method name="Simple">
+              <coverage type="method, %" value="100% (1/1)"/>
+              <coverage type="block, %" value="100% (1/1)"/>
+              <coverage type="line, %" value="100% (1/1)"/>
+            </method>
+          </class>
+          <class name="TCalc">
+            <coverage type="method, %" value="100% (3/3)"/>
+            <method name="Branchy">
+              <coverage type="method, %" value="100% (1/1)"/>
+              <coverage type="block, %" value="0% (0/8)"/>
+              <coverage type="line, %" value="0% (0/8)"/>
+            </method>
+            <method name="Middling">
+              <coverage type="method, %" value="100% (1/1)"/>
+              <coverage type="block, %" value="20% (2/10)"/>
+              <coverage type="line, %" value="20% (2/10)"/>
+            </method>
+            <method name="Removed">
+              <coverage type="line, %" value="50% (1/2)"/>
+            </method>
+          </class>
+        </srcfile>
+      </package>
+      <package name="Ghost">
+        <srcfile name="Ghost.pas">
+          <class name="TGhost">
+            <method name="Boo">
+              <coverage type="line, %" value="50% (2/4)"/>
+            </method>
+          </class>
+        </srcfile>
+      </package>
+    </all>
+  </data>
+</report>
