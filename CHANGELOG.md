@@ -5,6 +5,7 @@ breaking changes** until v2.0.
 
 ## v1.56.0-alpha -- 2026-11-28
 
+- LINT (LINTFIX-B): lint cleanups in code outside query / charts / report / cli (fixes, reviewed dl:ok markers re-stamped, stale markers removed); no behaviour change.
 - LINT (G32, G-32): new rule `math-single-overload` (warning, OFF): `Max` / `Min` / `Power` on Single arguments or float literals whose result goes to a Double, Extended or Real. Wiki: v156-math-dfm-rules.
 - LINT (DFM-R, G-35 / G-36): new rules `dfm-god-handler` (hint, OFF, threshold 5) and `dfm-control-overlap` (info, OFF), form-file checks. Wiki: v156-math-dfm-rules.
 - LINT (LEAKFP): `TFormatSettings.Create` (an RTL record) is no longer reported as a leaked object by the object-leak checks.
