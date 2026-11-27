@@ -50,7 +50,7 @@ type
 /// fukLookup = KeyField, ListField, LookupKeyFields, LookupResultField, Properties.KeyFieldNames / ListFieldNames
 /// (one name or a ;-separated list); fukCode = a ds_field_accesses row with the literal field name. A field
 /// named by a constant in code, and a TField whose own FieldKind is fkLookup, are not seen. Blanks in pFieldName are ignored.</remarks>
-function FindFieldUses(pProjectDb: TFDConnection; const pFieldName: string): TArray<TFieldUse>;
+function FindFieldUses(pProjectDb: TFDConnection; const pFieldName: string): TArray<TFieldUse>;  // dl:ok unused-public-symbol@2455 -- REVIEWED LINTFIX-B 2026-11-27: public so tests\fieldrepo\FieldUsageTests.dpr calls it directly (unit test surface)
 
 /// <summary>The kinds in which a field is used.</summary>
 /// <param name="pProjectDb">See FindFieldUses.</param>
@@ -62,9 +62,7 @@ implementation
 
 uses
   System.SysUtils,
-  Data.DB,
-  FireDAC.Stan.Param,
-  FireDAC.Comp.DataSet;
+  FireDAC.Stan.Param;
 
 function TableExists(pDb: TFDConnection; const pTable: string): Boolean;
 var

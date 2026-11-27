@@ -18,7 +18,7 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , TreeSitter
-  , DRagLint.Core.Model
+  , DRagLint.Core.Model  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
   , DRagLint.Core.Interfaces
   , DRagLint.V151.Api
   , DRagLint.Analysis.Cfg

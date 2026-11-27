@@ -45,9 +45,10 @@ uses
   System.IOUtils,
   System.Character,
   System.StrUtils,
+  System.Math,
   Data.DB,
   FireDAC.Stan.Param,
-  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.FieldRepo.TextBackup;
 
 const
@@ -114,7 +115,7 @@ begin
     VI := 1;
     while VI <= Length(pValue) do
     begin
-      if (pValue[VI] >= CHAR_FIRST) and (pValue[VI] <= CHAR_LAST) then
+      if InRange(Ord(pValue[VI]), Ord(CHAR_FIRST), Ord(CHAR_LAST)) then
       begin
         if VMode <> lmQuote then
         begin
@@ -198,7 +199,7 @@ begin
     begin
       VVals := '';
       for VCol in pTable.Columns do
-        VVals := VVals + IfThen(VVals = '', '', ', ') + CellLiteral(VQuery.FieldByName(VCol.Name), VCol);  // dl:ok field-by-name-in-loop -- REVIEWED BK-Q 2026-11-27: columns are the loop; one lookup per cell -- REVIEWED BK-Q 2026-11-27: one row's few columns
+        VVals := VVals + IfThen(VVals = '', '', ', ') + CellLiteral(VQuery.FieldByName(VCol.Name), VCol);  // dl:ok field-by-name-in-loop@57bc -- REVIEWED BK-Q 2026-11-27: columns are the loop; one lookup per cell -- REVIEWED BK-Q 2026-11-27: one row's few columns
       pLines.Add(VHead + VVals + ');');
       Inc(VCount);
       VQuery.Next;
@@ -236,11 +237,11 @@ begin
   TFile.WriteAllBytes(VTmp, TEncoding.ASCII.GetBytes(VText));
   try
     if TFile.Exists(pFileName) then
-      TFile.Delete(pFileName);  // dl:ok stat-gated-destructive -- REVIEWED BK-Q 2026-11-27: the file is our own backup target and TFile.Move needs the name free; a failed stat only skips the delete and the move then raises
+      TFile.Delete(pFileName);  // dl:ok stat-gated-destructive@dba7 -- REVIEWED BK-Q 2026-11-27: the file is our own backup target and TFile.Move needs the name free; a failed stat only skips the delete and the move then raises
     TFile.Move(VTmp, pFileName);
   except
     if TFile.Exists(VTmp) then
-      TFile.Delete(VTmp);
+      TFile.Delete(VTmp);  // dl:ok stat-gated-destructive@aac8 -- REVIEWED LINTFIX-B 2026-11-27: removes our own half-written temp file on the failure path; a failed stat only leaves the temp file behind and the original error is re-raised
     raise;
   end;
 end;
@@ -269,8 +270,8 @@ type
     procedure ParseInsert;
     procedure ParseTrailer;
   public
-    Version: Integer;
-    Rows: TArray<TSqlRow>;
+    Version: Integer;  // dl:ok public-field@2d74 -- REVIEWED LINTFIX-B 2026-11-27: result of a one-shot parser, read by the restore driver after Parse; a property would add nothing
+    Rows: TArray<TSqlRow>;  // dl:ok public-field@5dff -- REVIEWED LINTFIX-B 2026-11-27: result of a one-shot parser, read by the restore driver after Parse
     constructor Create(pLines: TStrings);
     procedure Parse;
     property Tables: TArray<TRepoTable> read FTables;
@@ -347,11 +348,11 @@ begin
         VEnd := PosEx('''', FLine, FPos);
         if VEnd = 0 then
           Fail('unterminated string');
-        Result := Result + Copy(FLine, FPos, VEnd - FPos);  // dl:ok concat-in-loop -- REVIEWED BK-Q 2026-11-27: one line of a script
+        Result := Result + Copy(FLine, FPos, VEnd - FPos);  // dl:ok concat-in-loop@a0c4 -- REVIEWED BK-Q 2026-11-27: one line of a script
         FPos := VEnd + 1;
         if Peek <> '''' then
           Break;
-        Result := Result + '''';  // dl:ok concat-in-loop -- REVIEWED BK-Q 2026-11-27: one line of a script
+        Result := Result + '''';  // dl:ok concat-in-loop@5cd2 -- REVIEWED BK-Q 2026-11-27: one line of a script
         Inc(FPos);
       until False;
     end
@@ -362,10 +363,7 @@ begin
         VCp := Number;
         if (VCp < 0) or (VCp > CODE_POINT_MAX) then
           Fail('bad code point');
-        if (VCp >= SURR_HIGH_FIRST) and (VCp <= SURR_LAST) then
-          Result := Result + Char(Word(VCp))  // dl:ok concat-in-loop -- REVIEWED BK-Q 2026-11-27: one line of a script
-        else
-          Result := Result + TCharacter.ConvertFromUtf32(Integer(VCp));  // dl:ok concat-in-loop -- REVIEWED BK-Q 2026-11-27: one line of a script
+        Result := Result + if InRange(VCp, SURR_HIGH_FIRST, SURR_LAST) then string(Char(Word(VCp))) else TCharacter.ConvertFromUtf32(Integer(VCp));  // dl:ok concat-in-loop@7d5d -- REVIEWED BK-Q 2026-11-27: one line of a script
         SkipWs;
         if Peek <> ',' then
           Break;
@@ -477,7 +475,7 @@ begin
   VSp := LastDelimiter(' ', VRest);
   if (VSp = 0) or not TryStrToInt(Copy(VRest, VSp + 1, MaxInt), VWant) then
     Fail('bad trailer');
-  VIdx := TableIndex(Copy(VRest, 1, VSp - 1));
+  VIdx := TableIndex(Copy(VRest, 1, VSp - 1));  // dl:ok index-possibly-out-of-range@9f68 -- REVIEWED LINTFIX-B 2026-11-27: TableIndex returns a valid index or Fail raises; FEnded and FCounts are sized with FTables
   if FEnded[VIdx] then
     Fail('duplicate trailer');
   if FCounts[VIdx] <> VWant then
@@ -569,8 +567,8 @@ begin
       VVals := '';
       for VN := 0 to High(VRow.ColIdx) do
       begin
-        VCols := VCols + IfThen(VN = 0, '', ', ') + QuoteRepoIdent(VTable.Columns[VRow.ColIdx[VN]].Name);  // dl:ok concat-in-loop -- REVIEWED BK-Q 2026-11-27: one row's few columns
-        VVals := VVals + IfThen(VN = 0, '', ', ') + ':p' + IntToStr(VN);  // dl:ok concat-in-loop -- REVIEWED BK-Q 2026-11-27: one row's few columns
+        VCols := VCols + IfThen(VN = 0, '', ', ') + QuoteRepoIdent(VTable.Columns[VRow.ColIdx[VN]].Name);
+        VVals := VVals + IfThen(VN = 0, '', ', ') + ':p' + IntToStr(VN);
       end;
       VQuery.SQL.Text := 'INSERT INTO ' + QuoteRepoIdent(VTable.Name) + ' (' + VCols + ') VALUES (' + VVals + ')';
       for VN := 0 to High(VRow.ColIdx) do

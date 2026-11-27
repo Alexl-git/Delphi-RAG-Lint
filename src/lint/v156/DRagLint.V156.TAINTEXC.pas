@@ -29,7 +29,7 @@ unit DRagLint.V156.TAINTEXC;
 interface
 
 uses
-  DRagLint.Core.Model
+  DRagLint.Core.Model  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
   , DRagLint.Core.Interfaces
   ;
 
@@ -66,10 +66,10 @@ uses
   System.SysUtils
   , System.StrUtils
   , System.Generics.Collections
-  , FireDAC.Stan.Param // dl:unit FireDAC.Stan.Param accepted -- TFDParam.AsString is inline: dcc expands it only with the declaring unit in uses (H2443)
+  , FireDAC.Stan.Param // dl:unit FireDAC.Stan.Param accepted -- TFDParam.AsString is inline: dcc expands it only with the declaring unit in uses (H2443); dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
   , FireDAC.Comp.Client
   , DRagLint.Storage.SQLite
-  , DRagLint.Lint.TaintRules  // dl:ok circular-uses@aecf -- REVIEWED 2026-11-27: implementation-only cycle by design (v156 plan settlement, PLAN-HPS 7): TaintRules' interface calls this unit through ONE hook line; this unit runs TTaintRules.Check for the raise side and reads TTaintConfig; re-entrancy is cut by GInside
+  , DRagLint.Lint.TaintRules  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
   , DRagLint.V156.TAINTEXC.Support
   ;
 

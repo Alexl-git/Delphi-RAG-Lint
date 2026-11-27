@@ -71,17 +71,17 @@ begin
   ADecls.Add(V151Rule(RULE_LOCK_ORDER_INVERSION, CATEGORY, SEVERITY, TITLE));
 end;
 
-class function TV156THRRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV156THRRules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@db3e -- REVIEWED LINTFIX-B 2026-11-27: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV156THRRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV156THRRules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@8beb -- REVIEWED LINTFIX-B 2026-11-27: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV156THRRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV156THRRules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@d05f -- REVIEWED LINTFIX-B 2026-11-27: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;

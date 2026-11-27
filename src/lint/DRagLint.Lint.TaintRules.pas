@@ -80,7 +80,6 @@ uses
   System.SysUtils
   , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- the DF_* kind constants ARE the data_flows contract T0 put in the model; the walker compares exactly those
   , DRagLint.Core.Interfaces
-  , DRagLint.V156.TAINTEXC
   ;
 
 const
@@ -375,6 +374,7 @@ implementation
 
 uses
   System.Generics.Collections
+  , DRagLint.V156.TAINTEXC  // dl:ok circular-uses@6213 -- REVIEWED LINTFIX-B 2026-11-27: implementation-only cycle by design (v156 plan settlement, PLAN-HPS 7); see the matching marker in DRagLint.V156.TAINTEXC
   , System.Generics.Defaults
   , System.JSON
   , System.IOUtils

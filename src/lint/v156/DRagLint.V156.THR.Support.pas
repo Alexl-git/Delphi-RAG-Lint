@@ -51,7 +51,6 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , System.Generics.Defaults
-  , Data.DB
   , FireDAC.Comp.Client
   , DRagLint.Storage.SQLite
   , DRagLint.Query.LockSites
@@ -117,7 +116,7 @@ type
   end;
 
   { One run of the analysis over one index. }
-  TLockOrderRun = class
+  TLockOrderRun = class  // dl:ok high-response@db34 -- REVIEWED LINTFIX-B 2026-11-27: one scanner class holding the per-rule checks of one lane; a split is beyond this lint pass
   private
     FStore: ISymbolStore;
     FRoutines: TArray<TRoutineLockSites>;

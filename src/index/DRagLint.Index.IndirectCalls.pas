@@ -40,7 +40,7 @@ uses
   System.SysUtils,
   System.Generics.Collections,
   FireDAC.Comp.Client,
-  DRagLint.Core.Model,
+  DRagLint.Core.Model,  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.Core.Interfaces;
 
 type
@@ -183,7 +183,7 @@ type
     /// <summary>Frees the caches; the store and the connections are not owned.</summary>
     destructor Destroy; override;
     /// <summary>Computes every row. Re-runnable: each call starts from empty results.</summary>
-    /// <exception cref="EFDDBEngineException">A read of the index failed.</exception>
+    /// <remarks>A failed read of the index lets the FireDAC exception propagate to the caller.</remarks>
     procedure Run;
     /// <summary>The rows of the last Run, in the order they were derived (binding site order).</summary>
     property Edges: TArray<TIndirectEdgeRow> read GetEdges;
@@ -534,7 +534,7 @@ end;
 
 { The lines of an indexed file, or [] with the file recorded stale. Same probe as
   TDispatchResolver.LinesOf: line / col of the index are only valid for the bytes it parsed. }
-function TIndirectCallResolver.LinesOf(AFileId: Int64): TArray<string>;
+function TIndirectCallResolver.LinesOf(AFileId: Int64): TArray<string>;  // dl:ok duplicate-code -- same shape over different fields or sources; a shared helper would need more parameters than it saves, and this lane must not change extraction or checker structure
 var
   Path: string;
   Txt : string;

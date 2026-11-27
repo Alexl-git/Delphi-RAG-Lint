@@ -51,7 +51,7 @@ uses
   , System.StrUtils
   , TreeSitter
   , TreeSitterLib
-  , DRagLint.Core.Model
+  , DRagLint.Core.Model  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
   , DRagLint.Index.DataFlowFacts
   ;
 

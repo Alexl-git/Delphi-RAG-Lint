@@ -1929,10 +1929,10 @@ const
   DF_VAL_BOOL     = 'bool';
   /// <summary>B3 val_class: an enumeration, a set, a Char or another ordinal that is not an integer.
   /// Reserved -- not emitted in 1.56 (enum / Char typed values are pre-1.56 rows and keep '').</summary>
-  DF_VAL_ORD      = 'ord';
+  DF_VAL_ORD      = 'ord';  // dl:ok unused-global -- REVIEWED LINTFIX-B 2026-11-27: reserved val_class value of the data_flows contract; documented, not emitted in 1.56
   /// <summary>B3 val_class: Variant / OleVariant (a dataset `Value`, `FieldValues[..]`).
   /// Reserved -- not emitted in 1.56 (Variant typed values are pre-1.56 rows and keep '').</summary>
-  DF_VAL_VARIANT  = 'variant';
+  DF_VAL_VARIANT  = 'variant';  // dl:ok unused-global -- REVIEWED LINTFIX-B 2026-11-27: reserved val_class value of the data_flows contract; documented, not emitted in 1.56
 
   /// <summary>ds_field_accesses.mode: the field value is read.</summary>
   DSFA_MODE_READ      = 'read';

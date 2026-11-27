@@ -249,7 +249,7 @@ begin
         'ORDER BY c.start_line', ACtx.FileId) do
     begin
       if DeclaredAbstract(Lines, Spot.Line) then Continue;
-      Open:= OpenMethods(ACtx.Store, Spot.Id);
+      Open:= OpenMethods(ACtx.Store, Spot.Id);  // dl:ok query-in-loop@1f10 -- REVIEWED LINTFIX-B 2026-11-27: one class per iteration; the ancestor walk is recursive (ClassAncestor) and cannot be one set query
       if Length(Open) = 0 then Continue;
       Shown:= string.Join(', ', Copy(Open, 0, MAX_NAMES_SHOWN)) + IfThen(Length(Open) > MAX_NAMES_SHOWN, ', ...', '');
       Found.Add(NewFinding(ACtx, RULE_ABSTRACT_NOT_OVERRIDDEN,
@@ -310,7 +310,7 @@ begin
         'JOIN symbols s ON s.id = r.symbol_id WHERE r.file_id = :f AND r.kind = ''handle'' AND s.kind = ''class'' ORDER BY r.start_line, r.start_col', ACtx.FileId) do
     begin
       if TypeIsUsed(ACtx.Store, Spot.Id) then Continue;
-      Source:= DeclaringSource(ACtx.Store, Spot.Id);
+      Source:= DeclaringSource(ACtx.Store, Spot.Id);  // dl:ok query-in-loop@7186 -- REVIEWED LINTFIX-B 2026-11-27: one handled class per iteration; the lookup is a single indexed read
       if (Source = '') or IsSharedText(Source) then Continue;
       Found.Add(NewFinding(ACtx, RULE_HANDLER_NEVER_RAISED,
         Format('No code in the project raises or builds %s or a class derived from it: this handler never runs', [Spot.Name]),

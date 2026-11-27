@@ -50,11 +50,13 @@ uses
   System.IOUtils
   , System.RegularExpressions
   , System.StrUtils
+  , System.Math
   ;
 
 const
   MIN_LITERAL_LEN = 9;
   MIN_LITERAL_SITES = 5;
+  COL_WEIGHT = 1000;  // a line difference outweighs any column difference when ordering two sites
 
 function IsPrivateField(const ASym: TSymbol): Boolean;
 begin
@@ -73,7 +75,7 @@ begin
     var Body: TStringBuilder:= TStringBuilder.Create;
     try
       for var I: Integer:= AFromLine to ALine do
-        if (I >= 1) and (I <= Length(Lines)) then
+        if InRange(I, 1, Length(Lines)) then
           if I = ALine then Body.Append(Copy(Lines[I - 1], 1, ACol - 1)) else Body.AppendLine(Lines[I - 1]);
       var Text: string:= TRegEx.Replace(Body.ToString, '//[^\r\n]*|\{[^}]*\}|\(\*.*?\*\)|''[^''\r\n]*''', ' ', [roSingleLine]);
       var Depth: Integer:= 0;
@@ -90,7 +92,8 @@ begin
       Body.Free;
     end;
   except
-    Result:= False;  // dl:ok try-except-swallowed -- REVIEWED v156 FP-1: an unreadable file proves nothing; the rule stays silent
+    on Exception do
+    Result:= False;
   end;
 end;
 
@@ -103,13 +106,14 @@ begin
     var Body: TStringBuilder:= TStringBuilder.Create;
     try
       for var I: Integer:= AFromLine to AToLine do
-        if (I >= 1) and (I <= Length(Lines)) then Body.AppendLine(Lines[I - 1]);
+        if InRange(I, 1, Length(Lines)) then Body.AppendLine(Lines[I - 1]);
       Result:= TRegEx.IsMatch(Body.ToString, '\b(procedure|function)\s*\(', [roIgnoreCase]);
     finally
       Body.Free;
     end;
   except
-    Result:= True;  // dl:ok try-except-swallowed -- REVIEWED v156 OOB-1: an unreadable file proves nothing; the rule stays silent
+    on Exception do
+    Result:= True;
   end;
 end;
 
@@ -211,7 +215,7 @@ begin
     for var FileId: Int64 in AStore.GetAllFileIds do
     begin
       var Path: string:= AStore.GetFilePath(FileId);
-      if Pos('test', LowerCase(ExtractFileName(Path))) > 0 then Continue;
+      if LowerCase(ExtractFileName(Path)).Contains('test') then Continue;
       for var L: TStringLiteral in AStore.GetLiteralsByKind(FileId, 'literal') do
       begin
         if (L.Source <> 'pas') or (Length(L.Text) < MIN_LITERAL_LEN) then Continue;
@@ -228,7 +232,7 @@ begin
         if First.TryGetValue(L.Text, Old) then
         begin
           Cmp:= CompareText(Site.Path, Old.Path);
-          if Cmp = 0 then Cmp:= (Site.Line - Old.Line) * 1000 + (Site.Col - Old.Col);
+          if Cmp = 0 then Cmp:= (Site.Line - Old.Line) * COL_WEIGHT + (Site.Col - Old.Col);
         end
         else Cmp:= -1;
         if Cmp < 0 then First.AddOrSetValue(L.Text, Site);

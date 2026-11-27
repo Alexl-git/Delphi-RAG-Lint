@@ -1037,7 +1037,7 @@ begin
   end;
 end;
 
-function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;  // dl:ok too-many-locals@5324, method-too-long@c98a, deep-nesting@ab51, too-many-exit-points@9b84, cyclomatic-complexity@c8f2, cognitive-complexity@c672 -- too-many-locals: measured 26 locals (max 25), method-too-long: measured 571 lines (max 250), deep-nesting: measured 6 deep (max 5), too-many-exit-points: measured 19 Exits (max 5), cyclomatic-complexity: measured 121 (max 30), cognitive-complexity: measured 236 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22; re-measured 2026-11-27 (v156 FA-2: the except-else arm, +8 lines, same review)
+function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;  // dl:ok too-many-locals@5324, method-too-long@951f, deep-nesting@ab51, too-many-exit-points@563f, cyclomatic-complexity@7998, cognitive-complexity@cff8 -- too-many-locals: measured 26 locals (max 25), method-too-long: measured 571 lines (max 250), deep-nesting: measured 6 deep (max 5), too-many-exit-points: measured 19 Exits (max 5), cyclomatic-complexity: measured 121 (max 30), cognitive-complexity: measured 236 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22; re-measured 2026-11-27 (v156 FA-2: the except-else arm, +8 lines, same review)
 var
   K, EntTxt: string;
   Cond, ThenN, ElseN, StartN, EntityN, IterN, LhsN: TTSNode;
