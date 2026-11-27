@@ -1321,6 +1321,7 @@ Described in:
 * [Lint rules for repeated, impossible and misleading expressions and source text](../../docs/wiki/v154-expr-rules.md)
 * [Lint rules for results, parameters, nested addresses and overlays](../../docs/wiki/v154-flow-rules.md)
 * [Lint rules sql-param-mismatch and query-in-loop](../../docs/wiki/v154-sql-rules.md)
+* [Lint rules: Single-precision Math calls and form-file smells](../../docs/wiki/v156-math-dfm-rules.md)
 * [Lint rules for unfreed container items and unowned instances](../../docs/wiki/v156-mem-rules.md)
 * [Lint rule for calls that never return (noreturn)](../../docs/wiki/v156-noreturn-contract.md)
 * [Lint rules: ambiguous uses, narrowing assignments, open abstracts, dead handlers](../../docs/wiki/v156-oo-a-rules.md)

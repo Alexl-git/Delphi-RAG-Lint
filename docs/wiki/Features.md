@@ -145,11 +145,11 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**478 rules. 131 have an auto-fix. 385 are on by default.** 366 are built-in checks; 112 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**481 rules. 131 have an auto-fix. 385 are on by default.** 369 are built-in checks; 112 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 177 | 40 |
+| bug-patterns | 179 | 40 |
 | complexity | 15 | 2 |
 | data-flow | 13 | 3 |
 | dead-code | 23 | 15 |
@@ -166,8 +166,8 @@ Rules, autofix, suppression markers and project-wide checks.
 | resource-lifetime | 24 | 9 |
 | review-markers | 6 | 2 |
 | security | 31 | 2 |
-| structure | 20 | 9 |
-| **Total** | **478** | **131** |
+| structure | 21 | 9 |
+| **Total** | **481** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -224,7 +224,8 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
 | [Lint rules: ambiguous uses, narrowing assignments, open abstracts, dead handlers](v156-oo-a-rules) | `lint`; `lint-all`; `lint-all`; `lint-all` |  |
 | [Lint rules: class and literal hygiene (locals, literals, DUnitX, Variant loops)](v156-oob-rules) | `lint-all`; `lint`; `lint`; `lint` |  |
-| [Lint rules](rules) | 478 rules, 131 fixable; `rules` |  |
+| [Lint rules: Single-precision Math calls and form-file smells](v156-math-dfm-rules) | `lint`; `lint`; `lint` |  |
+| [Lint rules](rules) | 481 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Lock order inversion rule](v156-lock-order-rule) | `lint-all` |  |

@@ -5,6 +5,10 @@ breaking changes** until v2.0.
 
 ## v1.56.0-alpha -- 2026-11-28
 
+- LINT (G32, G-32): new rule `math-single-overload` (warning, OFF): `Max` / `Min` / `Power` on Single arguments or float literals whose result goes to a Double, Extended or Real. Wiki: v156-math-dfm-rules.
+- LINT (DFM-R, G-35 / G-36): new rules `dfm-god-handler` (hint, OFF, threshold 5) and `dfm-control-overlap` (info, OFF), form-file checks. Wiki: v156-math-dfm-rules.
+- LINT (LEAKFP): `TFormatSettings.Create` (an RTL record) is no longer reported as a leaked object by the object-leak checks.
+- LINT (LINTFIX-A): lint cleanups in query / charts / report code; Hbv presets of happens-before moved to `DRagLint.Query.HappensBefore.Judge.pas`; no behaviour change.
 - LINT (FP-1, false-positive triage on three real projects): `field-could-be-local` is silent for a write-only field, a field whose first write is conditional, an accumulator (`F := F + [X]`) and a field with a same-name reference the index could not bind (one project: 137 findings -> 0, 1 of them had been true; recall on loop / try-nested temporaries is lower); `ambiguous-unit-reference` is silent for identical constants, a redirect `X = Unit.X` and the same `external` export declared twice. `class-passed-as-interface` is unchanged: it still reports a fresh instance passed to a `const` interface parameter.
 - LINT (MEM-A, G-01): new rule `container-items-leak` (resource-lifetime, warning, ON): new objects added to a local container that does not own them and are never freed. Wiki: v156-mem-rules.
 - LINT (MEM-B, G-63 host): new rule `class-passed-as-interface` (resource-lifetime, warning, OFF); `fresh-instance-as-argument` moved from a `.scm` rule to a built-in rule that needs an index (info, OFF; default state unchanged), its old `.scm` / `.json` fixtures are removed; `indexof-result-unchecked` also checks a stored `IndexOf` result (ON, no index needed).

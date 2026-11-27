@@ -1,3 +1,4 @@
+# positive-control: math-single-overload
 <#
   run_v156_G32.ps1 -- 1.56 lane G32: math-single-overload (G-32) on
   tests\fixtures\v156\G32. A fixture line that must report carries "// FIRE <rule>"; every other line must

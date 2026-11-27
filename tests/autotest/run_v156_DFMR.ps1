@@ -1,3 +1,5 @@
+# positive-control: dfm-god-handler
+# positive-control: dfm-control-overlap
 <#
   run_v156_DFMR.ps1 -- 1.56 lane DFM-R: dfm-god-handler (G-35) and dfm-control-overlap (G-36) on
   tests\fixtures\v156\DFMR (two form + unit pairs). Both rules are OFF by default and are switched on by config.

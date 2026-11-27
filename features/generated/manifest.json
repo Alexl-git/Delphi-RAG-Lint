@@ -5715,6 +5715,41 @@
       }
     },
     {
+      "id": "v156-math-dfm-rules",
+      "title": "Lint rules: Single-precision Math calls and form-file smells",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Finds Max, Min and Power calls that run in Single precision for a Double result, a handler wired to many events, and overlapping controls",
+      "intro": "Read this to see what math-single-overload, dfm-god-handler and dfm-control-overlap report, that all three are off by default and what each leaves alone.",
+      "wikiPage": "v156-math-dfm-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule math-single-overload"
+        },
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <form.dfm> --rule dfm-god-handler"
+        },
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <form.dfm> --rule dfm-control-overlap"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha",
+        "surfaceHash": "c64b3404080a52524931e776729b22b1e2683294f663e6e03895b52c13a944a5"
+      }
+    },
+    {
       "id": "lint-rules",
       "title": "Lint rules",
       "group": "linting",
@@ -20058,6 +20093,26 @@
         "wikiAnchor": "dfm-control-field-type-mismatch"
       },
       {
+        "id": "rule.dfm-control-overlap",
+        "title": "dfm-control-overlap",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A visible control covers a sibling in the same parent -- one of them is partly hidden (bug-patterns, info)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule dfm-control-overlap"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "dfm-control-overlap"
+      },
+      {
         "id": "rule.dfm-default-component-name",
         "title": "dfm-default-component-name",
         "group": "linting",
@@ -20136,6 +20191,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "dfm-event-handler-missing"
+      },
+      {
+        "id": "rule.dfm-god-handler",
+        "title": "dfm-god-handler",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "One event handler is wired to many events of a form (a hidden dispatcher) -- split it per event or per control (structure, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule dfm-god-handler"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "dfm-god-handler"
       },
       {
         "id": "rule.dfm-hardcoded-credential",
@@ -23536,6 +23611,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "manual-inrange"
+      },
+      {
+        "id": "rule.math-single-overload",
+        "title": "math-single-overload",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Max / Min / Power on Single arguments and literals binds the Single overload; the result feeds a Double / Extended variable (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule math-single-overload"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "math-single-overload"
       },
       {
         "id": "rule.member-could-be-private",

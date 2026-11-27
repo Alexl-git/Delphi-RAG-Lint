@@ -1,0 +1,35 @@
+{
+  "id": "v156-math-dfm-rules",
+  "title": "Lint rules: Single-precision Math calls and form-file smells",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "Finds Max, Min and Power calls that run in Single precision for a Double result, a handler wired to many events, and overlapping controls",
+  "intro": "Read this to see what math-single-overload, dfm-god-handler and dfm-control-overlap report, that all three are off by default and what each leaves alone.",
+  "wikiPage": "v156-math-dfm-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas> --rule math-single-overload"
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <form.dfm> --rule dfm-god-handler"
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <form.dfm> --rule dfm-control-overlap"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha",
+    "surfaceHash": "c64b3404080a52524931e776729b22b1e2683294f663e6e03895b52c13a944a5"
+  }
+}
