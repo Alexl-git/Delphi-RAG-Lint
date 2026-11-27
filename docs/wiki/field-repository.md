@@ -35,8 +35,8 @@ drag-lint repo info           (--repo <file> | --project <project file>) [--json
 drag-lint repo import-fb      --connection "<Firebird connection string>" (--repo | --project) [--replace]
 drag-lint repo seed-fb        (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo | --project) [--apply | --select <id file>] [--json]
 drag-lint repo refresh-schema (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo | --project) [--apply | --select <id file>] [--json]
-drag-lint repo backup         (--repo | --project) [--output <file>]
-drag-lint repo restore        --in <backup file> (--repo | --project) [--replace]
+drag-lint repo backup         (--repo | --project) [--format text|sql|zip] [--output <file>]
+drag-lint repo restore        --in <backup file> (--repo | --project) [--format text|sql|zip] [--replace]
 drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]
 ```
 
@@ -47,8 +47,8 @@ drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]
 | `import-fb` | The Micronite path: copies the four `FIB$` tables as they are (the `FIB$VERSION` column is not carried; `ALIGNMENT` -2, "not set", becomes NULL). Creates the repository when missing. A non-empty repository needs `--replace`, which first writes `<repo>.before-import-<yyyymmdd-hhnnss>.txt` (a text backup) and prints its path. Prints `<table>: <n> rows (source <m>)` per table; exit 0 only when every n equals m. | 0; 1 failure; 2 when a source table does not match the repository columns (nothing written) |
 | `seed-fb` | The non-Micronite start: fills an EMPTY repository from the Firebird schema (`--connection`) or a DDL script (`--ddl`). It prints the change set (all inserts, checked) and writes NOTHING unless `--apply` or `--select <id file>` is given. | 0; 1 (not empty, no or two sources, read error) |
 | `refresh-schema` | The old "Update Fields Info", as a change set (db-to-repo): new tables, fields, domains, constraints and generators are checked inserts, changed schema-derived values are checked updates, rows whose source vanished are UNCHECKED deletes. Hand-kept columns never appear. No flag = dry run; `--apply` writes the checked changes and keeps the vanished rows; `--select <id file>` writes exactly the listed ids (one per line or `all`), which is how a vanished row is deleted. | 0; 1 |
-| `backup` | Writes the diffable text backup (default `<repo>.txt`). Deterministic: the same rows give the same bytes. | 0; 1 |
-| `restore` | Reads a text backup into the repository, creating it when missing. A non-empty repository needs `--replace`. The whole file is validated first; a malformed file prints `line <n>: ...` and changes nothing (a missing repository is not left behind). | 0; 1; 2 malformed backup |
+| `backup` | Writes a backup of the repository. `--format text` (the default) is the diffable text file (`<repo>.txt`), deterministic: the same rows give the same bytes; `sql` is an SQL script of the DDL and one INSERT per row (`<repo>.sql`); `zip` is a zip of a consistent copy of the repository file (`<repo>.zip`). A backup of the DATABASE is `repo backup --connection`. See [[repo-backup-formats]]. | 0; 1 |
+| `restore` | Reads a backup into the repository, creating it when missing; give the `--format` the file was written in (`text` is the default). A malformed or damaged backup prints a message, exits 2 and changes nothing. See [[repo-backup-formats]]. A non-empty repository needs `--replace`. The whole file is validated first; a malformed file prints `line <n>: ...` and changes nothing (a missing repository is not left behind). | 0; 1; 2 malformed backup |
 | `gen-memtable` | Prints (or writes with `--output`) the Pascal source of `Create<Name>Fields`, a procedure that builds the fields of a `TFDMemTable` from a CSV (`FieldName,FieldType,Size,FieldKind,...`). `--name` defaults to `FDMemTable`. | 0; 1; 2 bad CSV |
 
 ## gen-orm, update-orm, upgrade-orm-headers, gen-dataservice
@@ -216,7 +216,7 @@ repository keeps only the `Database` value (`source_database`).
 
 ## Field kinds, schema versions and `repo migrate` / `repo check` (1.53, 1.54, 1.55)
 
-A repository created by 1.55 is **schema 4**; a 1.52 file (schema 1), a 1.53 file (schema 2) and a 1.54 file (schema 3) still open
+A repository created by 1.56 is **schema 5**; a 1.55 file (schema 4) still opens, as does a 1.52 file (schema 1), a 1.53 file (schema 2) and a 1.54 file (schema 3) still open
 and are handled as their own schema until you run `repo migrate`. Nothing is dropped or renamed.
 
 | Schema | Adds |
@@ -224,6 +224,7 @@ and are handled as their own schema until you run `repo migrate`. Nothing is dro
 | 2 (1.53) | `DL_FIELDS_INFO.CALC_BODY`, `DOMAIN_NAME`, `CHAR_LENGTH`; `DL_LAYOUT_EVENTS`, `DL_EXCEPTIONS` and the four schema-fact tables |
 | 3 (1.54) | the six event columns of `DL_FIELDS_INFO` (last, in this order): `ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY`, `GRID_DISPLAYTEXT_BODY`, `GRID_DRAWCELL_BODY`; `DL_GRID_COLUMNS` |
 | 4 (1.55) | `DL_RELATIONS`, `DL_RELATION_COLUMNS`, `DL_FIELD_INPUTS` (cross-table fields, below); no column and no row changes |
+| 5 (1.56) | `DL_GRID_COLUMNS.PROPERTIES_CLASS_NAME` (Str(128), the column's `PropertiesClassName`), `DL_GRID_COLUMNS.PROPERTIES` (text, the column's `Properties.*` lines), `DL_FIELDS_INFO.NOTES` (text, free text per field; lineage block written from 1.57), `DL_FIELDS_INFO.DERIVED_KIND` (Str(10): `direct`, `aggregate`, `unknown`; NULL = not derived) |
 
 `read-dfm` and `gen-handlers` need schema 4 (1.55: read-dfm writes `DL_FIELD_INPUTS` / `DL_RELATIONS` rows); the other verbs work on every schema.
 
@@ -272,12 +273,11 @@ and the 0-based `COLUMN_INDEX`. `repo read-dfm` writes it. Two columns of one fi
 drag-lint repo migrate (--repo <file> | --project <project file>) [--apply]
 ```
 
-Without `--apply` it prints the plan and changes no byte: `v3 -> v4: create DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS,
-ALIGNMENT -2 to NULL in N rows, user_version 4`; from schema 2 also `add DL_FIELDS_INFO.ONGETTEXT_BODY, ...`, `DL_GRID_COLUMNS`,
+Without `--apply` it prints the plan and changes no byte: `v4 -> v5: add DL_FIELDS_INFO.NOTES, DERIVED_KIND, add DL_GRID_COLUMNS.PROPERTIES_CLASS_NAME, PROPERTIES, ALIGNMENT -2 to NULL in N rows, user_version 5` (one `add` per table that gets columns; `create ...` only when a table is new; from schema 3 also `create DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS`); from schema 2 also `add DL_FIELDS_INFO.ONGETTEXT_BODY, ...`, `DL_GRID_COLUMNS`,
 `move N Field events into columns`; from schema 1 also the columns and tables of schema 2 and `FIELD_KIND 2 for N ISCALCULATED
 rows` (kind NULL or 1). With `--apply` it first writes
-`<repo>.before-migrate-<yyyymmdd-hhnnss>.txt` (the text backup in the old schema), then runs one transaction. A schema-4
-file prints `already at schema 4` (exit 0). A `Field` event whose field has no row, or that has no column, stays where it is.
+`<repo>.before-migrate-<yyyymmdd-hhnnss>.txt` (the text backup in the old schema), then runs one transaction. A schema-5
+file prints `already at schema 5` (exit 0). A `Field` event whose field has no row, or that has no column, stays where it is.
 
 ### `repo check`
 
@@ -358,11 +358,11 @@ more than one path (a two-column key is one edge). `--json` prints one object: `
 
 ### Text backup versions
 
-A schema-4 repository writes `#DLREPO 4` (`DL_FIELD_INPUTS` last); a schema-3 file writes `#DLREPO 3`, a schema-2 file `#DLREPO 2` and a schema-1 file
+A schema-5 repository writes `#DLREPO 5`; a schema-4 file still writes `#DLREPO 4` (`DL_FIELD_INPUTS` last); a schema-3 file writes `#DLREPO 3`, a schema-2 file `#DLREPO 2` and a schema-1 file
 `#DLREPO 1`, byte for byte as before. Restoring an older backup into a newer repository is accepted (new tables empty, new
 columns NULL); its rows get the row changes up to the TARGET file's schema of `repo migrate` (FIELD_KIND 2, `ALIGNMENT` -2 to NULL,
 `Field` events into the event columns) in the same transaction, so the result is the migrated file; restoring a newer backup into an older file is refused with exit 2 ("migrate first"); restoring into a missing file creates
-the file at the backup's own version.
+the file at the backup's own version. A `#DLREPO 4` backup restores into a schema-5 file (the four new cells NULL); `#DLREPO 5` into a schema-4 file is refused.
 
 ### Lint exceptions
 

@@ -21,3 +21,45 @@ No dedicated IDE surface. The findings appear with the other lint findings of th
 
 ## What it needs
 An index of the project (`drag-lint index --project <file.dproj>`) with the 1.37.0 extractor, so the `data_flows` table is filled.
+
+## Taint through exceptions
+
+A tainted value that leaves a routine inside an exception is followed into the handler that catches it:
+
+```
+procedure Load;                          procedure Run(Q: TFDQuery);
+begin                                    begin
+  raise EBadName.Create(                   try
+    'unknown ' + ParamStr(1));               Load;
+end;                                       except
+                                             on E: EBadName do
+                                               Q.SQL.Text := E.Message;   // taint-sql-injection
+                                           end;
+                                         end;
+```
+
+The finding is reported at the handler's sink, under the ordinary rule id (`taint-sql-injection`,
+`taint-html-output`, ...), one per sink site and rule. Its message reads "Tainted data reaches Text
+through exception EBadName: raised in Load (line N), caught in Run (line M) -- CWE-89" and its path
+runs source -> raise -> handler -> sink.
+
+How the two sides are joined (deterministic, from the index; no heuristics on names other than the class):
+
+* class: the handler catches the raised class -- the same class, an ancestor of it (`on E: Exception`
+  catches everything), or a bare `except` / `ExceptObject`;
+* reach: the raise is in the handler's own routine or in a routine it calls, at any depth (12 call
+  hops, 4000 routines per handler at most), over the resolved call edges;
+* taint: the raised constructor argument is checked by the same walk as every other taint rule, so the
+  sources, propagators, sanitizers and categories are the ones of the catalogue.
+
+Limits:
+
+* the exception value must reach the sink inside the handler's routine (directly or through locals); a
+  handler that passes `E.Message` to another routine which holds the sink is not reported;
+* a sink entry that names a "type" is matched by its shape in the handler and reported weak;
+* `raise;` and `raise E` (re-raise) are not followed; calls dispatched at run time (virtual through an
+  interface, event handlers) are not followed by the reach search;
+* the try block is not narrowed: a raise anywhere in the handler's routine or its callees is joined.
+
+The `else` part of an except block is analysed too (1.56); before, its statements produced no data-flow
+rows and no flow findings. No CLI surface change and no new rule id.

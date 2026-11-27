@@ -142,7 +142,8 @@ has them in `reasons`). The list is closed and appended to only; tools branch on
 |---|---|
 | `unordered-root` | the use is reached from a root that is in no program's initialization order and can run at any time |
 | `escaped-routine` | the routine is exported, an interface method, has no callers, or its address is taken |
-| `indirect-call` | the routine is reached through a procedural value or address (with `escaped-routine`) |
+| `indirect-call` | the routine is reached through a procedural value or address (with `escaped-routine`); since 1.56 a call through a procedural value is also a hop of the witness, and it never proves a write |
+| `relied-on-indirect-edges` | on a SET: the proof took a routine that is named as a value (callback, procedural variable, event) for one that runs only through the calls of its slot that the index lists (table `indirect_edges`). The why-text names the routine, the slot and the call site. Conditions: every naming of the routine is the binding of an edge; every edge has a call site in the index and is resolved; the slot is a parameter / local / field / unit variable that is only assigned, called and tested with `Assigned()`; a property over a field slot is only written; every call through the slot has an edge. Any doubt keeps the routine an escaped root (MAY-BE-UNSET) and the why-text says which condition failed |
 | `writer-later-unit` | a unit that initializes later than the reading root writes it |
 | `writer-conditional` | a writer before the use does not run on every path (also: a use in a destructor) |
 | `writer-after-use-same-routine` | the only writer in the routine runs after the use (also: the use is reached from a constructor before the write) |
@@ -244,6 +245,23 @@ Not modelled (a verdict stays MAY, it is never wrongly SET in the test fixtures)
 out by a method called before the write; a use reached from a destructor's callees; an ancestor
 constructor that writes the field before `inherited` is always flagged; a conditional `inherited`
 in a descendant constructor counts as not chaining.
+
+Calls through procedural values: since 1.56 the index pairs every binding of a slot with every call
+through it (`indirect_edges`). check-init uses these edges as callers, never as writers. Not covered,
+and therefore still an escaped root: a handler bound to a library event (`Button.OnClick`) or in a
+`.dfm`, a slot that is copied or passed on, a binding the indexer declines (anonymous method,
+setter behind an event property, `with`, a binding over two lines), a function named without `@`.
+When the edges are not enough the answer says why (for example "pCb is read as a value (it can be
+copied or passed on)", "no indirect-call edge binds it", "bound to Button1.OnClick, which this index
+never calls"). A SET that relied on the edges says so in its summary line: "uses with
+relied-on-indirect-edges rely on the index's indirect-call edges (1.56)". An index written before
+1.56 gives the 1.55 answers (no `indirect_edges` table, no `must_writes` fact).
+
+Other 1.56 changes: on an instance field, methods whose stored must-write fact lists the field, and
+methods that hold no writer of it, no longer cost a flow graph, so a class with many methods no
+longer ends in `budget` at the default `--max-routines`. On a numeric / Boolean / date-time
+variable the argument events are the 1.55 ones (the new value rows of `data_flows` are not read as
+argument rows).
 
 ## What to do with the answer
 

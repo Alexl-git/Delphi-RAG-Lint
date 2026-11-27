@@ -15,7 +15,7 @@ CSV by row, a chart by its nodes and edges.
 ## Running it from the CLI
 
 ```
-drag-lint compare --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ..."] [--project <P.dproj>]
+drag-lint compare --old <report.txt|forms.csv|bundle dir> [--command "<id> --target T --project P ..."] [--project <P.dproj>]
                   [--new <same kind>] [--old-db <old.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]
                   [--format text|json|html] [--output <file>] [--open]
 drag-lint compare --in <U.pas> --line <L> [--update-doc]
@@ -28,8 +28,8 @@ drag-lint compare --question <id> --target <T> --project <P.dproj> --save [--aut
 | `--old <f>` | The old side: a saved plain report, a forms CSV, a `.dot` chart or a bundle folder (the folder holding `graph.dot` / `graph.svg`). |
 | `--new <f>` | With `--old`: compare two saved outputs. Nothing is rerun. |
 | `--command "<id> ..."` | The question to rerun, in the `COMMAND` line syntax without the word `COMMAND`. Needed when the old report has no `COMMAND` line; when both exist and differ, a warning names every differing argument and this one wins. |
-| `--question <id> --target <T>` | Builds the command for you (`<id> -Target "<T>" -Project "<P>"`). |
-| `--project <P.dproj>` | Replaces or adds `-Project` on the command that is run. |
+| `--question <id> --target <T>` | Builds the command for you (`<id> --target "<T>" --project "<P>"`). |
+| `--project <P.dproj>` | Replaces or adds `--project` on the command that is run. |
 | `--in <U.pas> --line <L>` | The old side is the `/// <remarks>` block around line `L` of the unit (S1). |
 | `--update-doc` | With `--in/--line`: rewrite that block with the new answer in DocInsight form. Only that block changes. |
 | `--old-db <old.sqlite>` | The old side is the same question answered from an old copy of the index (S4). The old copy is allowed to be stale. |
@@ -50,10 +50,10 @@ The first two lines of a plain answer are:
 
 ```
 Who writes this field (drag-lint report who-writes) for OPERAT.NAME, asked on 2026-10-10 14:32, engine 1.27.0.
-COMMAND who-writes -Target "OPERAT.NAME" -Project "C:\Projects\MyApp\CLIENT\MyApp.dproj" -Depth 3
+COMMAND who-writes --target "OPERAT.NAME" --project "C:\Projects\MyApp\CLIENT\MyApp.dproj" --depth 3
 ```
 
-`COMMAND <id> [-Target "v"] [-To "v"] (-Project "v" | -In "v") [-Depth n] [-Cap n] [-SurfaceCap n] [-Control "v"] [-Mode v] [-MaxRows n]` lists only the arguments the
+`COMMAND <id> [--target "v"] [--to "v"] (--project "v" | --in "v") [--depth n] [--cap n] [--surface-cap n] [--control "v"] [--mode v] [--max-rows n]` lists only the arguments the
 caller gave explicitly, in that fixed order. In a unit the same two lines appear as
 `///` comment lines (the `COMMAND` line XML-escaped and never wrapped). A report
 without them is a legacy report: it parses with an empty time, engine and command,
@@ -62,8 +62,23 @@ question." unless you pass `--command`.
 
 "Same question" means: the ids are equal, both commands name the same arguments, and
 a value that reads as an integer compares as a number, anything else compares
-ignoring case. Order and quoting never matter. `-Depth 3` against no `-Depth` is a
+ignoring case. Order and quoting never matter. `--depth 3` against no `--depth` is a
 difference; it is named in a warning, never a refusal.
+
+## Snapshots saved before 1.56
+
+A report or snapshot saved by 1.55 or earlier names its flags the PowerShell way
+(`COMMAND who-writes -Target "T" -Cap 20`; "... not shown (-Cap 20; raise -Cap to see them)").
+`compare` reads both styles, and `--command` takes either one: `"<id> --target T --project P"`
+(1.56) or `"<id> -Target T -Project P"` (1.55 and earlier). The same question in two styles
+is not a "command differs" warning, and a line whose only change is the spelling of a flag
+(`-Cap` / `--cap`, `-MaxRows` / `--max-rows`, `-SurfaceCap` / `--surface-cap`) is an unchanged
+line. The lines are still SHOWN as each file holds them. A forms CSV (`.csv`) and a chart
+(`.dot` / bundle folder) name no flag: old and new snapshots are one format. They carry no
+`COMMAND`, so a rerun needs `--command` (either style) and prints "The original command is
+unknown -- this may not be the same question." A warning about a differing argument now names
+the flag: "--depth: 3 vs 5" (was "Depth: 3 vs 5"). To rewrite the `COMMAND` line of saved
+reports to the 1.56 style, see `migrate-reports` (optional).
 
 ## What the diff ignores
 
@@ -138,7 +153,7 @@ question and target, newest 20, and are a local convenience, not a record.
   question reruns into a CSV, so `--old a.csv` alone has nothing to compare it with.
 * `--save --open` is refused: `--save` with no old side only takes a snapshot, and a
   snapshot alone cannot render a page.
-* A `COMMAND` line recorded from a `-DbPath` run carries no `-Project` or `-In`, so its
+* A `COMMAND` line recorded from a `-DbPath` run carries no `--project` or `--in`, so its
   rerun needs `--project <P.dproj>` or `--db <index>` on the compare command line.
 * A chart DOT is read in the emitters' dialect (one node statement per box with an HTML
   label; bare or double-quoted ids). A non-blank DOT that yields no node and no edge is

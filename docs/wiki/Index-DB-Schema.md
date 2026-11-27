@@ -46,6 +46,9 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
   * text: `string_literals` (+ FTS5)
   * external feeds: `compiler_findings`, `fb_relations`, `fb_columns`, `fb_field_info`,
     `fb_datasets`, `fb_enum_values`, `orm_links`
+  * 1.56 per-file facts (additive, probed): `symbol_extras`, `ds_field_accesses`, `loop_facts`, `call_literal_args`; derived: `indirect_edges`
+  * 1.56 caption concepts (additive, probed; only `index --project`): `repo_copy`, `concept_fields`, `concept_texts` (+ FTS5 `concept_texts_fts`), `concept_links`
+  * 1.56 columns on existing tables: `data_flows.val_class`, `symbol_facts.must_writes`
 
 ### ER diagram
 
@@ -79,6 +82,14 @@ erDiagram
   symbols ||--o{ type_ancestors : "symbol_id"
   symbols ||--o{ type_helpers : "helper_symbol_id"
   symbols ||--o{ data_flows : "symbol_id"
+  symbols ||--o| symbol_extras : "symbol_id (cascade)"
+  symbols ||--o{ ds_field_accesses : "symbol_id (cascade)"
+  symbols ||--o{ loop_facts : "symbol_id (cascade)"
+  symbols ||--o{ call_literal_args : "symbol_id (cascade)"
+  symbols ||--o{ indirect_edges : "target_symbol_id / caller_symbol_id (cascade)"
+  refs ||--o{ indirect_edges : "ref_id (cascade)"
+  files ||--o{ concept_links : "file_id (cascade)"
+  symbols ||--o{ concept_links : "symbol_id / enclosing_symbol_id (set null)"
   refs ||--o| ref_types : "ref_id (PK, cascade)"
   refs ||--o| ref_element_types : "ref_id (PK, cascade)"
   refs ||--o| ref_receivers : "ref_id (PK) / receiver_ref_id (cascade)"
@@ -111,6 +122,9 @@ erDiagram
 | **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `ref_types`, `ref_element_types`, `ref_receivers`, `ref_host_bindings` (26, calls pass), `inc_variants` and the `inc_variant` tags (27, indexer), `init_deps` (calls pass, rebuilt whole), `unit_uses.target_file_id` |
 | **search / cache** | concept-search stage; `index --project` closure walk | `symbol_search` (+ FTS5 via triggers; synced with `symbols`), `closure_cache` (what the compile-closure walk read out of each unit; used only while the unit and its includes still carry their stamps and `schema_meta.closure_cache_fp` is unchanged) |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
+| **1.56 file facts** (per file, in the file transaction) | `index`, `index --project` | `symbol_extras`, `ds_field_accesses`, `loop_facts`, `call_literal_args` (replaced per file by `PutExtFacts`), `data_flows.val_class`, `symbol_facts.must_writes` |
+| **indirect edges** (whole table, in `ResolveDispatch`) | end of `index` | `indirect_edges` -- written by `DRagLint.Index.IndirectCalls` through `TIndexPassHooks.RegisterIndirectEdges`; the whole table is replaced on every resolve |
+| **repository copy / concepts** (1.56) | end of `index --project` | `repo_copy`, `concept_fields`, `concept_texts` (+ `concept_texts_fts`), `concept_links` -- written by `DRagLint.Index.RepoCopy` in one transaction of its own, not by the per-file writer. `schema_meta` key `concept_derived_stamp_unix` = SHA-256 over (id, sha256, parsed_at) of every `files` row the derived part was computed from; a different value on the next run recomputes `concept_texts` (place = project) and `concept_links`. A library DB has none of them |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
 | **library** | `index` of a platform library | same tables as a project DB; `schema_meta.scan_type = library` |
 | **meta** | every index run | `schema_meta` (`schema_version`, `indexer_fingerprint`, `resolver_fingerprint`, `indexed_at_unix`, `scan_type`, `project_tag`, `out_of_closure_count`, `rebuild_in_progress`, `library_resolve_state`) |
@@ -242,9 +256,51 @@ Absent from a DB last opened writable before the taint wave. Column image of
 | src_name | TEXT | leaf name of the source |
 | via_local | INTEGER | 0 = source appears in the destination expression; 1 = reached through state (local, container) |
 | cond | INTEGER | 1 = path crossed a differing join or used the flow-insensitive fallback (explainability only) |
+| val_class | TEXT NOT NULL DEFAULT '' | 1.56. `''` = a pre-1.56 flow (string / object / unknown-typed value); else the class of a VALUE row, see below. Absent on an index not migrated by a 1.56 writer (reads `''`) |
 
-Per-routine cap: 4000 rows (`DF_ROW_CAP`). No row for literals, constants, nil, or
-numeric/boolean/ordinal-typed values.
+Per-routine cap: 4000 rows (`DF_ROW_CAP`). No row for literals, constants or nil. Numeric /
+Boolean / date-time values emit VALUE rows since 1.56 (`val_class <> ''), with their own
+per-routine cap (stderr note "value-row cap").
+
+**data_flows.val_class (1.56, B3).** Rows with `val_class = ''` are EXACTLY the rows the 1.55
+extractor emitted (same columns, same count). A value row is a flow the 1.55 walk dropped because a
+scalar carried it. The class is the class the value had where it FIRST became a scalar:
+`S := IntToStr(Length(Name))` gives (src `Name`, val_class `int`) at every later destination.
+
+| val_class | meaning |
+|---|---|
+| `int` | Integer-family type, `Length` / `Pos` / `StrToInt` / `Round` / `Trunc` / `Ord`, a numeric member (`Count`, `Length`, `Capacity`, `ItemIndex`, `RecordCount`), `div` / `mod` / `shl` / `shr`, an `AsInteger`-family accessor |
+| `float` | Double / Single / Extended / Real, `/`, an `AsFloat`-family accessor; also the fallback for an arithmetic operator whose operand types are not known in the file ("a number") |
+| `currency` | Currency, `AsCurrency` / `AsBCD` |
+| `datetime` | TDateTime, `AsDateTime` / `AsDate` / `AsTime` |
+| `bool` | Boolean family, a comparison (`=` `<>` `<` `>` `<=` `>=` `in`), `is`, `not` / `and` / `or` / `xor` of non-integers, `Assigned` / `SameText` / `SameStr` / `Odd`, `AsBoolean` |
+| `ord`, `variant` | reserved (`DF_VAL_ORD`, `DF_VAL_VARIANT`): not emitted in 1.56 |
+
+`val_class = ''` does NOT mean "not numeric". The 1.55 walk emitted a row for a field, a unit
+variable and a function result even when their type is Integer / Currency / ..., because it did
+not know the type. Those rows stay (`val_class = ''`), and the SAME flow is emitted once more as a
+value row carrying the declared class (EXT-B1F), so a consumer that reads both sees such a flow
+twice (same destination and source, two classes). A consumer that wants numeric flows reads
+`val_class <> ''`; one that wants the 1.55 flows reads `val_class = ''`.
+
+* The declared class comes from the declarations of the SAME unit, by bare name: field (any class /
+  record of the unit), unit variable, result type of a function / method. Two declarations of one
+  name with different classes claim nothing. Not typed: an inherited field declared in another
+  unit, a property, a routine of another unit, a user type alias (`TMoney = Currency`).
+* A source of declared class keeps THAT class in every later value row.
+* A field / unit variable of declared scalar class types what is written to it: every class-less
+  source reaching the write gains a value row of the destination's class beside its 1.55 row.
+* `IntToStr(x)` (bare): every class-less source of `x` gains an `arg` value row, `int`.
+* A paren-less member `X.M` of a local / parameter `X`, where `M` is a function of the unit with a
+  scalar result, adds the source (ref `M`, at the member's position, class of the result).
+
+Other 1.56 data_flows rows (see the `DF_DST_*` / `DF_SRC_*` comments in `DRagLint.Core.Model`):
+a write to a dataset field with no `write` row and a read of a dataset field (B14-2 / B14-3, kind
+`dsfield`, `dst_index` / `src_index` = `ds_field_accesses.root_index`, position = that row's
+line / col), a value reaching a raised exception (`raise E.Create(..)`, B4: `dst_name` = the
+class as written, `dst_index` = the constructor argument position, -1 = the object itself) and the
+exception object of a handler (`on E: T do` or a bare `except`, `src_name` = the handled class,
+'' = any).
 
 ### type_ancestors
 Direct ancestor edges, one per heritage entry; rebuilt by `ResolveAncestry` every run.
@@ -459,7 +515,10 @@ Wide analysis table, one row per analysed symbol (`symbol_id INTEGER PK FK symbo
 `sql_writes`, `covered_by`, `mutates_params`, `ui_affinity`, `touches`, `wiring` (TEXT,
 delimited lists), `cyclomatic INTEGER`, `body_loc INTEGER`, and the purity columns
 `effect_free INTEGER` (-1 while the purity stage is writing), `effect_summary TEXT`,
-`effect_witness TEXT`. NULL = not computed.
+`effect_witness TEXT`. NULL = not computed. 1.56 adds `must_writes TEXT` (B5): what the routine
+writes on EVERY path that returns normally, comma separated, in first-write order: `Result`, a
+var / out parameter by name, an own field by name; `''` = none proven, or the routine was not
+analysed; an index written before 1.56 has no such column and reads `''`.
 
 ### string_literals (+ string_fts, string_fts_tri)
 `id PK`, `file_id FK files (cascade)`, `symbol_id FK symbols (set null)`, `source TEXT`
@@ -496,6 +555,88 @@ Delphi-to-SQL bindings across DBs. `id PK`, `delphi_symbol_id`, `delphi_db_index
 `sql_symbol_id`, `sql_db_index` (ids are LOCAL to the DB at that `--db` position),
 `confidence REAL`, `link_kind TEXT` (`class_to_table`, `iface_to_table`, `field_to_column`),
 `evidence TEXT`, `computed_at`. Indexes on both ends and `link_kind`.
+
+### 1.56 per-file facts (symbol_extras, ds_field_accesses, loop_facts, call_literal_args)
+Additive tables, created by `Migrate` on every writable open and probed by the readers
+(`ISymbolStore.HasV156Facts`); `SCHEMA_READ_MIN` does not move. Column semantics are the DocInsight
+comments of the row records in `DRagLint.Core.Model` (section "1.56 store seam") and
+`SCHEMA_DDL_V156` in `DRagLint.Storage.Schema`. All are replaced per file by `PutExtFacts`; every
+`symbol_id` / `file_id` cascades.
+
+* **symbol_extras** (`symbol_id PK`, `file_id`, `noreturn`, `variant_part`, `variant_tag`,
+  `param_mode`, `param_index`): SPARSE, a symbol with no row reads as default (may return, not in a
+  variant part, by value, position unknown). `noreturn` (B1): 0 may return, 1 the declaration
+  carries the `noreturn` directive, 2 no directive but a routine the compiler treats as never
+  returning (`System.Halt`, `RunError`, `SysUtils.Abort`, the library-DB fact). `variant_part` (B2,
+  record fields): 0 = not in a variant part, else the 1-based ordinal of the variant BRANCH holding
+  the field, counted in source order over the whole record, so two fields with different non-zero
+  values may overlap in memory; `variant_tag` = the tag field of a variant part. `param_mode` (B8):
+  by value (`''`), `const`, `var`, `out` or `constref`; `param_index` = 0-based declared
+  position (Self excluded), -1 = not a parameter.
+* **ds_field_accesses** (`file_id`, `ordinal`, `symbol_id`, `mode` read|write, `line`, `col`,
+  `shape`, `dataset_text`, `field_text`, `field_name`, `name_kind`, `name_text`, `accessor`,
+  `root_kind`, `root_name`, `root_index`, `with_ctx`, `rhs_*`, `stmt_*`): one syntactic access to a
+  dataset field (B14-1). `shape`: `FieldByName(..)` + accessor, `FindField(..)` + accessor,
+  `FieldValues[..]`, `D[..]`, `Fields[i]` + accessor, or accessor only (`X.AsY` / `X.Value` / ..
+  on a persistent field component or a field object held in a variable). `name_kind`: literal
+  (`field_name` holds it), named constant, other expression (`name_text`, cut at 120), index, or
+  accessor (named by its component, `field_text`). `root_kind`: storage of the leftmost identifier
+  (parameter, local, class field, unit variable, `with` body, other). `with_ctx` = the `with`
+  expressions, innermost first, `|` separated. `rhs_*` = the right-hand side of a write by `:=`;
+  `stmt_*` = start of the statement.
+* **loop_facts** (`file_id`, `ordinal`, `symbol_id`, `parent`, `kind`, `start_*`, `end_*`,
+  `cond_*`): the range of one loop statement and of its condition (B14-5). `parent` = ordinal of the
+  enclosing loop of the same routine, -1 = none. `kind`: `while`, `repeat`, `for`, `for-in`.
+* **call_literal_args** (`file_id`, `ordinal`, `symbol_id`, `call_line`, `call_col`, `callee_name`,
+  `receiver_text`, `arg_index`, `arg_count`, `lit_line`, `lit_col`, `lit_kind`, `value`): "this
+  literal is argument `arg_index` of that call" (SPEC-SEARCH C-1). The call is named by the position
+  of its ref (`refs.start_line` / `start_col`), so a reader joins refs by (`file_id`, `call_line`,
+  `call_col`). `lit_kind`: string (decoded text), number (as written), or const (a named constant /
+  enum member as written; the parser emits a CANDIDATE, a reader confirms it through the read ref at
+  `lit_line` / `lit_col`). `value` is cut at 400.
+
+### indirect_edges (1.56, derived)
+Written by `DRagLint.Index.IndirectCalls` through `TIndexPassHooks.RegisterIndirectEdges`, run by
+`ResolveDispatch`; the whole table is replaced on every resolve. One row = "the call through a
+method pointer / event at `ref_id` CAN run `target_symbol_id`". Flow- and instance-insensitive:
+every binding of a slot is paired with every call through that slot and through every slot it is
+copied into (assignment or argument, up to 8 hops). Indexes on `ref_id`, `caller_symbol_id`,
+`target_symbol_id`.
+
+| column | meaning |
+|---|---|
+| ref_id | the `call` ref through the slot (`FOnChange(Self)`); NULL = the slot is never called in this index (a library event such as `TButton.OnClick`, a .dfm event the framework fires, a slot only stored) |
+| caller_symbol_id | the routine holding that call; NULL with `ref_id` NULL |
+| target_symbol_id | the routine that can run (the handler) |
+| kind | `method-pointer` (`Slot := Routine` / `Slot := @Routine`, slot = field, variable, parameter), `event` (the same through a property; the slot is the field behind it), `callback-arg` (`Callee(.., Routine, ..)`, slot = the callee's parameter at that position), `dfm-event` (`OnClick = Button1Click` in a .dfm, target = method of the form class) |
+| via_text | the slot as written AT THE BINDING SITE: `FOnChange`, `FEmitter.OnChange`, the parameter name, the callee name when the callee is not in the index, `Button1.OnClick` for a .dfm |
+| bind_file_id, bind_line, bind_col | position of the routine name at the binding site (the handler name in the .dfm); 0 = unknown |
+| confidence | `resolved` = slot and target tied by symbol ids / lexical scope; `by-name` = one link matched by name only (a unit variable of a used unit; the component class of a .dfm object found by its class name) |
+
+Declined, never guessed: a FUNCTION name without `@` whose slot type is not known to be procedural
+(it is a paren-less call); a setter method behind an event property; anonymous methods; `with`
+scopes; an assignment or argument list that spans more than one line. The environment variable
+`DRAGLINT_INDIRECT_LOG=1` prints one diagnostics line during `index`.
+
+### repo_copy, concept_fields, concept_texts (+ concept_texts_fts), concept_links (1.56)
+The three-place search / caption concepts tables (`query --concept`), written at the end of
+`index --project` by `DRagLint.Index.RepoCopy` (see "who writes" above). Additive and probed
+(`HasConceptTables`; the FTS5 mirror `concept_texts_fts` is probed apart, it is absent on a SQLite
+build without FTS5 and is refilled with the FTS5 `rebuild` command, no triggers).
+
+* **repo_copy**: one row (`id = 1`): `state`, `repo_path`, `repo_sha256`, `repo_size`,
+  `repo_mtime_unix`, `repo_schema_version`, `copied_at_unix`, `checked_at_unix`, `copy_format`,
+  `derived_format`, `derived_at_unix`, `last_error`. The copy of the configured field repository
+  (captions, descriptions) inside the project index.
+* **concept_fields**: `id`, `table_name`, `field_name` (UNIQUE pair), `caption`, `type_text`,
+  `field_kind`, `is_calculated`, `is_lookup`, `visible`.
+* **concept_texts**: `id`, `place`, `text_kind`, `table_name`, `field_name`, `text`, `uses`;
+  UNIQUE (`place`, `text_kind`, `table_name`, `field_name`, `text`).
+* **concept_links**: `id`, `link_kind`, `confidence`, `table_name`, `field_name`, `file_id`, `line`,
+  `col`, `form_name`, `form_class`, `component_name`, `dataset_name`, `symbol_id`,
+  `enclosing_symbol_id` (both set null), `via`, `caption`: where a field is shown, edited and
+  used (persistent fields, grid columns, edit controls, `FieldByName` / `FindField` /
+  `FieldValues` literals, by name only).
 
 ## 4. Enumerated codes
 

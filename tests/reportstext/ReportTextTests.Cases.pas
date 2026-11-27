@@ -155,7 +155,9 @@ const
     'cycles', 'wiring', 'effects', 'architecture', 'protocol-trace',
     'crosses-boundary', 'shown-where', 'change-impact', 'tested-by',
     'exception-paths', 'consumers', 'feeds-from', 'lands-where', 'round-trip',
-    'path', 'implementors');
+    'path', 'implementors',
+    'value-origin', 'value-use', 'class-diagram', 'sequence', 'control-flow',
+    'sent-not-handled', 'dependency-matrix', 'main-sequence');
 var
   Q: TReportQuestion;
 begin

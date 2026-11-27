@@ -89,6 +89,10 @@ $Pending = @()
 # covered by its OWN runner; the guard accepts the runner only if it exists, names the id, and carries a
 # `# positive-control: <id>` marker on a line of its hit arm (so removing the hit arm, or the runner, turns P6/P3 RED).
 $OwnRunner = @{
+    'container-items-leak' = 'tests\autotest\run_v156_MEMA.ps1'
+    'fresh-instance-as-argument' = 'tests\autotest\run_v156_MEMB.ps1'
+    'class-passed-as-interface' = 'tests\autotest\run_v156_MEMB.ps1'
+    'noreturn-contract' = 'tests\autotest\run_v156_FA1.ps1'
     'enum-read-inside-with'     = 'tests\autotest\run_enum_read_inside_with.ps1'
     'ifdef-undefined-symbol'    = 'tests\autotest\run_ifdef_undefined_symbol.ps1'
     'platform-divergent-define' = 'tests\autotest\run_platform_divergent_define.ps1'

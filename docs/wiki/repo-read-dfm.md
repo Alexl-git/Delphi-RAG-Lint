@@ -28,6 +28,8 @@ table of its SELECT. A data field of a SELECT belongs to the column its select-l
 When the select list and the Origin name different columns, the field is reported as a `conflict` and gets no table:
 nothing is picked. Everything else is reported as `UNRESOLVED` or `no table column` and gives no change: UNION, derived
 tables, TFDMemTable without a table, computed items, fields that are only overridden in an inherited form.
+A link source, a lookup dataset and a grid's dataset of an inherited module are read from the ancestor's DFM,
+see [Datasets of an inherited form or data module](repo-read-dfm-ancestor).
 
 **Joins (1.54.1).** A SELECT over several tables is `JOIN T1 T2 ...`, not unresolved: every field gets its own table.
 

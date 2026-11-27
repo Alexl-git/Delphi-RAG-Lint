@@ -97,7 +97,7 @@ const
   REPORT_DOC_MAX_LINE = DOCINSIGHT_MAX_LINE;
 
   /// <summary>Number of questions in REPORT_QUESTIONS.</summary>
-  REPORT_QUESTION_COUNT = 27;
+  REPORT_QUESTION_COUNT = 35;
 
   /// <summary>Every question of charts\src\New-DiagramArtifact.ps1's
   /// ValidateSet, in menu order within each group. Grouping follows the "You
@@ -132,7 +132,15 @@ const
     (Id: 'architecture'    ; Caption: 'Project architecture (layered zones)...'               ; Kind: rtkProject),
     (Id: 'cycles'          ; Caption: 'Circular unit dependencies...'                         ; Kind: rtkProject),
     (Id: 'consumers'       ; Caption: 'Who uses this table or column...'                      ; Kind: rtkName   ),
-    (Id: 'shown-where'     ; Caption: 'Where this database column is shown...'                ; Kind: rtkName   ));
+    (Id: 'shown-where'     ; Caption: 'Where this database column is shown...'                ; Kind: rtkName   ),
+    (Id: 'value-origin'    ; Caption: 'Where this value comes from...'                       ; Kind: rtkMember ),
+    (Id: 'value-use'       ; Caption: 'Where this value goes...'                             ; Kind: rtkMember ),
+    (Id: 'class-diagram'   ; Caption: 'Class diagram of this type...'                        ; Kind: rtkType   ),
+    (Id: 'sequence'        ; Caption: 'Sequence of calls in this routine...'                 ; Kind: rtkRoutine),
+    (Id: 'control-flow'    ; Caption: 'Control flow of this routine...'                      ; Kind: rtkRoutine),
+    (Id: 'sent-not-handled'; Caption: 'Commands sent but never handled...'                   ; Kind: rtkProject),
+    (Id: 'dependency-matrix'; Caption: 'Unit dependency matrix...'                           ; Kind: rtkProject),
+    (Id: 'main-sequence'   ; Caption: 'Abstractness and instability (main sequence)...'      ; Kind: rtkProject));
 
 /// <summary>The section header the menu shows above a group of questions.</summary>
 /// <param name="pKind">The selection kind the group is asked of.</param>
