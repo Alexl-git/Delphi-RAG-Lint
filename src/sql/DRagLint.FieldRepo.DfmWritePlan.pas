@@ -347,6 +347,7 @@ type
     FieldName: string;
     Kind: TFrFieldKind;
     KindKnown: Boolean;
+    DerivedKind: string; // DL_FIELDS_INFO.DERIVED_KIND; '' = a plain row (design 2.8: derived rows are never written)
     FieldType: Integer;
     SubType: Integer;
     Scale: Integer;
@@ -802,6 +803,14 @@ begin
     and (pRow.DisplayWidth = 0) and (pRow.Alignment < 0);
 end;
 
+function FieldTextOrEmpty(pQuery: TFDQuery; const pName: string): string;
+var
+  VField: TField;
+begin
+  VField := pQuery.FindField(pName);
+  Result := if VField = nil then '' else VField.AsString;
+end;
+
 function ReadRow(pQuery: TFDQuery): TRepoField;
 begin
   Result := Default(TRepoField);
@@ -825,6 +834,7 @@ begin
   Result.Alignment := if pQuery.FieldByName('ALIGNMENT').IsNull then -1 else pQuery.FieldByName('ALIGNMENT').AsInteger;
   Result.HasVisible := (not pQuery.FieldByName('VISIBLE').IsNull) and (Result.Visible or not IsNewRow(Result));
   Result.SourceKey := pQuery.FieldByName('SOURCEKEY').AsString;
+  Result.DerivedKind := FieldTextOrEmpty(pQuery, 'DERIVED_KIND');
   Result.DestTable := pQuery.FieldByName('DESTTABLE').AsString;
   Result.DestKey := pQuery.FieldByName('DESTKEY').AsString;
   Result.DestValue := pQuery.FieldByName('DESTVALUE').AsString;
@@ -1683,6 +1693,8 @@ begin
   Result := '';
   if not pRow.KindKnown then
     Result := 'unknown FIELD_KIND'
+  else if pRow.DerivedKind <> '' then
+    Result := 'derived(' + pRow.DerivedKind + '): its value is computed by code, it is not a column or a TField to write (design 2.8)'
   else if BdeBlockReason <> '' then
     Result := BdeBlockReason
   else if FrKindHasBody(pRow.Kind) and (Length(ForeignMacros(pRow.Body)) > 0) then
