@@ -88,7 +88,7 @@ const
   KIND_COLLECTION = 'collection';
   VALUE_TRUE = 'True';
   LIST_BREAK = #13#10;
-  FIRST_ARGUMENT = 1;
+  FIRST_ARGUMENT = 0; { v156 INT: call_literal_args.arg_index is 0-based (Core.Model TCallLiteralArgRow, the EXT-A1 emitter) }
   { A project text key = kind, table, field, text (AddText). }
   TEXT_KEY_PARTS = 4;
   { Positions of DOC_SUMMARY .. DOCUMENTATION in SQL_REPO_FIELDS. }

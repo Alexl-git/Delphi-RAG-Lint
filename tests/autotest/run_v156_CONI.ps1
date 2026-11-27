@@ -191,10 +191,10 @@ def fid(name):
 def sym(name):
     r = con.execute("SELECT id FROM symbols WHERE name = ? AND kind IN ('method', 'procedure', 'function') ORDER BY id", (name,)).fetchone()
     return r[0] if r else None
-rows = [(fid('umain.pas'), 0, sym('CustomerNameChanged'), 40, 24, 'FieldByName', 'qryCustomers', 1, 1, 40, 36, 'string', 'NAME'),
-        (fid('umain.pas'), 1, sym('CustomerNameChanged'), 42, 26, 'FindField', 'Self.tblSuppliers', 1, 1, 42, 36, 'string', 'NAME'),
-        (fid('umain.pas'), 2, sym('CustomerNameChanged'), 43, 5, 'Locate', 'qryCustomers', 1, 3, 43, 12, 'string', 'NAME'),
-        (fid('utools.pas'), 0, sym('CopyName'), 13, 7, 'FieldByName', 'pDs', 1, 1, 13, 19, 'string', 'NAME')]
+rows = [(fid('umain.pas'), 0, sym('CustomerNameChanged'), 40, 24, 'FieldByName', 'qryCustomers', 0, 1, 40, 36, 'string', 'NAME'),
+        (fid('umain.pas'), 1, sym('CustomerNameChanged'), 42, 26, 'FindField', 'Self.tblSuppliers', 0, 1, 42, 36, 'string', 'NAME'),
+        (fid('umain.pas'), 2, sym('CustomerNameChanged'), 43, 5, 'Locate', 'qryCustomers', 0, 3, 43, 12, 'string', 'NAME'),
+        (fid('utools.pas'), 0, sym('CopyName'), 13, 7, 'FieldByName', 'pDs', 0, 1, 13, 19, 'string', 'NAME')]
 con.executemany("INSERT INTO call_literal_args (file_id, ordinal, symbol_id, call_line, call_col, callee_name, receiver_text, arg_index, arg_count, lit_line, lit_col, lit_kind, value) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
 con.commit()
 con.close()
