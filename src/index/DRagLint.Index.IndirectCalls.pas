@@ -131,8 +131,6 @@ type
       FLines     : TDictionary<Int64, TArray<string>>;
       FStaleFiles: TDictionary<Int64, Boolean>;
       FProcTypes : TDictionary<string, Boolean>;
-      FRefFile   : Int64;
-      FFileRefs  : TDictionary<Int64, TFileRef>;
       FCallsByName: TObjectDictionary<string, TList<TCallSite>>;
       FFlows     : TObjectDictionary<Int64, TList<Int64>>;
       FBinds     : TList<TBind>;
@@ -207,7 +205,6 @@ uses
 const
   CHAIN_MAX_DEPTH    = 64; // a deeper class / alias chain is a cycle in bad data
   ALIAS_MAX_DEPTH    = 4;  // `TMyEvent = TNotifyEvent` hops followed when typing a slot
-  POS_COL_BITS       = 20; // FFileRefs key = line shl POS_COL_BITS or col
   FLOW_MAX_DEPTH     = 8;  // slot -> slot copies followed from one binding
   INDIRECT_LOG_ENV   = 'DRAGLINT_INDIRECT_LOG';
   KIND_FIELD         = 'field';
@@ -240,10 +237,12 @@ const
   SQL_FILE_REFS_MA =
     'SELECT r.id, r.kind, r.symbol_id, r.start_line, r.start_col, m.member_symbol_id, m.accessor_symbol_id ' +
     'FROM refs r LEFT JOIN member_accesses m ON m.ref_id = r.id ' +
-    'WHERE r.file_id = :f AND r.kind IN (''write'', ''member-access'', ''call'') ORDER BY r.id';
+    'WHERE r.file_id = :f AND r.start_line = :l AND r.start_col = :c ' +
+    'AND r.kind IN (''write'', ''member-access'', ''call'') ORDER BY r.id';
   SQL_FILE_REFS =
     'SELECT r.id, r.kind, r.symbol_id, r.start_line, r.start_col, NULL AS member_symbol_id, NULL AS accessor_symbol_id ' +
-    'FROM refs r WHERE r.file_id = :f AND r.kind IN (''write'', ''member-access'', ''call'') ORDER BY r.id';
+    'FROM refs r WHERE r.file_id = :f AND r.start_line = :l AND r.start_col = :c ' +
+    'AND r.kind IN (''write'', ''member-access'', ''call'') ORDER BY r.id';
   SQL_PROP_FIELD =
     'SELECT r.symbol_id FROM refs r JOIN symbols f ON f.id = r.symbol_id ' +
     'WHERE r.file_id = :f AND r.kind = ''property-spec'' AND r.start_line BETWEEN :a AND :b AND f.kind = ''field'' ' +
@@ -439,7 +438,6 @@ begin
   FLines      := TDictionary<Int64, TArray<string>>.Create;
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
   FProcTypes  := TDictionary<string, Boolean>.Create;
-  FFileRefs   := TDictionary<Int64, TFileRef>.Create;
   FCallsByName:= TObjectDictionary<string, TList<TCallSite>>.Create([doOwnsValues]);
   FFlows      := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   FBinds      := TList<TBind>.Create;
@@ -454,7 +452,6 @@ begin
   FBinds.Free;
   FFlows.Free;
   FCallsByName.Free;
-  FFileRefs.Free;
   FProcTypes.Free;
   FStaleFiles.Free;
   FLines.Free;
@@ -671,40 +668,37 @@ begin
   Result:= (I <= Length(S)) and (S[I] = ':');
 end;
 
-{ The write / member-access / call ref that starts at a position of AFileId. One file is held. }
+{ The write / member-access / call ref that starts at a position of AFileId. Asked per POSITION
+  (idx_refs_file_line), never by loading every ref of the file: a pass reads a handful of positions
+  in each of hundreds of files, and the slot copies of AddFlowAt jump between files (lane FIXR-C). }
 function TIndirectCallResolver.FileRefAt(AFileId: Int64; ALine, ACol: Integer; out ARef: TFileRef): Boolean;
 var
-  Q  : TFDQuery;
-  R  : TFileRef;
-  Key: Int64;
+  Q: TFDQuery;
+  R: TFileRef;
 begin
-  if AFileId <> FRefFile then
-  begin
-    FFileRefs.Clear;
-    FRefFile:= AFileId;
-    Q:= Query(if FHasMemberAccesses then SQL_FILE_REFS_MA else SQL_FILE_REFS);
-    Q.ParamByName('f').AsLargeInt:= AFileId;
-    Q.Open;
-    try
-      while not Q.Eof do
-      begin
-        R.Id        := Q.Fields[0].AsLargeInt;
-        R.Kind      := Q.Fields[1].AsString;
-        R.SymbolId  := Q.Fields[2].AsLargeInt;
-        R.MemberId  := Q.Fields[5].AsLargeInt;
-        R.AccessorId:= Q.Fields[6].AsLargeInt;
-        Key:= (Int64(Q.Fields[3].AsInteger) shl POS_COL_BITS) or Q.Fields[4].AsInteger;
-        { two refs at one position: keep the one that names a symbol }
-        if (not FFileRefs.TryGetValue(Key, ARef)) or ((ARef.SymbolId = 0) and (ARef.MemberId = 0)) then
-          FFileRefs.AddOrSetValue(Key, R);
-        Q.Next;
-      end;
-    finally
-      Q.Close;
+  Result:= False;
+  ARef  := Default(TFileRef);
+  Q:= Query(if FHasMemberAccesses then SQL_FILE_REFS_MA else SQL_FILE_REFS);
+  Q.ParamByName('f').AsLargeInt:= AFileId;
+  Q.ParamByName('l').AsInteger := ALine;
+  Q.ParamByName('c').AsInteger := ACol;
+  Q.Open;
+  try
+    while not Q.Eof do
+    begin
+      R.Id        := Q.Fields[0].AsLargeInt;
+      R.Kind      := Q.Fields[1].AsString;
+      R.SymbolId  := Q.Fields[2].AsLargeInt;
+      R.MemberId  := Q.Fields[5].AsLargeInt;
+      R.AccessorId:= Q.Fields[6].AsLargeInt;
+      { two refs at one position: keep the one that names a symbol }
+      if (not Result) or ((ARef.SymbolId = 0) and (ARef.MemberId = 0)) then ARef:= R;
+      Result:= True;
+      Q.Next;
     end;
+  finally
+    Q.Close;
   end;
-  Result:= FFileRefs.TryGetValue((Int64(ALine) shl POS_COL_BITS) or ACol, ARef);
-  if not Result then ARef:= Default(TFileRef);
 end;
 
 { The field a property reads / writes directly (its `read F` / `write F` specifier); 0 when the
@@ -1480,8 +1474,6 @@ begin
   FEdges.Clear;
   FEdgeKeys.Clear;
   FFlows.Clear;
-  FRefFile:= 0;
-  FFileRefs.Clear;
   FHasMemberAccesses:= TableExists(TABLE_MEMBER_ACCESSES);
   FHasDfmProperties := TableExists(TABLE_DFM_PROPERTIES) and TableExists(TABLE_DFM_OBJECTS);
   CollectBinds;
