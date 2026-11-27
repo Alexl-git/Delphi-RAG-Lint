@@ -5,7 +5,10 @@ unit DRagLint.FieldRepo.DfmReadLinks;
   FireDAC copies `T.CloneCursor(S...)`, `T.CopyDataSet(S...)`, `T.CopyData(S)`, `T.AppendData(S)`, `T.Data := S.Data`, plus
   the field writes that make a copied field no copy any more. Pure: text in, records out; comments and strings are blanked
   first, so a comment inside the argument list is skipped. Arrays, locals, parameters and FindComponent are not followed: the receiver
-  and the source must be a name, `Self.name` or `module.name`. }
+  and the source must be a name, `Self.name` or `module.name`.
+  1.56 lane ANCDFM: FireDAC's `T.AttachTable(S.Table, ...)` takes the storage of dataset S, so `S.Table` and
+  `module.S.Table` name the dataset S there (a dataset component that is itself called `Table` on a module is read as
+  the module). No other call reads `.Table`. }
 
 interface
 
@@ -43,7 +46,8 @@ function DfmrLinkIsCopy(pKind: TDfmrLinkKind): Boolean;
 /// <summary>Every literal link call and `Data :=` assignment of a unit (design 3.1, "FireDAC copy sources").</summary>
 /// <param name="pText">Unit source.</param>
 /// <returns>The links in text order. A receiver or source that is an array element, a call result or a chain of more
-/// than one qualifier is not a link.</returns>
+/// than one qualifier is not a link; the one exception is the `.Table` of the first AttachTable argument, which names
+/// its dataset (`X.Table` gives X, `dm.X.Table` gives dm.X).</returns>
 function ReadCodeLinks(const pText: string): TArray<TDfmrLink>;
 
 /// <summary>The fields of a dataset the unit writes: `D.FieldByName('F').X :=`, `D.FieldValues['F'] :=`,
@@ -65,9 +69,10 @@ const
   KIND_NAMES: array[TDfmrLinkKind] of string = ('AttachedTo', 'AttachTable', 'CloneCursor', 'CopyDataSet', 'CopyData',
     'AppendData', 'Data');
   SELF_PREFIX = 'Self.';
-  { receiver [qualifier.]name, then the method, then the first argument [qualifier.]name followed by , or ) }
+  { receiver [qualifier.]name, then the method, then the first argument [qualifier.]name[.Table] followed by , or ) }
   PAT_CALL = '(?<![\w\].\[)])(?:(\w+)\s*\.\s*)?(\w+)\s*\.\s*(AttachTable|CloneCursor|CopyDataSet|CopyData|AppendData)' +
-    '\s*\(\s*(?:(\w+)\s*\.\s*)?(\w+)\s*[,)]';
+    '\s*\(\s*(?:(\w+)\s*\.\s*)?(\w+)(?:\s*\.\s*(Table))?\s*[,)]';
+  STORAGE_MEMBER = 'Table'; // TFDDataSet.Table: what FireDAC's AttachTable takes
   PAT_DATA = '(?<![\w\].\[)])(?:(\w+)\s*\.\s*)?(\w+)\s*\.\s*Data\s*:=\s*(?:(\w+)\s*\.\s*)?(\w+)\s*\.\s*Data\s*;';
   GROUP_RECV_Q = 1;
   GROUP_RECV = 2;
@@ -76,6 +81,7 @@ const
   GROUP_DATA_SRC = 4;
   GROUP_SRC_Q = 4;
   GROUP_SRC = 5;
+  GROUP_SRC_TABLE = 6;
 
 function DfmrLinkKindName(pKind: TDfmrLinkKind): string;
 begin
@@ -104,6 +110,26 @@ begin
     else pQualifier + '.' + pName;
 end;
 
+{ The source of a link call; False = the argument is no dataset name (`dm.X.Table` outside AttachTable). For
+  AttachTable `X.Table` is dataset X and `q.X.Table` is q.X. }
+function CallSource(const pMatch: TMatch; pKind: TDfmrLinkKind; out pSource: string): Boolean;
+var
+  VQualifier, VName: string;
+  VStorage: Boolean;
+begin
+  VQualifier := pMatch.Groups[GROUP_SRC_Q].Value;
+  VName := pMatch.Groups[GROUP_SRC].Value;
+  { a trailing group that took no part is not in Groups }
+  VStorage := (pMatch.Groups.Count > GROUP_SRC_TABLE) and pMatch.Groups[GROUP_SRC_TABLE].Success;
+  Result := (pKind = dlkAttachTable) or not VStorage;
+  if (pKind = dlkAttachTable) and (not VStorage) and (VQualifier <> '') and SameText(VName, STORAGE_MEMBER) then
+  begin
+    VName := VQualifier;
+    VQualifier := '';
+  end;
+  pSource := Qualified(VQualifier, VName);
+end;
+
 function ReadCodeLinks(const pText: string): TArray<TDfmrLink>;
 var
   VCode: string;
@@ -120,9 +146,9 @@ begin
       if SameText(KIND_NAMES[VKind], VMatch.Groups[GROUP_METHOD].Value) then
         VLink.Kind := VKind;
     VLink.Target := Qualified(VMatch.Groups[GROUP_RECV_Q].Value, VMatch.Groups[GROUP_RECV].Value);
-    VLink.Source := Qualified(VMatch.Groups[GROUP_SRC_Q].Value, VMatch.Groups[GROUP_SRC].Value);
     VLink.Line := LineAt(VCode, VMatch.Index);
-    Result := Result + [VLink];
+    if CallSource(VMatch, VLink.Kind, VLink.Source) then
+      Result := Result + [VLink];
   end;
   for VMatch in TRegEx.Matches(VCode, PAT_DATA, [roIgnoreCase]) do
   begin

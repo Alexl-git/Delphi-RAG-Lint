@@ -1,0 +1,35 @@
+{
+  "id": "repo-read-dfm-ancestor",
+  "title": "Datasets of an inherited form or data module",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "repo read-dfm follows a link source, lookup dataset or grid dataset into the DFM of the ancestor form or data module",
+  "intro": "Read this when repo read-dfm reports a memory table or a lookup as unresolved although its source is a dataset of an inherited data module. The table name, the SQL and the fields of an inherited dataset are in the ancestor's DFM; drag-lint finds the ancestor class in the unit beside the DFM and reads the one DFM of the same folder that has it. What it cannot follow is a warning that names the reason; nothing is picked. AttachTable(X.Table) links to dataset X.",
+  "wikiPage": "repo-read-dfm-ancestor",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "read-dfm"
+    }
+  ],
+  "audience": "both",
+  "related": ["repo-read-dfm"],
+  "questions": [
+    {
+      "ask": "Why is a memory table copied from a dataset of an inherited data module unresolved, and which table does it hold?",
+      "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file>"
+    },
+    {
+      "ask": "Which ancestor DFM did repo read-dfm read a dataset from, and why was an ancestor not followed?",
+      "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file> --json"
+    }
+  ],
+  "verified": {
+    "date": "2026-11-26",
+    "by": "alexanderl",
+    "build": "1.55.0-alpha"
+  }
+}

@@ -87,6 +87,12 @@ type
     FieldName: string;
     /// <summary>Assigned column events that have a repository column: event name, handler name.</summary>
     Events: TArray<TDfmrPair>;
+    /// <summary>PropertiesClassName as written, without the quotes (TcxComboBoxProperties); '' = not stated.</summary>
+    PropertiesClassName: string;
+    /// <summary>The column's Properties.* lines as the text DFM has them (a binary DFM: as its text form has them), in
+    /// DFM order, CRLF between lines, the indentation of the first line removed from every line; a value over several
+    /// lines (collection, string list, continued string) is whole. '' = none. The format of TFrGridColumn.Properties.</summary>
+    Properties: string;
   end;
 
   /// <summary>One data-aware cxGrid view.</summary>
@@ -169,6 +175,8 @@ type
     { First property row of each object, -1 = none; an object's own rows are one run (a DFM streams the properties
       of an object before its child objects). }
     First: TArray<Integer>;
+    { The lines of the DFM text the rows were read from, without their line ends; a row's StartLine is 1-based. }
+    Lines: TArray<string>;
     procedure BuildFirst;
     function Prop(pObject: Integer; const pName: string): string;
     function ListText(pRow: Integer): string;
@@ -182,6 +190,8 @@ const
   FIELD_SUFFIX = 'Field';
   AGGREGATE_CLASS = 'TAggregateField';
   PROP_FIELD_NAME = 'FieldName';
+  PROP_EDITOR_CLASS = 'PropertiesClassName';
+  EDITOR_PREFIX = 'Properties.';
   VALUE_TRUE = 'True';
   LIST_BREAK = #13#10;
 
@@ -324,6 +334,7 @@ var
   VParser: TDFMParser;
   VResult: TParseResult;
   VBytes: TBytes;
+  VText: string;
 begin
   VBytes := DfmTextBytes(pFile, Result);
   VParser := TDFMParser.Create;
@@ -332,8 +343,10 @@ begin
   finally
     VParser.Free;
   end;
+  VText := TEncoding.UTF8.GetString(VBytes);
   pRows.Objects := VResult.DfmObjects;
-  pRows.Props := ExtractDfmPropertyRows(pFile, TEncoding.UTF8.GetString(VBytes), VResult.DfmObjects);
+  pRows.Props := ExtractDfmPropertyRows(pFile, VText, VResult.DfmObjects);
+  pRows.Lines := VText.Replace(LIST_BREAK, #10).Split([#10]);
   pRows.BuildFirst;
   pDiagnostics := VResult.Diagnostics;
   if Length(pRows.Objects) = 0 then
@@ -500,11 +513,47 @@ begin
   Result.AttachedTo := pRows.Prop(pObject, 'AttachedTo');
 end;
 
+{ pLine without its first pIndent characters, as far as they are blanks. }
+function Dedent(const pLine: string; pIndent: Integer): string;
+var
+  VCut: Integer;
+begin
+  VCut := 0;
+  while (VCut < pIndent) and (VCut < Length(pLine)) and (pLine.Chars[VCut] = ' ') do
+    Inc(VCut);
+  Result := pLine.Substring(VCut);
+end;
+
+{ The Properties.* lines of object pObject as the DFM text has them (TDfmrGridColumn.Properties). }
+function EditorLines(const pRows: TDfmRows; pObject: Integer): string;
+var
+  VI, VLine, VIndent: Integer;
+  VLines: TArray<string>;
+begin
+  VLines := nil;
+  VIndent := -1;
+  VI := pRows.First[pObject];
+  while (VI >= 0) and (VI < Length(pRows.Props)) and (pRows.Props[VI].ObjectOrdinal = pObject) do
+  begin
+    if (pRows.Props[VI].Depth = 0) and StartsText(EDITOR_PREFIX, pRows.Props[VI].Name) then
+      for VLine := Max(pRows.Props[VI].StartLine, 1) to Min(pRows.Props[VI].EndLine, Length(pRows.Lines)) do
+      begin
+        if VIndent < 0 then
+          VIndent := Length(pRows.Lines[VLine - 1]) - Length(TrimLeft(pRows.Lines[VLine - 1]));
+        VLines := VLines + [Dedent(pRows.Lines[VLine - 1], VIndent)];
+      end;
+    Inc(VI);
+  end;
+  Result := string.Join(LIST_BREAK, VLines);
+end;
+
 function ReadColumn(const pRows: TDfmRows; pObject: Integer): TDfmrGridColumn;
 begin
   Result.Name := pRows.Objects[pObject].Name;
   Result.FieldName := Trim(pRows.Prop(pObject, 'DataBinding.FieldName'));
   Result.Events := ReadEvents(pRows, pObject, True);
+  Result.PropertiesClassName := Trim(pRows.Prop(pObject, PROP_EDITOR_CLASS));
+  Result.Properties := EditorLines(pRows, pObject);
 end;
 
 { The grid streams its columns in item order; a stated Index is applied as the loader does, to the columns read so far. }
