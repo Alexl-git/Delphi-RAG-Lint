@@ -99,9 +99,9 @@ begin
     AddObject(vDb, 1, 2, 'colName', 'TcxGridDBColumn');
     AddProp(vDb, 1, 2, 2, 'DataBinding.FieldName', 'CUSTNAME', 30);
     vUses := FindFieldUses(vDb, 'custname');
-    Check('M1 a DataField control is one fukDfmControl use (case-insensitive)',
-      (Length(vUses) = 1) and (vUses[0].Kind = fukDfmControl), 'n=' + IntToStr(Length(vUses)));
-    if Length(vUses) = 1 then
+    Check('M1 a DataField control is the one fukDfmControl use (case-insensitive); the grid column is another kind',
+      (Length(vUses) = 2) and (vUses[0].Kind = fukDfmControl) and (vUses[1].Kind = fukGridColumn), 'n=' + IntToStr(Length(vUses)));
+    if Length(vUses) > 0 then
     begin
       Check('M2 use carries component, class, file and line',
         (vUses[0].Component = 'edName') and (vUses[0].ComponentClass = 'TDBEdit') and (vUses[0].FilePath = 'C:\p\Main.dfm') and
@@ -110,9 +110,64 @@ begin
     end
     else
       Check('M2/M3 skipped: no use returned', False);
-    Check('M4 FieldUseKinds = [fukDfmControl]', FieldUseKinds(vDb, 'CUSTNAME') = [fukDfmControl]);
+    Check('M4 FieldUseKinds = control + grid column', FieldUseKinds(vDb, 'CUSTNAME') = [fukDfmControl, fukGridColumn]);
     Check('M5 an unused field has no kind', FieldUseKinds(vDb, 'NOSUCH') = []);
     Check('M6 an empty name has no use', Length(FindFieldUses(vDb, '')) = 0);
+  finally
+    vDb.Free;
+  end;
+end;
+
+procedure TestOtherKinds;
+var
+  vDb: TFDConnection;
+  vUses: TArray<TFieldUse>;
+  vUse: TFieldUse;
+  vGrid, vLookup, vCode, vCtl: Integer;
+begin
+  vDb := NewProjectDb(True);
+  try
+    vDb.ExecSQL('CREATE TABLE ds_field_accesses (file_id INTEGER NOT NULL, symbol_id INTEGER NOT NULL, ordinal INTEGER NOT NULL, ' +
+      'mode TEXT NOT NULL, line INTEGER NOT NULL, col INTEGER NOT NULL, shape TEXT NOT NULL, dataset_text TEXT NOT NULL, ' +
+      'field_text TEXT NOT NULL, field_name TEXT NOT NULL, name_kind TEXT NOT NULL)');
+    vDb.ExecSQL('INSERT INTO files(id, path) VALUES (1, ''C:\p\Main.dfm'')');
+    vDb.ExecSQL('INSERT INTO files(id, path) VALUES (2, ''C:\p\Main.pas'')');
+    { a cx grid column, a DBGrid TColumn, a lookup combo (KeyField list), a lookup TField, a plain control }
+    AddObject(vDb, 1, 0, 'colName', 'TcxGridDBColumn');
+    AddProp(vDb, 1, 0, 0, 'DataBinding.FieldName', 'CUSTNAME', 30);
+    AddObject(vDb, 1, 1, 'cName', 'TColumn');
+    AddProp(vDb, 1, 1, 1, 'FieldName', 'CUSTNAME', 40);
+    AddObject(vDb, 1, 2, 'lcbCust', 'TDBLookupComboBox');
+    AddProp(vDb, 1, 2, 2, 'KeyField', 'CUSTID', 50);
+    AddProp(vDb, 1, 2, 3, 'ListField', 'CUSTNAME; CITY', 51);
+    AddObject(vDb, 1, 3, 'qOrderCustName', 'TStringField');
+    AddProp(vDb, 1, 3, 4, 'LookupKeyFields', 'CUSTID', 60);
+    AddProp(vDb, 1, 3, 5, 'LookupResultField', 'CUSTNAME', 61);
+    AddObject(vDb, 1, 4, 'edName', 'TDBEdit');
+    AddProp(vDb, 1, 4, 6, 'DataField', 'CUSTNAME', 12);
+    vDb.ExecSQL('INSERT INTO ds_field_accesses VALUES (2,1,0,''read'',77,5,''FieldByName'',''qCust'',''''''CUSTNAME'''''',''CUSTNAME'',''literal'')');
+    vDb.ExecSQL('INSERT INTO ds_field_accesses VALUES (2,1,1,''read'',78,5,''FieldByName'',''qCust'','''',''CITY'',''literal'')');
+    vUses := FindFieldUses(vDb, 'CustName');
+    vGrid := 0; vLookup := 0; vCode := 0; vCtl := 0;
+    for vUse in vUses do
+      case vUse.Kind of
+        fukDfmControl: Inc(vCtl);
+        fukGridColumn: Inc(vGrid);
+        fukLookup: Inc(vLookup);
+        fukCode: Inc(vCode);
+      end;
+    Check('K1 one DFM control', vCtl = 1, IntToStr(vCtl));
+    Check('K2 two grid columns (cx DataBinding.FieldName and TColumn.FieldName)', vGrid = 2, IntToStr(vGrid));
+    Check('K3 two lookups (ListField list element, LookupResultField); KeyField CUSTID not counted', vLookup = 2, IntToStr(vLookup));
+    Check('K4 one code use (FieldByName literal), line 77', vCode = 1, IntToStr(vCode));
+    for vUse in vUses do
+      if vUse.Kind = fukCode then
+        Check('K5 code use carries file, line and the dataset text as component',
+          (vUse.FilePath = 'C:\p\Main.pas') and (vUse.Line = 77) and (vUse.Component = 'qCust'), vUse.FilePath + ' ' + IntToStr(vUse.Line));
+    Check('K6 all four kinds', FieldUseKinds(vDb, 'CUSTNAME') = [fukDfmControl, fukGridColumn, fukLookup, fukCode]);
+    Check('K7 CUSTID is a lookup only', FieldUseKinds(vDb, 'custid') = [fukLookup]);
+    Check('K8 CITY: list element after ; and code', FieldUseKinds(vDb, 'CITY') = [fukLookup, fukCode]);
+    Check('K9 uses are ordered by kind', (Length(vUses) > 1) and (vUses[0].Kind = fukDfmControl) and (vUses[High(vUses)].Kind = fukCode));
   finally
     vDb.Free;
   end;
@@ -136,6 +191,7 @@ begin
   try
     try
       TestDfmControl;
+      TestOtherKinds;
       TestOldIndex;
     except
       on E: Exception do

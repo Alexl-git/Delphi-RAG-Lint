@@ -33,7 +33,7 @@ type
     FieldName: string;
     /// <summary>Path of the file (.dfm or source) holding the use, as stored in the project DB.</summary>
     FilePath: string;
-    /// <summary>The DFM component name; '' for a code use.</summary>
+    /// <summary>The DFM component name; for a code use the dataset expression as written ('qCust', 'Self.qCust').</summary>
     Component: string;
     /// <summary>The DFM component class; '' for a code use.</summary>
     ComponentClass: string;
@@ -46,7 +46,10 @@ type
 /// <param name="pFieldName">The field name; case-insensitive; '' returns no use.</param>
 /// <returns>The uses ordered by kind, file path, line. A DB without the DFM property tables (an index older than
 /// schema 25) returns no DFM use and does not raise.</returns>
-/// <remarks>UI-M.1 implements fukDfmControl only; the other kinds follow in the same lane.</remarks>
+/// <remarks>Kinds: fukDfmControl = DataField; fukGridColumn = FieldName / DataBinding.FieldName on a *Column object;
+/// fukLookup = KeyField, ListField, LookupKeyFields, LookupResultField, Properties.KeyFieldNames / ListFieldNames
+/// (one name or a ;-separated list); fukCode = a ds_field_accesses row with the literal field name. A field
+/// named by a constant in code, and a TField whose own FieldKind is fkLookup, are not seen. Blanks in pFieldName are ignored.</remarks>
 function FindFieldUses(pProjectDb: TFDConnection; const pFieldName: string): TArray<TFieldUse>;
 
 /// <summary>The kinds in which a field is used.</summary>
@@ -79,8 +82,9 @@ begin
   end;
 end;
 
-{ Appends the rows of pSql (columns: path, component, class, value_text, line; parameter :f = the field, upper-case) as uses of pKind. }
-procedure AddDfmUses(pDb: TFDConnection; const pSql, pField: string; pKind: TFieldUseKind; var pUses: TArray<TFieldUse>);
+{ Appends the rows of pSql (columns: path, component, class, field text, line; parameter :f = the field, upper-case,
+  no blanks) as uses of pKind. }
+procedure AddUses(pDb: TFDConnection; const pSql, pField: string; pKind: TFieldUseKind; var pUses: TArray<TFieldUse>);
 var
   VQuery: TFDQuery;
   VUse: TFieldUse;
@@ -89,7 +93,7 @@ begin
   try
     VQuery.Connection := pDb;
     VQuery.SQL.Text := pSql;
-    VQuery.ParamByName('f').AsString := UpperCase(pField);
+    VQuery.ParamByName('f').AsString := pField;
     VQuery.Open;
     while not VQuery.Eof do
     begin
@@ -113,13 +117,41 @@ const
     'JOIN dfm_objects o ON o.file_id = p.file_id AND o.ordinal = p.object_ordinal ' +
     'JOIN files f ON f.id = p.file_id ' +
     'WHERE p.name = ''DataField'' AND UPPER(p.value_text) = :f ORDER BY f.path, p.start_line';
+  SQL_GRID_COLUMN =
+    'SELECT f.path, o.name, o.class_name, p.value_text, p.start_line FROM dfm_properties p ' +
+    'JOIN dfm_objects o ON o.file_id = p.file_id AND o.ordinal = p.object_ordinal ' +
+    'JOIN files f ON f.id = p.file_id ' +
+    'WHERE p.name IN (''FieldName'', ''DataBinding.FieldName'') AND o.class_name LIKE ''%Column%'' ' +
+    'AND UPPER(p.value_text) = :f ORDER BY f.path, p.start_line';
+  { The lookup properties hold one name or a ;-separated list ('NAME; CITY'); INSTR, not LIKE, so an underscore in a name is no wildcard. }
+  SQL_LOOKUP =
+    'SELECT f.path, o.name, o.class_name, p.value_text, p.start_line FROM dfm_properties p ' +
+    'JOIN dfm_objects o ON o.file_id = p.file_id AND o.ordinal = p.object_ordinal ' +
+    'JOIN files f ON f.id = p.file_id ' +
+    'WHERE p.name IN (''KeyField'', ''ListField'', ''LookupKeyFields'', ''LookupResultField'', ' +
+    '''Properties.KeyFieldNames'', ''Properties.ListFieldNames'') ' +
+    'AND INSTR('';'' || REPLACE(UPPER(p.value_text), '' '', '''') || '';'', '';'' || :f || '';'') > 0 ' +
+    'ORDER BY f.path, p.start_line';
+  SQL_CODE =
+    'SELECT f.path, a.dataset_text, '''', a.field_name, a.line FROM ds_field_accesses a JOIN files f ON f.id = a.file_id ' +
+    'WHERE UPPER(a.field_name) = :f ORDER BY f.path, a.line';
 
 function FindFieldUses(pProjectDb: TFDConnection; const pFieldName: string): TArray<TFieldUse>;
+var
+  VField: string;
 begin
   Result := nil;
-  if (pFieldName = '') or not (TableExists(pProjectDb, 'dfm_properties') and TableExists(pProjectDb, 'dfm_objects')) then
+  VField := UpperCase(StringReplace(pFieldName, ' ', '', [rfReplaceAll]));
+  if VField = '' then
     Exit;
-  AddDfmUses(pProjectDb, SQL_DFM_CONTROL, pFieldName, fukDfmControl, Result);
+  if TableExists(pProjectDb, 'dfm_properties') and TableExists(pProjectDb, 'dfm_objects') then
+  begin
+    AddUses(pProjectDb, SQL_DFM_CONTROL, VField, fukDfmControl, Result);
+    AddUses(pProjectDb, SQL_GRID_COLUMN, VField, fukGridColumn, Result);
+    AddUses(pProjectDb, SQL_LOOKUP, VField, fukLookup, Result);
+  end;
+  if TableExists(pProjectDb, 'ds_field_accesses') then
+    AddUses(pProjectDb, SQL_CODE, VField, fukCode, Result);
 end;
 
 function FieldUseKinds(pProjectDb: TFDConnection; const pFieldName: string): TFieldUseKinds;
