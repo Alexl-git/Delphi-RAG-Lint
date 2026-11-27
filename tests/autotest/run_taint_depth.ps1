@@ -80,7 +80,11 @@ try {
   Check 'max_depth 100000: the default run did NOT hit the guard (positive control)' ($r.Err -match 'depth caps 0') (($r.Err -split "`n" | Select-String '^taint: sinks') -join ' ')
   # every taint rule disabled: the stage must not run at all (no stats line under DRAGLINT_DEBUG);
   # the default run above printed one, which is this check's positive control
-  $x = LintAll 'disabled' $deep @('--disable', 'taint-sql-injection,taint-command-injection,taint-path-traversal')
+  # 1.56 added taint-deserialization / taint-html-output (ON) and taint-log (OFF): "every taint rule" is read from
+  # the catalogue, never a hand list, so a new taint rule cannot keep the stage alive unseen.
+  $taintIds = @(((& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }).rules | Where-Object { $_.id -like 'taint-*' } | ForEach-Object { $_.id })
+  Check 'all taint rules disabled: the catalogue lists the three original taint rules (control)' (@('taint-sql-injection', 'taint-command-injection', 'taint-path-traversal' | Where-Object { $taintIds -notcontains $_ }).Count -eq 0) ($taintIds -join ',')
+  $x = LintAll 'disabled' $deep @('--disable', ($taintIds -join ','))
   Check 'all taint rules disabled: lint-all finishes, exit 0/1' ($x.Done -and ($x.Exit -in 0, 1)) "exit $($x.Exit)"
   Check 'all taint rules disabled: the taint stage does not run (no stats line)' ($x.Err -notmatch '(?m)^taint: sinks') (($x.Err -split "`n" | Select-String '^taint:') -join ' | ')
   Check 'all taint rules disabled: no taint finding' ($x.Taint.Count -eq 0) "got $($x.Taint.Count)"
