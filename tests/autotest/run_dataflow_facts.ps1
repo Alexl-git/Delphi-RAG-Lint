@@ -17,6 +17,9 @@
   Sites are located by the { M-... } marker comments, never by line number.
   The data is read with python sqlite3 (named columns), not `sql --json`
   (whose rows are positional arrays -- a lesson this repo paid for).
+  1.56 B3 (lane EXT-B1): the per-routine rows asserted here are the PRE-1.56 row set, i.e. the rows
+  with val_class = ''. Value rows (numeric / Boolean / date-time flows) are additions with their own
+  runner, run_v156_EXTB1_valclass.ps1; every shape and every no-row NEGATIVE below must hold unchanged.
 #>
 [CmdletBinding()]
 param(
@@ -77,7 +80,7 @@ if not has:
     print(json.dumps(out)); sys.exit(0)
 def rows(routine):
     q = ("select d.*, s.name as routine from data_flows d join symbols s on s.id = d.symbol_id "
-         "where s.name = ? collate nocase or s.name like ? collate nocase")
+         "where (s.name = ? collate nocase or s.name like ? collate nocase) and d.val_class = ''")
     return [dict(r) for r in c.execute(q, (routine, '%.' + routine))]
 routines = ['TrimParam','SinkParam','ViaLocal','Killed','Branch','Loop','LiteralOnly','Quoted',
             'NumericOnly','WithBody','ExitValue','SelfIndex','SetField','ReadField','SetGlobal',
