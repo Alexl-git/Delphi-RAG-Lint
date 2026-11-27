@@ -845,7 +845,9 @@ begin
      or SameText(Head, 'TGUID') or SameText(Head, 'TPoint') or SameText(Head, 'TRect')
      { 1.56 FIX-FLOW: RTL record types with a Create class function (INBOX-object-leak-record-thashsha2) }
      or SameText(Head, 'THashSHA2') or SameText(Head, 'THashSHA1') or SameText(Head, 'THashMD5')
-     or SameText(Head, 'THashBobJenkins') or SameText(Head, 'TStopwatch') or SameText(Head, 'TTimeSpan') then
+     or SameText(Head, 'THashBobJenkins') or SameText(Head, 'TStopwatch') or SameText(Head, 'TTimeSpan')
+     { v156 LEAKFP }
+     or SameText(Head, 'TFormatSettings') then
     Exit(True);
   Result:= (Length(Head) >= 2) and (Head[1] = 'I') and CharInSet(Head[2], ['A'..'Z']);
 end;
