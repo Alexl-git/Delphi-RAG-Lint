@@ -64,7 +64,15 @@
         "                               --preset randomize = --a extcall:Randomize --b extcall:Random.",
         "                               --preset format-settings = --a extwrite:FormatSettings --b extcall: of the RTL format / parse routines.",
         "                               --preset before-app-run --a <event> = B is app-run:* (does A happen before Application.Run?).",
-        "                               Not built: presets finalization, use-after-free, lock-held-when.",
+        "                               In-force question (lane HB6): --a free:<QName> / final-free:<QName> / held:<QName> is a STATE that lasts",
+        "                               from a site of A until a re-assignment (free) or any other mention of the lock (held); B is often use:<QName>.",
+        "                               free / final-free: YES = a site of B runs with A in force, NO = none can (b-never-after-a) or A never happens,",
+        "                               MAY = b-may-run-after-a. held: YES = in force at every site of B. Proofs in-force, reassigned-first,",
+        "                               finalization-order. JSON carries question: in-force.",
+        "                               --preset use-after-free --a <QName> = A free:X, B use:X (wanted: NO).",
+        "                               --preset finalization --a <QName> = A final-free:X, B use:X (wanted: NO; unit variable or class var).",
+        "                               --preset lock-held-when --a <QName> --b <event> = A held:L (wanted: YES).",
+        "                               Limits of the in-force question: aliases-not-followed, callbacks-not-modelled.",
         "                               Limits: sites are not instances (instance-insensitive); extcall: matches by name (matched-by-name);",
         "                               pre-check (call graph alone, no body solved); program-order: relied-on-handler-order and",
         "                               program-order: relied-on-indirect-edges (what a program-order YES leaned on; a NO never does).",
@@ -102,7 +110,19 @@
     {
       "ask": "Does this write happen before Application.Run?",
       "command": "drag-lint happens-before --preset before-app-run --a write:Unit.GConfig --db <db>"
+    },
+    {
+      "ask": "Is this object used after it was freed?",
+      "command": "drag-lint happens-before --preset use-after-free --a Unit.TClass.FField --db <db>"
+    },
+    {
+      "ask": "Is this global used after its unit finalization freed it?",
+      "command": "drag-lint happens-before --preset finalization --a Unit.GCache --db <db>"
+    },
+    {
+      "ask": "Is this lock held whenever that field is written?",
+      "command": "drag-lint happens-before --preset lock-held-when --a Unit.TClass.FLock --b write:Unit.TClass.FData --db <db>"
     }
   ],
-  "notes": "Shipped 1.56 (lane HB4, gap G-56; lane HB5 added program-order, the presets format-settings and before-app-run, the events extwrite: and app-run:, a comma list for extcall:, and the call-graph pre-check; spec docs\\superpowers\\specs\\2026-11-17-happens-before-design.md sec. 2.4). Units src\\query\\DRagLint.Query.HappensBefore.Verb.pas, src\\query\\DRagLint.Query.HappensBefore.pas (HbOrderSolve) and src\\cli\\DRagLint.CLI.HappensBefore.pas; guards tests\\autotest\\run_v156_HB4.ps1 and run_v156_HB5.ps1. Built presets: randomize, format-settings, before-app-run. Not built: finalization, use-after-free, lock-held-when."
+  "notes": "Lane HB6 added the in-force question (events free:, final-free:, held:, use:; presets use-after-free, finalization, lock-held-when; runner tests\\autotest\\run_v156_HB6.ps1). Shipped 1.56 (lane HB4, gap G-56; lane HB5 added program-order, the presets format-settings and before-app-run, the events extwrite: and app-run:, a comma list for extcall:, and the call-graph pre-check; spec docs\\superpowers\\specs\\2026-11-17-happens-before-design.md sec. 2.4). Units src\\query\\DRagLint.Query.HappensBefore.Verb.pas, src\\query\\DRagLint.Query.HappensBefore.pas (HbOrderSolve) and src\\cli\\DRagLint.CLI.HappensBefore.pas; guards tests\\autotest\\run_v156_HB4.ps1 and run_v156_HB5.ps1. Built presets: randomize, format-settings, before-app-run. Not built: finalization, use-after-free, lock-held-when."
 }

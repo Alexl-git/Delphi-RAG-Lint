@@ -152,7 +152,86 @@ drag-lint happens-before --preset before-app-run --a write:uConfig.GConfig --db 
 `format-settings` asks whether the settings are assigned before the first format / parse call;
 `before-app-run` takes A from `--a` and is refused without it.
 
-Not built: `finalization`, `use-after-free`, `lock-held-when`.
+## The in-force question (use-after-free, finalization, lock-held-when)
+
+Some events are a STATE, not a moment: an object stays freed until the variable is assigned again, a
+lock stays held until it is left. With such an event as A the verb answers a different question,
+"is A in force when B runs?" (`"question": "in-force"` in the JSON, `question:` on the verdict line).
+
+| Event | Sites | Undone by |
+|---|---|---|
+| `free:<QName>` | `X.Free`, `X.Destroy`, `X.DisposeOf`, `FreeAndNil(X)`, `X := nil` | an assignment to X |
+| `final-free:<QName>` | the same, only inside a finalization section (unit variable or class var) | -- |
+| `held:<QName>` | `L.Enter` / `Acquire` / `BeginRead` / `BeginWrite`, `TMonitor.Enter(L)`, `EnterCriticalSection(L)` | any other mention of L |
+| `use:<QName>` (for B) | the dereferencing reads `X.`, `X[`, `X^` | |
+
+| Preset | Events | Wanted |
+|---|---|---|
+| `use-after-free --a <QName>` | A = `free:X`, B = `use:X` | `NO` |
+| `finalization --a <QName>` | A = `final-free:X`, B = `use:X` | `NO` |
+| `lock-held-when --a <QName> --b <event>` | A = `held:L`, B = your event | `YES` |
+
+`--a` takes the variable itself (a unit variable, class var or instance field), not an event. Local
+variables are not events of this verb; the lint rule `use-after-free` covers them.
+
+```
+drag-lint happens-before --preset use-after-free --a uCache.TCache.FItems --db App.sqlite
+drag-lint happens-before --preset finalization --a uLog.GLog --db App.sqlite
+drag-lint happens-before --preset lock-held-when --a uAcct.TAcct.FLock --b write:uAcct.TAcct.FBalance --db App.sqlite
+```
+
+Verdicts:
+
+* `free:` / `final-free:` ask "does B EVER run with A in force?". `YES` = a site of B is in force on
+  every path that reaches it (whenever that site runs). `NO` = no site of B can run with A in force
+  (`b-never-after-a`), or A never happens (`a-never-happens`). `MAY` = everything else
+  (`b-may-run-after-a`).
+* `held:` asks "is A in force at EVERY site of B?". `YES` = all of them; `NO` only when the lock is
+  never entered anywhere; else `MAY`.
+
+Proofs (the `methods[]` codes; each judged row carries one):
+
+* `in-force` -- in B's own routine a certain site of A lies on every path to the site and nothing
+  can have undone it since. A call that can reach a routine which writes (or, for a lock, mentions)
+  the variable counts as an undo: calls of every confidence, dispatch, indirect edges.
+* `reassigned-first` -- the mirror: a certain assignment on every path and no possible free since.
+* `finalization-order` -- nothing that can run after the free reaches the site: no caller chain from
+  a finalization section (other than statements before the free in its own section, when that
+  section has no loop), from a destructor, or from a routine that can run without a visible call
+  (event handlers, published methods, thread Execute, address taken).
+
+```
+> drag-lint happens-before --preset finalization --a uFinRes.GCache --db App.sqlite
+happens-before  A = final-free:uFinRes.GCache (1 site)   B = use:uFinRes.GCache (1 site)   preset finalization
+verdict  MAY   (not proven either way)   question: is A in force when B runs?
+  B  uFinUser.pas:23:3  in uFinUser.TNode.Destroy   b-may-run-after-a   uFinUser.TNode.Destroy is a destructor: an object can be destroyed during or after the unit finalizations
+limits: aliases-not-followed
+```
+
+What it refuses (always `MAY`, never a guess):
+
+* a variable whose address is taken or that another variable overlays (`absolute`);
+* a field site on another object than `Self` (`pBox.FItems.Free` is no proof about `Self.FItems`);
+* an undo inside the body of a `try..except`, inside an anonymous method, or in the same statement as
+  the judged site; a site inside a `with`;
+* `final-free:` of a variable that is also freed (or may be) outside a finalization section --
+  ask `use-after-free` for that;
+* every OTHER unit's finalization section counts as "can run after the free": the unit order is not
+  used. A lock held by the CALLER is not seen (`MAY`).
+
+Limits on every in-force answer: `aliases-not-followed` (another reference to the same object, or an
+owner that frees it, is not a site) and, on a proven one, `callbacks-not-modelled` (code the index
+does not hold calling back into the project between the two sites).
+
+## Handler order: what a program-order YES assumes
+
+A `YES` with the limit `program-order: relied-on-handler-order` counts a DFM-bound event handler as
+running after the WHOLE program-block prefix, up to `Application.Run` -- also after statements that
+follow `Application.CreateForm`. That holds because such a handler fires from the message loop; the
+OnCreate family, handlers the code references and forms created at run time are never ordered, and a
+top-level `ShowModal` / `ProcessMessages` / dialog call in the prefix switches the ordering off.
+Not seen: a message pump inside a ROUTINE the prefix calls, or in a unit initialization. If your
+prefix calls such a routine before the write, read that `YES` as `MAY`. A `NO` never leans on it.
 
 ## --json
 
