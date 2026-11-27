@@ -1777,7 +1777,7 @@ begin
       Inc(i);
       Result.ConceptQuery:= ParamStr(i);  // dl:ok duplicate-code@33b9 -- the one-value flag shape every ParseArgs branch repeats; folding it is a ParseArgs refactor, not this lane
     end
-    { v156 CON-Q } else if ((A = '--place') or (A = '--links')) and (i < ParamCount) then Inc(i) { query --concept: DRagLint.Query.ConceptRepo reads the two values from ParamStr; this arm only keeps them from being taken as the path }
+    { v156 CON-Q } else if (A = '--links') and (i < ParamCount) then Inc(i) { query --concept: DRagLint.Query.ConceptRepo reads the two values from ParamStr; this arm only keeps them from being taken as the path }
     else if (A = '--source') and (i < ParamCount) then begin Inc(i); Result.TextSource:= ParamStr(i); end
     else if A = '--any-order' then Result.TextAnyOrder := True
     else if A = '--substring' then Result.TextSubstring:= True
@@ -4393,6 +4393,8 @@ begin
     else
       Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
     FinishLibraryResolve(Store, LibRun, RanCalls, Length(SectionLibs) > 0, '  ', AItem.DbPath);
+    { v156 INT (CON-I request, spec 2.5): index --all refreshes the field repository copy + caption concepts of a project section too }
+    if (AItem.Mode <> smLibrary) and (ItemDproj <> '') and not AResolveOnly then TIndexPassHooks.RunRepoCopy(Store, ExpandFileName(ItemDproj));
     { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
       were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
       rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun). }
@@ -17884,6 +17886,7 @@ begin
       JCap.AddPair('migrate_members', TJSONBool.Create(True));
       JCap.AddPair('migrate_identifiers', TJSONBool.Create(True)); { 1.38 (D2): file-scope / type / enum #migrate in code }
     JCap.AddPair('old_platform_enum_map', TJSONBool.Create(True)); { 1.43 ENUMMAP: convert-apply --old-platform-db }
+    JCap.AddPair('glyph_stitch', TJSONBool.Create(True)); { 1.56 GLYPH: convert-apply / convert-validate --glyph-stitch promoted }
       { E18 (1.33.0): cycles --fix plans, gates and (with --apply) writes the mechanical
         fix of one circular group -- cycle-fix/1 JSON, exit 0 / 1 / 2. }
       JCap.AddPair('cycle_fix', TJSONBool.Create(True));
