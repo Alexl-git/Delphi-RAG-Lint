@@ -210,6 +210,7 @@ const
   XREF_TXT = 'xref.txt';
   PATH_QUESTION = 'path';
   CROSSES_BOUNDARY = 'crosses-boundary';
+  SENT_NOT_HANDLED = 'sent-not-handled';  { v156 CHB-2: the second question that reads --counterpart-db }
   ISO_UTC = 'yyyy"-"mm"-"dd"T"hh":"nn":"ss"Z"';
   ASKED_ON = 'yyyy"-"mm"-"dd hh":"nn';
   HEX_BASE = 16;
@@ -242,11 +243,12 @@ const
   G_CAP_NAME = 1;
   G_CAP_VALUE = 2;
   { New-DiagramArtifact's per-question regenerate arguments }
-  REGEN_DEPTH: array[0..5] of string = ('butterfly', 'who-calls', 'what-it-calls', 'change-impact',
-    'exception-paths', 'round-trip');
-  REGEN_CAP: array[0..12] of string = ('who-writes', 'who-reads', 'hierarchy', 'wiring', 'protocol-trace',
+  REGEN_DEPTH: array[0..8] of string = ('butterfly', 'who-calls', 'what-it-calls', 'change-impact',
+    'exception-paths', 'round-trip', 'class-diagram', 'value-origin', 'value-use');
+  REGEN_CAP: array[0..20] of string = ('who-writes', 'who-reads', 'hierarchy', 'wiring', 'protocol-trace',
     'shown-where', 'tested-by', 'crosses-boundary', 'exception-paths', 'consumers', 'feeds-from',
-    'lands-where', 'path');
+    'lands-where', 'path', 'class-diagram', 'sequence', 'control-flow', SENT_NOT_HANDLED, 'dependency-matrix',
+    'main-sequence', 'value-origin', 'value-use');
 
   { New-DiagramArtifact.ps1's index.html, its $note for a chart question and its footer, verbatim; 
     the @@NAME@@ tokens are the here-string's variables (the template holds '%', so no Format). }
@@ -776,6 +778,13 @@ begin
   end;
 end;
 
+{ v156 CHB-2: the questions whose answer read the counterpart index, so the regenerate line and the INDEX
+  lines must name it }
+function ReadsCounterpart(const pQuestion: string): Boolean;
+begin
+  Result:= SameText(pQuestion, CROSSES_BOUNDARY) or SameText(pQuestion, SENT_NOT_HANDLED);
+end;
+
 function RegenerateText(const pArgs: TQuestionArgs): string;
 begin
   Result:= Format('drag-lint ask %s --target %s --db "%s"', [pArgs.Question, pArgs.Target, pArgs.DbPath]);
@@ -787,7 +796,7 @@ begin
     Result:= Result + ' --sql-db "' + pArgs.SqlDbPath + '"';
   if QuestionReadsServerIndex(pArgs.Question) then
     Result:= Result + ' --server-db "' + pArgs.ServerDbPath + '"';
-  if SameText(pArgs.Question, CROSSES_BOUNDARY) and (pArgs.CounterpartDb <> '') then
+  if ReadsCounterpart(pArgs.Question) and (pArgs.CounterpartDb <> '') then
     Result:= Result + ' --counterpart-db "' + pArgs.CounterpartDb + '"';
   if SameText(pArgs.Question, 'class-surface') then
     Result:= Result + ' --surface-cap ' + IntToStr(pArgs.SurfaceCap);
@@ -805,7 +814,7 @@ begin
     Result:= Result + ['INDEX ' + pArgs.ServerDbPath + ' (server)'];
   if QuestionReadsSqlIndex(pArgs.Question) then
     Result:= Result + ['INDEX ' + pArgs.SqlDbPath + ' (sql)'];
-  if SameText(pArgs.Question, CROSSES_BOUNDARY) and (pArgs.CounterpartDb <> '') then
+  if ReadsCounterpart(pArgs.Question) and (pArgs.CounterpartDb <> '') then
     Result:= Result + ['INDEX ' + pArgs.CounterpartDb + ' (counterpart)'];
 end;
 
