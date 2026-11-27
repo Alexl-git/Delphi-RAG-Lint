@@ -1,0 +1,35 @@
+{
+  "id": "grid-column-editors",
+  "title": "Grid column editors in the field repository",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "The field repository keeps the in-place editor of each cxGrid column: its PropertiesClassName and its Properties.* lines as the form has them",
+  "intro": "Read this when the editor of a grid column (combo box, image combo, currency edit, ...) should be kept with the column in the field repository. drag-lint repo read-dfm stores PropertiesClassName and the Properties.* lines of every column of a table or banded view in DL_GRID_COLUMNS (schema 5), as the text of the form, and shows a changed editor as one update per value. A schema-4 repository is read as before and the run says the editors were left out.",
+  "wikiPage": "grid-column-editors",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\grid-column-editors.md"
+    }
+  ],
+  "audience": "both",
+  "aliases": ["PropertiesClassName", "Properties", "PROPERTIES_CLASS_NAME", "column editor", "in-place editor"],
+  "related": ["repo-read-dfm", "repo-write-dfm", "field-repository-handlers", "field-repository"],
+  "questions": [
+    {
+      "ask": "Which editor does each grid column of a form have, and how do I keep it in the field repository?",
+      "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file> --apply"
+    },
+    {
+      "ask": "Did the editor of a grid column change since the form was last read?",
+      "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file>"
+    },
+    {
+      "ask": "Why does read-dfm say the editor properties of grid columns are not read?",
+      "command": "drag-lint repo migrate --repo <file> --apply"
+    }
+  ],
+  "access": "cli-only"
+}

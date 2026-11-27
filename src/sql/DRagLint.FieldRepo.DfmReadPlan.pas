@@ -10,7 +10,11 @@ unit DRagLint.FieldRepo.DfmReadPlan;
 
   EVCOLS (rulings 2026-11-23): the TField events and the column events of a DBTable view become event columns of the
   field row (R2); the columns of every table / banded view become DL_GRID_COLUMNS rows (R6), where a column that is gone
-  from the form is an unchecked delete. *)
+  from the form is an unchecked delete.
+
+  1.56 GC-R (GRIDCOL2): a DL_GRID_COLUMNS row also holds the column's in-place editor, PROPERTIES_CLASS_NAME and
+  PROPERTIES (TDfmrGridColumn.PropertiesClassName / Properties), in a repository of schema 5; an older repository is
+  read as before, with one warning that counts the columns whose editor was left out. *)
 
 interface
 
@@ -183,6 +187,7 @@ uses
 const
   FIELDS_TABLE = 'DL_FIELDS_INFO';
   SCHEMA_WITH_INPUTS = 4; // X3 writes DL_FIELD_INPUTS / DL_RELATIONS rows (design 2.3)
+  SCHEMA_WITH_EDITORS = 5; // DL_GRID_COLUMNS has PROPERTIES_CLASS_NAME / PROPERTIES (1.56 GC-R)
   BOOL_FALSE = 'False';
   COL_IS_DEFAULT = 'IS_DEFAULT';
   COL_RELATION = 'RELATION_NAME';
@@ -257,7 +262,7 @@ type
     FormName: string;
     ViewName: string;
     ColumnName: string;
-    Values: TArray<TDfmrPair>; // TABLE_NAME, FIELD_NAME, COLUMN_INDEX; '' = NULL
+    Values: TArray<TDfmrPair>; // TABLE_NAME, FIELD_NAME, COLUMN_INDEX, then in a schema-5 repository PROPERTIES_CLASS_NAME, PROPERTIES; '' = NULL
     function Key: string;
     function Text: string;
   end;
@@ -321,6 +326,8 @@ type
     FOrder: TList<TFieldFacts>;
     FGridRows: TList<TGridRow>;
     FGridSeen: TDictionary<string, Boolean>; // key of every row of FGridRows
+    FEditors: Boolean;        // the repository has the editor columns of DL_GRID_COLUMNS (schema 5)
+    FEditorsLeftOut: Integer; // read columns with an editor that an older repository cannot hold
     FChanges: TList<TFrChange>;
     FItems: TList<TDfmrChangeItem>;
     FColumns: TDfmrColumnCheck; // the repository's schema facts, for SqlFieldColumn
@@ -611,6 +618,7 @@ begin
   FOrder := TList<TFieldFacts>.Create;
   FGridRows := TList<TGridRow>.Create;
   FGridSeen := TDictionary<string, Boolean>.Create;
+  FEditors := RepoSchemaVersion(pRepo) >= SCHEMA_WITH_EDITORS;
   FChanges := TList<TFrChange>.Create;
   FItems := TList<TDfmrChangeItem>.Create;
   FColumns := HasSchemaColumn;
@@ -1811,6 +1819,11 @@ begin
   VRow.ViewName := pView.Name;
   VRow.ColumnName := VColumn.Name;
   VRow.Values := [MakePair(COL_TABLE, VTable), MakePair(COL_FIELD, VField), MakePair(COL_INDEX, IntToStr(pIndex))];
+  if FEditors then
+    VRow.Values := VRow.Values + [MakePair(REPO_COL_PROPERTIES_CLASS_NAME, VColumn.PropertiesClassName),
+      MakePair(REPO_COL_PROPERTIES, VColumn.Properties)]
+  else if (VColumn.PropertiesClassName <> '') or (VColumn.Properties <> '') then
+    Inc(FEditorsLeftOut);
   if VColumn.Name = '' then
     FWarnings.Add(Format('%s %s: column %d has no name: not stored', [ExtractFileName(pForm.FileName), pView.Name, pIndex]))
   else if FGridSeen.TryAdd(VRow.Key, True) then
@@ -2097,7 +2110,7 @@ end;
 procedure TDfmRead.PlanGridForm(const pForm: string; pDeletes: Boolean);
 var
   VQuery: TFDQuery;
-  VForm, VView, VColumn, VTable, VField, VIndex: TField;
+  VForm, VView, VColumn, VTable, VField, VIndex, VClass, VProps: TField;
   VOld: TDictionary<string, TGridRow>;
   VOrder: TArray<TGridRow>;
   VRow: TGridRow;
@@ -2113,6 +2126,8 @@ begin
     VTable := VQuery.FieldByName(COL_TABLE);
     VField := VQuery.FieldByName(COL_FIELD);
     VIndex := VQuery.FieldByName(COL_INDEX);
+    VClass := if FEditors then VQuery.FieldByName(REPO_COL_PROPERTIES_CLASS_NAME) else nil;
+    VProps := if FEditors then VQuery.FieldByName(REPO_COL_PROPERTIES) else nil;
     VOrder := nil;
     while not VQuery.Eof do
     begin
@@ -2120,6 +2135,9 @@ begin
       VRow.ViewName := VView.AsString;
       VRow.ColumnName := VColumn.AsString;
       VRow.Values := [MakePair(COL_TABLE, VTable.AsString), MakePair(COL_FIELD, VField.AsString), MakePair(COL_INDEX, VIndex.AsString)];
+      if FEditors then
+        VRow.Values := VRow.Values + [MakePair(REPO_COL_PROPERTIES_CLASS_NAME, VClass.AsString),
+          MakePair(REPO_COL_PROPERTIES, VProps.AsString)];
       VOld.AddOrSetValue(VRow.Key, VRow);
       VOrder := VOrder + [VRow];
       VQuery.Next;
@@ -2340,6 +2358,9 @@ begin
   end;
   if (pDataset <> '') and (Length(FPlan.Datasets) = 0) then
     raise EDfmReadError.CreateFmt('no dataset %s in the DFM', [pDataset]);
+  if FEditorsLeftOut > 0 then
+    FWarnings.Add(Format('the repository is schema %d: the editor properties of %d grid columns are not read (run repo migrate --apply)',
+      [RepoSchemaVersion(FRepo), FEditorsLeftOut]));
   PlanAll(pFiles, pDataset = '');
   UncheckOffered;
   FPlan.ChangeSet.Changes := FChanges.ToArray;

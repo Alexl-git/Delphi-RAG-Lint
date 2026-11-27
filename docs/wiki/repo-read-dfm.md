@@ -7,7 +7,7 @@ drag-lint repo read-dfm --dfm <file.dfm>[;...] [--dataset <Name>] --direction df
 
 Reads the datasets of a form (one with `--dataset`, all without) and prints the change set that brings the repository
 in line with their persistent fields. Nothing is written without `--apply` or `--select`; the form and its unit are
-never written. The direction is required, there is no default. The repository must be schema 4 (`repo migrate --apply`); `repo gen-handlers` needs schema 4 too.
+never written. The direction is required, there is no default. The repository must be schema 4 or later (`repo migrate --apply`); the editor of a grid column needs schema 5; `repo gen-handlers` needs schema 4 too.
 
 | What | Where it goes |
 |---|---|
@@ -20,6 +20,7 @@ never written. The direction is required, there is no default. The repository mu
 | OnGetText, OnSetText, OnValidate, OnChange | `ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY` of the field row |
 | column events of a TcxGridDBTableView: OnGetDisplayText, OnCustomDrawCell | `GRID_DISPLAYTEXT_BODY`, `GRID_DRAWCELL_BODY` of the row of the column's field; of an unbound column, a banded view or a field without a row: listed, not stored |
 | columns of every TcxGridDBTableView and TcxGridDBBandedTableView | `DL_GRID_COLUMNS`, see below |
+| PropertiesClassName and the `Properties.*` lines of such a column (1.56) | `PROPERTIES_CLASS_NAME`, `PROPERTIES` of its `DL_GRID_COLUMNS` row, see below |
 
 **The table of a dataset** is `UpdateOptions.UpdateTableName`, else `TableName` (`Tools.DB` is `TOOLS`), else the one
 table of its SELECT. A data field of a SELECT belongs to the column its select-list item names, or to the one its
@@ -101,6 +102,12 @@ DataBinding.FieldName without a table. Card, layout and other views, inherited v
 not stored. A stored column that is gone from a form that was read completely is an UNCHECKED delete; `--dataset` limits the read to
 the views of that dataset and proposes no delete. The key is the form NAME: two projects that share a repository and have
 two forms of one name share its rows.
+
+**Column editors (1.56).** The row also holds the column's in-place editor: `PROPERTIES_CLASS_NAME` is its
+`PropertiesClassName`, `PROPERTIES` its `Properties.*` lines as the form has them (a collection, a string list and a
+continued string whole; CRLF between lines, the indentation of the first line removed). A changed editor is one checked
+update per value; a schema-4 repository gets a warning instead and stores the columns without it. Details:
+[grid column editors](grid-column-editors).
 
 **Hand-kept values.** A column the DFM does not state is kept. A value the DFM states differently is a checked change
 (`old -> new`): the DFM wins when you apply, so read the dry run first. A body or lookup wiring of a field that stays a
