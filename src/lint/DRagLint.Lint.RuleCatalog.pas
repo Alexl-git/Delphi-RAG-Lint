@@ -129,7 +129,9 @@ const
     { 1.47 wave 148 lane PQ }
     'quit-from-thread',
     { 152b lane RTTI }
-    'rtti-unavailable'];
+    'rtti-unavailable',
+    { v156 TAINT-1 (G-14) }
+    'taint-log'];
     { 1.52 IDXRANGE3: index-possibly-out-of-range is ON again (owner C3) -- BK-RULEFP fixed the six FP
       classes of the IDXRANGE2 gate, IDXRANGE3 the seven of the FPM2 re-measure (21 FP / 36); re-measured
       0 FP / 12 on YADF and ORM3 CLIENT, 0 / 5 on SERVER (run_v152_IDXRANGE3.ps1) }
@@ -1018,6 +1020,10 @@ begin
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');
     B('taint-command-injection', 'security', 'error', 'Tainted data reaches a process launch sink -- a catalogued source flows across routines into ShellExecute / CreateProcess / WinExec (CWE-78)');
     B('taint-path-traversal', 'security', 'warning', 'Tainted data reaches a file-system path sink -- a catalogued source flows across routines into a file / directory API (CWE-22)');
+    { v156 TAINT-1 }
+    B('taint-deserialization', 'security', 'error', 'Tainted data reaches a deserializer sink -- a catalogued source (request body) flows across routines into a component / object reader (CWE-502); a value cleaned by a deser sanitizer stops the path');
+    B('taint-html-output', 'security', 'error', 'Tainted data reaches an HTML response write -- a catalogued source (request field) flows across routines into a response content member (CWE-79); an encoded value (html sanitizer) stops the path');
+    B('taint-log', 'security', 'warning', 'Tainted data reaches a log sink -- a catalogued source flows across routines into a log call (CWE-117 log forging); an encoded value stops the path', False); { OFF: v156 TAINT-1 (G-14). }
     { lane INC3: the preprocessor's IF symbol table (DRagLint.Diagnostics.PpChecks) }
     B('pp-unresolved-if', 'bug-patterns', 'hint', '$IF names a constant the index cannot resolve -- the directive was taken as False, so the wrong branch (and include) may be indexed');
     { v151 (lane FRAME): rows registered by RegisterProviderRules -- the v151 rule lanes, via DRagLint.V151.Dispatch }

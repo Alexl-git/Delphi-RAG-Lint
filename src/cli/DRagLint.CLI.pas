@@ -14208,8 +14208,9 @@ const
   LINT_GATE_LIFETIME_SHAPE: array[0..2] of string = (
     STREAM_BUFFER_AFTER_FREE_RULE, INTERFACED_OBJECT_NIL_LEAK_RULE, IDENTIFIER_CASE_MISMATCH_RULE);
   { taint wave T2: the store-backed interprocedural taint rules (DRagLint.Lint.TaintRules) }
-  LINT_GATE_TAINT: array[0..2] of string = (
-    'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal');
+  LINT_GATE_TAINT: array[0..5] of string = (
+    'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal',
+    'taint-deserialization', 'taint-html-output', 'taint-log'); { v156 TAINT-1 }
   { lane INC3: the preprocessor's own report (DRagLint.Diagnostics.PpChecks) }
   LINT_GATE_PP: array[0..0] of string = ('pp-unresolved-if');
 { See the forward declaration before ApplyLineMarkers. }

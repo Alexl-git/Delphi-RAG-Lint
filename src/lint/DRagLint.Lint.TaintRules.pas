@@ -80,6 +80,7 @@ uses
   System.SysUtils
   , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- the DF_* kind constants ARE the data_flows contract T0 put in the model; the walker compares exactly those
   , DRagLint.Core.Interfaces
+  , DRagLint.V156.TAINTEXC
   ;
 
 const
@@ -89,6 +90,18 @@ const
   TAINT_RULE_CMD  = 'taint-command-injection';
   /// <summary>Rule id: tainted data reaches a file-system path sink (warning, CWE-22).</summary>
   TAINT_RULE_PATH = 'taint-path-traversal';
+  /// <summary>Rule id (v156 TAINT-1, G-14): tainted data reaches a deserializer sink -- a component or object reader fed from a request body (error, CWE-502).</summary>
+  TAINT_RULE_DESER = 'taint-deserialization';
+  /// <summary>Rule id (v156 TAINT-1, G-14): tainted data reaches an HTML response write that no encoder cleaned (error, CWE-79).</summary>
+  TAINT_RULE_HTML  = 'taint-html-output';
+  /// <summary>Rule id (v156 TAINT-1, G-14): tainted data reaches a log sink (warning, CWE-117); OFF by default.</summary>
+  TAINT_RULE_LOG   = 'taint-log';
+  /// <summary>Sanitizer category of TAINT_RULE_DESER.</summary>
+  TAINT_CAT_DESER  = 'deser';
+  /// <summary>Sanitizer category of TAINT_RULE_HTML.</summary>
+  TAINT_CAT_HTML   = 'html';
+  /// <summary>Sanitizer category of TAINT_RULE_LOG.</summary>
+  TAINT_CAT_LOG    = 'log';
   /// <summary>Sanitizer category of TAINT_RULE_SQL.</summary>
   TAINT_CAT_SQL   = 'sql';
   /// <summary>Sanitizer category of TAINT_RULE_CMD.</summary>
@@ -603,6 +616,9 @@ function RuleCategory(const ARule: string): string;
 begin
   if SameText(ARule, TAINT_RULE_CMD) then Result:= TAINT_CAT_CMD
   else if SameText(ARule, TAINT_RULE_PATH) then Result:= TAINT_CAT_PATH
+  else if SameText(ARule, TAINT_RULE_DESER) then Result:= TAINT_CAT_DESER
+  else if SameText(ARule, TAINT_RULE_HTML) then Result:= TAINT_CAT_HTML
+  else if SameText(ARule, TAINT_RULE_LOG) then Result:= TAINT_CAT_LOG
   else Result:= TAINT_CAT_SQL;
 end;
 
@@ -610,12 +626,15 @@ function RuleCweText(const ARule: string): string;
 begin
   if SameText(ARule, TAINT_RULE_CMD) then Result:= 'CWE-78 OS command injection'
   else if SameText(ARule, TAINT_RULE_PATH) then Result:= 'CWE-22 path traversal'
+  else if SameText(ARule, TAINT_RULE_DESER) then Result:= 'CWE-502 unsafe deserialization'
+  else if SameText(ARule, TAINT_RULE_HTML) then Result:= 'CWE-79 cross-site scripting'
+  else if SameText(ARule, TAINT_RULE_LOG) then Result:= 'CWE-117 log forging'
   else Result:= 'CWE-89 SQL injection';
 end;
 
 function RuleBaseSeverity(const ARule: string): string;
 begin
-  Result:= if SameText(ARule, TAINT_RULE_PATH) then SEV_WARNING else SEV_ERROR;
+  Result:= if SameText(ARule, TAINT_RULE_PATH) or SameText(ARule, TAINT_RULE_LOG) then SEV_WARNING else SEV_ERROR;
 end;
 
 function DropSeverity(const ASev: string): string;
@@ -734,7 +753,7 @@ begin
       Src.Categories:= JStrs(O, 'categories');
       Src.TrustedArgs:= JStrs(O, 'trusted_args');
       for Cat in Src.Categories do
-        if not MatchText(Cat, [TAINT_CAT_SQL, TAINT_CAT_CMD, TAINT_CAT_PATH]) then
+        if not MatchText(Cat, [TAINT_CAT_SQL, TAINT_CAT_CMD, TAINT_CAT_PATH, TAINT_CAT_DESER, TAINT_CAT_HTML, TAINT_CAT_LOG]) then
           raise ELintConfigError.CreateFmt('taint: source "%s" in %s names unknown category "%s"', [Src.Id, AWhat, Cat]);
       if Src.Name <> '' then ACfg.Sources:= ACfg.Sources + [Src];
     end;
@@ -759,7 +778,7 @@ begin
       Snk.ReceiverSuffix:= JStr(O, 'receiver_suffix', '');
       Snk.TypeName      := JStr(O, 'type', '');
       Snk.Cwe           := JStr(O, 'cwe', '');
-      if not MatchText(Snk.Rule, [TAINT_RULE_SQL, TAINT_RULE_CMD, TAINT_RULE_PATH]) then
+      if not MatchText(Snk.Rule, [TAINT_RULE_SQL, TAINT_RULE_CMD, TAINT_RULE_PATH, TAINT_RULE_DESER, TAINT_RULE_HTML, TAINT_RULE_LOG]) then
         raise ELintConfigError.CreateFmt('taint: sink "%s" in %s names unknown rule "%s"', [Snk.Id, AWhat, Snk.Rule]);
       if Snk.Name <> '' then ACfg.Sinks:= ACfg.Sinks + [Snk];
     end;
@@ -924,6 +943,7 @@ begin
   W:= TTaintWalker.Create(AStore, ALibStore, ACfg);
   try
     Result:= W.Run(AScopeFileIds);
+    Result:= Result + TV156TaintExc.Check(AStore, ALibStore, AScopeFileIds); { v156 TAINT-1.1: taint through exceptions (lane FA-2) }
     AStats:= W.Stats;
   finally
     W.Free;
