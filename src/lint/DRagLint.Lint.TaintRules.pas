@@ -2313,6 +2313,8 @@ begin
     end;
     for W in FStores[AStore].GetFieldWriters(Owners, ARow.SrcName) do
     begin
+      { v156 FIXRA (REV-1 #1): a VALUE row (ValClass <> '') is no taint carrier, as in RowsOf }
+      if W.ValClass <> '' then Continue;
       Inc(FStats.RowsRead);
       WS:= Sym(AStore, W.SymbolId);
       Hop:= Loc(AStore, WS, W.FileId, W.DstLine, W.DstCol,
@@ -2367,6 +2369,8 @@ begin
       if S.Kind = skVarDecl then Inc(Decls);
     for W in FStores[AStore].GetGlobalWriters(ARow.SrcName, 0) do
     begin
+      { v156 FIXRA (REV-1 #1): a VALUE row (ValClass <> '') is no taint carrier, as in RowsOf }
+      if W.ValClass <> '' then Continue;
       Inc(FStats.RowsRead);
       WS:= Sym(AStore, W.SymbolId);
       Hop:= Loc(AStore, WS, W.FileId, W.DstLine, W.DstCol,
