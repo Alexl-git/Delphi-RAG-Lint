@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.56.0-alpha -- 2026-11-28
+## v1.56.0-alpha -- 2026-11-27
 
 - LINT (LINTFIX-B): lint cleanups in code outside query / charts / report / cli (fixes, reviewed dl:ok markers re-stamped, stale markers removed); no behaviour change.
 - LINT (G32, G-32): new rule `math-single-overload` (warning, OFF): `Max` / `Min` / `Power` on Single arguments or float literals whose result goes to a Double, Extended or Real. Wiki: v156-math-dfm-rules.
