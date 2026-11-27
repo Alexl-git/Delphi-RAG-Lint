@@ -213,7 +213,12 @@ type
     function SkipComment(var pPos: Integer): Boolean;
     function SkipString(pPos: Integer): Integer;
     function SkipWord(pPos: Integer): Integer;
-    function StringContext(pIndex: Integer): Integer;
+    function TokenContext(pIndex: Integer): Integer;
+    function OpenContext(pOpen: Integer): Integer;
+    function AssignContext(pColon: Integer): Integer;
+    function ConstName(pIndex: Integer): Integer;
+    function IsWordToken(pIndex: Integer): Boolean;
+    function UnitCodeEnd: Integer;
     function FindClassHeader(const pClass: string): Integer;
     function AfterAncestors(pToken: Integer): Integer;
     function ReadDecl(var pToken: Integer; var pDecls: TArray<TDfmwDecl>): Boolean;
@@ -239,11 +244,18 @@ type
     /// <returns>The number of tokens.</returns>
     function Mentions(const pText: string): Integer;
     /// <summary>True when a string literal of the code that REFERS to a field has the name as a word: the name alone, an
-    /// entry of a list `A;B` or `A:D`, a part of a filter. A reference is an argument of FieldByName / FindField / Locate /
-    /// Lookup, an index of FieldValues, a value given to Filter, IndexFieldNames, MasterFields, KeyFields, LookupKeyFields, LookupResultField,
-    /// ListField, DataField, FieldName or Sort, or a `:name` parameter of a SQL text (SQL.Add, SQL.Text).</summary>
-    /// <remarks>1.55 Q17 B (owner 2026-11-26): any other string (a message, a caption, a log line) only has the same
-    /// word and does not count; 1.54 counted every string.</remarks>
+    /// entry of a list `A;B` or `A:D`, a part of a filter. A reference is a literal anywhere in the argument list of
+    /// FieldByName / FindField / Locate / Lookup (a nested call or a concatenation included), anywhere in the value given
+    /// to Filter, IndexFieldNames, MasterFields, KeyFields, LookupKeyFields, LookupResultField, ListField, DataField,
+    /// FieldName or Sort (`Filter := Format('F > %d', [N])`, `'A;' + 'F'`), an index in square brackets after a name,
+    /// `)` or `]` (`DataSet['F']`, `FieldValues['F']`), or a `:name` parameter anywhere in a SQL text (SQL.Add,
+    /// SQL.Text). A constant `C = 'F'` or `C: string = 'F'` of the unit counts where its NAME stands in one of those
+    /// places.</summary>
+    /// <remarks>1.55 Q17 B (owner 2026-11-26): any other string (a message, a caption, a log line, a set constructor,
+    /// an argument of Format in a message) only has the same word and does not count; 1.54 counted every string. Not
+    /// followed: a variable that holds the name (`S := 'F'; FieldByName(S)`), a resourcestring, a constant of another
+    /// unit. An index of any other string-keyed property (`Ini.Values['F']`) does count: the unit is not typed here, and
+    /// a field delete that is refused once too often is undone by hand, one that breaks at run time is not seen.</remarks>
     /// <param name="pName">A field name (case-insensitive).</param>
     /// <returns>True when found.</returns>
     function NamesInString(const pName: string): Boolean;
@@ -268,9 +280,11 @@ type
     /// <param name="pParams">Parameter list without the parentheses.</param>
     /// <param name="pBody">Lines between `begin` and `end;`, each ending in a line end (any; they get the unit's).</param>
     /// <remarks>The declaration goes on a line of its own before the first token after the component declarations
-    /// (fields before methods); the method before `initialization`, `finalization` or the final `end.`.</remarks>
-    /// <exception cref="EDfmWriteError">The class is missing or declared twice, the unit already has the name, or
-    /// either place is not a line of its own outside a conditional.</exception>
+    /// (fields before methods); the method before `initialization`, `finalization`, the `begin` of a unit that ends in
+    /// `begin ... end.`, or the final `end.`.</remarks>
+    /// <exception cref="EDfmWriteError">The class is missing or declared twice, the unit already has the name,
+    /// either place is not a line of its own outside a conditional, or the blocks of the unit do not pair up to its
+    /// final `end.` (the place of the method cannot be told).</exception>
     procedure AddMethod(const pClass, pName, pParams, pBody: string);
   end;
 
@@ -345,14 +359,28 @@ const
   LF = 10;
   CR = 13;
   QUOTE = 39; // apostrophe
-  { what the string token of the code is, see StringContext; the OFFSETs count tokens back from the string }
+  { what a token of the code is part of, see TokenContext }
   STRING_PLAIN = 0;
   STRING_FIELD = 1;
   STRING_SQL = 2;
-  OFFSET_PROP = 3;         // Prop := 'text'
-  OFFSET_SQL_ASSIGN = 5;   // SQL.Text := 'text'
   OFFSET_SQL_CALL = 3;     // SQL.Add('text'): the string is inside the parenthesis, counted from it
+  OFFSET_TYPED_CONST = 4;  // Name: string = 'text'
+  OFFSET_CONST = 2;        // Name = 'text'
+  OFFSET_ASSIGN_PROP = 1;  // Prop := ..., counted back from the colon
+  OFFSET_ASSIGN_SQL = 3;   // SQL.Text := ..., counted back from the colon
   REFERENCE_CALLS: array[0..3] of string = ('FieldByName', 'FindField', 'Locate', 'Lookup');
+  { where the walk back from a token ends: the statement or declaration it is part of starts after one of these }
+  STATEMENT_STOPS: array[0..15] of string = (';', 'begin', 'then', 'else', 'do', 'try', 'repeat', 'finally', 'except', 'end',
+    'const', 'var', 'type', 'implementation', 'interface', 'resourcestring');
+  { words that can stand before `[` without making it an index: a set constructor, an attribute }
+  NO_INDEX_WORDS: array[0..27] of string = ('in', 'of', 'array', 'then', 'else', 'do', 'to', 'downto', 'and', 'or', 'not', 'xor',
+    'div', 'mod', 'shl', 'shr', 'is', 'as', 'if', 'while', 'until', 'case', 'public', 'private', 'protected', 'published',
+    'strict', 'class');
+  { what opens a block that its own `end` closes }
+  BLOCK_STARTS: array[0..3] of string = ('begin', 'try', 'case', 'asm');
+  TYPE_BLOCK_STARTS: array[0..4] of string = ('record', 'class', 'object', 'interface', 'dispinterface');
+  WORD_RECORD = 'record';
+  WORD_BEGIN = 'begin';
   REFERENCE_PROPS: array[0..9] of string = ('Filter', 'IndexFieldNames', 'MasterFields', 'KeyFields', 'LookupKeyFields',
     'LookupResultField', 'ListField', 'DataField', 'FieldName', 'Sort');
   FIRST_NON_ASCII = $80;
@@ -1392,66 +1420,121 @@ begin
     end;
 end;
 
-{ The kind of reference the string token at pIndex is: 0 = none, 1 = a field reference, 2 = a SQL text. }
-function TDfmUnitDocument.StringContext(pIndex: Integer): Integer;
+function TDfmUnitDocument.IsWordToken(pIndex: Integer): Boolean;
+begin
+  Result := (pIndex >= 0) and (pIndex <= High(FTokens)) and (FTokens[pIndex].Text <> '') and
+    (CharInSet(FTokens[pIndex].Text[1], ['A'..'Z', 'a'..'z', '_', '&']));
+end;
+
+{ What the open parenthesis or bracket at pOpen makes of everything inside it: an argument list of a call that takes
+  field names, a SQL.Add, or an index after a name (DataSet['X'], FieldValues['X'], Fields[..]['X']). }
+function TDfmUnitDocument.OpenContext(pOpen: Integer): Integer;
 var
-  VOpen, VDepth: Integer;
+  VBefore: string;
 begin
   Result := STRING_PLAIN;
-  if (pIndex >= OFFSET_PROP) and (FTokens[pIndex - 1].Text = '=') and (FTokens[pIndex - 2].Text = ':') then
-  begin
-    if MatchText(FTokens[pIndex - OFFSET_PROP].Text, REFERENCE_PROPS) then
-      Exit(STRING_FIELD);
-    if SameText(FTokens[pIndex - OFFSET_PROP].Text, 'Text') and (pIndex >= OFFSET_SQL_ASSIGN)
-      and SameText(FTokens[pIndex - OFFSET_SQL_ASSIGN].Text, 'SQL') then
-      Exit(STRING_SQL);
+  if pOpen < 1 then
     Exit;
-  end;
-  { DataSet.FieldValues['X'] (the default array property of the field list) names a field like FieldByName }
-  if (pIndex >= OFFSET_PROP - 1) and (FTokens[pIndex - 1].Text = '[') and SameText(FTokens[pIndex - 2].Text, 'FieldValues') then
-    Exit(STRING_FIELD);
-  { the call the string is an argument of: back to the unmatched open parenthesis of the statement }
-  VDepth := 0;
-  VOpen := pIndex - 1;
-  while (VOpen >= 0) and (FTokens[VOpen].Text <> ';') do
+  VBefore := FTokens[pOpen - 1].Text;
+  if FTokens[pOpen].Text = '[' then
   begin
-    if FTokens[VOpen].Text = ')' then
-      Inc(VDepth)
-    else if FTokens[VOpen].Text = '(' then
-    begin
-      if VDepth = 0 then
-        Break;
-      Dec(VDepth);
-    end;
-    Dec(VOpen);
-  end;
-  if (VOpen < 1) or (FTokens[VOpen].Text <> '(') then
-    Exit;
-  if MatchText(FTokens[VOpen - 1].Text, REFERENCE_CALLS) then
+    if (VBefore = ')') or (VBefore = ']') or (VBefore = '^') or (IsWordToken(pOpen - 1) and not MatchText(VBefore, NO_INDEX_WORDS)
+      and not MatchText(VBefore, STATEMENT_STOPS)) then
+      Result := STRING_FIELD;
+  end
+  else if MatchText(VBefore, REFERENCE_CALLS) then
     Result := STRING_FIELD
-  else if SameText(FTokens[VOpen - 1].Text, 'Add') and (VOpen >= OFFSET_SQL_CALL) and SameText(FTokens[VOpen - 2].Text, '.')
-    and SameText(FTokens[VOpen - OFFSET_SQL_CALL].Text, 'SQL') then
+  else if SameText(VBefore, 'Add') and (pOpen >= OFFSET_SQL_CALL) and SameText(FTokens[pOpen - 2].Text, '.')
+    and SameText(FTokens[pOpen - OFFSET_SQL_CALL].Text, 'SQL') then
     Result := STRING_SQL;
+end;
+
+{ What the assignment whose colon is the token pColon gives its whole right-hand side: Prop := ..., SQL.Text := ... }
+function TDfmUnitDocument.AssignContext(pColon: Integer): Integer;
+begin
+  Result := STRING_PLAIN;
+  if pColon < OFFSET_ASSIGN_PROP then
+    Exit;
+  if MatchText(FTokens[pColon - OFFSET_ASSIGN_PROP].Text, REFERENCE_PROPS) then
+    Result := STRING_FIELD
+  else if SameText(FTokens[pColon - OFFSET_ASSIGN_PROP].Text, 'Text') and (pColon >= OFFSET_ASSIGN_SQL)
+    and SameText(FTokens[pColon - OFFSET_ASSIGN_SQL].Text, 'SQL') then
+    Result := STRING_SQL;
+end;
+
+{ The kind of reference the token at pIndex (a string, or the name of a constant) is part of: 0 = none, 1 = a field
+  reference, 2 = a SQL text. The WHOLE expression counts (1.55 review #6): the walk goes back to the start of the statement,
+  out through every parenthesis and bracket the token is inside; the first of them that takes field names decides, else the
+  assignment the expression is the right-hand side of. A parenthesis that closed before the token is skipped. }
+function TDfmUnitDocument.TokenContext(pIndex: Integer): Integer;
+var
+  VI, VDepth: Integer;
+  VText: string;
+begin
+  Result := STRING_PLAIN;
+  VDepth := 0;
+  VI := pIndex - 1;
+  while (VI >= 0) and (Result = STRING_PLAIN) do
+  begin
+    VText := FTokens[VI].Text;
+    if MatchText(VText, STATEMENT_STOPS) then
+      Exit;
+    if (VText = ')') or (VText = ']') then
+      Inc(VDepth)
+    else if ((VText = '(') or (VText = '[')) and (VDepth > 0) then
+      Dec(VDepth)
+    else if (VText = '(') or (VText = '[') then
+      Result := OpenContext(VI)
+    else if (VDepth = 0) and (VText = '=') and (VI >= 1) and (FTokens[VI - 1].Text = ':') then
+      Exit(AssignContext(VI - 1));
+    Dec(VI);
+  end;
+end;
+
+{ The token that names the constant whose value the string token at pIndex is (`Name = 'x';`, `Name: string = 'x';`);
+  -1 = the string is no constant. }
+function TDfmUnitDocument.ConstName(pIndex: Integer): Integer;
+begin
+  Result := -1;
+  if (pIndex < OFFSET_CONST) or (pIndex >= High(FTokens)) or (FTokens[pIndex + 1].Text <> ';') or (FTokens[pIndex - 1].Text <> '=') then
+    Exit;
+  if (pIndex >= OFFSET_TYPED_CONST) and (FTokens[pIndex - OFFSET_TYPED_CONST + 1].Text = ':') then
+    Result := pIndex - OFFSET_TYPED_CONST
+  else if FTokens[pIndex - OFFSET_CONST].Text <> ':' then
+    Result := pIndex - OFFSET_CONST;
+  if not IsWordToken(Result) then
+    Result := -1;
 end;
 
 function TDfmUnitDocument.NamesInString(const pName: string): Boolean;
 var
-  VIndex, VContext: Integer;
+  VIndex, VUse, VConst: Integer;
   VWord, VParam: string;
+
+  function Refers(pContext: Integer): Boolean;
+  begin
+    Result := ((pContext = STRING_FIELD) and TRegEx.IsMatch(FTokens[VIndex].Text, VWord, [roIgnoreCase])) or
+      ((pContext = STRING_SQL) and TRegEx.IsMatch(FTokens[VIndex].Text, VParam, [roIgnoreCase]));
+  end;
+
 begin
   Result := False;
   VWord := '(?<!\w)' + TRegEx.Escape(pName) + '(?!\w)';
   VParam := ':(OLD_|NEW_)?' + TRegEx.Escape(pName) + '(?!\w)';
   for VIndex := 0 to High(FTokens) do
-    if FTokens[VIndex].Text.StartsWith('''') then
+    if FTokens[VIndex].Text.StartsWith('''') and (TRegEx.IsMatch(FTokens[VIndex].Text, VWord, [roIgnoreCase]) or TRegEx.IsMatch(FTokens[VIndex].Text, VParam, [roIgnoreCase])) then
     begin
-      VContext := StringContext(VIndex);
-      if ((VContext = STRING_FIELD) and TRegEx.IsMatch(FTokens[VIndex].Text, VWord, [roIgnoreCase])) or
-        ((VContext = STRING_SQL) and TRegEx.IsMatch(FTokens[VIndex].Text, VParam, [roIgnoreCase])) then
+      if Refers(TokenContext(VIndex)) then
         Exit(True);
+      { a constant: every place its name stands in }
+      VConst := ConstName(VIndex);
+      if VConst < 0 then
+        Continue;
+      for VUse := 0 to High(FTokens) do
+        if (VUse <> VConst) and SameText(FTokens[VUse].Text, FTokens[VConst].Text) and Refers(TokenContext(VUse)) then
+          Exit(True);
     end;
 end;
-
 function TDfmUnitDocument.Mentions(const pText: string): Integer;
 var
   VToken: TDfmwToken;
@@ -1516,6 +1599,55 @@ begin
   Edit(VStart, LineEnd(VDecls[VIdx].Finish) - VStart, '');
 end;
 
+{ Where the routines of the unit end: the position of its final `end.`, or of the `begin` that end closes (a unit whose
+  initialization is written `begin ... end.`). Blocks are paired from the top: begin / try / case / asm and the type
+  bodies (record, class, object, interface with a body) each have an `end`; the `case` of a variant record has none. }
+function TDfmUnitDocument.UnitCodeEnd: Integer;
+var
+  VStack: TArray<Integer>;
+  VI, VAfter: Integer;
+  VText: string;
+  VOpens: Boolean;
+begin
+  Result := -1;
+  VStack := nil;
+  for VI := 0 to High(FTokens) do
+  begin
+    VText := FTokens[VI].Text;
+    if SameText(VText, WORD_END) then
+    begin
+      if (VI < High(FTokens)) and (FTokens[VI + 1].Text = '.') then
+      begin
+        if Length(VStack) = 0 then
+          Exit(FTokens[VI].Pos);
+        if (Length(VStack) = 1) and SameText(FTokens[VStack[0]].Text, WORD_BEGIN) then
+          Exit(FTokens[VStack[0]].Pos);
+        Break;
+      end;
+      if Length(VStack) = 0 then
+        Break;
+      SetLength(VStack, Length(VStack) - 1);
+      Continue;
+    end;
+    VOpens := MatchText(VText, BLOCK_STARTS);
+    { a variant part: `case` directly inside a record }
+    if VOpens and SameText(VText, 'case') and (Length(VStack) > 0) and SameText(FTokens[VStack[High(VStack)]].Text, WORD_RECORD) then
+      VOpens := False;
+    if (not VOpens) and SameText(VText, WORD_RECORD) then
+      { every record has a body, but the generic constraint `<T: record>` }
+      VOpens := (VI >= High(FTokens)) or not MatchStr(FTokens[VI + 1].Text, ['>', ',', ';', ')'])
+    else if (not VOpens) and MatchText(VText, TYPE_BLOCK_STARTS) and (VI > 0) and ((FTokens[VI - 1].Text = '=') or SameText(FTokens[VI - 1].Text, 'packed')) then
+    begin
+      { `class;` `class(TBase);` `class of T` and `interface;` have no body }
+      VAfter := AfterAncestors(VI);
+      VOpens := (VAfter <= High(FTokens)) and (FTokens[VAfter].Text <> ';') and not SameText(FTokens[VAfter].Text, 'of');
+    end;
+    if VOpens then
+      VStack := VStack + [VI];
+  end;
+  Fail('the blocks of the unit do not pair up to its final end.: the place for a new method cannot be told');
+end;
+
 procedure TDfmUnitDocument.AddMethod(const pClass, pName, pParams, pBody: string);
 var
   VDecls: TArray<TDfmwDecl>;
@@ -1553,7 +1685,7 @@ begin
       Break;
     end
     else if (VImpl >= 0) and SameText(FTokens[VI].Text, WORD_END) and (VI < High(FTokens)) and (FTokens[VI + 1].Text = '.') then
-      VAt := FTokens[VI].Pos;
+      VAt := UnitCodeEnd;
   if VAt < 0 then
     Fail('the unit has no implementation section with a final end.');
   VLine := LineStart(VAt);

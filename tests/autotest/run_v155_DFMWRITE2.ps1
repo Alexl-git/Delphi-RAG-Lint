@@ -166,6 +166,25 @@ try {
   $rs = Write-Dfm ($hn + @('--select', $sel)) $hdfm $y2
   Check 'E11b selecting the blocked event is refused, the files stay as they were' (($rs.Code -eq 2) -and ($rs.Out -match 'change \d+ is blocked: handler memOrdersPRICEGetText is the name of two fields') -and ((Text $hdfm) -ceq $hOldDfm) -and ((Text $hpas) -ceq $hOldPas)) $rs.Out
 
+  # ---- REVFIX (1.55 final review): a unit that ends in `begin ... end.` -- the new method goes BEFORE that block ----
+  foreach ($case in @(@('e12a', "begin`n  RegisterClass(TfrmAllKinds);`nend.", 'an initialization block written begin..end.'),
+      @('e12b', "procedure Tail;`nbegin`n  if True then`n  begin`n    case 1 of`n      1: ;`n    end;`n  end;`nend;`n`nbegin`n  try`n    RegisterClass(TfrmAllKinds);`n  finally`n  end;`nend.", 'nested begin / case / try before and inside it'))) {
+    $ef = NewForms $case[0]
+    $epas = Join-Path $ef 'uAllKinds.pas'; $edfm = Join-Path $ef 'uAllKinds.dfm'
+    $tail = $case[1].Replace("`n", "`r`n")
+    $et = Text $epas
+    $cut = $et.LastIndexOf("end.")
+    Put $epas ($et.Substring(0, $cut) + $tail + "`r`n")
+    $r = Write-Dfm @() $edfm
+    PutSel $sel $r @(IdOf $r 'insert uAllKinds\.dfm memOrdersQTY OnGetText')
+    $rs = Write-Dfm @('--select', $sel) $edfm
+    $np = Text $epas
+    $at = $np.IndexOf('procedure TfrmAllKinds.memOrdersQTYGetText(')
+    $block = $np.LastIndexOf("`r`nbegin`r`n")
+    Check "E12 $($case[2]): the method is written before the block, the block is whole" (($rs.Code -eq 0) -and ($at -gt 0) -and ($at -lt $block) -and $np.EndsWith($tail.Substring($tail.LastIndexOf("begin`r`n  ")) + "`r`n") -and ($np.Substring(0, $at).EndsWith("end;`r`n`r`n")) -and
+      ($np.Substring($at, $block - $at) -match "(?s)^procedure TfrmAllKinds\.memOrdersQTYGetText\(.*?\r\nend;\r\n$")) ($rs.Out + "`n" + $np.Substring([Math]::Max(0, $np.Length - 900)))
+  }
+  # control: the fixture itself ends in a plain `end.` and E3c pins the method before it
   # ---- Q3(2): removing a field takes its grid items ----
   $rf = NewForms 'remove'
   $rdfm = Join-Path $rf 'uAllKinds.dfm'; $rpas = Join-Path $rf 'uAllKinds.pas'
