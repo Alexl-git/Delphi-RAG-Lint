@@ -43,6 +43,12 @@ function Index-Fixture([string]$Dir, [string]$Db) {
 # The extractor rows of ds_field_accesses come from another lane (EXT); this runner seeds them from the fixture's
 # own literal accesses so the verb is tested on the table shape, not on the extractor. -Fields = names to seed.
 function Seed-Code([string]$Db, [string[]]$Names) {
+  # v156 INT: an engine with the EXT-B3 emitter has already written the rows of the fixture's literal accesses;
+  # then nothing is seeded and the 'code' kind is proven on REAL ds_field_accesses rows.
+  $have = 0
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query 'SELECT COUNT(*) FROM ds_field_accesses' --db $Db --json 2>$null }
+  if ($LASTEXITCODE -eq 0 -and $raw) { $have = [int]((($raw -join "`n") | ConvertFrom-Json).rows[0][0]) }
+  if ($have -gt 0) { Write-Host "  code rows: $have emitted by the engine (no seed)"; return }
   $py = Join-Path $OutDir 'seed.py'
   $lines = @('import sqlite3, sys', 'c = sqlite3.connect(sys.argv[1])',
     "f = c.execute(`"select id from files where path like '%Unit1.pas'`").fetchone()[0]",
