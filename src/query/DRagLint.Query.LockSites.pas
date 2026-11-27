@@ -332,12 +332,15 @@ const
   COL_CLASS_ID = 15;
   COL_END_COL = 16;
   { Every resolved name that follows a by-argument lock call on its line: the candidates for its argument.
-    Same placeholders as SQL_SITES; %0:s holds the by-argument call names only. }
+    %1:s as in SQL_SITES; %2:s = the lock functions (no receiver), %3:s = the TMonitor calls. The join goes through
+    the routine (idx_refs_enclosing): `Exit` alone is thousands of refs, and refs has no index on the line. }
   SQL_ARG_REFS =
     'SELECT a.file_id, a.start_line, a.start_col, a.symbol_id, s.kind, s.qualified_name ' +
-    'FROM refs r JOIN refs a ON a.file_id = r.file_id AND a.start_line = r.start_line AND a.start_col > r.start_col ' +
+    'FROM refs r JOIN refs a ON a.enclosing_symbol_id = r.enclosing_symbol_id AND a.file_id = r.file_id ' +
+    'AND a.start_line = r.start_line AND a.start_col > r.start_col ' +
     'JOIN symbols s ON s.id = a.symbol_id ' +
-    'WHERE r.kind IN (''call'', ''member-access'') AND r.name_text COLLATE NOCASE IN (%0:s)%1:s';
+    'WHERE r.kind IN (''call'', ''member-access'') AND (r.name_text COLLATE NOCASE IN (%2:s) ' +
+    'OR (r.name_text COLLATE NOCASE IN (%3:s) AND r.receiver_text COLLATE NOCASE IN (''TMonitor'', ''System.TMonitor'')))%1:s';
   ARG_FILE_ID = 0;
   ARG_LINE = 1;
   ARG_COL = 2;
@@ -348,6 +351,9 @@ const
   SCOPE_ROUTINE = ' AND r.enclosing_symbol_id = %d';
 
 type
+  { Which call names of LOCK_CALLS a SQL list holds. }
+  TCallNames = (cnAll, cnFunctions, cnMonitor);
+
   { One load: the index, and what it had to look up on the way (argument names, source lines, type ancestry). }
   TLockSiteLoader = class
   private
@@ -355,7 +361,7 @@ type
     FArgRefs: TDictionary<string, TArgRef>;
     FLines  : TDictionary<Int64, TArray<string>>;
     FBaseOf : TDictionary<string, string>;
-    function NewQuery(const pSqlFmt: string; pByArgOnly: Boolean; const pScope: string): TFDQuery;
+    function NewQuery(const pSqlFmt, pScope: string): TFDQuery;
     procedure LoadArgRefs(const pScope: string);
     function SourceLine(pFileId: Int64; const pPath: string; pLine: Integer): string;
     function LockTypeOf(const pTypeText: string; pFileId: Int64): string;
@@ -428,14 +434,15 @@ begin
     if LOCK_CALLS[I].TypeLeaf = pTypeLeaf then Exit(True);
 end;
 
-{ The call names of LOCK_CALLS as a SQL list, each once; pByArgOnly keeps the by-argument rows only. }
-function CallNameList(pByArgOnly: Boolean): string;
+{ The call names of LOCK_CALLS as a SQL list, each once: all of them, the lock functions, or the TMonitor calls. }
+function CallNameList(pWhich: TCallNames): string;
 begin
   Result:= '';
   var Seen:= TList<string>.Create;
   try
     for var I:= Low(LOCK_CALLS) to High(LOCK_CALLS) do
-      if (LOCK_CALLS[I].ByArg or not pByArgOnly) and not Seen.Contains(QuotedStr(LOCK_CALLS[I].Call)) then
+      if ((pWhich = cnAll) or (LOCK_CALLS[I].ByArg and ((LOCK_CALLS[I].TypeLeaf = T_NONE) = (pWhich = cnFunctions))))
+        and not Seen.Contains(QuotedStr(LOCK_CALLS[I].Call)) then
         Seen.Add(QuotedStr(LOCK_CALLS[I].Call));
     Result:= string.Join(', ', Seen.ToArray);
   finally
@@ -592,18 +599,18 @@ begin
 end;
 
 { The caller frees the query. }
-function TLockSiteLoader.NewQuery(const pSqlFmt: string; pByArgOnly: Boolean; const pScope: string): TFDQuery;
+function TLockSiteLoader.NewQuery(const pSqlFmt, pScope: string): TFDQuery;
 begin
   Result:= TFDQuery.Create(nil);
   Result.Connection:= (FStore as TSQLiteSymbolStore).GetConnection;
-  Result.SQL.Text  := Format(pSqlFmt, [CallNameList(pByArgOnly), pScope]);
+  Result.SQL.Text  := Format(pSqlFmt, [CallNameList(cnAll), pScope, CallNameList(cnFunctions), CallNameList(cnMonitor)]);
 end;
 
 procedure TLockSiteLoader.LoadArgRefs(const pScope: string);
 var
   Ref: TArgRef;
 begin
-  var Query:= NewQuery(SQL_ARG_REFS, True, pScope);
+  var Query:= NewQuery(SQL_ARG_REFS, pScope);
   try
     Query.Open;
     while not Query.Eof do
@@ -743,7 +750,7 @@ begin
   LoadArgRefs(pScope);
   var Ends: TArray<Integer>:= nil;
   var IndexOf:= TDictionary<string, Integer>.Create;
-  var Query:= NewQuery(SQL_SITES, False, pScope);
+  var Query:= NewQuery(SQL_SITES, pScope);
   try
     Query.Open;
     var LastPosition:= '';
