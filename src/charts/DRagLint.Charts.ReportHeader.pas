@@ -329,11 +329,11 @@ const
   GROUP_ASKED = 4;
   GROUP_ENGINE = 5;
   /// Canonical order and spelling of the COMMAND arguments (header contract).
-  KNOWN_NAMES: array[0..9] of string = ('Target', 'To', 'Project', 'In', 'Depth', 'Cap',
-    'SurfaceCap', 'Control', 'Mode', 'MaxRows');
+  KNOWN_NAMES: array[0..11] of string = ('Target', 'To', 'Project', 'In', 'Depth', 'Cap',
+    'SurfaceCap', 'Control', 'Mode', 'MaxRows', 'Since', 'MinSupport'); { v156 G46: the last two }
   /// The CLI spelling of KNOWN_NAMES, index for index: the flag names of `drag-lint ask`.
-  KNOWN_CLI_NAMES: array[0..9] of string = ('target', 'to', 'project', 'in', 'depth', 'cap',
-    'surface-cap', 'control', 'mode', 'max-rows');
+  KNOWN_CLI_NAMES: array[0..11] of string = ('target', 'to', 'project', 'in', 'depth', 'cap',
+    'surface-cap', 'control', 'mode', 'max-rows', 'since', 'min-support');
   /// The known arguments whose value is always double-quoted.
   QUOTED_NAMES: array[0..4] of string = ('Target', 'To', 'Project', 'In', 'Control');
   ENTITIES: array[0..3] of string = ('&lt;', '&gt;', '&amp;', '&quot;');

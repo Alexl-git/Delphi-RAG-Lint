@@ -590,7 +590,7 @@ const
   V156_CAPTION = 1;
   V156_LEFT = 2;
   V156_RIGHT = 3;
-  V156_QUESTIONS: array[0..8] of array[V156_ID..V156_RIGHT] of string = (
+  V156_QUESTIONS: array[0..9] of array[V156_ID..V156_RIGHT] of string = (
     ('class-diagram', 'Class diagram of this type...', 'classes', 'relations'),
     ('sequence', 'Sequence of calls in this routine...', 'calls', 'participants'),
     ('control-flow', 'Control flow of this routine...', 'nodes', 'edges'),
@@ -600,7 +600,9 @@ const
     ('architecture-delta', 'What changed in the unit dependencies (before and after)...', 'edges changed', 'new cycles'),
     ('risk', 'Risky untested routines (complexity x missing coverage)...', 'routines', 'without coverage data'), { v156 G51 }
     { v156 G41 }
-    ('hotspots', 'Hotspots: size and complexity (treemap)...', 'units', 'above complexity 20'));
+    ('hotspots', 'Hotspots: size and complexity (treemap)...', 'units', 'above complexity 20'),
+    { v156 G46 }
+    ('change-coupling', 'Units that change together...', 'units', 'coupled pairs'));
   NO_ROW = -1;
 
 var

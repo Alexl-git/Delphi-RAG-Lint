@@ -443,6 +443,7 @@
         <DCCReference Include="..\charts\DRagLint.Charts.Q.ControlFlow.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.Q.SentNotHandled.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.Q.DepMatrix.pas"/>
+        <DCCReference Include="..\charts\DRagLint.Charts.Q.ChangeCoupling.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.Q.MainSequence.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.Q.ArchDelta.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.Q.Hotspots.pas"/>

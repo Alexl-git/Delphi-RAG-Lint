@@ -272,6 +272,7 @@ uses
   DRagLint.Charts.Q.ControlFlow in '..\charts\DRagLint.Charts.Q.ControlFlow.pas',
   DRagLint.Charts.Q.SentNotHandled in '..\charts\DRagLint.Charts.Q.SentNotHandled.pas',
   DRagLint.Charts.Q.DepMatrix in '..\charts\DRagLint.Charts.Q.DepMatrix.pas',
+  DRagLint.Charts.Q.ChangeCoupling in '..\charts\DRagLint.Charts.Q.ChangeCoupling.pas',
   DRagLint.Charts.Q.MainSequence in '..\charts\DRagLint.Charts.Q.MainSequence.pas',
   DRagLint.Charts.Q.ArchDelta in '..\charts\DRagLint.Charts.Q.ArchDelta.pas',
   DRagLint.Charts.Q.Hotspots in '..\charts\DRagLint.Charts.Q.Hotspots.pas',

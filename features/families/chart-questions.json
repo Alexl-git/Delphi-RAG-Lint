@@ -49,6 +49,7 @@
     "control-flow":    { "wikiPage": "ask-control-flow", "aliases": ["flow graph", "basic blocks"] },
     "sent-not-handled": { "wikiPage": "ask-sent-not-handled", "aliases": ["unhandled commands", "commands never handled"] },
     "risk":             { "aliases": ["crap", "untested complexity", "coverage risk"] },
-    "hotspots":         { "wikiPage": "ask-hotspots", "aliases": ["treemap", "size map", "complexity map"] }
+    "hotspots":         { "wikiPage": "ask-hotspots", "aliases": ["treemap", "size map", "complexity map"] },
+    "change-coupling":  { "aliases": ["change coupling", "co-change", "units that change together", "hidden coupling"] }
   }
 }
