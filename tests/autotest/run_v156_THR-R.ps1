@@ -37,6 +37,7 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if ($Exe -eq '') { $Exe = Join-Path $Root 'src\cli\Win64\Debug\drag-lint.exe' }
 if (-not (Test-Path $Exe)) { Write-Host "SKIP: engine not found: $Exe"; exit 0 }
 $Exe  = (Resolve-Path $Exe).Path
+# positive-control: lock-order-inversion
 $Rule = 'lock-order-inversion'
 
 $script:Fail = 0

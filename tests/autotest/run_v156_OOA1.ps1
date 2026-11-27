@@ -28,6 +28,8 @@ function Run-Fixture($name, $rule) {
 }
 function Line-Of($file, $text) { (Select-String -LiteralPath $file -SimpleMatch $text | Select-Object -First 1).LineNumber }
 
+# positive-control: ambiguous-unit-reference
+# positive-control: assignment-narrows
 # ---- G-06 ambiguous-unit-reference ----
 $r = Run-Fixture 'g06' 'ambiguous-unit-reference'
 $h = $r.Hits

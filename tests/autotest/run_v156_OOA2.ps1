@@ -45,6 +45,8 @@ function Get-Wanted([string]$Rule) {
     Get-Content $f.FullName | ForEach-Object { $n++; if ($_ -match "// FIRE $Rule\b") { "{0}:{1} {2}" -f $f.Name, $n, $Rule } } })
 }
 
+# positive-control: abstract-method-not-overridden
+# positive-control: handler-type-never-raised
 $AllRules = 'abstract-method-not-overridden', 'handler-type-never-raised'
 $NeedIndex = $AllRules
 $OffRules  = @()

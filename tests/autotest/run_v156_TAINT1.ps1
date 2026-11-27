@@ -33,6 +33,9 @@ try {
   $common = @('lint-all', '--db', $db, '--json', '--quiet')
   $all = Findings ($common + @('--config', $cfg, '--enable', 'taint-log'))
   $all | ForEach-Object { Write-Host ("  {0} {1} [{2}] {3}" -f $_.rule, $_.start_line, $_.severity, $_.message) }
+# positive-control: taint-deserialization
+# positive-control: taint-html-output
+# positive-control: taint-log
   $pos = @(
     @('taint-deserialization', 21, 'error'),   # Deser sink, reached from LoadBodyTwoHops (two hops)
     @('taint-deserialization', 26, 'error'),   # direct

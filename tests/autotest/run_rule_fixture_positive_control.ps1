@@ -164,6 +164,19 @@ $OwnRunner = @{
     'unit-used-by-no-unit'      = 'tests\autotest\run_v152_PROJ2.ps1'
     'extract-constant'          = 'tests\autotest\run_v152_XCONST_fix.ps1'
     'review-marker-remeasured'  = 'tests\autotest\run_v152_MARK_remeasured.ps1'
+    # v156 INT-FINAL: lane runners that already hold hit + non-hit arms; marker lines added to the runners where missing
+    'abstract-method-not-overridden' = 'tests\autotest\run_v156_OOA2.ps1'
+    'ambiguous-unit-reference' = 'tests\autotest\run_v156_OOA1.ps1'
+    'assignment-narrows' = 'tests\autotest\run_v156_OOA1.ps1'
+    'dunitx-attribute-hygiene' = 'tests\autotest\run_v156_OOB2.ps1'
+    'field-could-be-local' = 'tests\autotest\run_v156_OOB1.ps1'
+    'handler-type-never-raised' = 'tests\autotest\run_v156_OOA2.ps1'
+    'lock-order-inversion' = 'tests\autotest\run_v156_THR-R.ps1'
+    'repeated-string-literal' = 'tests\autotest\run_v156_OOB1.ps1'
+    'taint-deserialization' = 'tests\autotest\run_v156_TAINT1.ps1'
+    'taint-html-output' = 'tests\autotest\run_v156_TAINT1.ps1'
+    'taint-log' = 'tests\autotest\run_v156_TAINT1.ps1'
+    'variant-in-loop' = 'tests\autotest\run_v156_OOB2.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }
