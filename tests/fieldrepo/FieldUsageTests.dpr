@@ -185,7 +185,49 @@ begin
   end;
 end;
 
+{ I1..I5: a project DB written by the REAL indexer from tests\fixtures\v156\UIP (run_v156_UIM.ps1 passes --db FILE), so a
+  change of the dfm_properties / dfm_objects schema fails here and not only in a hand-built table. The code kind is not
+  covered: ds_field_accesses has rows only once the code extractor of the 1.56 EXT lanes is in the engine. }
+procedure TestIndexed(const pPath: string);
+var
+  vDb: TFDConnection;
 begin
+  vDb := TFDConnection.Create(nil);
+  try
+    vDb.DriverName := 'SQLite';
+    vDb.Params.Values['Database'] := pPath;
+    vDb.LoginPrompt := False;
+    vDb.Connected := True;
+    Check('I1 an indexed DataField + grid column + lookup list: CUSTNAME is control, grid column and lookup',
+      FieldUseKinds(vDb, 'CUSTNAME') = [fukDfmControl, fukGridColumn, fukLookup]);
+    Check('I2 CUSTID is only a lookup key', FieldUseKinds(vDb, 'custid') = [fukLookup]);
+    Check('I3 CITY is only a lookup (second name of ListField)', FieldUseKinds(vDb, 'CITY') = [fukLookup]);
+    Check('I4 an unused field has no kind', FieldUseKinds(vDb, 'NOSUCH') = []);
+    Check('I5 the control use names its component and class',
+      (Length(FindFieldUses(vDb, 'CUSTNAME')) > 0) and (FindFieldUses(vDb, 'CUSTNAME')[0].Component = 'edName') and
+      (FindFieldUses(vDb, 'CUSTNAME')[0].ComponentClass = 'TDBEdit'));
+  finally
+    vDb.Free;
+  end;
+end;
+
+begin
+  if (ParamCount = 2) and (ParamStr(1) = '--db') then
+  begin
+    try
+      TestIndexed(ParamStr(2));
+    except
+      on E: Exception do
+      begin
+        Inc(GFail);
+        Writeln('FAIL unhandled ', E.ClassName, ': ', E.Message);
+      end;
+    end;
+    Writeln('SUMMARY pass=', GPass, ' fail=', GFail);
+    if GFail > 0 then
+      ExitCode := 1;
+    Exit;
+  end;
   GDir := TPath.Combine(TPath.GetTempPath, 'dl-fieldusage-' + IntToStr(GetCurrentProcessId));
   ForceDirectories(GDir);
   try

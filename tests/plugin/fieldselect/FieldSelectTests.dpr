@@ -301,6 +301,42 @@ end;
 
 { ---- with the output of a real engine ---- }
 
+procedure TestUsageIcons;
+const
+  KINDS: array[TFsUseKind] of string = ('dfm', 'grid', 'lookup', 'code');
+var
+  VSel: TFieldSelection;
+  VKind: TFsUseKind;
+  VI: Integer;
+begin
+  CheckText('icon of no use = 0 (blank)', IntToStr(UsageIcon([])), '0');
+  for VKind := Low(TFsUseKind) to High(TFsUseKind) do
+    CheckText('icon of kind ' + KINDS[VKind] + ' = 1 shl ord', IntToStr(UsageIcon([VKind])), IntToStr(1 shl Ord(VKind)));
+  CheckText('icon of all kinds = last of the strip', IntToStr(UsageIcon([fuDfmControl, fuGridColumn, fuLookup, fuCode])),
+    IntToStr(USAGE_ICON_COUNT - 1));
+  VSel := TFieldSelection.Create(FirstDataset(READ_JSON));
+  try
+    CheckText('a fresh row has no use', IntToStr(UsageIcon(VSel[0].Used)), '0');
+    for VKind := Low(TFsUseKind) to High(TFsUseKind) do
+    begin
+      VSel.SetUsage('qty', [VKind]);
+      VI := RowOf(VSel, 'QTY');
+      CheckText('QTY with kind ' + KINDS[VKind] + ' gets its icon', IntToStr(UsageIcon(VSel[VI].Used)),
+        IntToStr(1 shl Ord(VKind)));
+      Writeln('ICON QTY ', KINDS[VKind], ' ', UsageIcon(VSel[VI].Used));
+    end;
+    VSel.SetUsage('QTY', [fuDfmControl, fuCode]);
+    CheckText('two kinds add up', IntToStr(UsageIcon(VSel[RowOf(VSel, 'QTY')].Used)), '9');
+    CheckText('other rows are not touched', IntToStr(UsageIcon(VSel[RowOf(VSel, 'ID')].Used)), '0');
+    VSel.SetUsage('NOSUCH', [fuCode]);
+    CheckText('an unknown field is ignored', IntToStr(UsageIcon(VSel[RowOf(VSel, 'ID')].Used)), '0');
+    CheckText('usage text of two kinds', UsageText([fuDfmControl, fuCode]), 'edit control, code');
+    CheckText('usage text of none', UsageText([]), '');
+  finally
+    VSel.Free;
+  end;
+end;
+
 procedure Clicks(pSel: TFieldSelection; pFrom: Integer);
 var
   VI: Integer;
@@ -371,7 +407,8 @@ begin
       TestDatasetToUse;
       TestPlan;
       TestText;
-  TestAfterWrite;
+      TestAfterWrite;
+      TestUsageIcons;
       Writeln(Format('Summary: pass=%d fail=%d', [GPass, GFail]));
       if GFail > 0 then
         ExitCode := 1;

@@ -172,8 +172,12 @@ var
 begin
   VName := 'F' + IntToStr(pPpi);
   VSelection := TFieldSelection.Create(Dataset);
+  VSelection.SetUsage('QTY', [fuGridColumn, fuCode]);
   VForm := TFsFieldsForm.CreateFor('drag-lint: Select Fields of qryOrders', VSelection, pPpi);
   try
+    Check(VName + ' usage icons', (VForm.List.Items[1].ImageIndex = 10) and (VForm.List.Items[0].ImageIndex = 0) and
+      (VForm.List.SmallImages.Count = USAGE_ICON_COUNT) and (VForm.List.Items[1].SubItems[1] = 'grid column, code'),
+      IntToStr(VForm.List.Items[1].ImageIndex));
     ShowHidden(VForm);
     CheckText(VName + ' layout', LayoutProblem(VForm), '');
     Check(VName + ' scaled', (VForm.CurrentPPI = pPpi) and (VForm.List.Columns[0].Width = MulDiv(NAME_COLUMN, pPpi, PPI_100)),
