@@ -275,7 +275,7 @@ try {
   Check 'B6c control: no project anywhere -> full, and the plan SAYS it is the default for want of a project' (($r.Code -eq 0) -and ($r.Out -notmatch 'BLOCKED: BDE') -and ($r.Out -match '(?m)^bde policy full for uAllKinds\.dfm: default: no (project folder|fieldrepo\.bde in) ')) $r.Out
   $rj = Write-Dfm ($bn + @('--json')) (Join-Path $od 'uAllKinds.dfm') $rpRepo
   $jl = @($rj.Out -split "`n" | Where-Object { $_.StartsWith('{') })
-  $jb = if ($jl.Count -gt 0) { @(($jl[-1] | ConvertFrom-Json).bde) } else { @() }
+  $jb = if ($jl.Count -gt 0) { @(($jl[-1] | ConvertFrom-Json | ForEach-Object { $_ }).bde) } else { @() }
   Check 'B6d --json carries it: bde[].dfm / policy / source' (($jb.Count -eq 1) -and ($jb[0].policy -eq 'readonly') -and ($jb[0].dfm -like '*uAllKinds.dfm') -and ($jb[0].source -like 'fieldrepo.bde of *')) $rj.Out
   # B8: a value that is not a string is refused, not read as full
   foreach ($bad in @('true', '0', '["none"]', '{"x": 1}', 'null')) {

@@ -99,6 +99,7 @@ try {
   $nulOut = Join-Path $work 'nul.out'
   $cmdLine = '"' + $Exe + '" repo update-orm --repo "' + $rp + '" --code-dir "' + $o + '" --table ORDERS --no-backup --apply < NUL > "' + $nulOut + '" 2>&1'
   $pn = Start-Process -FilePath cmd.exe -ArgumentList ('/c "' + $cmdLine + '"') -Wait -NoNewWindow -PassThru
+  $null = $pn.Handle
   $nulText = [IO.File]::ReadAllText($nulOut)
   Check 'U7b stdin = NUL: no question is printed, the region is kept, REFUSED, exit 1' (($pn.ExitCode -eq 1) -and ($nulText -match 'REFUSED region 2, hand-edited') -and
     ($nulText -notmatch 'Overwrite it with the generated code') -and ((Hash $iu) -eq $h)) $nulText

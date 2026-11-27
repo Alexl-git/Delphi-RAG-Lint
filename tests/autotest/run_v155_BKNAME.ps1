@@ -111,7 +111,7 @@ COMMIT;
   $size = (Get-Item -LiteralPath (Join-Path $dbDir 'mine.fbk')).Length
   $r = Run @('repo', 'backup', '--connection', $cs, '--verify', 'quick', '--backup-name', 'MINE.FBK')
   Check 'B2c the same name again -> exit 1, the file is untouched, nothing more recorded' (($r.Code -eq 1) -and ($r.Out -match 'exists already') -and ((Get-Item -LiteralPath (Join-Path $dbDir 'mine.fbk')).Length -eq $size) -and
-    (@((Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json).backups).Count -eq 2)) $r.Out
+    (@((Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json | ForEach-Object { $_ }).backups).Count -eq 2)) $r.Out
   $other = Join-Path $work 'elsewhere'
   $r = Run @('repo', 'backup', '--connection', $cs, '--verify', 'quick', '--backup-name', 'in-dir.fbk', '--backup-dir', $other)
   Check 'B2d --backup-dir still picks the folder' (($r.Code -eq 0) -and (Test-Path -LiteralPath (Join-Path $other 'in-dir.fbk'))) $r.Out
@@ -119,9 +119,9 @@ COMMIT;
   $old = Join-Path $dbDir 'scratch-20200101-000000000.fbk'
   Copy-Item -LiteralPath $j1.file -Destination $old
   (Get-Item -LiteralPath $old).LastWriteTimeUtc = (Get-Item -LiteralPath $j1.file).LastWriteTimeUtc
-  $m = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+  $m = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   $e = $m.backups | Where-Object { $_.file -eq $j1.file } | Select-Object -First 1
-  $copy = $e | ConvertTo-Json | ConvertFrom-Json
+  $copy = $e | ConvertTo-Json | ConvertFrom-Json | ForEach-Object { $_ }
   $copy.file = $old
   $copy.created_utc = '2020-01-01T00:00:00.000Z'
   $m.backups = @($m.backups) + @($copy)

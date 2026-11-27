@@ -31,8 +31,8 @@ try {
   $r = Run @('repo', 'backup', '--repo', $repo, '--json')
   Check 'm1 --repo --json -> exit 1'                        ($r.Code -eq 1) $r.Out
   Check 'm2 ... does not speak of a database backup nobody asked for' ($r.Out -notmatch 'does not go with a database backup') $r.Out
-  Check 'm3 ... names the flag and says to drop it'         (($r.Out -match '"--json"') -and ($r.Out -match 'drop')) $r.Out
-  Check 'm4 ... names what the text backup takes'           ($r.Out -match '--repo, --project and --output') $r.Out
+  Check 'm3 ... names the flag and says to drop it'         (($r.Out -match '--json is not supported') -and ($r.Out -match 'drop --json')) $r.Out
+  Check 'm4 ... names what the text backup takes'           ($r.Out -match 'only the database backup, with --connection, prints JSON') $r.Out
   Check 'm5 ... wrote no text backup'                       (-not (Test-Path -LiteralPath "$repo.txt"))
 
   $r = Run @('repo', 'backup', '--repo', $repo, '--connection', 'Database=C:\x.fdb;User_Name=SYSDBA;Password=pw')

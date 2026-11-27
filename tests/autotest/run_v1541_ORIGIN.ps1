@@ -90,7 +90,7 @@ try {
   Check 'O10c joins summary line' (Has $r 'joins: 3 datasets; 7 calc, 1 lookup, 10 data fields with a table; 13 without') $r.Out
   $j = Dfm $dfm $x @('--json')
   $o = $null
-  try { $o = $j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json } catch { }
+  try { $o = $j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $jd = if ($o) { @($o.datasets | Where-Object { $_.dataset -eq 'qryJ' })[0] } else { $null }
   Check 'O10d --json: join tables, noTable reasons, totals' (($null -ne $jd) -and (($jd.join -join ' ') -eq 'ORDERS TOOLS') -and (@($jd.noTable | Where-Object { $_.field -eq 'Mixed' -and $_.why -like 'the calc code reads 2 tables*' }).Count -eq 1) -and ($o.totals.joins.datasets -eq 3) -and ($o.totals.joins.calc -eq 7) -and ($o.totals.joins.without -eq 13)) $j.Out
   # O8 with schema facts
