@@ -1,0 +1,35 @@
+{
+  "id": "convert-glyph-stitch",
+  "title": "Glyph strip stitching",
+  "group": "component-conversion",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "convert-apply and convert-validate --glyph-stitch: slices and stitches a TBitmap glyph strip per a book's G[I/N] expressions; advertised as info capability glyph_stitch",
+  "intro": "Convert a form whose images are glyph strips: add --glyph-stitch and the G[I/N] links of the book are realised on the .dfm surface instead of refused.",
+  "wikiPage": "convert-glyph-stitch",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\convert-glyph-stitch.md"
+    }
+  ],
+  "audience": "both",
+  "aliases": ["--glyph-stitch", "G[I/N]", "glyph_stitch"],
+  "related": ["convert-apply", "convert-validate", "convrules-glyph"],
+  "questions": [
+    {
+      "ask": "Convert a form whose images are glyph strips",
+      "command": "drag-lint convert-apply --unit <F.pas> --rules <book.rules> --db <file.sqlite> --castlib <casts> --glyph-stitch --apply"
+    },
+    {
+      "ask": "Does the book have a glyph link the engine cannot read the slot count of?",
+      "command": "drag-lint convert-validate --rules <book.rules> --glyph-stitch --db <file.sqlite>"
+    }
+  ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-11-26",
+    "by": "ENGINE"
+  }
+}
