@@ -4377,7 +4377,296 @@ begin
   end;
 end; // function
 
-class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@486a, method-too-long@868a, cyclomatic-complexity@d985, cognitive-complexity@a935 -- REVIEWED 2026-11-21 SLZ-S05: 661 lines (INT-FINAL 1.52.3 re-stamp: 659 lines, 53 locals); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+{ v156 FP-PR: WHICH CALLEE FACTS PROVE "THIS UNIT IS NEEDED FOR INLINE EXPANSION" (H2443).
+
+  dcc expands an `inline` routine at the call site, so the CALLING unit must list every unit
+  the routine's own text reaches, or it reports H2443 "Inline function 'TFDParams.GetItem' has
+  not been expanded because unit 'System.Classes' is not specified in USES list". Such a unit
+  is named by nothing in the caller, so unused-unit-in-uses called it a dead import (measured
+  on the ORM3 server: System.Classes through TFDParams.GetItem, Data.SqlTimSt through
+  TFDParam.SetAsSQLTimeStamp, Data.FmtBcd through TFDParam.SetAsFMTBCD).
+
+  A candidate unit C in the uses list of file F is kept when some unit X, also in F's uses
+  list, declares in its interface an inline routine R with BOTH:
+
+    CALLER FACT (F may expand R) -- one of
+      * F has a ref whose name is R's name;
+      * R is accessor-shaped (Get<P> / Set<P>, a method of a class or record) and F has a ref
+        named <P>: the property access is what expands it. The index does not store which
+        accessor a property names, hence the name shape;
+      * R is accessor-shaped, its class has an `indexed default` property, and F has an
+        index-access ref (`Coll[I]` names no member at all).
+      Matched by NAME, not by resolved id, because the usual X is a library unit: its symbols
+      live in the library store and the project's refs to them stay unresolved.
+
+    CALLEE FACT (R's text reaches C) -- one of
+      * a RESOLVED ref whose enclosing symbol is R (its implementation header and body: the
+        parameter and result types, every call / read / member access) lands on a symbol
+        declared in C;
+      * an ancestor of R's class is declared in C. `Result:= TFDParam(inherited Items[I])`
+        reaches TCollection, and the library index records no ref for an `inherited` member
+        access, so the heritage chain stands in for it.
+
+  Deliberately one-sided: a same-named member elsewhere, or an inline method that never
+  touches its ancestor, also keeps C. That loses a true finding; the opposite error tells the
+  user to delete a unit the build needs. A NON-inline routine proves nothing (dcc needs no
+  unit for its body), and X must be in F's uses list (dcc reports X itself first otherwise).
+
+  Cost: the routine list of X is one child scan, memoised per unit; X's refs are read (one
+  GetReferencesFromFile, memoised) only when a file actually triggers one of its routines,
+  and nothing here runs until a unit is otherwise about to be reported. }
+const
+  CInlineIndexTrigger      = '#index';       { no identifier can collide with it }
+  CInlineAccessorPrefixLen = 3;              { 'Get' / 'Set' }
+  CRefKindIndexAccess      = 'index-access';
+  CAttributeSuffix         = 'attribute';
+  CStemSep                 = ';';
+
+type
+  { One unit's inline routines. FTriggers / FOwnerOf are filled by the scan; FNeedsOf by Load. }
+  TInlineUnitFacts = class
+  private
+    FStore   : ISymbolStore;                        { the store that holds the unit; nil = not indexed }
+    FFileId  : Int64;
+    FTriggers: TDictionary<string, TArray<Int64>>;  { lowercase caller-side name -> inline routine ids }
+    FOwnerOf : TDictionary<Int64, Int64>;           { inline routine id -> its class / record id, 0 = unit level }
+    FNeedsOf : TDictionary<Int64, string>;          { inline routine id -> ';stem;stem;' of the units its text reaches }
+    FLoaded  : Boolean;
+  public
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+  { The answer to "does an inline routine F may expand need this unit?", memoised per run.
+    Not thread-safe; owned by one TProjectLintRules.Run. }
+  TInlineNeeds = class
+  private
+    FStore   : ISymbolStore;
+    FLibStore: ISymbolStore;
+    FFacts   : TObjectDictionary<string, TInlineUnitFacts>;
+    function FactsFor(const pUnitName: string): TInlineUnitFacts;
+    procedure Scan(const pFrom: ISymbolStore; const pUnitName: string; pFacts: TInlineUnitFacts);
+    procedure Load(pFacts: TInlineUnitFacts);
+  public
+    constructor Create(const pStore, pLibStore: ISymbolStore);
+    destructor Destroy; override;
+    { True when pCandidate is reached by an inline routine of another unit in pUses that
+      pRefNames (the file's lowercase ref names, CInlineIndexTrigger for an index access) triggers. }
+    function Proves(const pUses: TArray<TUnitUse>; pRefNames: TDictionary<string, Boolean>; const pCandidate: string): Boolean;
+  end;
+
+function HasDirective(const pDirectives, pWord: string): Boolean;
+begin
+  Result:= (' ' + LowerCase(pDirectives) + ' ').Contains(' ' + pWord + ' ');
+end;
+
+constructor TInlineUnitFacts.Create;
+begin
+  inherited Create;
+  FTriggers:= TDictionary<string, TArray<Int64>>.Create;
+  FOwnerOf := TDictionary<Int64, Int64>.Create;
+  FNeedsOf := TDictionary<Int64, string>.Create;
+end;
+
+destructor TInlineUnitFacts.Destroy;
+begin
+  FTriggers.Free;
+  FOwnerOf.Free;
+  FNeedsOf.Free;
+  inherited;
+end;
+
+constructor TInlineNeeds.Create(const pStore, pLibStore: ISymbolStore);
+begin
+  inherited Create;
+  FStore   := pStore;
+  FLibStore:= pLibStore;
+  FFacts   := TObjectDictionary<string, TInlineUnitFacts>.Create([doOwnsValues]);
+end;
+
+destructor TInlineNeeds.Destroy;
+begin
+  FFacts.Free;
+  inherited;
+end;
+
+function TInlineNeeds.FactsFor(const pUnitName: string): TInlineUnitFacts;
+var
+  Key: string;
+begin
+  Key:= LowerCase(pUnitName);
+  if FFacts.TryGetValue(Key, Result) then Exit;
+  Result:= TInlineUnitFacts.Create;
+  FFacts.Add(Key, Result);
+  Scan(FStore, pUnitName, Result);
+  if Result.FStore = nil then Scan(FLibStore, pUnitName, Result);
+end;
+
+procedure TInlineNeeds.Scan(const pFrom: ISymbolStore; const pUnitName: string; pFacts: TInlineUnitFacts);
+
+  procedure AddTrigger(const pName: string; pId: Int64);
+  var
+    Ids: TArray<Int64>;
+  begin
+    if pName = '' then Exit;
+    if not pFacts.FTriggers.TryGetValue(pName, Ids) then Ids:= nil;
+    pFacts.FTriggers.AddOrSetValue(pName, Ids + [pId]);
+  end;
+
+  function IsInlineRoutine(const pSym: TSymbol): Boolean;
+  begin
+    Result:= (pSym.Kind in [skProcedure, skFunction, skMethod]) and HasDirective(pSym.Directives, 'inline');
+  end;
+
+  procedure AddMembers(const pOwner: TSymbol);
+  var
+    Members   : TArray<TSymbol>;
+    M         : TSymbol;
+    HasDefault: Boolean;
+    Prefix    : string;
+  begin
+    Members:= pFrom.FindAllChildSymbols(pOwner.Id);
+    HasDefault:= False;
+    for M in Members do
+      if (M.Kind = skProperty) and HasDirective(M.Directives, 'default') and HasDirective(M.Directives, 'indexed') then
+        HasDefault:= True;
+    for M in Members do
+    begin
+      if not IsInlineRoutine(M) then Continue;
+      pFacts.FOwnerOf.AddOrSetValue(M.Id, pOwner.Id);
+      AddTrigger(LowerCase(M.Name), M.Id);
+      Prefix:= Copy(M.Name, 1, CInlineAccessorPrefixLen);
+      if (Length(M.Name) <= CInlineAccessorPrefixLen) or not (SameText(Prefix, 'Get') or SameText(Prefix, 'Set')) then Continue;
+      AddTrigger(LowerCase(Copy(M.Name, CInlineAccessorPrefixLen + 1, MaxInt)), M.Id);
+      if HasDefault then AddTrigger(CInlineIndexTrigger, M.Id);
+    end;
+  end;
+
+var
+  U : TSymbol;
+  Ch: TSymbol;
+begin
+  if pFrom = nil then Exit;
+  for U in pFrom.FindSymbolsByExactName(pUnitName) do
+  begin
+    if U.Kind <> skUnit then Continue;
+    pFacts.FStore := pFrom;
+    pFacts.FFileId:= U.FileId;
+    for Ch in pFrom.FindAllChildSymbols(U.Id) do
+    begin
+      if not SameText(Ch.Section, 'interface') then Continue;
+      if Ch.Kind in [skClass, skRecord] then
+        AddMembers(Ch)
+      else if IsInlineRoutine(Ch) then
+      begin
+        pFacts.FOwnerOf.AddOrSetValue(Ch.Id, 0);
+        AddTrigger(LowerCase(Ch.Name), Ch.Id);
+      end;
+    end;
+    Break;
+  end;
+end;
+
+procedure TInlineNeeds.Load(pFacts: TInlineUnitFacts);
+var
+  StemOfFile : TDictionary<Int64, string>;
+  FileOfSym  : TDictionary<Int64, Int64>;
+  StemsOfType: TDictionary<Int64, string>;
+
+  { '' for the unit itself and for an unknown file: neither is a unit the caller must add. }
+  function StemOf(pFileId: Int64): string;
+  begin
+    if (pFileId <= 0) or (pFileId = pFacts.FFileId) then Exit('');
+    if StemOfFile.TryGetValue(pFileId, Result) then Exit;
+    Result:= LowerCase(ChangeFileExt(ExtractFileName(pFacts.FStore.GetFilePath(pFileId)), ''));
+    StemOfFile.Add(pFileId, Result);
+  end;
+
+  procedure Need(pRoutine: Int64; const pStem: string);
+  var
+    Cur: string;
+  begin
+    if pStem = '' then Exit;
+    if not pFacts.FNeedsOf.TryGetValue(pRoutine, Cur) then Cur:= CStemSep;
+    if not Cur.Contains(CStemSep + pStem + CStemSep) then pFacts.FNeedsOf.AddOrSetValue(pRoutine, Cur + pStem + CStemSep);
+  end;
+
+  { ';stem;stem;' of the units that declare the type's resolved ancestors. }
+  function AncestorStems(pTypeId: Int64): string;
+  var
+    Anc : TTypeAncestor;
+    Stem: string;
+  begin
+    if StemsOfType.TryGetValue(pTypeId, Result) then Exit;
+    Result:= CStemSep;
+    for Anc in pFacts.FStore.GetTransitiveAncestors(pTypeId) do
+    begin
+      Stem:= StemOf(Anc.FileId);
+      if (Stem <> '') and not Result.Contains(CStemSep + Stem + CStemSep) then Result:= Result + Stem + CStemSep;
+    end;
+    StemsOfType.Add(pTypeId, Result);
+  end;
+
+var
+  Ref   : TReference;
+  Target: Int64;
+  Pair  : TPair<Int64, Int64>;
+  Stem  : string;
+begin
+  pFacts.FLoaded:= True;
+  StemOfFile := TDictionary<Int64, string>.Create;
+  FileOfSym  := TDictionary<Int64, Int64>.Create;
+  StemsOfType:= TDictionary<Int64, string>.Create;
+  try
+    for Ref in pFacts.FStore.GetReferencesFromFile(pFacts.FFileId) do
+    begin
+      if (Ref.SymbolId <= 0) or not pFacts.FOwnerOf.ContainsKey(Ref.EnclosingSymbolId) then Continue;
+      if not FileOfSym.TryGetValue(Ref.SymbolId, Target) then
+      begin
+        Target:= pFacts.FStore.GetSymbolById(Ref.SymbolId).FileId;
+        FileOfSym.Add(Ref.SymbolId, Target);
+      end;
+      Need(Ref.EnclosingSymbolId, StemOf(Target));
+    end;
+    for Pair in pFacts.FOwnerOf do
+    begin
+      if Pair.Value <= 0 then Continue;
+      for Stem in AncestorStems(Pair.Value).Split([CStemSep], TStringSplitOptions.ExcludeEmpty) do
+        Need(Pair.Key, Stem);
+    end;
+  finally
+    StemOfFile.Free;
+    FileOfSym.Free;
+    StemsOfType.Free;
+  end;
+end;
+
+function TInlineNeeds.Proves(const pUses: TArray<TUnitUse>; pRefNames: TDictionary<string, Boolean>; const pCandidate: string): Boolean;
+var
+  Key  : string;
+  U    : TUnitUse;
+  Facts: TInlineUnitFacts;
+  Pair : TPair<string, TArray<Int64>>;
+  Id   : Int64;
+  Needs: string;
+begin
+  Result:= False;
+  Key:= CStemSep + LowerCase(pCandidate) + CStemSep;
+  for U in pUses do
+  begin
+    if SameText(U.UnitName, pCandidate) then Continue;
+    Facts:= FactsFor(U.UnitName);
+    for Pair in Facts.FTriggers do
+    begin
+      if not pRefNames.ContainsKey(Pair.Key) then Continue;
+      if not Facts.FLoaded then Load(Facts);
+      for Id in Pair.Value do
+        if Facts.FNeedsOf.TryGetValue(Id, Needs) and Needs.Contains(Key) then Exit(True);
+    end;
+  end;
+end;
+
+class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@4bb0, method-too-long@f9e0, cyclomatic-complexity@649d, cognitive-complexity@3e9d -- REVIEWED 2026-11-21 SLZ-S05: 661 lines (v156 FP-PR re-stamp: 677 lines, 54 locals); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
   const AOptInRules: TArray<string>; const AOnlyFileId: Int64;
   const AWholeGraph: TFunc<string, TArray<TLintFinding>>; const ASiblingNames: TSiblingProjectLister): TArray<TLintFinding>;
@@ -4426,6 +4715,8 @@ var
   { unused-unit-in-uses (1.40, UNUSEDUNIT-INLINE): resolved call target id ->
     lowercase unit stem when that routine is `inline`, '' otherwise. }
   InlineUnitOfSym: TDictionary<Int64, string>      ;
+  { unused-unit-in-uses (v156 FP-PR): the units an inline routine the file may expand reaches (H2443). }
+  InlineNeeds   : TInlineNeeds                      ;
   { Per-rule cost attribution, printed only under DRAGLINT_PROFILE. `lint-all`'s
     phase profiler can say "project-rules cost N seconds" but not WHICH of the
     seven rules in this pass spent it, and the answer decided the fix: on YADF,
@@ -5089,6 +5380,7 @@ begin
   UsesOfCanon  := TDictionary<string, TArray<string>>.Create;
   ProjRoots    := nil; { built on the first InitDepVerdict that needs a reach set }
   InlineUnitOfSym:= TDictionary<Int64, string>     .Create;
+  InlineNeeds:= TInlineNeeds.Create(AStore, ALibraryStore);
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
   Shared     := TSharedScope.Create(AStore, ASiblingStore, ASiblingNames);
@@ -5356,7 +5648,22 @@ begin
             begin
               AddRefName(RefdUnitStems, Ref.NameText    );
               AddRefName(RefdUnitStems, Ref.ReceiverText);
+              { v156 FP-PR: `Coll[I]` names no member; it is what expands an inline default-property accessor. }
+              if SameText(Ref.Kind, CRefKindIndexAccess) then RefdUnitStems.AddOrSetValue(CInlineIndexTrigger, True);
             end;
+            { v156 FP-PR: AN ATTRIBUTE IS A USE OF <Name>Attribute. `[Inject]` names InjectAttribute by its
+              short form and `[Spring.Container.Common.Inject]` emits no ref at all, so the unit that
+              declares the attribute class read as a dead import (removing it: W1025 unsupported
+              language feature 'custom attribute', and the injection silently stops). The attributes
+              table carries both spellings; the last dotted segment joins the names, with and without
+              the suffix. }
+            if AStore.HasAttributes then
+              for var Attr: TAttributeRow in AStore.GetAttributes(Fid) do
+              begin
+                var AttrName: string:= Copy(Attr.Name, LastDelimiter('.', Attr.Name) + 1, MaxInt);
+                AddRefName(RefdUnitStems, AttrName);
+                AddRefName(RefdUnitStems, AttrName + CAttributeSuffix);
+              end;
             { UNUSEDUNIT-INLINE (1.40): A CALL TO AN `inline` ROUTINE NEEDS ITS
               UNIT. `I.Gray.At(1)` names nothing GridU exports -- the type arrives
               through another unit's record field -- yet dcc needs GridU in uses to
@@ -5366,7 +5673,7 @@ begin
               '#inline:' key, which no identifier can collide with. A NON-inline
               member call keeps nothing alive: dcc needs no unit for it. }
             for Ref in Refs do
-              if (Ref.SymbolId > 0) and SameText(Ref.Kind, 'call') then
+              if (Ref.SymbolId > 0) and (SameText(Ref.Kind, 'call') or SameText(Ref.Kind, 'member-access')) then { v156 FP-PR: `Coll.Touch` without parentheses is a member-access ref }
               begin
                 var InlUnit: string;
                 if not InlineUnitOfSym.TryGetValue(Ref.SymbolId, InlUnit) then
@@ -5434,6 +5741,7 @@ begin
                   Break;
                 end;
               if (not UsesAnyExport) and RefdUnitStems.ContainsKey('#inline:' + LowerCase(U.UnitName)) then UsesAnyExport:= True; { UNUSEDUNIT-INLINE }
+              if (not UsesAnyExport) and InlineNeeds.Proves(UsesList, RefdUnitStems, U.UnitName) then UsesAnyExport:= True; { v156 FP-PR: needed for inline expansion (H2443) }
               if not UsesAnyExport then
               begin
                 UF:= Default(TLintFinding);
@@ -5728,6 +6036,7 @@ begin
     UsesOfCanon.Free;
     ProjRoots.Free;
     InlineUnitOfSym.Free;
+    InlineNeeds.Free;
     PathOfFile .Free;
     StemsOfName.Free;
     Findings   .Free;
