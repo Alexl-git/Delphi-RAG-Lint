@@ -106,7 +106,7 @@ type
     InnerKey: string;
     OuterShared: Boolean;
     InnerShared: Boolean;
-    Held: TArray<string>;   // every exact lock held at the place, OuterKey among them
+    Held: TArray<string>;   // every lock held at the place (exact or not, tried or not), OuterKey among them
     RoutineQName: string;
     FilePath: string;
     Line: Integer;          // the place: the enter of the inner lock, or the call that leads to it
@@ -136,7 +136,7 @@ type
     procedure HeldRegions(const pRoutine: TRoutineLockSites; pLine, pCol: Integer;
       out pAllKeys: TArray<string>; out pOuter: TArray<Integer>);
     procedure AddEdges(const pRoutine: TRoutineLockSites; const pOuter: TArray<Integer>;
-      pLine, pCol: Integer; const pTaken: TAcquire; const pViaQName: string);
+      const pAllKeys: TArray<string>; pLine, pCol: Integer; const pTaken: TAcquire; const pViaQName: string);
     procedure CollectNames;
     procedure CollectDirectEdges;
     procedure CollectCallEdges;
@@ -316,13 +316,14 @@ end;
 
 { One edge per held region of pOuter: "that lock is held when pTaken.Key is taken at pLine, pCol". }
 procedure TLockOrderRun.AddEdges(const pRoutine: TRoutineLockSites; const pOuter: TArray<Integer>;
-  pLine, pCol: Integer; const pTaken: TAcquire; const pViaQName: string);
+  const pAllKeys: TArray<string>; pLine, pCol: Integer; const pTaken: TAcquire; const pViaQName: string);
 var
   Edge: TOrderEdge;
   List: TList<Integer>;
 begin
-  var Held: TArray<string>:= nil;
-  for var R in pOuter do Held:= Held + [pRoutine.Regions[R].LockKey];
+  { v156 FIX2-A F8: a gate held through an inexact lock or a try-enter still serialises both sides, so every
+    held key counts for the common-gate test of CanDeadlock, not only the exact blocking ones. }
+  var Held:= pAllKeys;
   for var R in pOuter do
   begin
     var Region:= pRoutine.Regions[R];
@@ -367,7 +368,7 @@ begin
       Taken.RoutineQName:= Routine.RoutineQName;
       Taken.FilePath    := Routine.FilePath;
       Taken.Line        := Site.Line;
-      AddEdges(Routine, Outer, Site.Line, Site.Col, Taken, '');
+      AddEdges(Routine, Outer, AllKeys, Site.Line, Site.Col, Taken, '');
     end;
 end;
 
@@ -391,7 +392,7 @@ begin
         if Outer <> nil then
           for var Taken in Reach(Query.Fields[CALL_TARGET_ID].AsLargeInt) do
             if not HasKey(AllKeys, Taken.Key) then
-              AddEdges(FRoutines[At], Outer, Line, Col, Taken, Query.Fields[CALL_TARGET_QN].AsString);
+              AddEdges(FRoutines[At], Outer, AllKeys, Line, Col, Taken, Query.Fields[CALL_TARGET_QN].AsString);
       end;
       Query.Next;
     end;
