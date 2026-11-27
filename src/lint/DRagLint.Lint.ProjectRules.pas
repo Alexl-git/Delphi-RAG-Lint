@@ -1809,6 +1809,25 @@ var
     Result:= if Unresolved then rrUnresolved else rrSame;
   end;
 
+  { v156 FP-2: True when row AK declares its name as a bare re-export of the SAME name in another
+    site's unit of the group AFrom..ATo-1 (`TPrePlan = MSCTYPES.TPrePlan;`). That is one type seen
+    under two unit names, not two declarations, so it is not the hazard this rule names. The unit
+    is matched by file stem (a unit's file is named after it); a qualifier naming no site's unit
+    proves nothing and stays a finding. }
+  function IsReExportOfSite(AK, AFrom, ATo: Integer): Boolean;
+  var
+    Sig, Stem: string;
+    Q: Integer;
+  begin
+    Result:= False;
+    Sig:= LowerCase(Trim(Rows[AK].Signature));
+    for Q:= AFrom to ATo - 1 do
+    begin
+      if Q = AK then Continue;
+      Stem:= LowerCase(ChangeFileExt(ExtractFileName(AStore.GetFilePath(Rows[Q].FileId)), ''));
+      if (Stem <> '') and (Sig = Stem + '.' + LowerCase(Rows[AK].Name)) then Exit(True);
+    end;
+  end;
   { The library tier proper. Appends to AFindings; never raises.
 
     Which library units count as "used": every entry of the declaring file's
@@ -1992,6 +2011,7 @@ var
 
 var
   RefCmp  : TRefCompare               ;
+  ReExports: Integer                  ;
   I, J, K : Integer                   ;
   Paths   : TArray<string>            ;
   Sites   : string                    ;
@@ -2023,6 +2043,7 @@ begin
       Kinds := '';
       Sigs  := '';
       Differ:= False;
+      ReExports:= 0;
       Seen.Clear;
       { THE ENUMERATION IS CAPPED, and the cap is not cosmetic. A finding is one
         line a human reads in a report; widening the rule to routines (2026-08-31)
@@ -2056,7 +2077,8 @@ begin
           if Kinds <> '' then Kinds:= Kinds + '/';  // dl:ok concat-in-loop@277f -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           Kinds:= Kinds + Rows[K].Kind;  // dl:ok concat-in-loop@ca17 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         end;
-        if NormSig(Rows[K].Signature) <> NormSig(Rows[I].Signature) then Differ:= True;
+        if IsReExportOfSite(K, I, J) then Inc(ReExports)
+        else if NormSig(Rows[K].Signature) <> NormSig(Rows[I].Signature) then Differ:= True;
       end;
       if Elided > 0 then
         Sites:= Sites + Format(', and %d more', [Elided]);
@@ -2065,7 +2087,7 @@ begin
       { Two sites in the SAME file are not the hazard this rule names -- the
         store already requires two distinct files, but a name declared twice in
         one unit would otherwise slip through the row loop above. }
-      if NFiles >= 2 then
+      if (NFiles >= 2) and (ReExports < NFiles - 1) then
       begin
         F:= Default(TLintFinding);
         F.RuleId   := 'duplicate-global-decl';
