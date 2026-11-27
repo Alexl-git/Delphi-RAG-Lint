@@ -4031,6 +4031,8 @@ var
   begin
     Result:= False;
     if (ATypeText = '') or (ATypeText = AMBIGUOUS_DECL_TYPE) then Exit;
+    { v156 FP-S: a Variant / OleVariant target is arithmetic, not a string build; variant-in-loop reports it (G-30). }
+    if MatchText(Trim(ATypeText), ['Variant', 'OleVariant', 'System.Variant', 'System.OleVariant']) then Exit(True);
     C:= AStore.ResolveTypeCategory(ATypeText, AFileId);
     if C <> tcUnknown then Exit(C in NON_STRING_CATEGORIES);
     { No category for container types: a dynamic array or a set is never a string,

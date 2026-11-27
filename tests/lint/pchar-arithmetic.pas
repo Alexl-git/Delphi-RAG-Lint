@@ -44,4 +44,14 @@ begin
   if Src + 1 = nil then Exit;
 end;
 
+procedure PByteIsNotPChar(const Src: PByte; var Cur: PByte);
+var
+  Walk: PByte;
+begin
+  Cur := Cur + 4;
+  Walk := Src + 1;
+  Walk := Walk - 2;
+  GBuf := GBuf + 1;
+end;
+
 end.

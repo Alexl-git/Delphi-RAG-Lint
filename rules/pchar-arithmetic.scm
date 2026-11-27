@@ -8,4 +8,4 @@
 ((exprBinary
   lhs: (identifier) @ptr
   operator: [(kAdd) (kSub)]) @warn
- (#declared-type? @ptr "^(System\\.)?(PChar|PAnsiChar|PWideChar|PUTF8Char|PByte|\\^(Char|AnsiChar|WideChar|UTF8Char|Byte))$"))
+ (#declared-type? @ptr "^(System\\.)?(PChar|PAnsiChar|PWideChar|PUTF8Char|\\^(Char|AnsiChar|WideChar|UTF8Char|Byte))$"))
