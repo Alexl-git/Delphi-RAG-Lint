@@ -47,11 +47,11 @@ uses
   Data.DB,
   FireDAC.Stan.Param,
   FireDAC.Comp.Client,
-  DRagLint.Core.Model,  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  DRagLint.Core.Model,  // dl:ok uses-global-census@744f -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.Core.Interfaces,
   DRagLint.Storage.SQLite,
   DRagLint.FieldRepo.Locate,
-  DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census@9edb -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.FieldRepo.Kinds,
   DRagLint.FieldRepo.DfmRead,
   DRagLint.FieldRepo.DfmReadPlan;

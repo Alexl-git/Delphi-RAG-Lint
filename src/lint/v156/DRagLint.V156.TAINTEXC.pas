@@ -29,7 +29,7 @@ unit DRagLint.V156.TAINTEXC;
 interface
 
 uses
-  DRagLint.Core.Model  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  DRagLint.Core.Model  // dl:ok uses-global-census@2576 -- the named constants are the whole contract this unit draws; the unit pair travels together
   , DRagLint.Core.Interfaces
   ;
 
@@ -66,10 +66,10 @@ uses
   System.SysUtils
   , System.StrUtils
   , System.Generics.Collections
-  , FireDAC.Stan.Param // dl:unit FireDAC.Stan.Param accepted -- TFDParam.AsString is inline: dcc expands it only with the declaring unit in uses (H2443); dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  , FireDAC.Stan.Param // dl:unit FireDAC.Stan.Param accepted -- TFDParam.AsString is inline: dcc expands it only with the declaring unit in uses (H2443); dl:ok uses-global-census@c61d -- the named constants are the whole contract this unit draws; the unit pair travels together
   , FireDAC.Comp.Client
   , DRagLint.Storage.SQLite
-  , DRagLint.Lint.TaintRules  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  , DRagLint.Lint.TaintRules  // dl:ok uses-global-census@aecf -- the named constants are the whole contract this unit draws; the unit pair travels together
   , DRagLint.V156.TAINTEXC.Support
   ;
 

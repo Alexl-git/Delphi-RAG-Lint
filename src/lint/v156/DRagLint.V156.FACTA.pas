@@ -50,7 +50,7 @@ type
 implementation
 
 uses
-  DRagLint.V156.FACTA.Support  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  DRagLint.V156.FACTA.Support  // dl:ok uses-global-census@2613 -- the named constants are the whole contract this unit draws; the unit pair travels together
   ;
 
 const

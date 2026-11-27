@@ -40,7 +40,7 @@ uses
   System.SysUtils,
   System.Generics.Collections,
   FireDAC.Comp.Client,
-  DRagLint.Core.Model,  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  DRagLint.Core.Model,  // dl:ok uses-global-census@744f -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.Core.Interfaces;
 
 type
@@ -534,7 +534,7 @@ end;
 
 { The lines of an indexed file, or [] with the file recorded stale. Same probe as
   TDispatchResolver.LinesOf: line / col of the index are only valid for the bytes it parsed. }
-function TIndirectCallResolver.LinesOf(AFileId: Int64): TArray<string>;  // dl:ok duplicate-code -- same shape over different fields or sources; a shared helper would need more parameters than it saves, and this lane must not change extraction or checker structure
+function TIndirectCallResolver.LinesOf(AFileId: Int64): TArray<string>;  // dl:ok duplicate-code@fcfd -- same shape over different fields or sources; a shared helper would need more parameters than it saves, and this lane must not change extraction or checker structure
 var
   Path: string;
   Txt : string;

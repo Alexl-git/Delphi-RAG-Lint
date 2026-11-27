@@ -10,7 +10,7 @@ interface
 
 uses
   System.Generics.Collections
-  , DRagLint.Core.Model  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  , DRagLint.Core.Model  // dl:ok uses-global-census@64a5 -- the named constants are the whole contract this unit draws; the unit pair travels together
   , DRagLint.Core.Interfaces
   ;
 

@@ -49,7 +49,7 @@ type
 implementation
 
 uses
-  DRagLint.V156.OOA1.Support  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  DRagLint.V156.OOA1.Support  // dl:ok uses-global-census@a00f -- the named constants are the whole contract this unit draws; the unit pair travels together
   ;
 
 class procedure TV156OOA1Rules.Catalog(const ADecls: TList<TV151RuleDecl>);

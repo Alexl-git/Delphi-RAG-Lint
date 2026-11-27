@@ -21,7 +21,7 @@ unit DRagLint.Index.FieldLineage;
 interface
 
 uses
-  DRagLint.Core.Model,  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  DRagLint.Core.Model,  // dl:ok uses-global-census@744f -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.Core.Indexer;
 
 type
@@ -189,7 +189,7 @@ begin
   FSrc:= ASrc;
 end;
 
-function TSrcText.TextOf(const ANode: TTSNode): string;  // dl:ok duplicate-code -- same shape over different fields or sources; a shared helper would need more parameters than it saves, and this lane must not change extraction or checker structure
+function TSrcText.TextOf(const ANode: TTSNode): string;  // dl:ok duplicate-code@421e -- same shape over different fields or sources; a shared helper would need more parameters than it saves, and this lane must not change extraction or checker structure
 var
   S, E: Integer;
 begin

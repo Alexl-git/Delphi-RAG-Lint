@@ -48,7 +48,7 @@ uses
   System.Math,
   Data.DB,
   FireDAC.Stan.Param,
-  DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census -- the named constants are the whole contract this unit draws; the unit pair travels together
+  DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census@9edb -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.FieldRepo.TextBackup;
 
 const
