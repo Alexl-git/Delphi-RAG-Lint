@@ -2209,8 +2209,9 @@ begin
     if (VPlanned.ChangeId > 0) and FRows.TryGetValue(KeyOf(FSource.TableName, VPlanned.Column), VRow) then
       PlanEvents(FItems[VPlanned.ChangeId - 1].Component, FItems[VPlanned.ChangeId - 1].FieldClass, nil, VRow, [VPlanned.ChangeId]);
   for VField in FDataset.Fields do
-    if FieldSource(FSource, VField, VTable, VColumn) and SameText(VTable, FSource.TableName) and (not MatchText(VColumn, VWanted)) then
-      PlanDelete(VField);
+    if FieldSource(FSource, VField, VTable, VColumn) and SameText(VTable, FSource.TableName) and (not MatchText(VColumn, VWanted))
+      and not (FRows.TryGetValue(KeyOf(VTable, VColumn), VRow) and (VRow.DerivedKind <> '')) then
+      PlanDelete(VField); { a derived field is computed by code, not a column the selection owns (design 2.8) }
 end;
 
 { ---- datasets ---- }

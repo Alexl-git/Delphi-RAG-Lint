@@ -65,6 +65,27 @@ try {
   Check 'A2 the calc body comes from the ancestor''s unit' ((Ch '(?m)^calc bodies: 1 read, 0 blocked, 0 none') -and (Ch 'ORDERS\|TOTAL[^\n]*\{\{QTY\}\}\.AsInteger \* \{\{PRICE\}\}\.AsFloat') -and (Ch 'ORDERS\|QTY[^\n]*pcs')) $o
   Check 'L1 a link in the ancestor''s unit gives the inherited memory table its table' (Ch 'dataset uDerived\.dfm memCopy \(TFDMemTable\) -> CUSTOMERS \(via CopyDataSet tblCust\): 1 data') $o
   Check 'D1 a dry run writes no byte' ((Ch 'dry run: nothing written') -and ($h0 -eq (Get-FileHash -LiteralPath $x).Hash)) $o
+  # ---- item 4: write-dfm leaves a derived field alone ----
+  $fixLin = Join-Path $Repo 'tests\fixtures\v156\LIN2'
+  $dx = Join-Path $work 'der'
+  [IO.Directory]::CreateDirectory($dx) | Out-Null
+  foreach ($n in 'uLin2.pas', 'uLin2.dfm', 'lin2_schema.sql') { [IO.File]::Copy((Join-Path $fixLin $n), (Join-Path $dx $n), $true) }
+  foreach ($n in 'uDer.pas', 'uDer.dfm') { [IO.File]::Copy((Join-Path $Repo "tests\fixtures\v156\GCR3\der\$n"), (Join-Path $dx $n), $true) }
+  $idx = Join-Path $work 'der.sqlite'
+  $dr = Join-Path $work 'der.dlrepo'
+  function Dl([string[]]$a) { (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) -join "`n" }
+  $null = Dl @('index', $dx, '--db', $idx)
+  $null = Dl @('repo', 'init', '--repo', $dr)
+  $null = Dl @('repo', 'seed-fb', '--ddl', (Join-Path $dx 'lin2_schema.sql'), '--repo', $dr, '--apply')
+  $lin = Dl @('repo', 'read-dfm', '--repo', $dr, '--dfm', (Join-Path $dx 'uLin2.dfm'), '--direction', 'dfm-to-repo', '--db', $idx)
+  $tid = @([regex]::Matches($lin, '(?m)^\[(\d+)\] insert DL_FIELDS_INFO ORDERS\|TOTAL:') | ForEach-Object { $_.Groups[1].Value })
+  $selF = Join-Path $work 'der-sel.txt'
+  [IO.File]::WriteAllLines($selF, [string[]]$tid)
+  $st = Dl @('repo', 'read-dfm', '--repo', $dr, '--dfm', (Join-Path $dx 'uLin2.dfm'), '--direction', 'dfm-to-repo', '--db', $idx, '--select', $selF)
+  Check 'W0 the derived row ORDERS|TOTAL is stored (setup)' (($tid.Count -eq 1) -and ($st -match 'applied: 1 changes')) $st
+  $wr = Dl @('repo', 'write-dfm', '--repo', $dr, '--dfm', (Join-Path $dx 'uDer.dfm'), '--direction', 'repo-to-dfm', '--dataset', 'tblOrders', '--names', 'QTY')
+  Check 'W1 control: a plain field the selection leaves out is proposed for removal (PRICE)' ($wr -match '(?m)^\[\d+\] delete uDer\.dfm tblOrdersPRICE') $wr
+  Check 'W2 a derived field the selection leaves out is NOT proposed for removal (TOTAL)' ($wr -notmatch 'delete uDer\.dfm tblOrdersTOTAL') $wr
 } finally {
   try { [IO.Directory]::Delete($work, $true) } catch { }
 }
