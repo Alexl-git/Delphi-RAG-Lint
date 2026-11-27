@@ -411,6 +411,9 @@ begin
   end;
 end;
 
+const
+  WINSOCK_VERSION_2_2 = $0202;
+
 { True when pHost is an IPv4 address of this computer (what its own name resolves to). }
 function IsOwnAddress(const pHost: string): Boolean;
 var
@@ -421,7 +424,7 @@ var
   VName: AnsiString;
 begin
   Result := False;
-  if (pHost = '') or not CharInSet(pHost[1], ['0'..'9']) or (WSAStartup($0202, VData) <> 0) then
+  if (pHost = '') or not CharInSet(pHost[1], ['0'..'9']) or (WSAStartup(WINSOCK_VERSION_2_2, VData) <> 0) then
     Exit;
   try
     VName := AnsiString(GetEnvironmentVariable('COMPUTERNAME'));
