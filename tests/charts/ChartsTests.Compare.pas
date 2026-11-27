@@ -52,6 +52,11 @@ type
     [Test] procedure AutoGraphSnapshotIsFoundNextTime;
     [Test] procedure EmptyChartIsRefusedNotSame;
     [Test] procedure OldSvgCopyIsTheCallersPathEvenWhenTheRunRaises;
+    { v156 QE-2: a snapshot written before 1.56 (PowerShell-style COMMAND and notes) against a 1.56 answer }
+    [Test] procedure OldStyleTextAgainstNewStyleShowsOnlyTheKnownDifference;
+    [Test] procedure OldStyleTextRerunHasNoWarningAndOneInsert;
+    [Test] procedure CommandStyleFoldKeepsARealCapChange;
+    [Test] procedure RefusalHintNamesTheCliFlags;
   end;
 
 implementation
@@ -355,7 +360,8 @@ begin
   Assert.AreEqual(EXIT_SAME, R.ExitCode, R.Message);
   Assert.AreEqual(ONE, Integer(Length(R.Warnings)), JoinWarnings(R.Warnings));
   Assert.IsTrue(R.Warnings[0].StartsWith('The given command differs from the report''s COMMAND: '), R.Warnings[0]);
-  Assert.IsTrue(R.Warnings[0].Contains('Depth: 3 vs 5'), R.Warnings[0]);
+  // v156 QE-2: the argument is named as the flag that asks it, never as the 1.55 '-Depth'
+  Assert.IsTrue(R.Warnings[0].Contains('--depth: 3 vs 5'), R.Warnings[0]);
   Assert.AreEqual('5', R.NewHeader.Command.Get('Depth'), 'the GIVEN command wins');
   // R10: a different question id is named by Compare itself
   Req.Command:= Cmd('who-calls -Target "OPERAT.NAME" -Project "C:\P\A.dproj" -Depth 3');
@@ -548,7 +554,7 @@ begin
   Assert.AreEqual(EXIT_SAME, R.ExitCode, R.Message);
   Assert.AreEqual('3', R.OldHeader.Command.Get('Depth'), 'the snapshot''s header was parsed');
   Assert.AreEqual(ONE, Integer(Length(R.Warnings)), JoinWarnings(R.Warnings));
-  Assert.IsTrue(R.Warnings[0].Contains('Depth: 3 vs (absent)'), R.Warnings[0]);
+  Assert.IsTrue(R.Warnings[0].Contains('--depth: 3 vs (absent)'), R.Warnings[0]);
   Assert.IsFalse(R.NewHeader.Command.Has('Depth'), 'the GIVEN command was run');
 end;
 
@@ -714,6 +720,167 @@ begin
   R:= RunCompare(Req);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Message);
   Assert.AreEqual('the chart ' + Empty2 + ' parsed as empty -- cannot compare', R.Message);
+end;
+
+{ ---- v156 QE-2: old-style and new-style report text ------------------------------------ }
+
+const
+  { What an engine of 1.55 or earlier wrote: PowerShell-style COMMAND, and the two notes that
+    name a flag the same way. }
+  OLD_STYLE_COMMAND = 'COMMAND who-writes -Target "OPERAT.NAME" -Project "C:\P\A.dproj" -Depth 3 -Cap 2 -MaxRows 50';
+  OLD_STYLE_CAP_NOTE = '  ... +6 more routines (+6 more sites) not shown (-Cap 2; raise -Cap to see them)';
+  OLD_STYLE_ROWS_NOTE = '  ... 4 more row(s) not printed here (-MaxRows 50): Unit1.pas';
+  { The same three lines as 1.56 writes them. }
+  NEW_STYLE_COMMAND = 'COMMAND who-writes --target "OPERAT.NAME" --project "C:\P\A.dproj" --depth 3 --cap 2 --max-rows 50';
+  NEW_STYLE_CAP_NOTE = '  ... +6 more routines (+6 more sites) not shown (--cap 2; raise --cap to see them)';
+  NEW_STYLE_ROWS_NOTE = '  ... 4 more row(s) not printed here (--max-rows 50): Unit1.pas';
+  RAISED_CAP_NOTE = '  ... +5 more routines (+5 more sites) not shown (--cap 3; raise --cap to see them)';
+  KNOWN_NEW_ROW = '  Unit1.TFoo.Reset (Unit1.pas:77)';
+  ENGINE_OLD = '1.55.0';
+  ENGINE_NEW = '1.56.0';
+
+{ One report in either style; pExtraRow is the known difference ('' for none). }
+function StyledReport(const pEngine, pCommand, pCapNote, pRowsNote, pExtraRow: string): string;
+begin
+  var Lines:= TStringList.Create;
+  try
+    Lines.Add('Who writes this field (drag-lint report who-writes) for OPERAT.NAME, asked on 2026-10-10 14:32, engine ' +
+      pEngine + '.');
+    Lines.Add(pCommand);
+    Lines.Add('BUNDLE ' + STUB_DEFAULT_BUNDLE);
+    Lines.Add('INDEX ' + STUB_DEFAULT_INDEX);
+    Lines.Add('Totals: 8 write sites / 8 routines.');
+    Lines.Add('  Unit1.TFoo.SetName (Unit1.pas:10)');
+    Lines.Add('  Unit1.TFoo.Load (Unit1.pas:42)');
+    if pExtraRow <> '' then
+      Lines.Add(pExtraRow);
+    Lines.Add(pCapNote);
+    Lines.Add(pRowsNote);
+    Result:= Lines.Text;
+  finally
+    Lines.Free;
+  end;
+end;
+
+function OldStyleReport: string;
+begin
+  Result:= StyledReport(ENGINE_OLD, OLD_STYLE_COMMAND, OLD_STYLE_CAP_NOTE, OLD_STYLE_ROWS_NOTE, '');
+end;
+
+type
+  { Answers every question with one fixed text: the 1.56 answer of the rerun. }
+  TFixedProducer = class(TInterfacedObject, IReportProducer)
+  private
+    FText: string;
+  public
+    constructor Create(const pText: string);
+    function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
+    function Describe: string;
+  end;
+
+constructor TFixedProducer.Create(const pText: string);
+begin
+  inherited Create;
+  FText:= pText;
+end;
+
+function TFixedProducer.Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
+begin
+  Result:= Default(TProduceResult);
+  Result.Ok:= True;
+  Result.ExitCode:= EXIT_SAME;
+  Result.Text:= FText;
+  Result.IndexPaths:= [STUB_DEFAULT_INDEX];
+  Result.BundlePath:= STUB_DEFAULT_BUNDLE;
+end;
+
+function TFixedProducer.Describe: string;
+begin
+  Result:= 'fixed producer';
+end;
+
+procedure TCompareTests.OldStyleTextAgainstNewStyleShowsOnlyTheKnownDifference;
+begin
+  // two files, nothing rerun: the 1.55 snapshot against the 1.56 one with ONE new row
+  var Req:= Default(TCompareRequest);
+  Req.Source:= csTwoFiles;
+  Req.OldPath:= WriteTemp(FTemp, 'old.txt', OldStyleReport);
+  Req.NewPath:= WriteTemp(FTemp, 'new.txt',
+    StyledReport(ENGINE_NEW, NEW_STYLE_COMMAND, NEW_STYLE_CAP_NOTE, NEW_STYLE_ROWS_NOTE, KNOWN_NEW_ROW));
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_DIFFERENT, R.ExitCode, R.Message);
+  var Eq, Del, Ins: Integer;
+  CountEdits(R.Edits, Eq, Del, Ins);
+  Assert.AreEqual(0, Del, 'a note that only spells its flag the new way is not a deleted line');
+  Assert.AreEqual(ONE, Ins, 'the known difference, and nothing else');
+  Assert.AreEqual('2', R.OldHeader.Command.Get('Cap'), 'the 1.55 COMMAND was read');
+  Assert.AreEqual('2', R.NewHeader.Command.Get('Cap'), 'the 1.56 COMMAND was read');
+  // the other way round: the same single line, now deleted
+  Req.OldPath:= Req.NewPath;
+  Req.NewPath:= WriteTemp(FTemp, 'old2.txt', OldStyleReport);
+  R:= RunCompare(Req);
+  CountEdits(R.Edits, Eq, Del, Ins);
+  Assert.AreEqual(ONE, Del, 'new -> old: deleted');
+  Assert.AreEqual(0, Ins, 'new -> old: inserted');
+  // and with no real difference the two styles are the same answer
+  Req.NewPath:= WriteTemp(FTemp, 'same.txt',
+    StyledReport(ENGINE_NEW, NEW_STYLE_COMMAND, NEW_STYLE_CAP_NOTE, NEW_STYLE_ROWS_NOTE, ''));
+  Req.OldPath:= WriteTemp(FTemp, 'old3.txt', OldStyleReport);
+  R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_SAME, R.ExitCode, R.Message);
+  // what is SHOWN stays what the file holds: only the comparison key is folded
+  Assert.IsTrue(R.OldText.Contains('raise -Cap'), 'the old text is not rewritten');
+end;
+
+procedure TCompareTests.OldStyleTextRerunHasNoWarningAndOneInsert;
+begin
+  // the 1.55 snapshot's own COMMAND is rerun; the 1.56 answer spells everything the new way
+  var Req:= StubRequest(csFile, FTemp);
+  Req.Producer:= TFixedProducer.Create(
+    StyledReport(ENGINE_NEW, NEW_STYLE_COMMAND, NEW_STYLE_CAP_NOTE, NEW_STYLE_ROWS_NOTE, KNOWN_NEW_ROW));
+  Req.OldPath:= WriteTemp(FTemp, 'old.txt', OldStyleReport);
+  // the caller names the same question in the NEW style: not a differing command
+  Req.Command:= Cmd(NEW_STYLE_COMMAND);
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_DIFFERENT, R.ExitCode, R.Message);
+  Assert.AreEqual(0, Integer(Length(R.Warnings)), 'no warnings: ' + JoinWarnings(R.Warnings));
+  var Eq, Del, Ins: Integer;
+  CountEdits(R.Edits, Eq, Del, Ins);
+  Assert.AreEqual(0, Del, 'deleted');
+  Assert.AreEqual(ONE, Ins, 'inserted');
+end;
+
+procedure TCompareTests.CommandStyleFoldKeepsARealCapChange;
+begin
+  // positive control: folding the SPELLING must not hide a note whose numbers changed
+  var Req:= Default(TCompareRequest);
+  Req.Source:= csTwoFiles;
+  Req.OldPath:= WriteTemp(FTemp, 'old.txt', OldStyleReport);
+  Req.NewPath:= WriteTemp(FTemp, 'new.txt',
+    StyledReport(ENGINE_NEW, NEW_STYLE_COMMAND, RAISED_CAP_NOTE, NEW_STYLE_ROWS_NOTE, ''));
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_DIFFERENT, R.ExitCode, R.Message);
+  var Eq, Del, Ins: Integer;
+  CountEdits(R.Edits, Eq, Del, Ins);
+  Assert.AreEqual(ONE, Del, 'the old cap note');
+  Assert.AreEqual(ONE, Ins, 'the new cap note');
+end;
+
+procedure TCompareTests.RefusalHintNamesTheCliFlags;
+begin
+  var Req:= StubRequest(csFile, FTemp);
+  var Legacy:= TPath.Combine(FTemp, 'legacy.txt');
+  TFile.Copy(Fixture('reports', 'who-writes.legacy.doc.txt'), Legacy);
+  Req.OldPath:= Legacy;
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Message);
+  Assert.IsTrue(R.Message.EndsWith('pass --command "<id> --target ... --project ..."'), R.Message);
+  // --project against the COMMAND's own project: both named as flags
+  Req.OldPath:= WriteTemp(FTemp, 'old.txt', OldStyleReport);
+  Req.ProjectFile:= TPath.Combine(FTemp, 'Other.dproj');
+  R:= RunCompare(Req);
+  Assert.AreEqual(ONE, Integer(Length(R.Warnings)), JoinWarnings(R.Warnings));
+  Assert.IsTrue(R.Warnings[0].StartsWith('The given --project differs from the COMMAND''s --project: '), R.Warnings[0]);
 end;
 
 initialization

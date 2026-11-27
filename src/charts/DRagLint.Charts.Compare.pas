@@ -6,7 +6,12 @@ unit DRagLint.Charts.Compare;
   (snapshot, update-doc). Everything a renderer or the CLI prints comes back in one
   TCompareResult; this unit prints nothing and never raises for a refusal.
   PS trap handled: question ids, argument names and project paths are compared with
-  SameText (PowerShell -eq is case-insensitive); exit codes are compared as integers. }
+  SameText (PowerShell -eq is case-insensitive); exit codes are compared as integers.
+  Since 1.56 the engine writes ONE command grammar, CLI style ('--target', '--cap'). A report
+  saved by 1.55 or earlier spells its COMMAND line and its cap / row notes the PowerShell way
+  ('-Target', '-Cap'); both are read, and a line that differs from its counterpart only in
+  that spelling is the same line (FoldCommandStyle). A forms CSV and a chart's DOT name no
+  flag, so their old and new snapshots are one format. }
 
 interface
 
@@ -62,7 +67,7 @@ type
     OldDb       : string;
     /// <summary>The caller's command (--command, or --question/--target/--project); may be empty.</summary>
     Command     : TReportCommand;
-    /// <summary>--project: replaces or adds -Project on the command that is run.</summary>
+    /// <summary>--project: replaces or adds --project on the command that is run.</summary>
     ProjectFile : string;
     /// <summary>The snapshot folder; '' resolves it with ResolveSnapshotDir.</summary>
     SnapshotDir : string;
@@ -168,7 +173,11 @@ type
 /// <remarks>
 /// The command run is the old report's COMMAND, or the caller's when the old one
 /// is missing (warning WARN_NO_COMMAND) or differs (a warning naming each differing
-/// argument; the caller's wins); an auto snapshot's own COMMAND counts as the old one, the
+/// argument as its CLI flag, e.g. '--depth: 3 vs 5'; the caller's wins). A COMMAND may be in
+/// the CLI style of 1.56 or the PowerShell style before it, on either side: the same question
+/// in two styles is not a difference, and a report line whose only change is a flag spelled
+/// '-Cap' on one side and '--cap' on the other compares equal (OldText and NewText are never
+/// rewritten; only the item keys are). An auto snapshot's own COMMAND counts as the old one, the
 /// caller's command only locating the snapshot. The new run never passes AllowStale, whatever
 /// pRequest.Options says (only the S4 old side does). A graph's old DOT is read into memory
 /// and its SVG copied to pRequest.OldSvgCopy (or a temp file) before the rerun, because a rerun may overwrite the
@@ -193,7 +202,7 @@ function RunCompare(const pRequest: TCompareRequest): TCompareResult;
 implementation
 
 uses
-  System.SysUtils, System.IOUtils, System.DateUtils,
+  System.SysUtils, System.IOUtils, System.DateUtils, System.RegularExpressions,
   DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness, // dl:unit DRagLint.Index.Freshness accepted -- INDEXED_AT_KEY names the meta row the freshness module writes, so the --old-db age check reads the same key
   DRagLint.Charts.Remarks, DRagLint.Charts.Snapshot, DRagLint.Charts.DocInsight; // dl:unit DRagLint.Charts.Snapshot, DRagLint.Charts.DocInsight accepted -- the three snapshot extensions name the formats Snapshot writes; DOCINSIGHT_UNKNOWN_PHRASE is the phrase the formatter writes for an unknown question
 
@@ -208,7 +217,18 @@ const
   MB_ERR_INVALID_CHARS = 8;
   UTF8_BOM: array[0..2] of Byte = ($EF, $BB, $BF);
   SVG_EXT = '.svg';
-  RERUN_HINT = ' -- pass --command "<id> -Target ... -Project ..."';
+  RERUN_HINT = ' -- pass --command "<id> --target ... --project ..."';
+  { A flag as 1.55 and earlier wrote it inside a report line: one '-', then a PascalCase name,
+    not glued to a word or to another '-' ('(-Cap 20; raise -Cap', '(-MaxRows 50)'). }
+  PS_FLAG_PATTERN = '(?<![\w\-])-[A-Z][A-Za-z]*';
+  { Any question id: CliFlag only needs a line the parser accepts. }
+  FOLD_QUESTION = 'q';
+  NAME_VALUE_SEP = ': ';
+  PS_NAME_MARK = '-';
+
+var
+  { Built once in initialization; a TRegEx is not changed by matching, so reading it is thread-safe. }
+  RxPsFlag: TRegEx;
 
 procedure AddWarning(var pResult: TCompareResult; const pText: string);
 begin
@@ -315,14 +335,49 @@ begin
     Result:= Result + PATH_ARROW + pCmd.Get(ARG_TO);
 end;
 
-{ --project replaces or adds -Project; a different path than the command's is warned. }
+{ The CLI spelling of one PowerShell-style flag, '-SurfaceCap' -> '--surface-cap', through the
+  one grammar (ParseCommandLine reads it, BuildCommandLine writes it): no second name table
+  here. Anything the parser does not take as a single name comes back unchanged. }
+function CliFlag(const pPsFlag: string): string;
+begin
+  Result:= pPsFlag;
+  var Cmd: TReportCommand;
+  if not ParseCommandLine(FOLD_QUESTION + ' ' + pPsFlag, Cmd) or (Length(Cmd.Args) <> 1) then
+    Exit;
+  var Parts:= BuildCommandLine(Cmd).Split([' ']);
+  if Length(Parts) > 1 then
+    Result:= Parts[1];
+end;
+
+{ One spelling for the flags a report line names, so a 1.55 line and the 1.56 line that says
+  the same compare equal. Used on comparison keys only, never on text that is shown. }
+function FoldCommandStyle(const pKey: string): string;
+begin
+  Result:= pKey;
+  if not pKey.Contains(PS_NAME_MARK) then
+    Exit;
+  var Found:= RxPsFlag.Matches(pKey);
+  for var I:= Found.Count - 1 downto 0 do
+    Result:= Copy(Result, 1, Found[I].Index - 1) + CliFlag(Found[I].Value) +
+      Copy(Result, Found[I].Index + Found[I].Length, MaxInt);
+end;
+
+{ SameQuestion's 'Name: a vs b' with the name as its CLI flag ('--surface-cap: 25 vs 30'). }
+function DifferingAsFlag(const pDiffering: string): string;
+begin
+  var Cut:= Pos(NAME_VALUE_SEP, pDiffering);
+  Result:= if Cut <= 1 then pDiffering
+    else CliFlag(PS_NAME_MARK + Copy(pDiffering, 1, Cut - 1)) + Copy(pDiffering, Cut, MaxInt);
+end;
+
+{ --project replaces or adds --project; a different path than the command's is warned. }
 procedure ApplyProject(var pCmd: TReportCommand; const pProjectFile: string; var pResult: TCompareResult);
 begin
   if pProjectFile = '' then
     Exit;
   var Prev:= pCmd.Get(ARG_PROJECT);
   if (Prev <> '') and not SameText(ExpandFileName(Prev), ExpandFileName(pProjectFile)) then
-    AddWarning(pResult, 'The given --project differs from the COMMAND''s -Project: ' + Prev + ' vs ' + pProjectFile);
+    AddWarning(pResult, 'The given --project differs from the COMMAND''s --project: ' + Prev + ' vs ' + pProjectFile);
   SetArg(pCmd, ARG_PROJECT, pProjectFile);
 end;
 
@@ -344,6 +399,8 @@ begin
   var Differing: TArray<string>;
   if pGiven.IsEmpty or SameQuestion(pOld, pGiven, Differing) then
     Exit;
+  for var I:= 0 to High(Differing) do
+    Differing[I]:= DifferingAsFlag(Differing[I]);
   // R10: SameQuestion lists arguments only; a different question id is named here.
   if not SameText(pOld.Question, pGiven.Question) then
     Differing:= ['Question: ' + pOld.Question + ' vs ' + pGiven.Question] + Differing;
@@ -483,7 +540,7 @@ begin
 end;
 
 { S3: the old side is the newest auto snapshot of the question. The caller's command only
-  LOCATES it (question, target, -Project or --project for the folder); the snapshot's own
+  LOCATES it (question, target, its --project or the caller's for the folder); the snapshot's own
   COMMAND then meets the caller's in ChooseCommand like any saved report (R16). }
 function LoadAutoSnapshotSide(const pRequest: TCompareRequest; var pResult: TCompareResult): Boolean;
 begin
@@ -632,11 +689,24 @@ begin
   Result:= True;
 end;
 
+{ Report text only: the keys of both sides in one command style. A CSV row and a chart node
+  name no flag, so their keys stay as the adapter made them. }
+procedure FoldItemKeys(var pItems: TArray<TDiffItem>);
+begin
+  for var I:= 0 to High(pItems) do
+    pItems[I].Key:= FoldCommandStyle(pItems[I].Key);
+end;
+
 { Step 5: items, edit script, hunks, and the C6 code. }
 procedure DiffSides(var pResult: TCompareResult);
 begin
   pResult.OldItems:= ItemsFor(pResult.Format, pResult.OldText);
   pResult.NewItems:= ItemsFor(pResult.Format, pResult.NewText);
+  if pResult.Format = cfReportText then
+  begin
+    FoldItemKeys(pResult.OldItems);
+    FoldItemKeys(pResult.NewItems);
+  end;
   pResult.Edits:= MyersDiff(pResult.OldItems, pResult.NewItems);
   pResult.Hunks:= BuildHunks(pResult.Edits, COMPARE_CONTEXT);
   var Eq, Del, Ins: Integer;
@@ -700,5 +770,8 @@ begin
   end;
   Result:= R;
 end;
+
+initialization
+  RxPsFlag:= TRegEx.Create(PS_FLAG_PATTERN, [roCompiled]);
 
 end.
