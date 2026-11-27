@@ -157,6 +157,8 @@ begin
   if not ACtx.Wants(RULE_MEMBER_PRIVATE) then Exit;
   if not (SameText(ACtx.NarrowRule, RULE_MEMBER_PRIVATE) or ACtx.Cfg.IsEnabled(RULE_MEMBER_PRIVATE)) then Exit;
   if ACtx.Store = nil then Exit;
+  { 1.56 G24R (G-24): the tighter-visibility proposals ride on the same id and the same switch }
+  Result:= TMemberPrivacy.FindTighter(ACtx.Store, ACtx.LibStore, RULE_MEMBER_PRIVATE);
   { 1.52 BK-XPROJ (FPM finding): a member of a unit another project also compiles may be
     called from that project (COMMON Pipes.Chunks WriteChunk from SERVER). The peer's index
     answers; a peer that cannot answer withholds the finding (svUndecided). }

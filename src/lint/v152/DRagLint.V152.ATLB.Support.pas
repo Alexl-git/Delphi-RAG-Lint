@@ -19,7 +19,10 @@ unit DRagLint.V152.ATLB.Support;
   or a form file); members of a unit that lists more than one project in its
   `dl:shared` header (a sibling project's index is not open here); a name another
   indexed file spells on a line the preprocessor blanks -- an inactive conditional
-  branch the index never parsed (1.52 TAILS-ENG2). }
+  branch the index never parsed (1.52 TAILS-ENG2).
+
+  1.56 G24R (gap G-24): the same rule id also proposes the tighter visibilities -- private to strict
+  private, protected to strict protected / strict private, public to protected -- see FindTighter. }
 
 interface
 
@@ -65,6 +68,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Find(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>; static;
+    /// <summary>1.56 G24R (gap G-24): finds members whose visibility could be one step tighter -- private to
+    /// strict private, protected to strict protected (or strict private), public to protected.</summary>
+    /// <param name="AStore">Project index (not nil).</param>
+    /// <param name="ALibStore">Library index used to resolve interface ancestors; may be nil.</param>
+    /// <param name="ARuleId">Rule id to stamp on each finding.</param>
+    /// <returns>One hint per member; nil when none or when the index has no attributes table.</returns>
+    /// <remarks>
+    /// Judged on the references naming the member (by name, so an unrelated same-name symbol only makes it
+    /// quieter): every one must sit in a routine of the member's own class (private: nothing else), or in a
+    /// routine of a descendant the project index places, reaching the member bare or through Self (protected
+    /// and public). A reference outside a routine body, from a DFM, an unrelated class or through another
+    /// receiver keeps it silent. Public to protected needs at least one descendant reference from another file
+    /// (a public member used only in its own file is the could-be-private finding). Same exemptions as
+    /// Find: published, unlabelled section, virtual / override / ..., interface-implementing names, attributed
+    /// members, units several projects compile, names spelled in an inactive conditional branch.
+    /// Reads the store, never writes it. Meant for lint-all only.
+    /// </remarks>
+    class function FindTighter(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>; static;
   end;
 
   /// <summary>1.52 BK-ATTRRULES (B48): evaluates debug-display-placeholder on one indexed file --
@@ -569,6 +590,238 @@ begin
     finally
       Names.Free;
     end;
+  end;
+end;
+
+{ ---- member-could-be-private, tighter visibilities (1.56 G24R, gap G-24) ---- }
+
+type
+  TTightCand = record
+    Sym : TSymbol;
+    Cls : TSymbol;
+    Path: string;
+    Key : string;
+  end;
+
+  TTightRef = record
+    FileId   : Int64;
+    Enclosing: Int64;
+    Receiver : string;
+  end;
+
+const
+  MAX_TIGHT_DEPTH = 32;
+
+{ The one class / record / interface named AName in the project index; False when none or several. }
+function UniqueType(const AStore: ISymbolStore; const AName: string; out ASym: TSymbol): Boolean;
+begin
+  ASym:= Default(TSymbol);
+  var Hits: Integer:= 0;
+  for var S: TSymbol in AStore.FindSymbolsByExactName(AName) do
+    if S.Kind in [skClass, skInterface, skRecord] then
+    begin
+      Inc(Hits);
+      ASym:= S;
+    end;
+  Result:= Hits = 1;
+end;
+
+{ True when ADesc reaches the class with id AAncId through first-heritage links the project index places
+  uniquely. Anything not placed is "not a descendant" (the caller stays silent). }
+function IsStrictDescendant(const AStore: ISymbolStore; const ADesc: TSymbol; AAncId: Int64): Boolean;
+begin
+  Result:= False;
+  var Cur: TSymbol:= ADesc;
+  for var Depth: Integer:= 1 to MAX_TIGHT_DEPTH do
+  begin
+    if Cur.Kind <> skClass then Exit;
+    var Heads: TArray<string>:= HeritageNames(Cur.Heritage);
+    var Anc  : TSymbol;
+    if (Length(Heads) = 0) or (Heads[0] = '') or not UniqueType(AStore, Heads[0], Anc) or (Anc.Kind <> skClass) then Exit;
+    if Anc.Id = AAncId then Exit(True);
+    Cur:= Anc;
+  end;
+end;
+
+{ What to propose for member ASym given where it is referenced; '' = nothing provable.
+  ARefs are every reference naming the member in the project index. A reference outside any routine
+  body, from another class that is not a descendant, through another receiver, or (private) from any
+  other class makes the answer ''. }
+function TightTarget(const AStore: ISymbolStore; const ASym, ACls: TSymbol; const ARefs: TList<TTightRef>;
+  const AEncCache: TDictionary<Int64, TSymbol>): string;
+begin
+  Result:= '';
+  var Vis      : string:= Trim(LowerCase(ASym.Modifiers));
+  var DescRefs : Boolean:= False;
+  var Elsewhere: Boolean:= False;
+  if (ARefs = nil) or (ARefs.Count = 0) then Exit;
+  for var R: TTightRef in ARefs do
+  begin
+    if R.Enclosing <= 0 then Exit;
+    var Enc: TSymbol;
+    if not AEncCache.TryGetValue(R.Enclosing, Enc) then
+    begin
+      Enc:= AStore.GetSymbolById(R.Enclosing);
+      AEncCache.Add(R.Enclosing, Enc);
+    end;
+    if Enc.Id <> R.Enclosing then Exit;
+    if Enc.ParentId = ACls.Id then Continue;
+    if (Vis = 'private') or (ACls.Kind <> skClass) then Exit;
+    var EncCls: TSymbol:= AStore.GetSymbolById(Enc.ParentId);
+    if (EncCls.Id <> Enc.ParentId) or not IsStrictDescendant(AStore, EncCls, ACls.Id) then Exit;
+    if (R.Receiver <> '') and not SameText(R.Receiver, 'Self') then Exit;
+    DescRefs:= True;
+    if R.FileId <> ASym.FileId then Elsewhere:= True;
+  end;
+  if Vis = 'private' then Result:= 'strict private'
+  else if Vis = 'protected' then Result:= (if DescRefs then 'strict protected' else 'strict private')
+  else if DescRefs and Elsewhere then Result:= 'protected';
+end;
+
+class function TMemberPrivacy.FindTighter(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>;
+var
+  Cands   : TList<TTightCand>;
+  Wanted  : TDictionary<string, Boolean>;
+  RefsOf  : TDictionary<string, TList<TTightRef>>;
+  Parents : TDictionary<Int64, TSymbol>;
+  IfaceOf : TDictionary<Int64, TDictionary<string, Boolean>>;
+  AttrSyms: TDictionary<Int64, Boolean>;
+  AttrDone: TDictionary<Int64, Boolean>;
+  Shared  : TDictionary<Int64, Boolean>;
+  EncCache: TDictionary<Int64, TSymbol>;
+  Hits    : TList<TLintFinding>;
+begin
+  Result:= nil;
+  { the attributes fact is the only attribute source here: an older index stays silent (nothing proven) }
+  if not AStore.HasAttributes then Exit;
+  Cands   := TList<TTightCand>.Create;
+  Wanted  := TDictionary<string, Boolean>.Create;
+  RefsOf  := TDictionary<string, TList<TTightRef>>.Create;
+  Parents := TDictionary<Int64, TSymbol>.Create;
+  IfaceOf := TDictionary<Int64, TDictionary<string, Boolean>>.Create;
+  AttrSyms:= TDictionary<Int64, Boolean>.Create;
+  AttrDone:= TDictionary<Int64, Boolean>.Create;
+  Shared  := TDictionary<Int64, Boolean>.Create;
+  EncCache:= TDictionary<Int64, TSymbol>.Create;
+  Hits    := TList<TLintFinding>.Create;
+  try
+    for var FileId: Int64 in AStore.GetAllFileIds do
+    begin
+      var Path: string:= AStore.GetFilePath(FileId);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      for var Sym: TSymbol in AStore.FindSymbolsByFile(Path) do
+      begin
+        if (Sym.Kind not in [skMethod, skFunction, skProcedure, skField]) or (Sym.ParentId <= 0) or not Sym.VisExplicit then Continue;
+        var Vis: string:= Trim(LowerCase(Sym.Modifiers));
+        if not ((Vis = 'private') or (Vis = 'protected') or (Vis = 'public')) or HasExemptDirective(Sym) then Continue;
+        var Cls: TSymbol;
+        if not Parents.TryGetValue(Sym.ParentId, Cls) then
+        begin
+          Cls:= AStore.GetSymbolById(Sym.ParentId);
+          Parents.Add(Sym.ParentId, Cls);
+        end;
+        if (Cls.Id <> Sym.ParentId) or (Cls.Kind not in [skClass, skRecord]) or Cls.IsHelper then Continue;
+        var Names: TDictionary<string, Boolean>;
+        if not IfaceOf.TryGetValue(Cls.Id, Names) then
+        begin
+          Names:= TDictionary<string, Boolean>.Create;
+          IfaceOf.Add(Cls.Id, Names);
+          if not InterfaceNamesOf(AStore, ALibStore, Cls, Names) then Names.AddOrSetValue('*', True);
+        end;
+        if Names.ContainsKey('*') or Names.ContainsKey(LowerCase(Sym.Name)) then Continue;
+        var IsShared: Boolean;
+        if not Shared.TryGetValue(FileId, IsShared) then
+        begin
+          IsShared:= Length(TSharedUnit.ProjectsOf(Path)) > 1;
+          Shared.Add(FileId, IsShared);
+        end;
+        if IsShared then Continue;
+        if not AttrDone.ContainsKey(FileId) then
+        begin
+          AttrDone.Add(FileId, True);
+          for var A: TAttributeRow in AStore.GetAttributes(FileId) do
+            if A.SymbolId > 0 then AttrSyms.AddOrSetValue(A.SymbolId, True);
+        end;
+        if AttrSyms.ContainsKey(Sym.Id) then Continue;
+        var C: TTightCand;
+        C.Sym := Sym;
+        C.Cls := Cls;
+        C.Path:= Path;
+        C.Key := LowerCase(Sym.Name);
+        Cands.Add(C);
+        Wanted.AddOrSetValue(C.Key, True);
+      end;
+    end;
+    if Cands.Count = 0 then Exit;
+    for var FileId: Int64 in AStore.GetAllFileIds do
+      for var R: TReference in AStore.GetReferencesFromFile(FileId) do
+      begin
+        var Key: string:= LowerCase(R.NameText);
+        if not Wanted.ContainsKey(Key) then Continue;
+        var L: TList<TTightRef>;
+        if not RefsOf.TryGetValue(Key, L) then
+        begin
+          L:= TList<TTightRef>.Create;
+          RefsOf.Add(Key, L);
+        end;
+        var TR: TTightRef;
+        TR.FileId   := FileId;
+        TR.Enclosing:= R.EnclosingSymbolId;
+        TR.Receiver := R.ReceiverText;
+        L.Add(TR);
+      end;
+    for var C: TTightCand in Cands do
+    begin
+      var L: TList<TTightRef>;
+      if not RefsOf.TryGetValue(C.Key, L) then Continue;
+      var Target: string:= TightTarget(AStore, C.Sym, C.Cls, L, EncCache);
+      if Target = '' then Continue;
+      var IsPublic: Boolean:= Trim(LowerCase(C.Sym.Modifiers)) = 'public';
+      var F: TLintFinding:= Default(TLintFinding);
+      F.RuleId    := ARuleId;
+      F.Severity  := 'hint';
+      F.FileId    := C.Sym.FileId;
+      F.FilePath  := C.Path;
+      F.StartLine := C.Sym.StartLine;
+      F.StartCol  := C.Sym.StartCol;
+      F.EndLine   := C.Sym.EndLine;
+      F.EndCol    := C.Sym.EndCol;
+      F.SymbolName:= C.Sym.Name;
+      if IsPublic then
+        F.Message:= Format('Public member %s.%s is only used by its descendants -- it could be protected', [C.Cls.Name, C.Sym.Name])
+      else
+        F.Message:= Format('%s member %s.%s is only used %s -- it could be %s',
+          [(if SameText(Trim(C.Sym.Modifiers), 'private') then 'Private' else 'Protected'),
+           C.Cls.Name, C.Sym.Name, (if Target = 'strict protected' then 'by its descendants' else 'inside its own class'), Target]);
+      Hits.Add(F);
+    end;
+    { a name any indexed file (the declaring one too) spells inside an inactive conditional branch is used there }
+    var Names2: TDictionary<string, Int64>:= TDictionary<string, Int64>.Create;
+    try
+      for var F: TLintFinding in Hits do Names2.AddOrSetValue(LowerCase(F.SymbolName), -2);
+      var Inactive: TDictionary<string, Boolean>:= NamesInInactiveBranches(AStore, Names2);
+      try
+        for var F: TLintFinding in Hits do
+          if not Inactive.ContainsKey(LowerCase(F.SymbolName)) then Result:= Result + [F];
+      finally
+        Inactive.Free;
+      end;
+    finally
+      Names2.Free;
+    end;
+  finally
+    Hits.Free;
+    for var L: TList<TTightRef> in RefsOf.Values do L.Free;
+    RefsOf.Free;
+    for var D: TDictionary<string, Boolean> in IfaceOf.Values do D.Free;
+    IfaceOf.Free;
+    EncCache.Free;
+    Shared.Free;
+    AttrDone.Free;
+    AttrSyms.Free;
+    Parents.Free;
+    Wanted.Free;
+    Cands.Free;
   end;
 end;
 
