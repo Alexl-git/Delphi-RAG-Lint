@@ -1,7 +1,7 @@
 #Requires -Version 7.3
 <#
   run_v156_GCPM.ps1 -- builds and runs the grid copy model tests (1.56 lane GCP-M: copy events and columns between grid view types, or one event)
-  (tests\fieldrepo\GridCopyTests.dpr; unit DRagLint.FieldRepo.GridCopy on testsixturesieldrepogridcopy). No engine needed.
+  (tests\fieldrepo\GridCopyTests.dpr; unit DRagLint.FieldRepo.GridCopy on tests\fixtures\fieldrepo\gridcopy). No engine needed.
 
   A MISSING Delphi toolchain or test exe is a FAIL here, never a skip. Exit 0 only when the
   SUMMARY line reports fail=0 and the process exit code is 0.
