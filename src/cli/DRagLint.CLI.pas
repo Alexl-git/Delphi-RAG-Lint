@@ -95,6 +95,10 @@ uses
   , DRagLint.Query.SyntaxCountVerb { syntax-count verb (GAP-SYNTAXQ, 1.42) }
   , DRagLint.Query.ConceptRepo { 1.56 FRAME-1: query --concept over the field-repository copy (lane CON-Q) }
   , DRagLint.CLI.UsesRecover { uses-recover verb (148 HP): own flags, read-only }
+  , DRagLint.CLI.Metrics { v156 W2FRAME: metrics verb (lane MET-1): own flags }
+  , DRagLint.CLI.Sbom { v156 W2FRAME: sbom verb (lane SBOM-1): own flags }
+  , DRagLint.CLI.HappensBefore { v156 W2FRAME: happens-before verb (lane HB4): own flags }
+  , DRagLint.CLI.ChangedSince { v156 W2FRAME: lint-all --changed-since (lane VCS-1) }
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , DRagLint.Lint.MissingUses { unit-missing-from-uses (lint <file> / lint-all) } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
@@ -1002,7 +1006,8 @@ begin
   { `ask`, `protocol` and `mcp-config` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg,
     DRagLint.MCP.ClientConfig) and print nothing else: no defaults note on stderr }
   { 1.52.2: the no-config warning (TManifestIO.Load) stays off where stderr must stay clean. }
-  var SelfParsing:= MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover']);
+  var SelfParsing:= MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover',
+    'metrics', 'sbom', 'happens-before' { v156 W2FRAME: DRagLint.CLI.Metrics / .Sbom / .HappensBefore }]);
   TManifestIO.QuietNoManifest:= SelfParsing or HasSwitch('--quiet') or JsonOutputRequested;
   if SelfParsing then Exit;
   LoadConfigDefaults(Result);
@@ -1231,6 +1236,19 @@ begin
     else if (A = '--fail-on') and (i < ParamCount) then begin Inc(i); Result.FailOn:= ParamStr(i); end
     else if (A = '--baseline') and (i < ParamCount) then begin Inc(i); Result.Baseline:= ParamStr(i); end
     else if (A = '--write-baseline') and (i < ParamCount) then begin Inc(i); Result.WriteBaseline:= ParamStr(i); end
+    { v156 W2FRAME: lint-all --changed-since <rev>; read by DRagLint.CLI.ChangedSince (lane VCS-1) }
+    else if (A = '--changed-since') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ChangedSince:= ParamStr(i);
+    end
+    { v156 W2FRAME: --place <list> on query --name / --text and find-unit (lane TS-N, DRagLint.Query.PlaceRows).
+      query --concept reads the same value from ParamStr (DRagLint.Query.ConceptRepo, lane CON-Q). }
+    else if (A = '--place') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Place:= ParamStr(i);
+    end
     else if A = '--compile'      then Result.TreeCompile  := True
     else if A = '--with-rules'   then Result.TreeWithRules:= True
     else if (A = '--config') and (i < ParamCount) then
@@ -20878,6 +20896,21 @@ begin
     Writeln(ErrOutput, Format('ERROR: lint-all: --library-db does not exist: %s. Nothing was answered.', [AArgs.LibraryDbs[0]]));
     Exit(2);
   end;
+  { v156 W2FRAME (lane VCS-1): --changed-since <rev> is refused HERE, before the scan, when the revision or the
+    working copy cannot be read -- never guessed, and never after a whole lint-all. }
+  var SinceRequest: TChangedSinceRequest:= Default(TChangedSinceRequest);
+  if AArgs.ChangedSince <> '' then
+  begin
+    SinceRequest.Revision:= AArgs.ChangedSince;
+    SinceRequest.ProjectPath:= AArgs.ProjectPath;
+    SinceRequest.DbPath:= AArgs.DbPath;
+    var SinceRefusal: string;
+    if not CheckChangedSince(SinceRequest, SinceRefusal) then
+    begin
+      EmitStatusLine(AArgs, 'ERROR: ' + SinceRefusal);
+      Exit(2);
+    end;
+  end;
   TailPhase:= 0;
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
@@ -21906,6 +21939,21 @@ begin
       [ExtractFileName(AArgs.ProjectPath), Length(InScope), Length(Findings), ScopeSet.Count]));
     Findings:= InScope;
     FreeAndNil(ScopeSet);
+  end;
+
+  { v156 W2FRAME (lane VCS-1): --changed-since <rev> keeps the findings on lines changed since the revision;
+    after the scope filter, before the report, the baseline and the exit code see them. }
+  if AArgs.ChangedSince <> '' then
+  begin
+    LintPhase('--changed-since filter');
+    SinceRequest.DbPath:= ProjectDb;
+    var SinceMessage: string;
+    if not KeepFindingsChangedSince(SinceRequest, Findings, SinceMessage) then
+    begin
+      EmitStatusLine(AArgs, 'ERROR: ' + SinceMessage);
+      Exit(2);
+    end;
+    if SinceMessage <> '' then EmitNoteLine(AArgs, SinceMessage);
   end;
 
   { Resolve output path: --output / --report, or lint-report-YYYYMMDD.txt beside --project, else beside
@@ -30048,6 +30096,9 @@ begin
     else if Args.Command = 'init'              then Result:= RunInitVerbFromCommandLine
     else if Args.Command = 'syntax-count'      then Result:= RunSyntaxCountVerb { GAP-SYNTAXQ: own flags, DRagLint.Query.SyntaxCountVerb }
     else if Args.Command = 'uses-recover'      then Result:= RunUsesRecoverVerb { 148 HP: own flags, DRagLint.CLI.UsesRecover }
+    else if Args.Command = 'metrics'           then Result:= RunMetricsVerb { v156 W2FRAME: own flags, DRagLint.CLI.Metrics (lane MET-1) }
+    else if Args.Command = 'sbom'              then Result:= RunSbomVerb { v156 W2FRAME: own flags, DRagLint.CLI.Sbom (lane SBOM-1) }
+    else if Args.Command = 'happens-before'    then Result:= RunHappensBeforeVerb { v156 W2FRAME: own flags, DRagLint.CLI.HappensBefore (lane HB4) }
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
     else if Args.Command = 'exception-facts'   then Result:= DoExceptionFacts  (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)
