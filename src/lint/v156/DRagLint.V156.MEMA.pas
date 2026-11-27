@@ -1,10 +1,9 @@
 unit DRagLint.V156.MEMA;
 
 { Wave v156 (1.56.0-alpha) lane MEM-A -- container-items-leak (G-01).
-  Scaffold created EMPTY by lane FRAME-1; lane MEM-A owns this unit and DRagLint.V156.MEMA.Support.
+  Lane MEM-A owns this unit and DRagLint.V156.MEMA.Support (the behaviour is described there).
   Called only by DRagLint.V151.Dispatch (the ONE provider mechanism; v156 lanes reuse the
-  DRagLint.V151.Api types). The rule ids below are fixed by the 1.56 plan; Catalog declares
-  them when the lane implements them, so the catalog counts do not move before that. }
+  DRagLint.V151.Api types). }
 
 interface
 
@@ -16,7 +15,7 @@ uses
   ;
 
 const
-  /// <summary>Rule id of G-01; not in the catalog until Catalog declares it.</summary>
+  /// <summary>Rule id of G-01: fresh objects added to a local container that does not own them.</summary>
   RULE_CONTAINER_ITEMS_LEAK = 'container-items-leak';
 
 type
@@ -28,11 +27,14 @@ type
     /// <summary>Declares every rule id this lane may emit: new ids (V151Rule) and host ids of in-place expansions (V151Host).</summary>
     /// <param name="ADecls">List to append to; owned by the caller.</param>
     /// <remarks>Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.
-    /// The scaffold declares nothing.</remarks>
+    /// Declares container-items-leak: category resource-lifetime, warning, ON by default.</remarks>
     class procedure Catalog(const ADecls: TList<TV151RuleDecl>); static;
-    /// <summary>Per-file check of one .pas (parse tree, index, library).</summary>
+    /// <summary>Per-file check of one .pas: container-items-leak in every routine of the file.</summary>
     /// <param name="ACtx">The file being linted; Store / LibStore may be nil.</param>
-    /// <returns>Findings; nil when none.</returns>
+    /// <returns>One finding per leaking local container, at its first fresh addition; nil when none,
+    /// when the run does not ask for the rule, or when the file has no parse tree.</returns>
+    /// <remarks>A class the file does not declare is looked up in Store, then LibStore; with both nil
+    /// such a class is unknown and its additions do not report.</remarks>
     class function CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
     /// <summary>Per-file check of the .pas unit's sibling form file.</summary>
     /// <param name="ACtx">The file being linted; ACtx.DfmPath is not empty when this is called.</param>
@@ -52,30 +54,49 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V156.MEMA.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V156.MEMA.Support
+  , DRagLint.Diagnostics.ParseCache
+  ;
+
+const
+  RULE_CATEGORY = 'resource-lifetime';
+  RULE_SEVERITY = 'warning';
+  RULE_TITLE    = 'Objects added to a container that does not own them are never freed';
 
 class procedure TV156MEMARules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_CONTAINER_ITEMS_LEAK, RULE_CATEGORY, RULE_SEVERITY, RULE_TITLE));
 end;
 
 class function TV156MEMARules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  PF : TParsedFile;
+  Run: TMemaRun;
+begin
+  Result:= nil;
+  if not ACtx.Wants(RULE_CONTAINER_ITEMS_LEAK) then Exit;
+  PF:= TAstParseCache.Get(ACtx.Path);
+  if PF.Tree = nil then Exit;
+  Run:= TMemaRun.Create(ACtx.Path, PF.Src, ACtx.Store, ACtx.LibStore);
+  try
+    Result:= Run.Run(PF.Tree.RootNode);
+  finally
+    Run.Free;
+  end;
+end;
+
+class function TV156MEMARules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@b41c -- REVIEWED 2026-11-26 v156 MEM-A: signature fixed by the v151 lane frame hook; this lane has no check of this kind
 begin
   Result:= nil;
 end;
 
-class function TV156MEMARules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV156MEMARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@bf68 -- REVIEWED 2026-11-26 v156 MEM-A: signature fixed by the v151 lane frame hook; this lane has no check of this kind
 begin
   Result:= nil;
 end;
 
-class function TV156MEMARules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
-begin
-  Result:= nil;
-end;
-
-class function TV156MEMARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV156MEMARules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@d375 -- REVIEWED 2026-11-26 v156 MEM-A: signature fixed by the v151 lane frame hook; this lane has no check of this kind
 begin
   Result:= nil;
 end;
