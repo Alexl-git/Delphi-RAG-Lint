@@ -131,7 +131,7 @@ try {
   $null = NewRepo $z $ddl
   $dfmB = Join-Path $fx 'uLin2b.dfm'
   $d = ReadDfm $z $dfmB $withDb
-  Check 'D1 relation neither stored nor planned: the field is proposed, its input is not, with the reason' ((Has $d.Out '(?m)^\[\d+\] insert DL_FIELDS_INFO ORDERS\|REBATE:  -> derived\(direct\); inputs \{\{QTY\}\}\r?\n  \(unchecked\)') -and (Has $d.Out 'warning: ORDERS\.REBATE input qryCust\.DISCOUNT: the path FK_ORDERS_CUST needs the relation FK_ORDERS_CUST, which is neither stored in DL_RELATIONS nor planned by this read: no DL_FIELD_INPUTS row proposed') -and -not (Has $d.Out 'DL_FIELD_INPUTS ORDERS\|REBATE')) $d.Out
+  Check 'D1 relation neither stored nor planned: the field, the relation (LIN-3) and the input are proposed, all UNCHECKED, no warning' ((Has $d.Out '(?m)^\[\d+\] insert DL_FIELDS_INFO ORDERS\|REBATE:  -> derived\(direct\); inputs \{\{QTY\}\}, \{\{CUSTOMERS\.DISCOUNT\}\}\r?\n  \(unchecked\)') -and (Has $d.Out '(?m)^\[\d+\] insert DL_RELATIONS FK_ORDERS_CUST:[^\n]*\r?\n  \(unchecked\)') -and (Has $d.Out '(?m)^\[\d+\] insert DL_FIELD_INPUTS ORDERS\|REBATE\|\|CUSTOMERS:[^\n]*\r?\n  \(unchecked\)') -and -not (Has $d.Out 'neither stored')) $d.Out
   $null = ReadDfm $z $dfm @('--apply')
   $d2 = ReadDfm $z $dfmB $withDb
   Check 'D2 once the relation is stored the input row is proposed, UNCHECKED' ((Has $d2.Out '(?m)^\[\d+\] insert DL_FIELDS_INFO ORDERS\|REBATE:  -> derived\(direct\); inputs \{\{QTY\}\}, \{\{CUSTOMERS\.DISCOUNT\}\}\r?\n  \(unchecked\)') -and (Has $d2.Out '(?m)^\[\d+\] insert DL_FIELD_INPUTS ORDERS\|REBATE\|\|CUSTOMERS:  -> PATH=FK_ORDERS_CUST; TARGET_TABLE=CUSTOMERS \(rule single\)\r?\n  \(unchecked\)')) $d2.Out

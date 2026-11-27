@@ -58,7 +58,6 @@ const
   COL_ALIAS = 'ALIAS';
   COL_PATH = 'PATH';
   COL_TARGET = 'TARGET_TABLE';
-  COL_RELATION = 'RELATION_NAME';
   SQL_FIELD_ROW = 'SELECT "FIELD_KIND", "DERIVED_KIND", "NOTES" FROM "DL_FIELDS_INFO" WHERE "TABLE_NAME" = :T ' +
     'AND "FIELD_NAME" = :F';
   SQL_INPUT_ALIASES = 'SELECT "ALIAS" FROM "DL_FIELD_INPUTS" WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F ' +
@@ -77,7 +76,6 @@ const
   WHY_NO_TABLE = 'dataset of input %s has no table';
   WHY_NO_PATH = 'no path %s -> %s';
   WHY_PATHS = '%d paths to %s, none chosen';
-  WHY_RELATION = 'the path %s needs the relation %s, which is neither stored in DL_RELATIONS nor planned by this read';
   NEW_ROW_TEXT = 'derived(%s); inputs %s';
   NEW_INPUT_TEXT = 'PATH=%s; TARGET_TABLE=%s (rule %s)';
   NOTES_OLD_TEXT = '(lineage block)';
@@ -111,7 +109,6 @@ type
     FQuery: TFDQuery;
     FGraph: TFrRelationGraph;
     function Graph: TFrRelationGraph;
-    function RelationKnown(const pName: string): Boolean;
     function DatasetTable(const pReport: TDfmrDatasetReport; const pDataset, pField: string): string;
     function Place(const pReport: TDfmrDatasetReport; const pHome: string; const pInput: TLineageInput): TPlacedInput;
     function PlaceAll(const pReport: TDfmrDatasetReport; const pHome: string;
@@ -264,20 +261,6 @@ begin
   Result := FGraph;
 end;
 
-{ A relation an input row may name: stored, or inserted by a change of this plan. }
-function TDerivedPlanner.RelationKnown(const pName: string): Boolean;
-var
-  VItem: TDfmrChangeItem;
-begin
-  if MatchText(pName, LoadStoredRelationNames(FHost.Repo)) then
-    Exit(True);
-  for VItem in FHost.Items do
-    if (VItem.RowTable = REPO_TABLE_RELATIONS) and (Length(VItem.Columns) > 0) and (VItem.Columns[0].Name = COL_RELATION)
-      and SameText(VItem.Columns[0].Value, pName) then
-      Exit(True);
-  Result := False;
-end;
-
 { The table a field of a dataset of the form belongs to: what the read found for the persistent field, else the one
   table of the dataset; '' = none (a join, a dataset without a table, no such dataset). }
 function TDerivedPlanner.DatasetTable(const pReport: TDfmrDatasetReport; const pDataset, pField: string): string;
@@ -334,11 +317,7 @@ begin
   end;
   Result.Path := VChoice.Paths[VChoice.Chosen].Text;
   for VStep in VChoice.Paths[VChoice.Chosen].Steps do
-    if not RelationKnown(VStep.Name) then
-    begin
-      Result.Why := Format(WHY_RELATION, [Result.Path, VStep.Name]);
-      Exit;
-    end;
+    FHost.AddRelationChange(VStep, False); // neither stored nor planned: proposed UNCHECKED, with the input row
   Result.Alias := DefaultInputAlias(UpperCase(Result.Table), 1);
   Result.Rule := PathRuleName(VChoice.Rule);
   Result.Macro := Format(MACRO_OTHER, [Result.Alias, UpperCase(pInput.FieldName)]);
@@ -531,6 +510,19 @@ begin
     ReadDataset(VReport);
 end;
 
+{ True when a dataset of the read has a persistent data field with no table column (the ones the lineage looks at). }
+function HasCandidates(pHost: TDfmrPlanHost): Boolean;
+var
+  VReport: TDfmrDatasetReport;
+  VRef: TDfmrFieldRef;
+begin
+  for VReport in pHost.Datasets do
+    for VRef in VReport.Fields do
+      if (VRef.Kind = frkData) and (VRef.TableName = '') then
+        Exit(True);
+  Result := False;
+end;
+
 { The planner extension (TDfmrPlanExtension): adds the derived-field changes of a read to its plan. Only UNCHECKED
   changes and warning lines; writes nothing. An index that does not open, or has no lineage facts, is one
   `lineage: skipped (...)` line, never an exception. }
@@ -543,7 +535,9 @@ begin
   VIndex := IndexDb;
   if VIndex = '' then
   begin
-    pHost.Warn(NO_INDEX_LINE);
+    // a note about work NOT done: said only when a dataset has a field the lineage would have looked at
+    if HasCandidates(pHost) then
+      pHost.Warn(NO_INDEX_LINE);
     Exit;
   end;
   try

@@ -35,6 +35,7 @@ uses
   DRagLint.FieldRepo.ChangeSet,
   DRagLint.FieldRepo.DfmReadSelection,
   DRagLint.FieldRepo.DfmReadSql,
+  DRagLint.FieldRepo.RelationGraph,
   DRagLint.FieldRepo.DfmRead;
 
 type
@@ -215,6 +216,14 @@ type
     /// <returns>The 0-based index of the change in Changes; its id is the index + 1.</returns>
     function AddRowChange(pOp: TFrChangeOp; const pRowTable, pKey, pProp, pOld, pNew: string;
       const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer; virtual; abstract;
+    /// <summary>Adds the insert of a DL_RELATIONS row with its DL_RELATION_COLUMNS rows, as the planner's own
+    /// relation changes are; a relation the repository stores or this plan already inserts is not added again.</summary>
+    /// <param name="pRelation">The relation: Name, ChildTable, ParentTable, Source, ConstraintName, ParentKey and the
+    /// column pairs.</param>
+    /// <param name="pChecked">The change's default mark; an extension proposes UNCHECKED.</param>
+    /// <returns>The 0-based index of the change in Changes (its id is the index + 1); -1 = the relation is stored or
+    /// already planned, nothing added.</returns>
+    function AddRelationChange(const pRelation: TFrRelation; pChecked: Boolean): Integer; virtual; abstract;
     /// <summary>Adds a warning line of the plan (no line twice).</summary>
     /// <param name="pText">The line.</param>
     procedure Warn(const pText: string); virtual; abstract;
@@ -247,7 +256,7 @@ function FieldSource(const pSource: TDatasetSource; const pField: TDfmrField; ou
 /// first.</param>
 /// <remarks>Call from a unit's initialization or from a test, on the main thread; PlanDfmRead reads it without a
 /// lock.</remarks>
-procedure RegisterDfmrPlanExtension(const pExtension: TDfmrPlanExtension);  // dl:ok unused-public-symbol@27a9 -- REVIEWED 2026-11-27 GCR-2: the registrant is lane LIN-2's DRagLint.FieldRepo.DfmReadDerived (not merged here yet); called by tests/fieldrepo/DfmReadGcr2Tests.dpr (H1-H7), outside this project index
+procedure RegisterDfmrPlanExtension(const pExtension: TDfmrPlanExtension);
 
 /// <summary>Reads DFMs and plans the changes that bring the repository in line with them.</summary>
 /// <param name="pRepo">Open repository connection, schema 4; only SELECTs run.</param>
@@ -305,7 +314,6 @@ uses
   DRagLint.FieldRepo.DfmReadCalc,
   DRagLint.FieldRepo.DfmReadLinks,
   DRagLint.FieldRepo.DfmReadInherit,
-  DRagLint.FieldRepo.RelationGraph,
   DRagLint.FieldRepo.RelationRepo,
   DRagLint.FieldRepo.CrossTable;
 
@@ -345,6 +353,9 @@ const
   SQL_FIELD_ROW = 'SELECT * FROM "DL_FIELDS_INFO" WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F';
   SQL_TABLE_FIELDS = 'SELECT "FIELD_NAME", "FIELD_KIND", "SOURCEKEY", "CALC_BODY" FROM "DL_FIELDS_INFO" ' +
     'WHERE UPPER("TABLE_NAME") = UPPER(:T) ORDER BY "FIELD_NAME"';
+  SQL_TABLE_FIELDS_PLAIN = 'SELECT "FIELD_NAME", "FIELD_KIND", "SOURCEKEY", "CALC_BODY" FROM "DL_FIELDS_INFO" ' +
+    'WHERE UPPER("TABLE_NAME") = UPPER(:T) AND COALESCE("DERIVED_KIND", '''') = '''' ORDER BY "FIELD_NAME"';
+  SCHEMA_WITH_DERIVED = 5; // DL_FIELDS_INFO.DERIVED_KIND exists (GC-S)
   SQL_GRID_ROW = 'SELECT * FROM "DL_GRID_COLUMNS" WHERE "FORM_NAME" = :F AND "VIEW_NAME" = :V AND "COLUMN_NAME" = :C';
   SQL_GRID_FORM = 'SELECT * FROM "DL_GRID_COLUMNS" WHERE UPPER("FORM_NAME") = UPPER(:F) ORDER BY "VIEW_NAME", "COLUMN_INDEX", "COLUMN_NAME"';
   MULTI_FIELD = ';';
@@ -529,6 +540,7 @@ type
       const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer; override;
     function AddRowChange(pOp: TFrChangeOp; const pRowTable, pKey, pProp, pOld, pNew: string;
       const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer; override;
+    function AddRelationChange(const pRelation: TFrRelation; pChecked: Boolean): Integer; override;
     procedure Warn(const pText: string); override;
   end;
 
@@ -2419,6 +2431,37 @@ begin
     FItems.List[Result].Columns := pColumns;
 end;
 
+function TDfmRead.AddRelationChange(const pRelation: TFrRelation; pChecked: Boolean): Integer;
+var
+  VCols, VSub: TArray<TDfmrPair>;
+  VPairs, VText: string;
+  VI: Integer;
+begin
+  Result := -1;
+  if MatchText(pRelation.Name, FStoredRelations) then
+    Exit;
+  for VI := 0 to FItems.Count - 1 do
+    if (FItems[VI].RowTable = REPO_TABLE_RELATIONS) and (Length(FItems[VI].Columns) > 0)
+      and SameText(FItems[VI].Columns[0].Value, pRelation.Name) then
+      Exit;
+  VPairs := '';
+  VSub := nil;
+  for VI := 0 to High(pRelation.ChildColumns) do
+  begin
+    VPairs := VPairs + (if VI = 0 then '' else ',') + pRelation.ChildColumns[VI] + '=' + pRelation.ParentColumns[VI];
+    VSub := VSub + [MakePair(pRelation.ChildColumns[VI], pRelation.ParentColumns[VI])];
+  end;
+  VCols := [MakePair(COL_RELATION, pRelation.Name), MakePair('CHILD_TABLE', pRelation.ChildTable),
+    MakePair('PARENT_TABLE', pRelation.ParentTable), MakePair('SOURCE', pRelation.Source),
+    MakePair('CONSTRAINT_NAME', pRelation.ConstraintName), MakePair('PARENT_KEY', pRelation.ParentKey),
+    MakePair(COL_IS_DEFAULT, BOOL_FALSE)];
+  VText := pRelation.ChildTable + ' > ' + pRelation.ParentTable + '; SOURCE=' + pRelation.Source +
+    (if pRelation.ConstraintName = '' then '' else '; CONSTRAINT_NAME=' + pRelation.ConstraintName) +
+    '; PARENT_KEY=' + pRelation.ParentKey + '; IS_DEFAULT=' + BOOL_FALSE + '; COLUMNS=' + VPairs;
+  Result := AddRowChange(fcoInsert, REPO_TABLE_RELATIONS, pRelation.Name, '', '', VText, VCols, pChecked);
+  FItems.List[Result].SubColumns := VSub;
+end;
+
 procedure TDfmRead.Warn(const pText: string);
 begin
   FWarnings.Add(pText);
@@ -2448,9 +2491,6 @@ var
   VStep: TFrRelation;
   VNeeded: TList<TFrRelation>;
   VSeen, VFk: TDictionary<string, Boolean>;
-  VCols, VSub: TArray<TDfmrPair>;
-  VPairs, VText: string;
-  VI, VId: Integer;
 begin
   VNeeded := TList<TFrRelation>.Create;
   VSeen := TDictionary<string, Boolean>.Create;
@@ -2470,25 +2510,7 @@ begin
     FCross.FkUsed := VFk.Count;
     FCross.Offered := FOfferOrder.Count;
     for VStep in VNeeded do
-    begin
-      VPairs := '';
-      VSub := nil;
-      for VI := 0 to High(VStep.ChildColumns) do
-      begin
-        VPairs := VPairs + (if VI = 0 then '' else ',') + VStep.ChildColumns[VI] + '=' + VStep.ParentColumns[VI];
-        VSub := VSub + [MakePair(VStep.ChildColumns[VI], VStep.ParentColumns[VI])];
-      end;
-      VCols := [MakePair(COL_RELATION, VStep.Name), MakePair('CHILD_TABLE', VStep.ChildTable),
-        MakePair('PARENT_TABLE', VStep.ParentTable), MakePair('SOURCE', VStep.Source),
-        MakePair('CONSTRAINT_NAME', VStep.ConstraintName), MakePair('PARENT_KEY', VStep.ParentKey),
-        MakePair(COL_IS_DEFAULT, BOOL_FALSE)];
-      VText := VStep.ChildTable + ' > ' + VStep.ParentTable + '; SOURCE=' + VStep.Source +
-        (if VStep.ConstraintName = '' then '' else '; CONSTRAINT_NAME=' + VStep.ConstraintName) +
-        '; PARENT_KEY=' + VStep.ParentKey + '; IS_DEFAULT=' + BOOL_FALSE + '; COLUMNS=' + VPairs;
-      VId := AddRowChange(fcoInsert, REPO_TABLE_RELATIONS, VStep.Name, '', '', VText, VCols,
-        SameText(VStep.Source, REPO_RELATION_FK));
-      FItems.List[VId].SubColumns := VSub;
-    end;
+      AddRelationChange(VStep, SameText(VStep.Source, REPO_RELATION_FK));
   finally
     VFk.Free;
     VSeen.Free;
@@ -2568,10 +2590,12 @@ var
 begin
   FPlan := Default(TDfmrPlan);
   FPlan.ChangeSet.Direction := fdDfmToRepo;
-  FFiles := pFiles;
+  FFiles := nil;
+  for VFile in pFiles do
+    FFiles := FFiles + [VFile.Replace('/', PathDelim)]; // a forward-slash --dfm names the file like a backslash one
   LoadRows;
   LoadCrossTable;
-  for VFile in pFiles do
+  for VFile in FFiles do
   begin
     VForm := Form(VFile);
     for VDataset in VForm.Datasets do
@@ -2623,7 +2647,9 @@ begin
   VQuery := TFDQuery.Create(nil);
   try
     VQuery.Connection := pRepo;
-    VQuery.Open(SQL_TABLE_FIELDS, [pTable]);
+    // design 2.8: a derived row (DERIVED_KIND set) is computed by code, not table data: never offered as a column
+    VQuery.Open(if RepoSchemaVersion(pRepo) >= SCHEMA_WITH_DERIVED then SQL_TABLE_FIELDS_PLAIN else SQL_TABLE_FIELDS,
+      [pTable]);
     VName := VQuery.FieldByName(COL_FIELD);
     VKind := VQuery.FieldByName(COL_KIND);
     VKey := VQuery.FieldByName(COL_SOURCE_KEY);
