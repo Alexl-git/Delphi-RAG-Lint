@@ -14,7 +14,9 @@ unit DRagLint.Query.HappensBefore.Verb;
     write:<QName>    the writers of a unit variable, class var or instance field (events lane)
     read:<QName>     its reads
     call:<QName>     the call sites the index resolves to that routine
-    extcall:<Name>   the calls of a routine the index does NOT hold (RTL, a library), by name
+    extcall:<Name>[,<Name>...]   the calls of routines the index does NOT hold (RTL, a library), by name
+    extwrite:<Name>[,<Name>...]  the assignments to (or through) a variable the index does NOT hold
+    app-run:<program>|*          the top-level Application.Run of that program block (* = every program)
     site:<file>:<line>[:<col>]   one source position
   A site is DEFINITE when the event certainly happens there; a var / out argument, a call the index
   cannot resolve or a write inside a `with` is an UNCERTAIN site (the event may or may not happen).
@@ -31,8 +33,20 @@ unit DRagLint.Query.HappensBefore.Verb;
                   DRagLint.Query.HappensBefore.CheckInit (ordered roots: initialization chain, program
                   block, handler order); its SET is a YES. Its optimism is inherited: check-init
                   counts a var / out argument as a write.
-  YES needs a complete B; NO needs a complete A. Not built here (needs an export from the solver,
-  REQUESTS.md): program-level order for call / site events (initialization chain, program block).
+    program-order (lane HB5)  what the three above could not prove goes to the ordered-root solve
+                  DRagLint.Query.HappensBefore.HbOrderSolve with the DEFINITE sites of A as marks:
+                  initialization chain, program block, handler order, call chains. The same solve
+                  with B as marks proves the b-first NO; a NO never leans on the handler-order
+                  heuristic or on indirect-call edges, a YES that does carries the limit.
+  YES needs a complete B; NO needs a complete A.
+
+  PRE-CHECK (lane HB5): before any routine body is solved, the call graph alone says which sites of
+  B a proof can reach at all -- the routines that hold a site of A, everything that reaches one
+  backwards (calls of every confidence, dispatch, indirect edges), and everything those reach
+  forwards. A site of B outside that set is unprovable and answers a-in-other-routine at once
+  (limit pre-check); when that is every site of B, the b-first proof is not tried either. The pre-check stands down (proves nothing, refutes nothing) when A is in an
+  initialization section or a program block, when a walk passes HBV_PRECHECK_MAX_NODES, and for
+  write:T / read:T (the constructor model of check-init orders sites the call graph does not).
 
   Sites are not instances: `write:TFoo.FBar` is a write of FBar on ANY object (limit
   instance-insensitive).
@@ -56,6 +70,16 @@ const
   HBV_LIMIT_INSTANCE_INSENSITIVE = 'instance-insensitive';
   /// <summary>The `limits[]` code of an answer the --max-routines budget stopped short.</summary>
   HBV_LIMIT_BUDGET = 'budget';
+  /// <summary>The `limits[]` code of an answer in which the call-graph pre-check answered at least one
+  /// site of B (no routine that performs A reaches it) without solving a routine body.</summary>
+  HBV_LIMIT_PRECHECK = 'pre-check';
+  /// <summary>Prefix of the `limits[]` codes a program-order proof leaned on: followed by
+  /// relied-on-handler-order or relied-on-indirect-edges.</summary>
+  HBV_LIMIT_PROGRAM_ORDER = 'program-order: ';
+  /// <summary>How many routines one walk of the pre-check may visit before it stands down.</summary>
+  HBV_PRECHECK_MAX_NODES = 5000;
+  /// <summary>The program-order solve is not tried with more marks than this (cost).</summary>
+  HBV_ORDER_MAX_MARKS = 256;
   /// <summary>Exit code of a YES.</summary>
   HBV_EXIT_YES = 0;
   /// <summary>Exit code of a NO or a MAY.</summary>
@@ -65,8 +89,9 @@ type
   /// <summary>The three answers of the verb. The literals are YES, NO, MAY.</summary>
   THbvVerdict = (hbvYes, hbvNo, hbvMay);
 
-  /// <summary>The kinds of event a `--a` / `--b` value can name: the prefix is write, read, call, extcall, site.</summary>
-  THbvEventKind = (hekWrite, hekRead, hekCall, hekExtCall, hekSite);
+  /// <summary>The kinds of event a `--a` / `--b` value can name: the prefix is write, read, call, extcall,
+  /// site, extwrite, app-run.</summary>
+  THbvEventKind = (hekWrite, hekRead, hekCall, hekExtCall, hekSite, hekExtWrite, hekAppRun);
 
   /// <summary>Closed list of reason codes, in the order of the `reasons[]` literals a-never-happens, b-first,
   /// a-not-on-every-path, a-in-other-routine, a-site-uncertain, a-sites-incomplete, b-sites-incomplete,
@@ -75,8 +100,8 @@ type
   THbvReason = (hvrANeverHappens, hvrBFirst, hvrANotOnEveryPath, hvrAInOtherRoutine, hvrASiteUncertain,
     hvrASitesIncomplete, hvrBSitesIncomplete, hvrNoBSite, hvrNoRoutineBody, hvrBudget);
 
-  /// <summary>How a site was proven: same-routine, callee, callers, check-init; hvmNone = not proven.</summary>
-  THbvMethod = (hvmNone, hvmSameRoutine, hvmCallee, hvmCallers, hvmCheckInit);
+  /// <summary>How a site was proven: same-routine, callee, callers, check-init, program-order; hvmNone = not proven.</summary>
+  THbvMethod = (hvmNone, hvmSameRoutine, hvmCallee, hvmCallers, hvmCheckInit, hvmProgramOrder);
 
   /// <summary>One site of an event.</summary>
   THbvSite = record
@@ -120,6 +145,9 @@ type
     Reason: THbvReason;
     /// <summary>One line for the user.</summary>
     Why: string;
+    /// <summary>True when the call-graph pre-check answered this site (never Proven): no routine body
+    /// was solved for it and no later proof is tried.</summary>
+    PreChecked: Boolean;
   end;
 
   /// <summary>The complete answer of one `happens-before` question.</summary>
@@ -164,13 +192,14 @@ type
 /// Deterministic except Ms.</remarks>
 function HappensBefore(const pDbPath, pA, pB: string; const pOptions: THbOptions): THbvAnswer;
 
-/// <summary>Expands a preset name into its two events.</summary>
+/// <summary>Expands a preset name into its events.</summary>
 /// <param name="pPreset">Preset name, case-insensitive.</param>
-/// <param name="pA">Out: event A of the preset.</param>
+/// <param name="pA">Out: event A of the preset; '' when the preset takes the caller's --a.</param>
 /// <param name="pB">Out: event B of the preset.</param>
 /// <returns>False for a name that is not a built preset (pA and pB are then '').</returns>
-/// <remarks>Built: `randomize` (A = extcall:Randomize, B = extcall:Random). The other presets of
-/// spec 2.4 are not expressible as "A before every B" over sites and are not built.</remarks>
+/// <remarks>Built: `randomize` (A = extcall:Randomize, B = extcall:Random); `format-settings`
+/// (A = extwrite:FormatSettings, B = extcall: of the RTL routines that format or parse with the
+/// global settings); `before-app-run` (A = the caller's --a, B = app-run:*).</remarks>
 function HbvPresetEvents(const pPreset: string; out pA, pB: string): Boolean;
 
 /// <summary>The names of the built presets, in help order.</summary>
@@ -211,6 +240,7 @@ uses
 , DRagLint.Query.HappensBefore.Events
 , DRagLint.Query.HappensBefore.Intra
 , DRagLint.Query.HappensBefore.Roots
+, DRagLint.Query.HappensBefore.Handlers
 , DRagLint.Query.HappensBefore
   ;
 
@@ -218,16 +248,30 @@ const
   VERB_NAME = 'happens-before';
   EVENT_SEP = ':';
   QNAME_SEP = '.';
-  KIND_CODES: array[THbvEventKind] of string = ('write', 'read', 'call', 'extcall', 'site');
+  NAME_LIST_SEP = ',';
+  APP_RUN_ALL = '*';
+  KIND_CODES: array[THbvEventKind] of string = ('write', 'read', 'call', 'extcall', 'site', 'extwrite', 'app-run');
   VERDICT_CODES: array[THbvVerdict] of string = ('YES', 'NO', 'MAY');
   REASON_CODES: array[THbvReason] of string = ('a-never-happens', 'b-first', 'a-not-on-every-path',
     'a-in-other-routine', 'a-site-uncertain', 'a-sites-incomplete', 'b-sites-incomplete', 'no-b-site',
     'no-routine-body', 'budget');
-  METHOD_CODES: array[THbvMethod] of string = ('', 'same-routine', 'callee', 'callers', 'check-init');
+  METHOD_CODES: array[THbvMethod] of string = ('', 'same-routine', 'callee', 'callers', 'check-init', 'program-order');
   PRESET_RANDOMIZE = 'randomize';
+  PRESET_FORMAT_SETTINGS = 'format-settings';
+  PRESET_BEFORE_APP_RUN = 'before-app-run';
+  { the RTL routines that format or parse with the global FormatSettings when no settings argument is given }
+  FORMAT_SETTINGS_USERS = 'Format,FormatFloat,FormatCurr,FormatDateTime,FloatToStr,FloatToStrF,CurrToStr,CurrToStrF,' +
+    'StrToFloat,StrToFloatDef,TryStrToFloat,StrToCurr,StrToCurrDef,TryStrToCurr,DateToStr,TimeToStr,DateTimeToStr,' +
+    'StrToDate,StrToDateDef,TryStrToDate,StrToTime,StrToTimeDef,TryStrToTime,StrToDateTime,StrToDateTimeDef,TryStrToDateTime';
+  REF_KINDS_EXTCALL = '''call'', ''read''';
+  REF_KINDS_EXTWRITE = '''write'', ''write-through''';
+  ROOT_KINDS_SQL = '''initialization'', ''finalization'', ''program'', ''library''';
+  SECTION_KINDS_SQL = '''initialization'', ''finalization''';
+  ORDER_WHY_PREFIX = 'why not SET: ';
   CHECK_INIT_LIMIT = 'check-init: ';
-  PRESET_NAMES: array[0..0] of string = (PRESET_RANDOMIZE);
-  EVENT_KINDS_HELP = 'write:<QName>, read:<QName>, call:<QName>, extcall:<Name>, site:<file>:<line>[:<col>]';
+  PRESET_NAMES: array[0..2] of string = (PRESET_RANDOMIZE, PRESET_FORMAT_SETTINGS, PRESET_BEFORE_APP_RUN);
+  EVENT_KINDS_HELP = 'write:<QName>, read:<QName>, call:<QName>, extcall:<Name>[,<Name>...], extwrite:<Name>[,<Name>...], ' +
+    'site:<file>:<line>[:<col>], app-run:<program>|*';
   ROUTINE_KINDS_SQL = '''procedure'', ''function'', ''method'', ''constructor'', ''destructor''';
   { a routine declared in the interface carries its body in impl_*_line; one that lives only in the
     implementation carries it in start_line / end_line (impl_* = 0 or NULL) }
@@ -289,6 +333,10 @@ type
     FNames: TDictionary<Int64, string>;
     FSource: TDictionary<string, TArray<string>>;
     FCallsIn: TDictionary<Int64, TArray<TEdgeSite>>;
+    FPossible: THashSet<Int64>;
+    FPreConclusive: Boolean;
+    FHasIndirect: Boolean;
+    function Walk(const pSeeds: TArray<Int64>; pUp: Boolean; const pRoots, pInto: THashSet<Int64>): Boolean;
     function Id64(const pRow: TIndexRow; const pCol: string): Int64;
     function RoutineName(pId: Int64): string;
     function SourceLine(const pFile: string; pLine: Integer): string;
@@ -300,7 +348,8 @@ type
     procedure AddSite(var pEvent: THbvEvent; const pSite: THbSite; pDefinite: Boolean; const pWhy: string);
     procedure ResolveVar(var pEvent: THbvEvent);
     procedure ResolveCall(var pEvent: THbvEvent);
-    procedure ResolveExtCall(var pEvent: THbvEvent);
+    procedure ResolveUnresolved(var pEvent: THbvEvent; const pRefKinds: string);
+    procedure ResolveAppRun(var pEvent: THbvEvent);
     procedure ResolveSite(var pEvent: THbvEvent);
     procedure BuildReach(pSide: TMarkSide);
     function AllMarks(pSide: TMarkSide; pRoutineId: Int64): TArray<THbSite>;
@@ -313,6 +362,13 @@ type
     function Resolve(const pSpec, pFlag: string): THbvEvent;
     function Dominated(pSide: TMarkSide; const pSite: THbSite; pDepth: Integer; out pMethod: THbvMethod;
       out pNoBody: Boolean): Boolean;
+    { the call-graph pre-check: which routines a proof of "A first" can reach at all (unit header) }
+    procedure PreCheck(const pA, pB: THbvEvent);
+    { True when the pre-check is conclusive and says no proof can reach a site in pRoutineId }
+    function PreRefuted(pRoutineId: Int64): Boolean;
+    { adds the routine bodies another solver spent on this question }
+    procedure Charge(pRoutines: Integer; pExhausted: Boolean);
+    property MaxRoutines: Integer read FMaxRoutines;
     property Solved: Integer read FSolved;
     property Exhausted: Boolean read FExhausted;
   end;
@@ -327,12 +383,21 @@ function HbvPresetEvents(const pPreset: string; out pA, pB: string): Boolean;
 begin
   pA:= '';
   pB:= '';
-  Result:= SameText(pPreset, PRESET_RANDOMIZE);
-  if Result then
+  Result:= True;
+  if SameText(pPreset, PRESET_RANDOMIZE) then
   begin
     pA:= KIND_CODES[hekExtCall] + EVENT_SEP + 'Randomize';
     pB:= KIND_CODES[hekExtCall] + EVENT_SEP + 'Random';
-  end;
+  end
+  else if SameText(pPreset, PRESET_FORMAT_SETTINGS) then
+  begin
+    pA:= KIND_CODES[hekExtWrite] + EVENT_SEP + 'FormatSettings';
+    pB:= KIND_CODES[hekExtCall] + EVENT_SEP + FORMAT_SETTINGS_USERS;
+  end
+  else if SameText(pPreset, PRESET_BEFORE_APP_RUN) then
+    pB:= KIND_CODES[hekAppRun] + EVENT_SEP + APP_RUN_ALL
+  else
+    Result:= False;
 end;
 
 function HbvExitCode(const pAnswer: THbvAnswer): Integer;
@@ -396,10 +461,12 @@ begin
   FNames:= TDictionary<Int64, string>.Create;
   FSource:= TDictionary<string, TArray<string>>.Create;
   FCallsIn:= TDictionary<Int64, TArray<TEdgeSite>>.Create;
+  FPossible:= THashSet<Int64>.Create;
 end;
 
 destructor TEngine.Destroy;
 begin
+  FPossible.Free;
   FCallsIn.Free;
   FSource.Free;
   FNames.Free;
@@ -590,14 +657,24 @@ begin
       AddSite(pEvent, E.Site, E.Certain, 'the index resolved this call with confidence ' + E.Confidence);
 end;
 
-procedure TEngine.ResolveExtCall(var pEvent: THbvEvent);
+procedure TEngine.ResolveUnresolved(var pEvent: THbvEvent; const pRefKinds: string);
 begin
-  if pEvent.Name.Contains(QNAME_SEP) then
-    pEvent.Name:= pEvent.Name.Substring(pEvent.Name.LastIndexOf(QNAME_SEP) + 1);
+  var Names: TArray<string>:= nil;
+  var InList:= '';
+  for var Part in pEvent.Name.Split([NAME_LIST_SEP]) do
+  begin
+    var N:= Part.Trim;
+    if N.Contains(QNAME_SEP) then N:= N.Substring(N.LastIndexOf(QNAME_SEP) + 1);
+    if (N = '') or (IndexText(N, Names) >= 0) then Continue;
+    Names:= Names + [N];
+    InList:= InList + IfThen(InList <> '', ', ') + '''' + TChartsIndex.SqlText(LowerCase(N)) + '''';
+  end;
+  if Names = nil then
+    raise EHbUsage.Create(Format('%s%s needs a name, or names separated by "%s"', [KIND_CODES[pEvent.Kind], EVENT_SEP, NAME_LIST_SEP]));
+  pEvent.Name:= string.Join(NAME_LIST_SEP, Names);
   var R:= FIndex.Query(Format('SELECT f.path, r.start_line, r.start_col, COALESCE(r.enclosing_symbol_id, 0) AS caller ' +
-    'FROM refs r JOIN files f ON f.id = r.file_id WHERE r.symbol_id IS NULL AND r.kind IN (''call'', ''read'') ' +
-    'AND lower(r.name_text) = ''%s'' ORDER BY f.path, r.start_line, r.start_col, r.id',
-    [TChartsIndex.SqlText(LowerCase(pEvent.Name))]));
+    'FROM refs r JOIN files f ON f.id = r.file_id WHERE r.symbol_id IS NULL AND r.kind IN (%s) ' +
+    'AND lower(r.name_text) IN (%s) ORDER BY f.path, r.start_line, r.start_col, r.id', [pRefKinds, InList]));
   try
     for var Row in R do
     begin
@@ -611,6 +688,38 @@ begin
   finally
     R.Free;
   end;
+end;
+
+procedure TEngine.ResolveAppRun(var pEvent: THbvEvent);
+begin
+  var Every:= pEvent.Name = APP_RUN_ALL;
+  var Known:= Every;
+  var Orderer:= THbHandlerOrderer.Create(FIndex);
+  try
+    var R:= FIndex.Query('SELECT id, name FROM symbols WHERE kind IN (''program'', ''library'') ORDER BY name, id');
+    try
+      for var Row in R do
+      begin
+        if not (Every or SameText(Row.S('name'), pEvent.Name)) then Continue;
+        Known:= True;
+        var S: THbSite;
+        if Orderer.RunSiteOf(Id64(Row, 'id'), S) then
+        begin
+          { the program block is no routine body: the program-order solve places the site }
+          S.RoutineId:= 0;
+          S.Routine:= '';
+          AddSite(pEvent, S, True, '');
+        end;
+      end;
+    finally
+      R.Free;
+    end;
+  finally
+    Orderer.Free;
+  end;
+  if not Known then
+    raise EHbUsage.Create(Format('no program "%s" in the index. %s%s%s names every program', [pEvent.Name,
+      KIND_CODES[hekAppRun], EVENT_SEP, APP_RUN_ALL]));
 end;
 
 procedure TEngine.ResolveSite(var pEvent: THbvEvent);
@@ -647,6 +756,17 @@ begin
   finally
     R.Free;
   end;
+  if At.RoutineId = 0 then
+  begin
+    { a section is no routine body, but the program-order solve places a site by its section symbol }
+    R:= FIndex.Query(Format('SELECT s.id FROM symbols s WHERE s.file_id = %d AND s.kind IN (%s) AND s.start_line <= %d ' +
+      'AND s.end_line >= %d ORDER BY s.start_line DESC, s.id LIMIT 1', [FileId, SECTION_KINDS_SQL, At.Line, At.Line]));
+    try
+      if R.Count > 0 then At.RoutineId:= Id64(R[0], 'id');
+    finally
+      R.Free;
+    end;
+  end;
   AddSite(pEvent, At, True, '');
 end;
 
@@ -662,8 +782,10 @@ begin
   case Result.Kind of
     hekWrite, hekRead: ResolveVar(Result);
     hekCall: ResolveCall(Result);
-    hekExtCall: ResolveExtCall(Result);
+    hekExtCall: ResolveUnresolved(Result, REF_KINDS_EXTCALL);
+    hekExtWrite: ResolveUnresolved(Result, REF_KINDS_EXTWRITE);
     hekSite: ResolveSite(Result);
+    hekAppRun: ResolveAppRun(Result);
   end;
   Result.Complete:= Result.IncompleteWhy = nil;
   Result.Spec:= KIND_CODES[Result.Kind] + EVENT_SEP + Result.Name;
@@ -672,6 +794,100 @@ begin
     begin
       Result:= SiteLess(pLeft.Site, pRight.Site);
     end));
+end;
+
+{ One walk of the pre-check over the call graph (calls of every confidence, dispatch edges, indirect
+  edges), from pSeeds into pInto: callers when pUp, callees when not. False = stand down: the walk met
+  a caller the index cannot place or (pUp) an ordered root, passed the node cap, or ran out of time. }
+function TEngine.Walk(const pSeeds: TArray<Int64>; pUp: Boolean; const pRoots, pInto: THashSet<Int64>): Boolean;
+const
+  SQL_UP = 'SELECT DISTINCT COALESCE(r.enclosing_symbol_id, 0) AS x FROM refs r JOIN call_edges c ON c.ref_id = r.id ' +
+    'WHERE c.target_symbol_id = %0:d UNION SELECT base_symbol_id FROM dispatch_edges WHERE impl_symbol_id = %0:d';
+  SQL_UP_INDIRECT = ' UNION SELECT COALESCE(r.enclosing_symbol_id, 0) FROM indirect_edges e LEFT JOIN refs r ' +
+    'ON r.id = e.ref_id WHERE e.target_symbol_id = %0:d';
+  SQL_DOWN = 'SELECT DISTINCT c.target_symbol_id AS x FROM refs r JOIN call_edges c ON c.ref_id = r.id ' +
+    'WHERE r.enclosing_symbol_id = %0:d UNION SELECT impl_symbol_id FROM dispatch_edges WHERE base_symbol_id = %0:d';
+  SQL_DOWN_INDIRECT = ' UNION SELECT e.target_symbol_id FROM indirect_edges e JOIN refs r ON r.id = e.ref_id ' +
+    'WHERE r.enclosing_symbol_id = %0:d';
+begin
+  Result:= False;
+  var Sql:= if pUp then SQL_UP + IfThen(FHasIndirect, SQL_UP_INDIRECT) else SQL_DOWN + IfThen(FHasIndirect, SQL_DOWN_INDIRECT);
+  var Queue:= TQueue<Int64>.Create;
+  try
+    for var Id in pSeeds do
+      if pInto.Add(Id) then Queue.Enqueue(Id);
+    while Queue.Count > 0 do
+    begin
+      if (pInto.Count > HBV_PRECHECK_MAX_NODES) or HbTimeUp then Exit;
+      var R:= FIndex.Query(Format(Sql + ' ORDER BY 1', [Queue.Dequeue]));
+      try
+        for var Row in R do
+        begin
+          var X:= Id64(Row, 'x');
+          if pUp and ((X = 0) or pRoots.Contains(X)) then Exit;
+          if (X <> 0) and pInto.Add(X) then Queue.Enqueue(X);
+        end;
+      finally
+        R.Free;
+      end;
+    end;
+  finally
+    Queue.Free;
+  end;
+  Result:= True;
+end;
+
+procedure TEngine.PreCheck(const pA, pB: THbvEvent);
+begin
+  FPreConclusive:= False;
+  FPossible.Clear;
+  { write:T / read:T: check-init's constructor model orders sites no call path connects }
+  if (pA.Kind = hekWrite) and (pB.Kind = hekRead) and SameText(pA.Name, pB.Name) then Exit;
+  var Roots:= THashSet<Int64>.Create;
+  try
+    var R:= FIndex.Query('SELECT COUNT(*) AS n FROM sqlite_master WHERE type = ''table'' AND name = ''indirect_edges''');
+    try
+      FHasIndirect:= (R.Count > 0) and (R[0].I('n') > 0);
+    finally
+      R.Free;
+    end;
+    R:= FIndex.Query(Format('SELECT id FROM symbols WHERE kind IN (%s) ORDER BY id', [ROOT_KINDS_SQL]));
+    try
+      for var Row in R do Roots.Add(Id64(Row, 'id'));
+    finally
+      R.Free;
+    end;
+    { every site of A seeds the walk, the uncertain ones too: the pre-check only ever says "unprovable" }
+    var Seeds: TArray<Int64>:= nil;
+    for var S in pA.Sites do
+    begin
+      if (S.Site.RoutineId = 0) or Roots.Contains(S.Site.RoutineId) then Exit;
+      Seeds:= Seeds + [S.Site.RoutineId];
+    end;
+    if Seeds = nil then Exit;
+    var Up:= THashSet<Int64>.Create;
+    try
+      if not Walk(Seeds, {pUp=}True, Roots, Up) then Exit;
+      var UpIds:= Up.ToArray;
+      TArray.Sort<Int64>(UpIds);
+      FPreConclusive:= Walk(UpIds, {pUp=}False, Roots, FPossible);
+    finally
+      Up.Free;
+    end;
+  finally
+    Roots.Free;
+  end;
+end;
+
+function TEngine.PreRefuted(pRoutineId: Int64): Boolean;
+begin
+  Result:= FPreConclusive and (pRoutineId <> 0) and not FPossible.Contains(pRoutineId);
+end;
+
+procedure TEngine.Charge(pRoutines: Integer; pExhausted: Boolean);
+begin
+  Inc(FSolved, pRoutines);
+  FExhausted:= FExhausted or pExhausted;
 end;
 
 procedure TEngine.BuildReach(pSide: TMarkSide);
@@ -868,9 +1084,16 @@ begin
       var Row:= Default(THbvSiteAnswer);
       Row.Site:= S.Site;
       Row.SideA:= pSideA;
-      var NoBody: Boolean;
-      Row.Proven:= pEngine.Dominated(Side, S.Site, 0, Row.Method, NoBody);
-      if Row.Proven then
+      var NoBody:= False;
+      Row.PreChecked:= not pSideA and pEngine.PreRefuted(S.Site.RoutineId);
+      if not Row.PreChecked then Row.Proven:= pEngine.Dominated(Side, S.Site, 0, Row.Method, NoBody);
+      if Row.PreChecked then
+      begin
+        Row.Reason:= hvrAInOtherRoutine;
+        Row.Why:= 'pre-check: no routine that performs A, and no caller of one, reaches this routine (call graph only, no body solved)';
+        AddLimit(pAnswer, HBV_LIMIT_PRECHECK);
+      end
+      else if Row.Proven then
         Row.Why:= Format('%s runs first on every path (%s)', [if pSideA then 'B' else 'A', METHOD_CODES[Row.Method]])
       else if pSideA then
         Row.Why:= 'not proven to run after B'
@@ -907,6 +1130,61 @@ begin
     end;
 end;
 
+{ Lane HB5: the sites of one side the site proofs left open go to the ordered-root solve, with the
+  DEFINITE sites of pMarks as marks. True when every site of that side is proven afterwards. }
+function OrderProves(pEngine: TEngine; const pDbPath: string; const pMarks: THbvEvent; pSideA: Boolean;
+  var pAnswer: THbvAnswer): Boolean;
+const
+  RELIED: array[0..1] of THbReason = (hrReliedOnHandlerOrder, hrReliedOnIndirectEdges);
+  CONDITIONAL: array[0..2] of THbReason = (hrWriterConditional, hrWriterAfterUseSameRoutine, hrCalleeNotMust);
+begin
+  var Marks: TArray<THbSite>:= nil;
+  for var S in pMarks.Sites do
+    if S.Definite then Marks:= Marks + [S.Site];
+  var Rows: TArray<Integer>:= nil;
+  var Queries: TArray<THbSite>:= nil;
+  for var I:= 0 to High(pAnswer.Judged) do
+    if (pAnswer.Judged[I].SideA = pSideA) and not pAnswer.Judged[I].Proven and not pAnswer.Judged[I].PreChecked then
+    begin
+      Rows:= Rows + [I];
+      Queries:= Queries + [pAnswer.Judged[I].Site];
+    end;
+  if (Marks <> nil) and (Queries <> nil) and (Length(Marks) <= HBV_ORDER_MAX_MARKS) and not pEngine.Exhausted then
+  begin
+    var Solved:= HbOrderSolve(pDbPath, Marks, Queries, pEngine.MaxRoutines);
+    pEngine.Charge(Solved.Budget.Routines, Solved.Budget.Exhausted);
+    if Length(Solved.JudgedUses) = Length(Rows) then
+      for var K:= 0 to High(Rows) do
+      begin
+        var Use:= Solved.JudgedUses[K];
+        var Leans: TArray<THbReason>:= nil;
+        for var L in RELIED do
+          if TArray.Contains<THbReason>(Use.Reasons, L) then Leans:= Leans + [L];
+        if (Use.Verdict = hvSet) and not (pSideA and (Leans <> nil)) then
+        begin
+          pAnswer.Judged[Rows[K]].Proven:= True;
+          pAnswer.Judged[Rows[K]].Method:= hvmProgramOrder;
+          pAnswer.Judged[Rows[K]].Why:= Format('%s runs first on every path from every root that reaches the site (%s)',
+            [if pSideA then 'B' else 'A', METHOD_CODES[hvmProgramOrder]]);
+          for var L in Leans do AddLimit(pAnswer, HBV_LIMIT_PROGRAM_ORDER + ReasonCode(L));
+        end
+        else if not pSideA and (Use.Verdict <> hvSet) then
+        begin
+          { the site was placed after all: say what the order solve saw, in the verb's reason codes }
+          var NotAlways:= False;
+          for var C in CONDITIONAL do NotAlways:= NotAlways or TArray.Contains<THbReason>(Use.Reasons, C);
+          if pAnswer.Judged[Rows[K]].Reason = hvrNoRoutineBody then
+            pAnswer.Judged[Rows[K]].Reason:= if NotAlways then hvrANotOnEveryPath else hvrAInOtherRoutine;
+          pAnswer.Judged[Rows[K]].Why:= Format('%s | %s: %s', [pAnswer.Judged[Rows[K]].Why, METHOD_CODES[hvmProgramOrder],
+            Use.Why.Replace(ORDER_WHY_PREFIX, '').Replace('writer', 'site of A').Replace('the use', 'this site')]);
+        end;
+      end;
+  end;
+  Result:= True;
+  for var J in pAnswer.Judged do
+    if (J.SideA = pSideA) and not J.Proven then Exit(False);
+end;
+
 procedure Conclude(var pAnswer: THbvAnswer; pVerdict: THbvVerdict; const pSummary: string);
 begin
   pAnswer.Verdict:= pVerdict;
@@ -939,16 +1217,23 @@ begin
     end;
     Exit;
   end;
+  pEngine.PreCheck(pAnswer.A, pAnswer.B);
   var AllB:= JudgeAll(pEngine, pAnswer.A, pAnswer.B, {pSideA=}False, pAnswer);
   { NO: every site of a complete A runs after a site of B in its own activation, so the first A of any
     run is preceded by a B that no A preceded. Uncertain sites of A are judged too. }
-  if not AllB and pAnswer.A.Complete and JudgeAll(pEngine, pAnswer.B, pAnswer.A, {pSideA=}True, pAnswer) then
+  { the pre-check's relation is symmetric (a common ancestor of an A routine and a B routine): when it
+    refuted EVERY site of B, no site of A can be proven to run after B either, so b-first is not tried }
+  var AllRefuted:= True;
+  for var J in pAnswer.Judged do AllRefuted:= AllRefuted and J.PreChecked;
+  if not AllB and not AllRefuted and pAnswer.A.Complete and (JudgeAll(pEngine, pAnswer.B, pAnswer.A, {pSideA=}True, pAnswer)
+    or OrderProves(pEngine, pDbPath, pAnswer.B, {pSideA=}True, pAnswer)) then
   begin
     AddReason(pAnswer, hvrBFirst);
     Conclude(pAnswer, hbvNo, '(proven: every site of A runs after a site of B, so the first B runs with no A before it)');
     Exit;
   end;
   if not AllB then AllB:= CheckInitProves(pDbPath, pOptions, pAnswer);
+  if not AllB then AllB:= OrderProves(pEngine, pDbPath, pAnswer.A, {pSideA=}False, pAnswer);
   if AllB and pAnswer.B.Complete then
     Conclude(pAnswer, hbvYes, '(proven: every site of B runs after A)')
   else if AllB then
@@ -976,7 +1261,8 @@ begin
     try
       Result.A:= Engine.Resolve(pA, '--a');
       Result.B:= Engine.Resolve(pB, '--b');
-      if (Result.A.Kind = hekExtCall) or (Result.B.Kind = hekExtCall) then AddLimit(Result, HBV_LIMIT_MATCHED_BY_NAME);
+      if (Result.A.Kind in [hekExtCall, hekExtWrite]) or (Result.B.Kind in [hekExtCall, hekExtWrite]) then
+        AddLimit(Result, HBV_LIMIT_MATCHED_BY_NAME);
       if Result.A.InstanceField or Result.B.InstanceField then AddLimit(Result, HBV_LIMIT_INSTANCE_INSENSITIVE);
       Decide(Engine, pDbPath, pOptions, Result);
       Result.Routines:= Engine.Solved;
