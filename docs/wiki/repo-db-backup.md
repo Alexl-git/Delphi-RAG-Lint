@@ -56,6 +56,7 @@ in `--json` (`file`, `host`) and in the list is a path on the server, and the li
   drag-lint can neither compare it with what it needs nor reliably remove it; without `--verify quick` the verb stops before
   anything is opened (exit 1, the message names the option). This is a judgment call, not a limit of Firebird.
 - Free space is not checked (a note says so); `--backup-dir` is a path on the server and is not created or looked at here.
+- The automatic name of a remote backup carries milliseconds and a Unix path is cut to its base name; the project's `"backupDir"` is not sent to the other machine (its own default folder is used). The test runner `run_v155_BKNAME.ps1` ends SKIP (no Firebird 4 server) with exit 77.
 - `--backup-name` is REFUSED with a remote server (exit 1 before connecting): an existing file of that name on the server cannot be seen from here and the Firebird service replaces it without a word. The automatic time-stamped name is used there, so nothing is overwritten.
 - The backup is not verified at all, and says so: the report, `--json` (`verified`) and `repo backup list` show `remote, not verified` (`NOT verified`), never `quick`; `repo alter-table --apply` prints the same for its backup.
 - `purge` never deletes an entry that has a host (it is skipped, with the reason); `list` shows it, size 0 (unknown).

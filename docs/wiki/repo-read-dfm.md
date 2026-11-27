@@ -68,7 +68,7 @@ UNRESOLVED. After a COPY (CopyDataSet, CopyData, AppendData, `Data :=`) a data f
 (`no table: written in code after the copy (Unit.pas:51)`). The summary line is `links: N datasets got a source:
 AttachedTo a, CopyDataSet c, ...; M unresolved`; `--json` has `via` per dataset and `totals.links`.
 
-Measured 2026-11-26 on M2022 (182 DFMs, the MICRONITEV6A schema facts, a copy): unresolved datasets 245 -> 185; 99 calc
+Measured 2026-11-26 on M2022 (182 DFMs, the schema facts of a production schema copy): unresolved datasets 245 -> 185; 99 calc
 fields over several tables placed with a home and every binding, 11 not (4 with two paths and no form join, 1 with no
 child end, 1 1:1 pair, 5 reading a field without a table); 94 inputs, 11 FK relations used, 9 FORM relations offered;
 60 memory tables got a source (CopyDataSet 59, CloneCursor 1), 33 links did not (22 of them name a dataset of an inherited

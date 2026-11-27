@@ -351,7 +351,7 @@ choice: ambiguous (several paths: asked once in the dialog, the answer is stored
 ```
 
 `--stats` counts, over every table, the ordered pairs with at least one path and with more than one, at depth 1..n.
-On the MICRONITEV6A schema (297 FKs): 274 / 1,089 / 1,653 pairs at 1 / 2 / 3 steps, 10 / 332 / 1,165 of them with
+On a production schema copy (297 FKs): 274 / 1,089 / 1,653 pairs at 1 / 2 / 3 steps, 10 / 332 / 1,165 of them with
 more than one path (a two-column key is one edge). `--json` prints one object: `paths[]` with `alias`, `path`,
 `steps[]` (`relation`, `child`, `parent`, `source`, `parent_key`, `columns`, `default`), `choice` and `chosen`
 (1-based, 0 = none); with `--stats`, `tables`, `relations`, `not_edges` and `depths[]`.
