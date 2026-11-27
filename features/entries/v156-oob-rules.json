@@ -1,0 +1,19 @@
+{
+  "id": "v156-oob-rules",
+  "title": "Lint rules for class and literal hygiene (field-could-be-local, repeated-string-literal, dunitx-attribute-hygiene, variant-in-loop)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "Finds private fields that could be locals, string literals typed five or more times, DUnitX attribute mistakes and Variant use inside loops",
+  "intro": "Read this to see what each of the four OO-B rules reports, which of them are off by default and what each leaves alone.",
+  "wikiPage": "v156-oob-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule repeated-string-literal"
+    }
+  ],
+  "audience": "both"
+}
