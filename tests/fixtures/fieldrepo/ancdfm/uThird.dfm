@@ -1,0 +1,2 @@
+inherited dmThird: TdmThird
+end
