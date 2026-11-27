@@ -611,6 +611,7 @@ type
 
 const
   MAX_TIGHT_DEPTH = 32;
+  ANY_FILE_ID     = -2;  { NamesInInactiveBranches: a file id no file has, so the declaring file is scanned too }
 
 { The one class / record / interface named AName in the project index; False when none or several. }
 function UniqueType(const AStore: ISymbolStore; const AName: string; out ASym: TSymbol): Boolean;
@@ -654,30 +655,60 @@ begin
   var Vis      : string:= Trim(LowerCase(ASym.Modifiers));
   var DescRefs : Boolean:= False;
   var Elsewhere: Boolean:= False;
-  if (ARefs = nil) or (ARefs.Count = 0) then Exit;
+  var Bad      : Boolean:= (ARefs = nil) or (ARefs.Count = 0);
+  if Bad then Exit;
   for var R: TTightRef in ARefs do
   begin
-    if R.Enclosing <= 0 then Exit;
-    var Enc: TSymbol;
-    if not AEncCache.TryGetValue(R.Enclosing, Enc) then
+    var Enc: TSymbol:= Default(TSymbol);
+    if R.Enclosing > 0 then
     begin
-      Enc:= AStore.GetSymbolById(R.Enclosing);
-      AEncCache.Add(R.Enclosing, Enc);
+      if not AEncCache.TryGetValue(R.Enclosing, Enc) then
+      begin
+        Enc:= AStore.GetSymbolById(R.Enclosing);
+        AEncCache.Add(R.Enclosing, Enc);
+      end;
     end;
-    if Enc.Id <> R.Enclosing then Exit;
-    if Enc.ParentId = ACls.Id then Continue;
-    if (Vis = 'private') or (ACls.Kind <> skClass) then Exit;
-    var EncCls: TSymbol:= AStore.GetSymbolById(Enc.ParentId);
-    if (EncCls.Id <> Enc.ParentId) or not IsStrictDescendant(AStore, EncCls, ACls.Id) then Exit;
-    if (R.Receiver <> '') and not SameText(R.Receiver, 'Self') then Exit;
-    DescRefs:= True;
-    if R.FileId <> ASym.FileId then Elsewhere:= True;
+    if (R.Enclosing <= 0) or (Enc.Id <> R.Enclosing) then Bad:= True
+    else if Enc.ParentId = ACls.Id then Continue
+    else if (Vis = 'private') or (ACls.Kind <> skClass) then Bad:= True
+    else
+    begin
+      var EncCls: TSymbol:= AStore.GetSymbolById(Enc.ParentId);
+      Bad:= (EncCls.Id <> Enc.ParentId) or not IsStrictDescendant(AStore, EncCls, ACls.Id)
+        or ((R.Receiver <> '') and not SameText(R.Receiver, 'Self'));
+      DescRefs:= True;
+      if R.FileId <> ASym.FileId then Elsewhere:= True;
+    end;
+    if Bad then Break;
   end;
+  if Bad then Exit;
   if Vis = 'private' then Result:= 'strict private'
   else if Vis = 'protected' then Result:= (if DescRefs then 'strict protected' else 'strict private')
   else if DescRefs and Elsewhere then Result:= 'protected';
 end;
 
+{ Fills ARefsOf with every reference of the project index whose name is a key of AWanted. }
+procedure GatherTightRefs(const AStore: ISymbolStore; const AWanted: TDictionary<string, Boolean>;
+  const ARefsOf: TDictionary<string, TList<TTightRef>>);
+begin
+  for var FileId: Int64 in AStore.GetAllFileIds do
+    for var R: TReference in AStore.GetReferencesFromFile(FileId) do
+    begin
+      var Key: string:= LowerCase(R.NameText);
+      if not AWanted.ContainsKey(Key) then Continue;
+      var L: TList<TTightRef>;
+      if not ARefsOf.TryGetValue(Key, L) then
+      begin
+        L:= TList<TTightRef>.Create;
+        ARefsOf.Add(Key, L);
+      end;
+      var TR: TTightRef;
+      TR.FileId   := FileId;
+      TR.Enclosing:= R.EnclosingSymbolId;
+      TR.Receiver := R.ReceiverText;
+      L.Add(TR);
+    end;
+end;
 class function TMemberPrivacy.FindTighter(const AStore, ALibStore: ISymbolStore; const ARuleId: string): TArray<TLintFinding>;
 var
   Cands   : TList<TTightCand>;
@@ -713,7 +744,7 @@ begin
       begin
         if (Sym.Kind not in [skMethod, skFunction, skProcedure, skField]) or (Sym.ParentId <= 0) or not Sym.VisExplicit then Continue;
         var Vis: string:= Trim(LowerCase(Sym.Modifiers));
-        if not ((Vis = 'private') or (Vis = 'protected') or (Vis = 'public')) or HasExemptDirective(Sym) then Continue;
+        if not ((Vis = 'private') or (Vis = 'protected') or (Vis = 'public')) or HasExemptDirective(Sym) then Continue;  // dl:ok duplicate-code@09dc -- REVIEWED 2026-11-27 v156 G24R: the candidate screen of Find kept as a copy so the v152 findings stay byte-identical; both screens must change together
         var Cls: TSymbol;
         if not Parents.TryGetValue(Sym.ParentId, Cls) then
         begin
@@ -753,23 +784,8 @@ begin
       end;
     end;
     if Cands.Count = 0 then Exit;
-    for var FileId: Int64 in AStore.GetAllFileIds do
-      for var R: TReference in AStore.GetReferencesFromFile(FileId) do
-      begin
-        var Key: string:= LowerCase(R.NameText);
-        if not Wanted.ContainsKey(Key) then Continue;
-        var L: TList<TTightRef>;
-        if not RefsOf.TryGetValue(Key, L) then
-        begin
-          L:= TList<TTightRef>.Create;
-          RefsOf.Add(Key, L);
-        end;
-        var TR: TTightRef;
-        TR.FileId   := FileId;
-        TR.Enclosing:= R.EnclosingSymbolId;
-        TR.Receiver := R.ReceiverText;
-        L.Add(TR);
-      end;
+    GatherTightRefs(AStore, Wanted, RefsOf);
+
     for var C: TTightCand in Cands do
     begin
       var L: TList<TTightRef>;
@@ -787,18 +803,18 @@ begin
       F.EndLine   := C.Sym.EndLine;
       F.EndCol    := C.Sym.EndCol;
       F.SymbolName:= C.Sym.Name;
-      if IsPublic then
-        F.Message:= Format('Public member %s.%s is only used by its descendants -- it could be protected', [C.Cls.Name, C.Sym.Name])
+      F.Message:= (if IsPublic then
+        Format('Public member %s.%s is only used by its descendants -- it could be protected', [C.Cls.Name, C.Sym.Name])
       else
-        F.Message:= Format('%s member %s.%s is only used %s -- it could be %s',
+        Format('%s member %s.%s is only used %s -- it could be %s',
           [(if SameText(Trim(C.Sym.Modifiers), 'private') then 'Private' else 'Protected'),
-           C.Cls.Name, C.Sym.Name, (if Target = 'strict protected' then 'by its descendants' else 'inside its own class'), Target]);
+           C.Cls.Name, C.Sym.Name, (if Target = 'strict protected' then 'by its descendants' else 'inside its own class'), Target]));
       Hits.Add(F);
     end;
     { a name any indexed file (the declaring one too) spells inside an inactive conditional branch is used there }
     var Names2: TDictionary<string, Int64>:= TDictionary<string, Int64>.Create;
     try
-      for var F: TLintFinding in Hits do Names2.AddOrSetValue(LowerCase(F.SymbolName), -2);
+      for var F: TLintFinding in Hits do Names2.AddOrSetValue(LowerCase(F.SymbolName), ANY_FILE_ID);
       var Inactive: TDictionary<string, Boolean>:= NamesInInactiveBranches(AStore, Names2);
       try
         for var F: TLintFinding in Hits do
