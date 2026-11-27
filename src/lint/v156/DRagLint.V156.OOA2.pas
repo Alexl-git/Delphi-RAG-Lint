@@ -30,7 +30,7 @@ type
     /// <summary>Declares every rule id this lane may emit: new ids (V151Rule) and host ids of in-place expansions (V151Host).</summary>
     /// <param name="ADecls">List to append to; owned by the caller.</param>
     /// <remarks>Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.
-    /// The scaffold declares nothing.</remarks>
+    /// Both rules are ON by default.</remarks>
     class procedure Catalog(const ADecls: TList<TV151RuleDecl>); static;
     /// <summary>Per-file check of one .pas (parse tree, index, library).</summary>
     /// <param name="ACtx">The file being linted; Store / LibStore may be nil.</param>
@@ -54,30 +54,42 @@ type
 
 implementation
 
-{ The lane's helpers live in DRagLint.V156.OOA2.Support; name it in an
-  implementation uses clause here once it declares something. }
+uses
+  DRagLint.V156.OOA2.Support  // dl:ok uses-global-census@f2aa -- REVIEWED 2026-11-26 v156 OOA-2: the Support unit of the lane holds the checks; the pair travels together
+  ;
 
 class procedure TV156OOA2Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
 begin
-  { no rules yet }
+  ADecls.Add(V151Rule(RULE_ABSTRACT_METHOD_NOT_OVERRIDDEN, 'bug-patterns', 'warning', 'Class leaves an inherited abstract method open'));
+  ADecls.Add(V151Rule(RULE_HANDLER_TYPE_NEVER_RAISED, 'bug-patterns', 'warning', 'Exception handler for a project type that nothing raises or builds'));
 end;
 
 class function TV156OOA2Rules.CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+var
+  Found: TList<TLintFinding>;
+begin
+  Result:= nil;
+  Found := TList<TLintFinding>.Create;
+  try
+    if ACtx.Wants(RULE_ABSTRACT_METHOD_NOT_OVERRIDDEN) then Found.AddRange(CheckAbstractNotOverridden(ACtx));
+    if ACtx.Wants(RULE_HANDLER_TYPE_NEVER_RAISED) then Found.AddRange(CheckHandlerNeverRaised(ACtx));
+    if Found.Count > 0 then Result:= Found.ToArray;
+  finally
+    Found.Free;
+  end;
+end;
+
+class function TV156OOA2Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@c7de -- REVIEWED 2026-11-26 v156 OOA-2: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV156OOA2Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV156OOA2Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@16ce -- REVIEWED 2026-11-26 v156 OOA-2: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
 
-class function TV156OOA2Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
-begin
-  Result:= nil;
-end;
-
-class function TV156OOA2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;
+class function TV156OOA2Rules.CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@cb34 -- REVIEWED 2026-11-26 v156 OOA-2: fixed TV151 frame hook signature; the lane has no check here
 begin
   Result:= nil;
 end;
