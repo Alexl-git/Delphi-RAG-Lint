@@ -502,11 +502,11 @@ end
   $qdfm = Join-Path $q 'uQ.dfm'
   Put $qdfm ("object frmQ: TfrmQ`n  object dsMain: TDataSource`n    DataSet = qryMain`n  end`n  object Lbl: TLabel`n    Caption = 'G1'`n  end`n  object Edit: TDBEdit`n    DataField = 'G2'`n    DataSource = dsMain`n  end`n" +
     "  object qryMain: TFDQuery`n    UpdateOptions.UpdateTableName = 'ORDERS'`n    object qryMainID: TIntegerField`n      FieldName = 'ID'`n    end`n    object qryMainG1: TIntegerField`n      FieldName = 'G1'`n    end`n    object qryMainG2: TIntegerField`n      FieldName = 'G2'`n    end`n" +
-    "    object qryMainG3: TIntegerField`n      FieldName = 'G3'`n    end`n    object qryMainG4: TIntegerField`n      FieldName = 'G4'`n    end`n  end`nend`n")
-  Put (Join-Path $q 'uQ.pas') "unit uQ;`ninterface`nuses Data.DB;`ntype`n  TfrmQ = class(TForm)`n  end;`nimplementation`nprocedure P;`nbegin`n  ShowMessage('G1 is a caption, G4 a word');`n  V := qryMain.FieldByName('G3').AsInteger;`nend;`nend.`n"
+    "    object qryMainG3: TIntegerField`n      FieldName = 'G3'`n    end`n    object qryMainG4: TIntegerField`n      FieldName = 'G4'`n    end`n    object qryMainG5: TIntegerField`n      FieldName = 'G5'`n    end`n  end`nend`n")
+  Put (Join-Path $q 'uQ.pas') "unit uQ;`ninterface`nuses Data.DB;`ntype`n  TfrmQ = class(TForm)`n  end;`nimplementation`nprocedure P;`nbegin`n  ShowMessage('G1 is a caption, G4 a word');`n  V := qryMain.FieldByName('G3').AsInteger;`n  V := qryMain.FieldValues['G5'];`nend;`nend.`n"
   $r = Write-Dfm @('--dataset', 'qryMain', '--names', 'ID') $qdfm
-  $state = (1..4 | ForEach-Object { $m = [regex]::Match($r.Out, "delete uQ\.dfm qryMainG$($_): [^\n]*\n  (BLOCKED: [^\n]*|\(unchecked\))"); if (-not $m.Success) { '?' } elseif ($m.Value -match 'BLOCKED') { 'B' } else { '-' } }) -join ''
-  Check 'W13d Q17: a caption (G1) and a word of a message (G1, G4) do not block; DataField (G2) and FieldByName (G3) do' ($state -eq '-BB-') ($state + "`n" + $r.Out)
+  $state = (1..5 | ForEach-Object { $m = [regex]::Match($r.Out, "delete uQ\.dfm qryMainG$($_): [^\n]*\n  (BLOCKED: [^\n]*|\(unchecked\))"); if (-not $m.Success) { '?' } elseif ($m.Value -match 'BLOCKED') { 'B' } else { '-' } }) -join ''
+  Check 'W13d Q17: a caption (G1) and a word of a message (G1, G4) do not block; DataField (G2), FieldByName (G3) and FieldValues[] (G5) do' ($state -eq '-BB-B') ($state + "`n" + $r.Out)
   # ---- M2: the plan id ----
   $pd = NewForms 'plan'
   $pdfm = Join-Path $pd 'uAllKinds.dfm'; $ppas = Join-Path $pd 'uAllKinds.pas'

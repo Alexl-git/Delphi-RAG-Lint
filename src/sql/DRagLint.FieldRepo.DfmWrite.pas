@@ -240,7 +240,7 @@ type
     function Mentions(const pText: string): Integer;
     /// <summary>True when a string literal of the code that REFERS to a field has the name as a word: the name alone, an
     /// entry of a list `A;B` or `A:D`, a part of a filter. A reference is an argument of FieldByName / FindField / Locate /
-    /// Lookup, a value given to Filter, IndexFieldNames, MasterFields, KeyFields, LookupKeyFields, LookupResultField,
+    /// Lookup, an index of FieldValues, a value given to Filter, IndexFieldNames, MasterFields, KeyFields, LookupKeyFields, LookupResultField,
     /// ListField, DataField, FieldName or Sort, or a `:name` parameter of a SQL text (SQL.Add, SQL.Text).</summary>
     /// <remarks>1.55 Q17 B (owner 2026-11-26): any other string (a message, a caption, a log line) only has the same
     /// word and does not count; 1.54 counted every string.</remarks>
@@ -1407,6 +1407,9 @@ begin
       Exit(STRING_SQL);
     Exit;
   end;
+  { DataSet.FieldValues['X'] (the default array property of the field list) names a field like FieldByName }
+  if (pIndex >= OFFSET_PROP - 1) and (FTokens[pIndex - 1].Text = '[') and SameText(FTokens[pIndex - 2].Text, 'FieldValues') then
+    Exit(STRING_FIELD);
   { the call the string is an argument of: back to the unmatched open parenthesis of the statement }
   VDepth := 0;
   VOpen := pIndex - 1;
