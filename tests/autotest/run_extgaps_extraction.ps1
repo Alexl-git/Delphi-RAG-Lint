@@ -58,7 +58,9 @@ $d = Sql $a "select d.dst_kind, d.dst_name, d.src_name, s.kind from data_flows d
 Check 'G2 evArgs.dpr main block has an arg row Fill <- GDpr under the program symbol' ($d -match 'arg\s+Fill\s+GDpr\s+program') $d
 # 1.52 EXTGAPS2: the calls pass adds 'global' <- 'argout' rows (dst_index >= 0) for globals passed to var / out
 # parameters (4 in evaData.pas, pinned by run_extgaps2_extraction.ps1); the extractor's own rows stay 7.
-$n = Sql $a "select count(*) from data_flows d join files f on f.id=d.file_id where f.path like '%evaData.pas' and not (d.dst_kind='global' and d.src_kind='argout' and d.dst_index >= 0)"
+# 1.56 EXT-B1F: declared scalar types add val_class twins beside the kept pre-1.56 rows (REV-1: the empty-val_class set
+# stays equal), so the control counts the val_class '' set: still 7 (13 with the twins).
+$n = Sql $a "select count(*) from data_flows d join files f on f.id=d.file_id where f.path like '%evaData.pas' and coalesce(d.val_class, '') = '' and not (d.dst_kind='global' and d.src_kind='argout' and d.dst_index >= 0)"
 Check 'G2 control: evaData.pas extractor rows unchanged (7)' ($n -match '(?m)^\s*7\s*$') $n
 
 # G4 -- every DFM binding of a shared handler

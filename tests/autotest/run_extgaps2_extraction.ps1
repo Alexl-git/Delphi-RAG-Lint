@@ -127,7 +127,9 @@ $g = Sql $x3 "select dst_line, dst_col, dst_index, dst_name, src_index, src_line
 Check 'HB3 Fill(GCount) (var) -> global GCount at 34:8 <- argout 0 of Fill at 34:3' ($g -match '(?m)^34\s+8\s+0\s+GCount\s+0\s+34\s+3\s+Fill\s*$') $g
 Check 'HB3 Load(GName) (out) -> global GName at 35:8 <- argout 0 of Load at 35:3' ($g -match '(?m)^35\s+8\s+0\s+GName\s+0\s+35\s+3\s+Load\s*$') $g
 Check 'HB3 control: Show(GName) (const) and Fill(L) (a local) write no global' (-not ($g -match '(?m)^3[67]\s')) $g
-$a = Sql $x3 "select count(*) from data_flows where dst_kind='arg'"
+# 1.56 EXT-B1F: a declared scalar adds a val_class twin beside the kept pre-1.56 arg row (REV-1: the empty-val_class
+# set stays equal), so the control counts that set: still 3 (4 with the twin).
+$a = Sql $x3 "select count(*) from data_flows where dst_kind='arg' and coalesce(val_class, '') = ''"
 Check 'HB3 control: the extractor''s 3 arg rows are unchanged' ($a -match '^\s*3\s*$') $a
 & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'argout') --db $x3 --force-reparse 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $n = Sql $x3 "select count(*) from data_flows where dst_kind='global' and src_kind='argout'"
