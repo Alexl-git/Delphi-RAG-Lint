@@ -87,6 +87,7 @@ if ($fail) { Write-Host "FAIL ($fail)" -ForegroundColor Red; exit 1 }
 Ok "hook unit wired; $($stubs.Count) stubs set Surfaces + Needs"
 
 # ---- 2. headless ----
+# -U = the plugin dir + the .dproj's own DCC_UnitSearchPath (core, lint, project) + sql (a DCCReference): a listed unit's own uses resolve from the source tree (1.56: Cmd.FieldRepo uses Cmd.GridCopy -> FieldSelectModel -> sql\DRagLint.FieldRepo.Kinds).
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $rs)) { Write-Host "FATAL: rsvars not found: $rs" -ForegroundColor Red; exit 2 }
 New-Item -ItemType Directory -Force (Join-Path $WorkDir 'dcu') | Out-Null
@@ -205,7 +206,7 @@ end.
 [IO.File]::WriteAllText((Join-Path $WorkDir 'CtxCheck.dpr'), ($dpr -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
 $bat = Join-Path $WorkDir 'build.bat'
 $lines = @('@echo off', ('call "{0}"' -f $rs), ('cd /d "{0}"' -f $WorkDir),
-  ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" CtxCheck.dpr' -f $WorkDir), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
+  ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" -U"{1};{1}\..\core;{1}\..\lint;{1}\..\project;{1}\..\sql" CtxCheck.dpr' -f $WorkDir, $plug), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $buildLog = Join-Path $WorkDir 'build.log'
 $null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru; $null = $null.Handle

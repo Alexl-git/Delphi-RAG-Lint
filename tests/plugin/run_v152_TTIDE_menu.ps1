@@ -73,7 +73,8 @@ begin
     SetLength(lMine, 0);
     for lCmd in lTable do
       if lCmd.OwnerLane = 'TTIDE' then lMine:= lMine + [lCmd];
-    Check(Length(lMine) = 9, 'nine rows (six TTIDE, three TT-DIALOG), got ' + IntToStr(Length(lMine)));
+    { 1.56 FRAME-2: + field-repository-10-grid-copy (Copy Grid Columns..., visible) -> ten rows }
+    Check(Length(lMine) = 10, 'ten rows (six TTIDE, three TT-DIALOG, one 1.56 grid-copy), got ' + IntToStr(Length(lMine)));
     for lCmd in lMine do Check(lCmd.ParentPath = 'Field Repository', lCmd.Id + ' parent path');
     lRoot:= Fixture;
     try
@@ -124,7 +125,7 @@ end.
 [IO.File]::WriteAllText((Join-Path $WorkDir 'FieldRepoMenuCheck.dpr'), ($dpr -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
 $bat = Join-Path $WorkDir 'build.bat'
 $lines = @('@echo off', ('call "{0}"' -f $rs), ('cd /d "{0}"' -f $WorkDir),
-  ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" FieldRepoMenuCheck.dpr' -f $WorkDir), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
+  ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" -U"{1};{1}\..\core;{1}\..\lint;{1}\..\project;{1}\..\sql" FieldRepoMenuCheck.dpr' -f $WorkDir, $plug), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $buildLog = Join-Path $WorkDir 'build.log'
 $null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru; $null = $null.Handle

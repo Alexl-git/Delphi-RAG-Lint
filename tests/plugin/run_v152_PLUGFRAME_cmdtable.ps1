@@ -28,8 +28,8 @@
 param(
   # 7833a66b7 = main at 1.51.2-alpha (67823450c + the RPT Reports item factory, merged into 1.52 by INT15)
   [string]$BaseRef = '7833a66b7',
-  [string[]]$EnabledIds = @('field-repository', 'field-repository-02-refresh', 'field-repository-03-orm', 'field-repository-04-dataservice', 'field-repository-05-memtable', 'field-repository-06-paramarray', 'field-repository-07-read-dataset', 'field-repository-08-read-form', 'field-repository-09-select-fields', 'check-init'),   # TTIDE (INT 1.52); 03/04/06 enabled by BK-TTFINISH (B33); check-init enabled by HBIDE
-  [int]$ExactCount = 11,   # headless rows: check-init + idx-range + 9 field-repository (3 of them 1.54 TT-DIALOG); ToolsAPI units left out (H5)
+  [string[]]$EnabledIds = @('field-repository', 'field-repository-02-refresh', 'field-repository-03-orm', 'field-repository-04-dataservice', 'field-repository-05-memtable', 'field-repository-06-paramarray', 'field-repository-07-read-dataset', 'field-repository-08-read-form', 'field-repository-09-select-fields', 'field-repository-10-grid-copy', 'check-init'),   # TTIDE (INT 1.52); 03/04/06 enabled by BK-TTFINISH (B33); check-init enabled by HBIDE; 10-grid-copy enabled by FRAME-2 (1.56)
+  [int]$ExactCount = 12,   # headless rows: check-init + idx-range + 10 field-repository (3 of them 1.54 TT-DIALOG, 1 the 1.56 FRAME-2 grid-copy, visible); ToolsAPI units left out (H5)
   [string]$WorkDir = "$env:TEMP\drag-lint-v152-plugframe-$PID"
 )
 # H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
@@ -197,7 +197,7 @@ end.
 [IO.File]::WriteAllText((Join-Path $WorkDir 'Cmd152Check.dpr'), ($dpr -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
 $bat = Join-Path $WorkDir 'build.bat'
 $lines = @('@echo off', ('call "{0}"' -f $rs), ('cd /d "{0}"' -f $WorkDir),
-  ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" Cmd152Check.dpr' -f $WorkDir), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
+  ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" -U"{1};{1}\..\core;{1}\..\lint;{1}\..\project;{1}\..\sql" Cmd152Check.dpr' -f $WorkDir, $plug), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $buildLog = Join-Path $WorkDir 'build.log'
 $null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru; $null = $null.Handle
