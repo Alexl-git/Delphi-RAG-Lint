@@ -14,7 +14,7 @@ unit DRagLint.Query.Vcs;
   (GIT_OPTIONAL_LOCKS=0), no user diff settings (explicit git options; HGPLAIN=1).
   Every failure is a refusal with a reason: no working copy, two of them in one folder, a tool that does not
   start, a revision the tool does not know, a revset that names several revisions, or tool output this unit
-  cannot read. The change counts and co-change pairs of S4 (G-41, G-46) are not built in 1.56. }
+  cannot read. The change counts of S4 (G-41) are not built in 1.56; ReadCommitLog (G-46) lists the commits and their files. }
 
 interface
 
@@ -127,8 +127,38 @@ function ResolveRevision(const pCopy: TVcsWorkingCopy; const pRevision: string; 
 function ChangedLinesSince(const pCopy: TVcsWorkingCopy; const pRevision: string; out pChanged: IVcsChangedLines;
   out pRefusal: string): Boolean;
 
-implementation
+type
+  /// <summary>One file a commit touched, as the tool lists it (no rename detection: a rename is a deletion
+  /// plus an addition).</summary>
+  TVcsCommitFile = record
+    /// <summary>The absolute path, with backslashes.</summary>
+    Path: string;
+    /// <summary>'A' added, 'M' modified, 'D' deleted.</summary>
+    Status: Char;
+  end;
 
+  /// <summary>One non-merge commit and the files it touched.</summary>
+  TVcsCommit = record
+    /// <summary>The tool's full hexadecimal id.</summary>
+    Id: string;
+    /// <summary>The files, in the order the tool listed them.</summary>
+    Files: TArray<TVcsCommitFile>;
+  end;
+
+/// <summary>Reads the non-merge commits of a working copy that came after a point in its history, with the
+/// files each touched (the input of co-change counting, G-46).</summary>
+/// <param name="pCopy">A working copy FindWorkingCopy returned.</param>
+/// <param name="pSince">'' = the whole history; 'YYYY-MM-DD' = commits from that day on (the tool's local
+/// time); anything else is a revision as for ResolveRevision, and the commits AFTER it (it is excluded).</param>
+/// <param name="pCommits">The commits, in the tool's order, when the result is True; empty otherwise.</param>
+/// <param name="pRefusal">Why not, as a clause without a final period; '' when the result is True.</param>
+/// <returns>False for every reason ResolveRevision refuses, and when the tool's log fails or has a shape this
+/// unit cannot read. Never a partial answer.</returns>
+/// <remarks>Runs the tool once (twice for a revision); read-only. Renames are never detected by similarity.</remarks>
+function ReadCommitLog(const pCopy: TVcsWorkingCopy; const pSince: string; out pCommits: TArray<TVcsCommit>;
+  out pRefusal: string): Boolean;
+
+implementation
 uses
   System.Classes, System.Generics.Collections, Winapi.Windows;
 
@@ -699,6 +729,110 @@ begin
   ReadUntracked(Untracked, Answer);
   pChanged:= Keep;
   Result:= True;
+end;
+
+{ the commit log (G-46) }
+
+const
+  GIT_LOG = GIT_BASE + 'log --no-merges --no-renames --name-status --no-color --format=@@%%H %s';
+  HG_LOG = 'hg log -r "%s and not merge()" --template "@@{node}\n{file_mods %% ''M {file}\n''}' +
+    '{file_adds %% ''A {file}\n''}{file_dels %% ''D {file}\n''}"';
+  DATE_LENGTH = 10;
+  DAY_DASH_1 = 5; { the dashes of YYYY-MM-DD }
+  DAY_DASH_2 = 8;
+  COMMIT_MARK = '@@';
+  ENTRY_MIN_LENGTH = 3; { 'A x': the status, one separator, a name }
+  ENTRY_PATH_AT = 3;
+  REFUSAL_SHOWN = 60;
+
+/// <summary>Whether a text is a calendar day written YYYY-MM-DD.</summary>
+function IsIsoDay(const pText: string): Boolean;
+begin
+  Result:= (Length(pText) = DATE_LENGTH) and (pText[DAY_DASH_1] = '-') and (pText[DAY_DASH_2] = '-');
+  if Result then
+    for var K:= 1 to DATE_LENGTH do
+      if (K <> DAY_DASH_1) and (K <> DAY_DASH_2) and not CharInSet(pText[K], ['0'..'9']) then Exit(False);
+end;
+
+/// <summary>Reads the '@@id' blocks and their 'S path' lines (S = A, M or D; one tab or space after it).</summary>
+function ReadLogText(const pCopy: TVcsWorkingCopy; const pText: string; out pCommits: TArray<TVcsCommit>;
+  out pRefusal: string): Boolean;
+begin
+  pCommits:= nil;
+  pRefusal:= '';
+  Result:= True;
+  var Root: string:= IncludeTrailingPathDelimiter(pCopy.Root);
+  var Done:= TList<TVcsCommit>.Create;
+  var Files:= TList<TVcsCommitFile>.Create;
+  try
+    var Open: Boolean:= False;
+    var Current:= Default(TVcsCommit);
+    for var Line: string in pText.Split([#10]) do
+    begin
+      var Row: string:= Line.TrimRight([#13]);
+      if Row = '' then Continue;
+      if Row.StartsWith(COMMIT_MARK) then
+      begin
+        if Open then
+        begin
+          Current.Files:= Files.ToArray;
+          Done.Add(Current);
+        end;
+        Files.Clear;
+        Open:= True;
+        Current.Id:= Copy(Row, Length(COMMIT_MARK) + 1, MaxInt);
+      end
+      else if Open and (Length(Row) >= ENTRY_MIN_LENGTH) and CharInSet(Row[1], ['A', 'M', 'D'])
+        and CharInSet(Row[2], [#9, ' ']) then
+      begin
+        var Entry: TVcsCommitFile;
+        Entry.Status:= Row[1];
+        Entry.Path:= Root + StringReplace(Copy(Row, ENTRY_PATH_AT, MaxInt), '/', '\', [rfReplaceAll]);
+        Files.Add(Entry);
+      end
+      else
+      begin
+        pRefusal:= Format('the %s log could not be read at "%s"', [VcsKindName(pCopy.Kind), Copy(Row, 1, REFUSAL_SHOWN)]);
+        Exit(False);
+      end;
+    end;
+    if Open then
+    begin
+      Current.Files:= Files.ToArray;
+      Done.Add(Current);
+    end;
+    pCommits:= Done.ToArray;
+  finally
+    Files.Free;
+    Done.Free;
+  end;
+end;
+function ReadCommitLog(const pCopy: TVcsWorkingCopy; const pSince: string; out pCommits: TArray<TVcsCommit>;
+  out pRefusal: string): Boolean;
+begin
+  Result:= False;
+  pCommits:= nil;
+  pRefusal:= '';
+  if pCopy.Kind = vkNone then
+  begin
+    pRefusal:= 'no working copy was given';
+    Exit;
+  end;
+  var IsGit: Boolean:= pCopy.Kind = vkGit;
+  var Range: string;
+  if pSince = '' then
+    Range:= if IsGit then 'HEAD' else 'ancestors(.)'
+  else if IsIsoDay(pSince) then
+    Range:= if IsGit then Format('--since="%s 00:00:00" HEAD', [pSince]) else Format('date(''>%s'') and ancestors(.)', [pSince])
+  else
+  begin
+    var Id: string;
+    if not ResolveRevision(pCopy, pSince, Id, pRefusal) then Exit;
+    Range:= if IsGit then Id + '..HEAD' else Format('ancestors(.) - ancestors(%s)', [Id]);
+  end;
+  var Output: TBytes;
+  if not RunFor(pCopy, Format(if IsGit then GIT_LOG else HG_LOG, [Range]), 'the commit log', Output, pRefusal) then Exit;
+  Result:= ReadLogText(pCopy, DecodeBytes(Output, 0, Length(Output), pCopy.Kind), pCommits, pRefusal);
 end;
 
 end.

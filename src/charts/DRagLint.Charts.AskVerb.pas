@@ -87,6 +87,10 @@ type
     SurfaceCap   : string;
     /// <summary>--max-rows, as typed.</summary>
     MaxRows      : string;
+    /// <summary>--since: change-coupling's start of history, a revision or YYYY-MM-DD; '' = all.</summary>
+    Since        : string;
+    /// <summary>--min-support, as typed: change-coupling's minimum shared commits.</summary>
+    MinSupport   : string;
     /// <summary>--out-root: where the bundle folder is made; '' = %TEMP%\drag-lint-reports.</summary>
     OutRoot      : string;
     /// <summary>--pairs-file: the report-pairs.json; '' = ResolveReportPairsFile.</summary>
@@ -253,6 +257,7 @@ begin
     'Usage: drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <index>]',
     '         [--to <routine B>] [--server-db <idx>] [--sql-db <idx>] [--counterpart-db <idx>]',
     '         [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N]',
+    '         [--since <rev|YYYY-MM-DD>] [--min-support N]   (change-coupling: the history read, and the least shared commits of a pair)',
     '         [--out-root <dir>] [--pairs-file <report-pairs.json>] [--allow-stale] [--plain] [--open] [--resolve-only]',
     '  <question>: ' + string.Join(', ', QuestionIds),
     '  --question <id>: the same as the positional <question>.',
@@ -265,14 +270,14 @@ end;
 type
   { Every flag `ask` takes; FLAG_NAMES spells them. }
   TAskFlag = (afQuestion, afTarget, afTo, afProject, afIn, afDb, afServerDb, afSqlDb, afCounterpartDb, afControl,
-    afMode, afDepth, afCap, afSurfaceCap, afMaxRows, afOutRoot, afPairsFile, afAllowStale, afPlain, afOpen,
+    afMode, afDepth, afCap, afSurfaceCap, afMaxRows, afSince, afMinSupport, afOutRoot, afPairsFile, afAllowStale, afPlain, afOpen,
     afResolveOnly, afHelp, afHelpShort);
 
 const
   FLAG_NAMES: array[TAskFlag] of string = ('--question', '--target', '--to', '--project', '--in', '--db', '--server-db',
-    '--sql-db', '--counterpart-db', '--control', '--mode', '--depth', '--cap', '--surface-cap', '--max-rows', '--out-root',
+    '--sql-db', '--counterpart-db', '--control', '--mode', '--depth', '--cap', '--surface-cap', '--max-rows', '--since', '--min-support', '--out-root',
     '--pairs-file', '--allow-stale', '--plain', '--open', '--resolve-only', '--help', '-h');
-  INT_FLAGS = [afDepth, afCap, afSurfaceCap, afMaxRows];
+  INT_FLAGS = [afDepth, afCap, afSurfaceCap, afMaxRows, afMinSupport];
   SWITCH_FLAGS = [afAllowStale, afPlain, afOpen, afResolveOnly, afHelp, afHelpShort];
 
 function FindFlag(const pText: string; out pFlag: TAskFlag): Boolean;
@@ -317,6 +322,8 @@ begin
     afCap          : pArgs.Cap:= pValue;
     afSurfaceCap   : pArgs.SurfaceCap:= pValue;
     afMaxRows      : pArgs.MaxRows:= pValue;
+    afSince        : pArgs.Since:= pValue;
+    afMinSupport   : pArgs.MinSupport:= pValue;
     afOutRoot      : pArgs.OutRoot:= pValue;
   else
     pArgs.PairsFile:= pValue;
@@ -388,6 +395,8 @@ begin
   AddArg(Result, 'Control', pArgs.Control);
   AddArg(Result, 'Mode', pArgs.Mode);
   AddArg(Result, 'MaxRows', pArgs.MaxRows);
+  AddArg(Result, 'Since', pArgs.Since);
+  AddArg(Result, 'MinSupport', pArgs.MinSupport);
 end;
 
 function AnswerLines(const pText: string): TArray<string>;

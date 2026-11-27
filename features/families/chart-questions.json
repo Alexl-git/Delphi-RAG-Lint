@@ -43,6 +43,7 @@
     "class-diagram":    { "aliases": ["uml class diagram", "has-a links"] },
     "sequence":         { "aliases": ["sequence diagram", "call sequence"] },
     "dependency-matrix": { "aliases": ["uses matrix", "dsm", "unit dependency matrix"] },
+    "change-coupling": { "aliases": ["change coupling", "co-change", "units that change together", "hidden coupling"] },
     "main-sequence":    { "aliases": ["abstractness", "instability", "zone of pain"] },
     "control-flow":    { "aliases": ["flow graph", "basic blocks"] },
     "sent-not-handled": { "aliases": ["unhandled commands", "commands never handled"] }
