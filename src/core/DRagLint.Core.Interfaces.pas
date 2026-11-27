@@ -656,6 +656,8 @@ type
     /// Not stamping is always SAFE: a NULL stamp reads as "unknown" and the file
     /// is re-parsed. Wrongly stamping is not.
     /// Not thread-safe; call from the owning thread only.
+    /// 1.56: a writable store also builds the additive index idx_refs_file_line here (the call
+    /// marks the start of an index run), when it does not exist yet.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.BeginFileBatch"/>
@@ -4126,6 +4128,8 @@ type
     /// Leaving it '' is always SAFE -- it costs a redundant re-parse. Setting it
     /// when the run was forced for either other reason is not.
     /// Not thread-safe; call from the owning thread only.
+    /// 1.56: a writable store also builds the additive index idx_refs_file_line here (the call
+    /// marks the start of an index run), when it does not exist yet.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ApplyIndexerFingerprint (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.IIndexer.AddExcludeRoot"/>
