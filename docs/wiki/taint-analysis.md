@@ -1,13 +1,13 @@
 # Taint analysis
 
-Three lint rules follow a value from a catalogued source to a dangerous sink across routines and units: `taint-sql-injection` (CWE-89), `taint-command-injection` (CWE-78) and `taint-path-traversal` (CWE-22). They walk the `data_flows` facts that the indexer writes (extractor 1.26.0-alpha), so they need a project index.
+Six lint rules follow a value from a catalogued source to a dangerous sink across routines and units: `taint-sql-injection` (CWE-89), `taint-command-injection` (CWE-78) `taint-path-traversal` (CWE-22), `taint-deserialization` (CWE-502, request body to a component or object reader), `taint-html-output` (CWE-79, request field to a response write) and `taint-log` (CWE-117, off by default; turn on with `--enable taint-log`). They walk the `data_flows` facts that the indexer writes (extractor 1.26.0-alpha), so they need a project index.
 
 ## Running it from the CLI
 ```
 drag-lint lint-all --db <db> --rule taint-sql-injection
 drag-lint lint <file.pas> --db <db> --rule taint-path-traversal
 ```
-`lint-all` runs all three by default. `lint <file>` runs them only with `--db`. A run that disables every taint rule skips the taint stage. Findings carry the path from source to sink.
+`lint-all` runs the five default-on rules (`taint-log` is off by default). `lint <file>` runs them only with `--db`. A run that disables every taint rule skips the taint stage. Findings carry the path from source to sink.
 
 Since 1.52 each rule reports **one finding per sink site** (file, line, column, rule), however many sources or paths reach it. The message names the best path (certain before weak, then the shortest) and, when more than one distinct path reaches the sink, ends with a summary such as `(4 sources, 6 paths)`. Nothing is dropped: in `--format json` the `path` key holds that best path (source first, sink last) and `paths` lists every distinct path, best first. A `dl:ok` marker on the sink line reviews the whole site, as it did each per-path finding before (the marker hash is unchanged). `max_paths_per_sink` is still accepted in the config and ignored.
 
