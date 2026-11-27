@@ -180,6 +180,7 @@ uses
   DRagLint.FieldRepo.DfmReadSql,
   DRagLint.FieldRepo.DfmReadCalc,
   DRagLint.FieldRepo.DfmReadLinks,
+  DRagLint.FieldRepo.DfmReadInherit,
   DRagLint.FieldRepo.RelationGraph,
   DRagLint.FieldRepo.RelationRepo,
   DRagLint.FieldRepo.CrossTable;
@@ -341,6 +342,7 @@ type
     FInputs: TList<TPlannedInput>;
     FUnitTexts: TDictionary<string, string>;       // lower-case .pas path -> source ('' = none)
     FUnitLinks: TDictionary<string, TArray<TDfmrLink>>;
+    FAncestry: IDfmrAncestry; // 1.56 ANCDFM: datasets of an inherited form or module, completed from the ancestor DFM
     FCross: TDfmrCrossTotals;
     FUnchecked: TDictionary<string, string>;      // KeyOf(table, field) of a placed field whose input needs an offer -> why
     procedure LoadRows;
@@ -628,6 +630,7 @@ begin
   FInputs := TList<TPlannedInput>.Create;
   FUnitTexts := TDictionary<string, string>.Create;
   FUnitLinks := TDictionary<string, TArray<TDfmrLink>>.Create;
+  FAncestry := NewDfmrAncestry(Form);
   FUnchecked := TDictionary<string, string>.Create;
 end;
 
@@ -785,7 +788,7 @@ var
   VLink: TDfmrLink;
   VSources, VWhere: TArray<string>;
   VOwner: TDfmrForm;
-  VSource, VCandidate: TDfmrDataset;
+  VSource: TDfmrDataset;
   VSub: TDatasetSource;
   VLocal, VKey, VKind, VPas: string;
   VFound: Boolean;
@@ -828,13 +831,7 @@ begin
   VFound := False;
   VSource := Default(TDfmrDataset);
   if OwnerForm(pForm, VLink.Source, VOwner, VLocal) then
-    for VCandidate in VOwner.Datasets do
-      if SameText(VCandidate.Name, VLocal) then
-      begin
-        VSource := VCandidate;
-        VFound := True;
-        Break;
-      end;
+    VFound := FAncestry.FindDataset(VOwner, VLocal, VSource);
   if not VFound then
   begin
     Result.Reason := Format('linked to %s (%s), which is no dataset of the form or of a module beside it', [VLink.Source, VKind]);
@@ -1311,18 +1308,12 @@ end;
 function TDfmRead.LookupTarget(const pForm: TDfmrForm; const pName: string; out pDataset: TDfmrDataset): Boolean;
 var
   VForm: TDfmrForm;
-  VDataset: TDfmrDataset;
   VName: string;
 begin
   pDataset := Default(TDfmrDataset);
   Result := False;
   if OwnerForm(pForm, pName, VForm, VName) then
-    for VDataset in VForm.Datasets do
-      if SameText(VDataset.Name, VName) then
-      begin
-        pDataset := VDataset;
-        Exit(True);
-      end;
+    Result := FAncestry.FindDataset(VForm, VName, pDataset);
 end;
 
 { The column behind a dataset field a lookup names; pBlocked = why it is none of the dataset's table. An unresolved dataset
@@ -2363,6 +2354,7 @@ begin
     raise EDfmReadError.CreateFmt('no dataset %s in the DFM', [pDataset]);
   PlanAll(pFiles, pDataset = '');
   UncheckOffered;
+  FWarnings.AddStrings(FAncestry.Notes);
   FPlan.ChangeSet.Changes := FChanges.ToArray;
   FPlan.Items := FItems.ToArray;
   FPlan.Warnings := FWarnings.ToStringArray;
