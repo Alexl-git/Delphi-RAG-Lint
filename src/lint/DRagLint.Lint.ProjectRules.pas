@@ -348,6 +348,18 @@ begin
   Result:= False;
 end;
 
+/// <summary>v156 FP-INJ: True when an attribute name is a dependency-injection attribute (Spring4D Inject / InjectAttribute), bare or unit-qualified.</summary>
+/// <param name="AName">Attribute name as indexed, possibly dotted (Spring.Container.Common.Inject).</param>
+/// <returns>True when the last dotted segment is Inject or InjectAttribute (case-insensitive).</returns>
+/// <remarks>Fixed list; only the last segment is compared so a qualified form matches the bare one.</remarks>
+function IsDiInjectAttribute(const AName: string): Boolean;
+begin
+  var Last: string:= AName;
+  var Dot: Integer:= Last.LastIndexOf('.');
+  if Dot >= 0 then Last:= Last.Substring(Dot + 1);
+  Result:= SameText(Last, 'Inject') or SameText(Last, 'InjectAttribute');
+end;
+
 { Walk the tree-sitter AST for AFile and collect every identifier that appears
   as a getter ('read'), setter ('write'), 'stored', 'index' or 'default'
   specifier in a declProp node, plus
@@ -4298,6 +4310,7 @@ var
   PrivModifiers : string                      ;
   IsPrivate     : Boolean                     ;
   PropAccessors : TDictionary<string, Boolean>;
+  InjIds        : TDictionary<Int64, Boolean>;  { v156 FP-INJ: symbol ids carrying a DI-injection attribute, per file }
   { Run-level memos for unused-unit-in-uses. See StemsFor. }
   StemsOfName   : TDictionary<string, TArray<string>>;
   PathOfFile    : TDictionary<Int64, string>        ;
@@ -5443,6 +5456,15 @@ begin
       if WantRule('unused-private-member') then
         PropAccessors:= BuildPropertyAccessorSet(Path);
       Inc(TAccess, Tick - TA);
+      { v156 FP-INJ: a private field/method decorated with a DI attribute (Spring4D [Inject]) is
+        written/called by the container through RTTI, so zero references is its normal state. }
+      InjIds:= nil;
+      if WantRule('unused-private-member') and AStore.HasAttributes then
+      begin
+        InjIds:= TDictionary<Int64, Boolean>.Create;
+        for var Atr: TAttributeRow in AStore.GetAttributes(Fid) do
+          if (Atr.SymbolId > 0) and IsDiInjectAttribute(Atr.Name) then InjIds.AddOrSetValue(Atr.SymbolId, True);
+      end;
       try
 
         for Sym in Syms do
@@ -5567,6 +5589,9 @@ begin
               if (PropAccessors <> nil) and PropAccessors.ContainsKey(LowerCase(Sym.Name)) then
                 { property accessor or backing field -- not dead code, skip }
               else
+              if (InjIds <> nil) and InjIds.ContainsKey(Sym.Id) then
+                { v156 FP-INJ: DI-injected by RTTI -- not dead code, skip }
+              else
               if not IsReferenced(Sym) then
                 Add('unused-private-member', 'warning',
                   Format('Private member ''%s'' has no references in the index -- possible dead code', [Sym.Name]), Sym);
@@ -5577,6 +5602,8 @@ begin
         end; // for Sym
 
       finally
+        InjIds.Free;
+        InjIds:= nil;
         PropAccessors.Free;
         PropAccessors:= nil;  // dl:ok overwrite-before-read@5eed -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       end;
