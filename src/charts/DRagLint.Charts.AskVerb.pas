@@ -158,6 +158,10 @@ function NormaliseAskQuestion(const pTyped: string; out pId: string): Boolean;
 /// Control, Mode, MaxRows -- each only when given. Never an index override or a display
 /// switch (Ask-Report's Get-ReportCommandLine, header contract H2).</returns>
 /// <remarks>
+/// The names are the canonical ones of DRagLint.Charts.ReportHeader; the answer prints
+/// them in CLI style, i.e. as this verb's own flags (--target, --to, --project, --in, --depth,
+/// --cap, --surface-cap, --control, --mode, --max-rows), so a printed COMMAND line names the
+/// flags that ask the same question again.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas)</para>
 /// <para>Calls: Default, DRagLint.Charts.AskVerb.AddArg, ExpandFileName</para>

@@ -85,10 +85,14 @@ function BundleSlug(const pTarget: string): string;
 
 /// <summary>The COMMAND line of the answer header (Ask-Report's Get-ReportCommandLine).</summary>
 /// <param name="pCmd">The question and its explicit arguments.</param>
-/// <returns>'COMMAND &lt;id&gt; -Target "t"' then -To, -Project (full path) or -In (full path),
-/// -Depth, -Cap, -SurfaceCap, -Control, -Mode, -MaxRows -- each only when given (-To,
-/// -Project, -In, -Control and -Mode only when not empty).</returns>
+/// <returns>'COMMAND &lt;id&gt; --target "t"' then --to, --project (full path) or --in (full
+/// path), --depth, --cap, --surface-cap, --control, --mode, --max-rows -- each only when given
+/// (--to, --project, --in, --control and --mode only when not empty).</returns>
 /// <remarks>
+/// CLI style since 1.56, written by BuildCommandLine (DRagLint.Charts.ReportHeader): the
+/// one grammar of every carrier. --target is always written, even when empty. A line in the
+/// PowerShell style of 1.55 and earlier ('-Target "t" -SurfaceCap 40') is still read by
+/// ParseCommandLine and names the same question.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
 /// <para>Calls: DRagLint.Charts.ReportHeader.TReportCommand.Get, DRagLint.Charts.ReportHeader.TReportCommand.Has, ExpandFileName</para>
@@ -563,29 +567,36 @@ begin
 end;
 
 function ReportCommandText(const pCmd: TReportCommand): string;
-begin
-  var SB:= TStringBuilder.Create;
-  try
-    SB.Append('COMMAND ').Append(pCmd.Question).Append(' -Target "').Append(pCmd.Get('Target')).Append('"');
-    if pCmd.Get('To') <> '' then
-      SB.Append(' -To "').Append(pCmd.Get('To')).Append('"');
-    if pCmd.Get('Project') <> '' then
-      SB.Append(' -Project "').Append(ExpandFileName(pCmd.Get('Project'))).Append('"')
-    else if pCmd.Get('In') <> '' then
-      SB.Append(' -In "').Append(ExpandFileName(pCmd.Get('In'))).Append('"');
-    for var N in ['Depth', 'Cap', 'SurfaceCap'] do
-      if pCmd.Has(N) then
-        SB.Append(' -').Append(N).Append(' ').Append(pCmd.Get(N));
-    if pCmd.Get('Control') <> '' then
-      SB.Append(' -Control "').Append(pCmd.Get('Control')).Append('"');
-    if pCmd.Get('Mode') <> '' then
-      SB.Append(' -Mode ').Append(pCmd.Get('Mode'));
-    if pCmd.Has('MaxRows') then
-      SB.Append(' -MaxRows ').Append(pCmd.Get('MaxRows'));
-    Result:= SB.ToString;
-  finally
-    SB.Free;
+var
+  Shown: TReportCommand;
+
+  procedure Keep(const pName, pValue: string);
+  begin
+    var A: TCommandArg;
+    A.Name:= pName;
+    A.Value:= pValue;
+    Shown.Args:= Shown.Args + [A];
   end;
+
+begin
+  // WHICH arguments the line names is decided here (Get-ReportCommandLine); HOW they are spelled,
+  // ordered and quoted is BuildCommandLine's, so every carrier prints one grammar.
+  Shown:= Default(TReportCommand);
+  Shown.Question:= pCmd.Question;
+  Keep('Target', pCmd.Get('Target'));
+  if pCmd.Get('To') <> '' then
+    Keep('To', pCmd.Get('To'));
+  if pCmd.Get('Project') <> '' then
+    Keep('Project', ExpandFileName(pCmd.Get('Project')))
+  else if pCmd.Get('In') <> '' then
+    Keep('In', ExpandFileName(pCmd.Get('In')));
+  for var N in ['Depth', 'Cap', 'SurfaceCap', 'MaxRows'] do
+    if pCmd.Has(N) then
+      Keep(N, pCmd.Get(N));
+  for var N in ['Control', 'Mode'] do
+    if pCmd.Get(N) <> '' then
+      Keep(N, pCmd.Get(N));
+  Result:= 'COMMAND ' + BuildCommandLine(Shown);
 end;
 
 function HtmlDecode(const pText: string): string;
@@ -684,11 +695,12 @@ begin
   var Cm:= TRegEx.Match(pRegenerate, RE_CAP_ARG);
   if Cm.Success then
   begin
-    var CapName:= if Cm.Groups[G_CAP_NAME].Value = 'surface-cap' then 'SurfaceCap' else 'Cap';
-    Result:= Format(' (-%s %s; raise -%s to see them)', [CapName, Cm.Groups[G_CAP_VALUE].Value, CapName]);
+    // the flag as the regenerate command and the COMMAND line spell it: --cap or --surface-cap
+    var CapName:= Cm.Groups[G_CAP_NAME].Value;
+    Result:= Format(' (--%s %s; raise --%s to see them)', [CapName, Cm.Groups[G_CAP_VALUE].Value, CapName]);
   end
   else
-    Result:= ' (raise -Cap to see them)';
+    Result:= ' (raise --cap to see them)';
 end;
 
 function DotAnswerRows(const pDotLines: TArray<string>; const pRegenerate: string; pMaxRows: Integer;
@@ -755,7 +767,7 @@ begin
     for var T in NotShown do
       Result:= Result + [ROW_INDENT + '... ' + T];
     if Rows.Count > pMaxRows then
-      Result:= Result + [Format('%s... %d more row(s) not printed here (-MaxRows %d): %s',
+      Result:= Result + [Format('%s... %d more row(s) not printed here (--max-rows %d): %s',
         [ROW_INDENT, Rows.Count - pMaxRows, pMaxRows, pDotPath])];
   finally
     NotShown.Free;
