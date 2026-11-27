@@ -239,6 +239,58 @@ try {
   Check 'B5c positive control: readonly leaves the field delete of a FireDAC dataset alone' (($r.Code -eq 0) -and ($r.Out -match ($delOld + '  \(unchecked\)'))) $r.Out
   $r = Write-Dfm $bn (NewBdeForms 'bdebad' 'readwrite')
   Check 'B4 an unknown fieldrepo.bde value is refused (exit 1, names the key)' (($r.Code -eq 1) -and ($r.Out -match 'fieldrepo\.bde')) $r.Out
+  # ---- REVFIX (1.55 final review #3, #5): the policy must not fail open ----
+  # B6: a form outside every project tree, the repository inside a project: the repository's project decides
+  $rp = Join-Path $work 'rp'
+  [IO.Directory]::CreateDirectory((Join-Path $rp '_D-RAG')) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $rp '_D-RAG\drag-lint-project.json'), '{"fieldrepo": {"bde": "readonly"}}')
+  $rpRepo = Join-Path $rp 'y.dlrepo'
+  [IO.File]::Copy($script:y, $rpRepo)
+  $od = Join-Path $work 'outside\f'
+  [IO.Directory]::CreateDirectory($od) | Out-Null
+  foreach ($f in 'uAllKinds.dfm', 'uAllKinds.pas') { Put (Join-Path $od $f) ((Text (Join-Path $src $f)).Replace('memOrders: TFDMemTable', 'memOrders: TTable')) }
+  $r = Write-Dfm $bn (Join-Path $od 'uAllKinds.dfm') $rpRepo
+  Check 'B6a a form outside the project tree: the project of the repository decides (insert BLOCKED)' (($r.Code -eq 0) -and ($r.Out -match ($insPrice + '  BLOCKED: BDE dataset: read only \(project policy\)'))) $r.Out
+  Check 'B6b the plan names the policy and where it is from' ($r.Out -match '(?m)^bde policy readonly for uAllKinds\.dfm: fieldrepo\.bde of .*\\rp\\_D-RAG') $r.Out
+  $r = Write-Dfm $bn (Join-Path $od 'uAllKinds.dfm')
+  Check 'B6c control: no project anywhere -> full, and the plan SAYS it is the default for want of a project' (($r.Code -eq 0) -and ($r.Out -notmatch 'BLOCKED: BDE') -and ($r.Out -match '(?m)^bde policy full for uAllKinds\.dfm: default: no (project folder|fieldrepo\.bde in) ')) $r.Out
+  $rj = Write-Dfm ($bn + @('--json')) (Join-Path $od 'uAllKinds.dfm') $rpRepo
+  $jl = @($rj.Out -split "`n" | Where-Object { $_.StartsWith('{') })
+  $jb = if ($jl.Count -gt 0) { @(($jl[-1] | ConvertFrom-Json).bde) } else { @() }
+  Check 'B6d --json carries it: bde[].dfm / policy / source' (($jb.Count -eq 1) -and ($jb[0].policy -eq 'readonly') -and ($jb[0].dfm -like '*uAllKinds.dfm') -and ($jb[0].source -like 'fieldrepo.bde of *')) $rj.Out
+  # B8: a value that is not a string is refused, not read as full
+  foreach ($bad in @('true', '0', '["none"]', '{"x": 1}', 'null')) {
+    $bd = NewBdeForms ('bdetype' + [Math]::Abs($bad.GetHashCode())) ''
+    [IO.File]::WriteAllText((Join-Path (Split-Path (Split-Path $bd)) '_D-RAG\drag-lint-project.json'), "{`"fieldrepo`": {`"bde`": $bad}}")
+    $r = Write-Dfm $bn $bd
+    Check "B8 fieldrepo.bde = $bad (not a string) is refused: exit 1, names the key, plans nothing" (($r.Code -eq 1) -and ($r.Out -match 'fieldrepo\.bde') -and ($r.Out -notmatch '# plan ')) $r.Out
+  }
+  # B9: two forms of two projects in one run: each has the policy of its own project
+  $b9full = NewBdeForms 'b9full' 'full'
+  $b9ro = NewBdeForms 'b9ro' 'readonly'
+  foreach ($e in 'dfm', 'pas') { [IO.File]::Move(($b9ro -replace 'dfm$', $e), ((Split-Path $b9ro) + "\uSecond.$e")) }
+  $b9ro = (Split-Path $b9ro) + '\uSecond.dfm'
+  $r = Write-Dfm @() "$b9full;$b9ro"
+  Check 'B9a the first form (full): its new handler is offered' (($r.Code -eq 0) -and ($r.Out -match ($evQty + '  \(unchecked\)'))) $r.Out
+  Check 'B9b the second form (readonly): its new handler is BLOCKED -- the first file does not decide for it' ($r.Out -match ($evQty.Replace('uAllKinds', 'uSecond') + '  BLOCKED: BDE dataset: read only')) $r.Out
+  Check 'B9c both policies are named' (($r.Out -match '(?m)^bde policy full for uAllKinds\.dfm: ') -and ($r.Out -match '(?m)^bde policy readonly for uSecond\.dfm: ')) $r.Out
+  # B10 (#5): a class that DESCENDS from a BDE dataset, known from the project's index (type_ancestors)
+  function NewIndexed($name, $class, [switch]$NoIndex) {
+    $bd = NewBdeForms $name 'none' $class
+    $p = Split-Path (Split-Path $bd)
+    Put (Join-Path $p 'uMyData.pas') "unit uMyData;`n`ninterface`n`nuses`n  DBTables, FireDAC.Comp.Client;`n`ntype`n  TMyQuery = class(TQuery)`n  end;`n`n  TMyQuery2 = class(TMyQuery)`n  end;`n`n  TMyMem = class(TFDMemTable)`n  end;`n`nimplementation`n`nend.`n"
+    if (-not $NoIndex) { $script:ix = Run @('index', $p, '--db', (Join-Path $p "_D-RAG\$name.sqlite")) }
+    $bd
+  }
+  $r = Write-Dfm $bn (NewIndexed 'b10q' 'TMyQuery2')
+  Check 'B10a TMyQuery2 = class(TMyQuery) = class(TQuery), policy none: the insert is BLOCKED' (($r.Code -eq 0) -and ($r.Out -match ($insPrice + '  BLOCKED: BDE not allowed in this project'))) ($r.Out + "`n" + $script:ix.Out)
+  Check 'B10b the plan says the index was asked' ($r.Out -match '(?m)^bde policy none for uAllKinds\.dfm: .*BDE classes: by name and \d+ descendant\(s\) from b10q\.sqlite') $r.Out
+  $r = Write-Dfm $bn (NewIndexed 'b10m' 'TMyMem')
+  Check 'B10c control: TMyMem = class(TFDMemTable) in the same index is left alone' (($r.Code -eq 0) -and ($r.Out -match ($insPrice + '\[')) -and ($r.Out -notmatch 'BLOCKED: BDE')) $r.Out
+  $r = Write-Dfm $bn (NewIndexed 'b10n' 'TMyQuery2' -NoIndex)
+  Check 'B10d no index: the descendant is NOT known, and the plan says the classes are by name only' (($r.Code -eq 0) -and ($r.Out -notmatch 'BLOCKED: BDE') -and ($r.Out -match '(?m)^bde policy none for uAllKinds\.dfm: .*BDE classes: by name only \(no project index')) $r.Out
+  $r = Write-Dfm $bn (NewIndexed 'b10w' 'TwwTable' -NoIndex)
+  Check 'B10e no index: a well-known third-party BDE descendant (TwwTable) is known by name' (($r.Code -eq 0) -and ($r.Out -match ($insPrice + '  BLOCKED: BDE not allowed in this project'))) $r.Out
 }
 finally {
   try { [IO.Directory]::Delete($work, $true) } catch { }

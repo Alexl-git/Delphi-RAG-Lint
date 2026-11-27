@@ -25,11 +25,23 @@ type
   /// <summary>Raised for a selection that cannot be planned: no dataset, an unresolved one, an unknown field.</summary>
   EDfmWriteSelection = class(EDfmWriteError);
 
-  /// <summary>What repo write-dfm may do to a BDE dataset (TTable, TQuery, TStoredProc, TBDE*): the project setting
-  /// fieldrepo.bde.</summary>
-  /// <remarks>dbpFull: the same as any other dataset (the default). dbpReadOnly: no field insert, no new event handler,
-  /// no grid or layout item removal. dbpNone: the project allows no BDE at all; the same three are refused.</remarks>
+  /// <summary>What repo write-dfm may do to a BDE dataset: the project setting fieldrepo.bde.</summary>
+  /// <remarks>A BDE dataset is one whose class is TTable, TQuery, TStoredProc, TNestedTable, an InfoPower twin of them
+  /// (TwwTable, TwwQuery, TwwStoredProc, TwwQBE), a TBDE* class, or a class TDfmwBdeRules.Classes names (the descendants an
+  /// index knows). dbpFull: the same as any other dataset (the default). dbpReadOnly: five things are refused -- a field
+  /// insert, a field delete, a new event handler, a grid or layout item removal, and a new grid column (with it its
+  /// handlers) of a view on the dataset. dbpNone: the project allows no BDE at all; the same five are refused.</remarks>
   TDfmwBdePolicy = (dbpFull, dbpReadOnly, dbpNone);
+
+  /// <summary>The BDE rules of one PlanDfmWriteWithRules call.</summary>
+  /// <remarks>Each form has the policy of its own project: PolicyOf is asked once per DFM with its full path.</remarks>
+  TDfmwBdeRules = record
+    /// <summary>The policy of a DFM (full path); nil = dbpFull for every form.</summary>
+    PolicyOf: TFunc<string, TDfmwBdePolicy>;
+    /// <summary>Class names that are BDE datasets beside the built-in names (case-insensitive): descendants of
+    /// BdeDatasetRoots found in the project's index.</summary>
+    Classes: TArray<string>;
+  end;
 
   /// <summary>What a change does to the DFM text.</summary>
   TDfmwAction = (dwaSet, dwaRemove, dwaKind, dwaInsert, dwaDelete, dwaEvent);
@@ -112,11 +124,30 @@ type
 /// <exception cref="ERepoError">The repository is schema 1 (run repo migrate first).</exception>
 /// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids and the same PlanId. A
 /// file given twice is planned once. A file that is open in the IDE is read from disk. An unknown field in pFields ends in
-/// the EFrSelectionError of ExpandSelection. pBde (the project's fieldrepo.bde) blocks, on a BDE dataset only, the field
-/// inserts, new event handlers and grid / layout item removals: `BDE dataset: read only (project policy)` or
-/// `BDE not allowed in this project`.</remarks>
+/// the EFrSelectionError of ExpandSelection. pBde (the project's fieldrepo.bde) blocks, on a BDE dataset only (see
+/// TDfmwBdePolicy), the field inserts, the field deletes, new event handlers, grid / layout item removals and new grid
+/// columns: `BDE dataset: read only (project policy)` or `BDE not allowed in this project`. pBde is the policy of EVERY
+/// form given; PlanDfmWriteWithRules takes one per form.</remarks>
 function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
   const pFields: TArray<string>; pBde: TDfmwBdePolicy = dbpFull): TDfmwPlan;
+
+/// <summary>PlanDfmWrite with a BDE policy per form and the BDE classes an index knows.</summary>
+/// <param name="pRepo">As PlanDfmWrite.</param>
+/// <param name="pFiles">As PlanDfmWrite.</param>
+/// <param name="pDataset">As PlanDfmWrite.</param>
+/// <param name="pFields">As PlanDfmWrite.</param>
+/// <param name="pBde">The policy of each form and the further BDE classes.</param>
+/// <returns>As PlanDfmWrite.</returns>
+/// <exception cref="EDfmWriteError">As PlanDfmWrite, with its other exceptions.</exception>
+/// <remarks>The policy of a form applies to the datasets of that form only: a run over two projects blocks in one and
+/// not in the other.</remarks>
+function PlanDfmWriteWithRules(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
+  const pFields: TArray<string>; const pBde: TDfmwBdeRules): TDfmwPlan;
+
+/// <summary>The classes whose descendants are BDE datasets.</summary>
+/// <returns>The built-in BDE class names and the two BDE base classes (TBDEDataSet, TDBDataSet).</returns>
+/// <remarks>For a caller that asks an index for descendants to fill TDfmwBdeRules.Classes.</remarks>
+function BdeDatasetRoots: TArray<string>;
 
 /// <summary>The policy a fieldrepo.bde value names.</summary>
 /// <param name="pText">`full`, `readonly` or `none` (case-insensitive); '' = full.</param>
@@ -228,7 +259,8 @@ const
   DEFAULT_STRING_SIZE = 20; // TStringField.Size
   MAX_BCD_SCALE = 4; // FireDAC maps more decimals to TFMTBCDField
   UNICODE_CHARSETS: array[0..1] of string = ('UTF8', 'UNICODE_FSS');
-  BDE_CLASSES: array[0..2] of string = ('TTable', 'TQuery', 'TStoredProc');
+  BDE_CLASSES: array[0..7] of string = ('TTable', 'TQuery', 'TStoredProc', 'TNestedTable', 'TwwTable', 'TwwQuery', 'TwwStoredProc', 'TwwQBE');
+  BDE_BASE_CLASSES: array[0..1] of string = ('TBDEDataSet', 'TDBDataSet');
   BDE_CLASS_PREFIX = 'TBDE';
   BDE_POLICY_NAMES: array[TDfmwBdePolicy] of string = ('full', 'readonly', 'none');
   BDE_POLICY_REASONS: array[TDfmwBdePolicy] of string = ('', 'BDE dataset: read only (project policy)',
@@ -336,6 +368,7 @@ type
   strict private
     FRepo: TFDConnection;
     FBde: TDfmwBdePolicy;
+    FRules: TDfmwBdeRules;
     FPlan: TDfmwPlan;
     FRows: TDictionary<string, TRepoField>;
     FOrder: TList<TRepoField>;
@@ -418,7 +451,7 @@ type
     procedure PlanGridColumn(const pRow: TRepoField; const pPlace: TGridPlace);
     procedure PlanGridColumns;
   public
-    constructor Create(pRepo: TFDConnection; pBde: TDfmwBdePolicy);
+    constructor Create(pRepo: TFDConnection; const pBde: TDfmwBdeRules);
     destructor Destroy; override;
     function Execute(const pFiles: TArray<string>; const pDataset: string; const pFields: TArray<string>): TDfmwPlan;
   end;
@@ -649,11 +682,12 @@ end;
 
 { TDfmWritePlanner }
 
-constructor TDfmWritePlanner.Create(pRepo: TFDConnection; pBde: TDfmwBdePolicy);
+constructor TDfmWritePlanner.Create(pRepo: TFDConnection; const pBde: TDfmwBdeRules);
 begin
   inherited Create;
   FRepo := pRepo;
-  FBde := pBde;
+  FRules := pBde;
+  FBde := dbpFull;
   FRows := TDictionary<string, TRepoField>.Create;
   FOrder := TList<TRepoField>.Create;
   FSamples := TObjectDictionary<string, TField>.Create([doOwnsValues]);
@@ -677,12 +711,26 @@ begin
   raise EDfmWriteError.CreateFmt('project setting fieldrepo.bde: %s is not full, readonly or none', [QuotedStr(pText)]);
 end;
 
-{ THE BDE check (owner 2026-11-26): '' unless the dataset being planned is a BDE one and the project's fieldrepo.bde
-  is not full. Every BDE refusal of the planner asks here, so that a later opt-in changes one place. }
+function BdeDatasetRoots: TArray<string>;
+var
+  VName: string;
+begin
+  Result := nil;
+  for VName in BDE_CLASSES do
+    Result := Result + [VName];
+  for VName in BDE_BASE_CLASSES do
+    Result := Result + [VName];
+end;
+
+{ THE BDE check (owner 2026-11-26): '' unless the dataset being planned is a BDE one and the fieldrepo.bde of the
+  project of the form being planned (FBde, set per file in Execute) is not full. Every BDE refusal of the planner asks
+  here, so that a later opt-in changes one place. A BDE dataset: a built-in name, TBDE*, or a class the caller's index
+  found to descend from one (FRules.Classes). }
 function TDfmWritePlanner.BdeBlockReason: string;
 begin
   Result := '';
-  if MatchText(FDataset.DatasetClass, BDE_CLASSES) or StartsText(BDE_CLASS_PREFIX, FDataset.DatasetClass) then
+  if MatchText(FDataset.DatasetClass, BDE_CLASSES) or StartsText(BDE_CLASS_PREFIX, FDataset.DatasetClass)
+    or MatchText(FDataset.DatasetClass, FRules.Classes) then
     Result := BDE_POLICY_REASONS[FBde];
 end;
 
@@ -1977,6 +2025,9 @@ begin
     VReason := ExtractFileName(FPlan.Files[FFileIndex].PasName) + ': the unit already has ' + pPlace.Column
   else
     VReason := MissingUnit([UNIT_CX_DB_TABLE]);
+  { the view shows a BDE dataset the project's fieldrepo.bde closes: no new column, and so no handlers of it }
+  if BdeBlockReason <> '' then
+    VReason := BdeBlockReason;
   FNewNames.Add(pPlace.Column);
   VIndex := AddItem(VItem, fcoInsert, '', BlockSummary(CLASS_GRID_COLUMN + '; ' + pPlace.View.Name + ' index ' + IntToStr(VAt), VItem.Block));
   FChanges.List[VIndex].Checked := False;
@@ -2318,6 +2369,7 @@ begin
   FGridTable := RepoSchemaVersion(FRepo) >= SCHEMA_WITH_GRID;
   for VFile in UniquePaths(pFiles) do
   begin
+    FBde := if Assigned(FRules.PolicyOf) then FRules.PolicyOf(VFile) else dbpFull;
     OpenForm(VFile);
     for VDataset in FForm.Datasets do
       if (pDataset = '') or SameText(pDataset, VDataset.Name) then
@@ -2337,6 +2389,20 @@ end;
 
 function PlanDfmWrite(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
   const pFields: TArray<string>; pBde: TDfmwBdePolicy): TDfmwPlan;
+var
+  VRules: TDfmwBdeRules;
+begin
+  VRules := Default(TDfmwBdeRules);
+  VRules.PolicyOf :=
+    function(pFile: string): TDfmwBdePolicy
+    begin
+      Result := pBde;
+    end;
+  Result := PlanDfmWriteWithRules(pRepo, pFiles, pDataset, pFields, VRules);
+end;
+
+function PlanDfmWriteWithRules(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string;
+  const pFields: TArray<string>; const pBde: TDfmwBdeRules): TDfmwPlan;
 var
   VPlanner: TDfmWritePlanner;
 begin
