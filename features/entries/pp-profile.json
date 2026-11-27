@@ -25,7 +25,7 @@
           "name": "--config"
         }
       ],
-      "helpOrder": 99,
+      "helpOrder": 90,
       "help": ["  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] [--in <file.pas> [--db <file.sqlite>]]   (diagnostic: print the resolved define profile, one symbol per line; --in prints the profile of the owning project's active build)"]
     }
   ],

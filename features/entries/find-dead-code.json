@@ -30,7 +30,7 @@
           "arg": "PATH"
         }
       ],
-      "helpOrder": 69,
+      "helpOrder": 62,
       "help": ["  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]"]
     }
   ],

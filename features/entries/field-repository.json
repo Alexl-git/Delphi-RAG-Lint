@@ -20,128 +20,92 @@
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "init",
-      "helpOrder": 116,
-      "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)"]
+      "sub": "init"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "info",
-      "helpOrder": 117,
-      "help": ["  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)"]
+      "sub": "info"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "import-fb",
-      "helpOrder": 118,
-      "help": ["  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; ALIGNMENT -2 becomes NULL; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)"]
+      "sub": "import-fb"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "seed-fb",
-      "helpOrder": 119,
-      "help": ["  drag-lint repo seed-fb        (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (fill an EMPTY repository from the Firebird schema or a DDL script; prints the change set and writes nothing unless --apply or --select; read-only on Firebird)"]
+      "sub": "seed-fb"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "refresh-schema",
-      "helpOrder": 120,
-      "help": ["  drag-lint repo refresh-schema (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (re-read the schema into a filled repository as a change set: new and changed values are checked, vanished ones are unchecked deletes; hand-edited columns are never touched; no --apply = dry run; --select <id file> writes exactly the listed ids)"]
+      "sub": "refresh-schema"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "backup",
-      "helpOrder": 121,
-      "help": ["  drag-lint repo backup         (--repo <file> | --project <project file>) [--format text|sql|zip] [--output <file>]   (write a backup of the field repository: text = the diffable text file (the default, <repo>.txt), sql = an SQL script of the DDL and one INSERT per row (<repo>.sql), zip = a zip of a consistent copy of the repository file (<repo>.zip); a backup of the DATABASE is repo backup --connection)"]
+      "sub": "backup"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "restore",
-      "helpOrder": 122,
-      "help": ["  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--format text|sql|zip] [--replace]   (create the repository when missing; give the --format the file was written in; a malformed or damaged backup prints a message, exits 2 and changes nothing)"]
+      "sub": "restore"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "gen-memtable",
-      "helpOrder": 123,
-      "help": ["  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)"]
+      "sub": "gen-memtable"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "gen-param-array",
-      "helpOrder": 124,
-      "help": ["  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)"]
+      "sub": "gen-param-array"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "gen-orm",
-      "helpOrder": 125,
-      "help": ["  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)"]
+      "sub": "gen-orm"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "update-orm",
-      "helpOrder": 126,
-      "help": ["  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--overwrite-edited <id,...|all>] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; a region of an id it does not generate (DB-RAD 99) is hand code and kept; a unit whose markers cannot be trusted is REFUSED and left unchanged, the others are written, exit 1 with --apply (a dry run lists them, exit 0); each regenerated start marker carries the hash of its body (a legacy marker gets one on its first write), and a region whose body no longer matches its hash is hand-edited: kept and listed as REFUSED region (exit 1 with --apply) unless --overwrite-edited names it or all, or you answer YES at the console question (asked only when stdin is a console); --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)"]
+      "sub": "update-orm"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "upgrade-orm-headers",
-      "helpOrder": 127,
-      "help": ["  drag-lint repo upgrade-orm-headers (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (one-time, 1.54: replaces the generated with-header of Assign / AssignTo and the unused Reader locals in the existing u<T> units, and AssignI by the overloaded Assign in each i<T> + u<T> pair (both units or neither); dry-run diff unless --apply; a hand-edited header or pair is listed and left alone; every remaining call of AssignI is listed as file(line) and never edited; run repo update-orm as well, it rewrites the regions)"]
+      "sub": "upgrade-orm-headers"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "gen-dataservice",
-      "helpOrder": 128,
-      "help": ["  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)"]
+      "sub": "gen-dataservice"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "migrate",
-      "helpOrder": 129,
-      "help": ["  drag-lint repo migrate        (--repo <file> | --project <project file>) [--apply]   (schema 1, 2, 3 or 4 -> 5: adds DL_FIELDS_INFO.NOTES / DERIVED_KIND and DL_GRID_COLUMNS.PROPERTIES_CLASS_NAME / PROPERTIES, from schema 3 also DL_RELATIONS, DL_RELATION_COLUMNS and DL_FIELD_INPUTS (cross-table fields), from schema 2 also the event columns of DL_FIELDS_INFO and DL_GRID_COLUMNS, from schema 1 also CALC_BODY, DL_LAYOUT_EVENTS, DL_EXCEPTIONS, the schema-fact tables and FIELD_KIND 2 for ISCALCULATED rows; ALIGNMENT -2 becomes NULL; no --apply = dry run that changes no byte; --apply writes <repo>.before-migrate-<yyyymmdd-hhnnss>.txt first; a schema-5 file prints already at schema 5)"]
+      "sub": "migrate"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "check",
-      "helpOrder": 130,
-      "help": ["  drag-lint repo check          (--repo <file> | --project <project file>) [--json]   (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc and event macros, dependency cycles, ALIGNMENT, layout-event and grid-column rows; schema 4: {{ALIAS.FIELD}} inputs, their paths and bindings, relations and their parent keys; exit 0 clean, 1 findings)"]
+      "sub": "check"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "paths",
-      "helpOrder": 131,
-      "help": ["  drag-lint repo paths          (--from <table> --to <table> | --stats) [--depth <n>] (--repo <file> | --project <project file>) [--json]   (read-only, 1.55: the relation paths from a home table UP to a parent table within --depth steps (default 3): FKs onto a PK / UNIQUE of the schema facts plus confirmed FORM / HAND relations; a parent with no key is never an edge; each path with its default input alias (TABLE, TABLE_2, ...) and the rule that chooses it: stored IS_DEFAULT, exactly one path, or ambiguous (asked once, never chosen by data); --stats instead counts the reachable and ambiguous table pairs at depth 1..n; exit 0 listed, 1 no path, 2 usage)"]
+      "sub": "paths"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "gen-const",
-      "helpOrder": 132,
-      "help": ["  drag-lint repo gen-const      (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run]   (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)"]
+      "sub": "gen-const"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "check-const",
-      "helpOrder": 133,
-      "help": ["  drag-lint repo check-const    (--repo <file> | --project <project file>) --unit-file <file.pas>   (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)"]
+      "sub": "check-const"
     },
     {
       "type": "ide-menu",
@@ -333,7 +297,9 @@
         {
           "name": "--stats"
         }
-      ]
+      ],
+      "helpOrder": 110,
+      "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; ALIGNMENT -2 becomes NULL; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (fill an EMPTY repository from the Firebird schema or a DDL script; prints the change set and writes nothing unless --apply or --select; read-only on Firebird)", "  drag-lint repo refresh-schema (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (re-read the schema into a filled repository as a change set: new and changed values are checked, vanished ones are unchecked deletes; hand-edited columns are never touched; no --apply = dry run; --select <id file> writes exactly the listed ids)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--format text|sql|zip] [--output <file>]   (write a backup of the field repository: text = the diffable text file (the default, <repo>.txt), sql = an SQL script of the DDL and one INSERT per row (<repo>.sql), zip = a zip of a consistent copy of the repository file (<repo>.zip); a backup of the DATABASE is repo backup --connection)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--format text|sql|zip] [--replace]   (create the repository when missing; give the --format the file was written in; a malformed or damaged backup prints a message, exits 2 and changes nothing)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)", "  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)", "  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)", "  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--overwrite-edited <id,...|all>] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; a region of an id it does not generate (DB-RAD 99) is hand code and kept; a unit whose markers cannot be trusted is REFUSED and left unchanged, the others are written, exit 1 with --apply (a dry run lists them, exit 0); each regenerated start marker carries the hash of its body (a legacy marker gets one on its first write), and a region whose body no longer matches its hash is hand-edited: kept and listed as REFUSED region (exit 1 with --apply) unless --overwrite-edited names it or all, or you answer YES at the console question (asked only when stdin is a console); --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)", "  drag-lint repo upgrade-orm-headers (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (one-time, 1.54: replaces the generated with-header of Assign / AssignTo and the unused Reader locals in the existing u<T> units, and AssignI by the overloaded Assign in each i<T> + u<T> pair (both units or neither); dry-run diff unless --apply; a hand-edited header or pair is listed and left alone; every remaining call of AssignI is listed as file(line) and never edited; run repo update-orm as well, it rewrites the regions)", "  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)", "  drag-lint repo migrate        (--repo <file> | --project <project file>) [--apply]   (schema 1, 2, 3 or 4 -> 5: adds DL_FIELDS_INFO.NOTES / DERIVED_KIND and DL_GRID_COLUMNS.PROPERTIES_CLASS_NAME / PROPERTIES, from schema 3 also DL_RELATIONS, DL_RELATION_COLUMNS and DL_FIELD_INPUTS (cross-table fields), from schema 2 also the event columns of DL_FIELDS_INFO and DL_GRID_COLUMNS, from schema 1 also CALC_BODY, DL_LAYOUT_EVENTS, DL_EXCEPTIONS, the schema-fact tables and FIELD_KIND 2 for ISCALCULATED rows; ALIGNMENT -2 becomes NULL; no --apply = dry run that changes no byte; --apply writes <repo>.before-migrate-<yyyymmdd-hhnnss>.txt first; a schema-5 file prints already at schema 5)", "  drag-lint repo check          (--repo <file> | --project <project file>) [--json]   (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc and event macros, dependency cycles, ALIGNMENT, layout-event and grid-column rows; schema 4: {{ALIAS.FIELD}} inputs, their paths and bindings, relations and their parent keys; exit 0 clean, 1 findings)", "  drag-lint repo paths          (--from <table> --to <table> | --stats) [--depth <n>] (--repo <file> | --project <project file>) [--json]   (read-only, 1.55: the relation paths from a home table UP to a parent table within --depth steps (default 3): FKs onto a PK / UNIQUE of the schema facts plus confirmed FORM / HAND relations; a parent with no key is never an edge; each path with its default input alias (TABLE, TABLE_2, ...) and the rule that chooses it: stored IS_DEFAULT, exactly one path, or ambiguous (asked once, never chosen by data); --stats instead counts the reachable and ambiguous table pairs at depth 1..n; exit 0 listed, 1 no path, 2 usage)", "  drag-lint repo gen-const      (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run]   (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)", "  drag-lint repo check-const    (--repo <file> | --project <project file>) --unit-file <file.pas>   (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)", "  drag-lint repo read-dfm       --dfm <file.dfm>[;...] [--dataset <Name>] --direction dfm-to-repo (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json] [--db <project index>]   (the persistent fields of a form's datasets as a change set: data, calc, lookup, internal-calc and aggregate fields, captions / formats / widths, lookup wiring, OnCalcFields code as CALC_BODY with {{FIELD}} component macros, OnGetText / OnSetText / OnValidate / OnChange code and OnGetDisplayText / OnCustomDrawCell code of TcxGridDBTableView columns, the column order of table and banded grid views and each column's in-place editor, PropertiesClassName and its Properties.* lines as the form has them (DL_GRID_COLUMNS; the editor needs schema 5, an older repository gets a warning); code in generated DLFR regions is not read back; needs a schema-4 repository or later; text or binary DFM, BDE or FireDAC; the table comes from UpdateTableName, TableName or a one-table SELECT, a join gives every field its own table, a calc reading several tables goes to the child end with {{ALIAS.FIELD}} inputs (alias = the table name) and DL_FIELD_INPUTS / DL_RELATIONS rows (the form's ON / WHERE joins choose the path; a join on a parent key with no FK is offered as a FORM relation, unchecked), a memory table takes the source of its AttachedTo or of a literal AttachTable / CloneCursor / CopyDataSet / CopyData / AppendData / Data := (cycle or two sources = unresolved), a link source, a lookup dataset and a grid's dataset that the module only inherits are read from the DFM of the ancestor form / data module (ancestor class from the unit beside the DFM, the one DFM of the same folder with that root class; not found or two = a warning, nothing picked), AttachTable(X.Table, ...) links to dataset X, an inherited dataset of an inherited form or module is itself read from the ancestor DFM (handler code from the unit of the form that states it), a module dmX.tblY that is not in the form's folder is found through the units the form's unit uses, in the project folder (nearest folder with a .dpr/.dproj/.dpk, up to three levels up) and below it, folders starting with __ or . left out, two candidates = a warning, nothing picked, anything else is listed as UNRESOLVED; with --dataset --json also lists the persistent fields and the repository fields of the table; --db <project index> = the index the lineage facts are read from: a persistent data field without a table column that code fills from other fields is proposed as insert DL_FIELDS_INFO T|F: derived(direct|aggregate); inputs {{..}} + insert DL_FIELD_INPUTS T|F||ALIAS, all unchecked (write them with --select), without it one warning lineage: skipped (no index); no --apply = dry run; exit 1 read / apply failure, 2 usage or a bad --select file)"]
     }
   ],
   "audience": "both",

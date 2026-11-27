@@ -33,7 +33,7 @@
           "arg": "<severity>"
         }
       ],
-      "helpOrder": 37,
+      "helpOrder": 33,
       "help": ["  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]", "                               every dcc message (hint, warning, error) is kept under its own code and passed through (LSP source \"dcc\");", "                               rules that overlap one go beyond it where the wiki page compiler-messages says so"]
     }
   ],

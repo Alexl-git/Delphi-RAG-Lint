@@ -22,7 +22,7 @@
           "arg": "<sql.sqlite>"
         }
       ],
-      "helpOrder": 57,
+      "helpOrder": 50,
       "help": ["  drag-lint fb-snapshot --connection \"Database=...;User=...;Password=...;DriverID=FB\" --db <sql.sqlite>"]
     }
   ],

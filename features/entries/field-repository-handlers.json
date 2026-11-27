@@ -53,22 +53,18 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 136,
-      "help": ["  drag-lint repo gen-handlers   --dfm <file.dfm>[;...] [--dataset <Name>] (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (writes the stored event code of a form's datasets (OnCalcFields, OnGetText, OnSetText, OnValidate, OnChange) into the handlers the DFM assigns, as hash-checked DLFR regions; a region edited by hand is refused and kept; a body that reads another table ({{ALIAS.FIELD}}) is refused until its SQL is composed; needs a schema-4 repository; everything outside the regions stays byte for byte; no --apply = dry run; exit 1 a region or unit refused or not written, 2 usage)"]
+      "helpOrder": 113,
+      "help": ["  drag-lint repo gen-handlers   --dfm <file.dfm>[;...] [--dataset <Name>] (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (writes the stored event code of a form's datasets (OnCalcFields, OnGetText, OnSetText, OnValidate, OnChange) into the handlers the DFM assigns, as hash-checked DLFR regions; a region edited by hand is refused and kept; a body that reads another table ({{ALIAS.FIELD}}) is refused until its SQL is composed; needs a schema-4 repository; everything outside the regions stays byte for byte; no --apply = dry run; exit 1 a region or unit refused or not written, 2 usage)", "  drag-lint repo gen-maxlen     --code-dir <folder> [--table <T,...>] (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (writes the <TABLE>_<FIELD>_MAXLEN constants into region DLFR 2a of each interface unit i<TABLE>.pas; no --apply = dry run; exit codes as gen-handlers)", "  drag-lint repo renumber-regions (--code-dir <folder> | --in <file.pas>[;...]) (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (renames the numbered ORM region markers DB-RAD n to DLFR n, whole units only; update-orm reads both; no --apply = dry run; exit codes as gen-handlers)"]
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "gen-maxlen",
-      "helpOrder": 137,
-      "help": ["  drag-lint repo gen-maxlen     --code-dir <folder> [--table <T,...>] (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (writes the <TABLE>_<FIELD>_MAXLEN constants into region DLFR 2a of each interface unit i<TABLE>.pas; no --apply = dry run; exit codes as gen-handlers)"]
+      "sub": "gen-maxlen"
     },
     {
       "type": "cli",
       "verb": "repo",
-      "sub": "renumber-regions",
-      "helpOrder": 138,
-      "help": ["  drag-lint repo renumber-regions (--code-dir <folder> | --in <file.pas>[;...]) (--repo <file> | --project <project file>) [--apply] [--dry-run] [--json]   (renames the numbered ORM region markers DB-RAD n to DLFR n, whole units only; update-orm reads both; no --apply = dry run; exit codes as gen-handlers)"]
+      "sub": "renumber-regions"
     }
   ],
   "audience": "both",

@@ -75,8 +75,7 @@
           "arg": "json"
         }
       ],
-      "helpOrder": 148,
-      "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--retype-consumer <Routine>.<param>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]", "       see wiki page: extract-interface"]
+      "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced[=norefcount]] [--retype-consumer <Routine>.<param>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - declare an interface from the members of a class the project uses and add it to the class: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
     }
   ],
   "audience": "both",

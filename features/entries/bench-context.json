@@ -23,7 +23,7 @@
           "arg": "N"
         }
       ],
-      "helpOrder": 46,
+      "helpOrder": 40,
       "help": ["  drag-lint bench-context      [--db <file.sqlite>] [--n N]"]
     }
   ],

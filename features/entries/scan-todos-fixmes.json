@@ -23,7 +23,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 34,
+      "helpOrder": 30,
       "help": ["  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])"]
     }
   ],

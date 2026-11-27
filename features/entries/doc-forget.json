@@ -39,7 +39,7 @@
           "name": "--no-backup"
         }
       ],
-      "helpOrder": 63,
+      "helpOrder": 56,
       "help": ["  drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup]   - reap project tags on inbound doc facts", "     --project removes that tag (entries whose set empties go); --rename <Tag>=<New> renames it and alone is enough (its left side names the tag; if --project is also given it must match); --untagged drops untagged entries in blocks that carry tags; --list-tags counts every tag in scope. Dry run unless --apply"]
     },
     {

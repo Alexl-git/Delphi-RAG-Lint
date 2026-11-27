@@ -26,9 +26,7 @@
         {
           "name": "--json"
         }
-      ],
-      "helpOrder": 144,
-      "help": ["  drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)", "       see wiki page: bookmarks"]
+      ]
     },
     {
       "type": "cli",
@@ -54,9 +52,7 @@
         {
           "name": "--json"
         }
-      ],
-      "helpOrder": 146,
-      "help": ["  drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json|--format json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)", "       see wiki page: bookmarks"]
+      ]
     },
     {
       "type": "cli",
@@ -74,9 +70,7 @@
         {
           "name": "--json"
         }
-      ],
-      "helpOrder": 145,
-      "help": ["  drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json|--format json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)", "       see wiki page: bookmarks"]
+      ]
     }
   ],
   "audience": "both",

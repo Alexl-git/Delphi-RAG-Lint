@@ -31,7 +31,7 @@
           "name": "--format"
         }
       ],
-      "helpOrder": 42,
+      "helpOrder": 36,
       "help": ["  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)", "  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)"]
     }
   ],

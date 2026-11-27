@@ -31,7 +31,7 @@
           "name": "--format"
         }
       ],
-      "helpOrder": 44,
+      "helpOrder": 38,
       "help": ["  drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]"]
     }
   ],

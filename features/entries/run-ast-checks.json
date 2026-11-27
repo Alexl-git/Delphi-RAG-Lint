@@ -31,7 +31,7 @@
           "name": "--format"
         }
       ],
-      "helpOrder": 82,
+      "helpOrder": 73,
       "help": ["  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json] [--json] [--output <file>]"]
     }
   ],

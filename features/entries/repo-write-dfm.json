@@ -53,7 +53,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 139,
+      "helpOrder": 114,
       "help": ["  drag-lint repo write-dfm      --dfm <file.dfm>[;...] [--dataset <Name> [--names <FIELD,...>|all]] --direction repo-to-dfm (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]   (the property changes that bring the persistent fields of a text DFM in line with the repository, and with --names the fields of one dataset to add or remove, declarations in the unit included; a field event the repository holds code for and the form lacks becomes an unchecked new handler (DFM + method), a graphical row (FIELD_KIND 10) whose grid column the form lacks an unchecked new TcxGridDBColumn with its GRID_* handlers, and a removed field takes the grid / layout items bound to it as linked unchecked changes; every byte outside a change stays, the new text is checked by Delphi's own reader first, each changed file gets a backup; what cannot be settled is BLOCKED with the reason; the repository is only read; no --apply = dry run; a --select file needs the # plan line of its dry run; a binary DFM is refused; the project setting fieldrepo.bde (full | readonly | none, read per form: --project, else the _D-RAG at or above the form, else at or above the repository) closes BDE datasets and the plan names the policy and its source; exit 1 plan / write failure, a changed plan or a bad fieldrepo.bde value, 2 usage)"]
     }
   ],

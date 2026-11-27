@@ -36,7 +36,7 @@
           "name": "--format"
         }
       ],
-      "helpOrder": 89,
+      "helpOrder": 80,
       "help": ["  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json]   (N-deep resolved call tree; cycle-guarded; another --format exits 2 -- dot/mermaid: reverse-calltree)"]
     },
     {

@@ -20,7 +20,7 @@
           "arg": "<.drag-lint-workspace.json>"
         }
       ],
-      "helpOrder": 103,
+      "helpOrder": 94,
       "help": ["  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]"]
     }
   ],

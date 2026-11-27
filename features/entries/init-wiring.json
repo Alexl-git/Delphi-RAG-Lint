@@ -29,7 +29,7 @@
           "name": "--appdata-dir"
         }
       ],
-      "helpOrder": 112,
+      "helpOrder": 103,
       "help": ["  drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-dir <dir>]", "                               runs register-project --apply, index --project, resolve-dbs --project, then mcp-config --all --db <that index>", "                               (Claude Code, VS Code and Cursor; an uninstalled client is skipped); --dry-run prints those four commands and runs NOTHING;", "                               --home-dir / --appdata-dir move where the client files are looked for (tests); a failing step stops the run with its exit code"]
     }
   ],

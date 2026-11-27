@@ -62,7 +62,8 @@
           "name": "--build-timeout",
           "arg": "<s>"
         }
-      ]
+      ],
+      "help": ["  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]] [--project <X.dproj> [--compile-gate | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)"]
     }
   ],
   "audience": "both",

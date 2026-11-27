@@ -19,7 +19,7 @@
           "arg": "<projDb.sqlite>"
         }
       ],
-      "helpOrder": 58,
+      "helpOrder": 51,
       "help": ["  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>", "                               reads Delphi and SQL symbols from EVERY --db; rebuilds orm_links in the LAST --db only (its db-index columns are --db positions)"]
     }
   ],

@@ -37,7 +37,7 @@
           "name": "--format"
         }
       ],
-      "helpOrder": 43,
+      "helpOrder": 37,
       "help": ["  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]"]
     }
   ],

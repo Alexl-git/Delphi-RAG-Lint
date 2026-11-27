@@ -32,7 +32,7 @@
           "arg": "<db>"
         }
       ],
-      "helpOrder": 67,
+      "helpOrder": 60,
       "help": ["  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references"]
     },
     {

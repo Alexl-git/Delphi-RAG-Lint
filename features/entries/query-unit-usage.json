@@ -34,7 +34,7 @@
           "arg": "N"
         }
       ],
-      "helpOrder": 12,
+      "helpOrder": 10,
       "help": ["  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json] [--limit N]", "                               WITH --in: of that unit's exports, which does THIS file reference? Empty = dead import.", "                               WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.", "                               The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry.", "                               --limit N (without --in) lists the first N importing files and says how many there are."]
     }
   ],

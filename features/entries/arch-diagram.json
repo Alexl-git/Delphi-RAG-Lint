@@ -26,7 +26,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 33,
+      "helpOrder": 30,
       "help": ["  drag-lint arch-diagram       --db <db> [--output <file.html>] [--json]   (one self-contained HTML layer diagram of the units by folder; layers measured from uses; no Graphviz)"]
     }
   ],

@@ -53,8 +53,7 @@
           "name": "--json"
         }
       ],
-      "helpOrder": 153,
-      "help": ["  drag-lint settings list|get|set|unset [<key> [<value>]] [--local] [--project <.dproj> | --db <db> | --in <file>] [--json|--format json]   (per-project settings in _D-RAG\\drag-lint-project.json; --local = this machine only, _D-RAG\\drag-lint-project.local.json; exit 0 done, 1 nothing to do, 2 refused)", "       see wiki page: project-settings", "  drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]", "       see wiki page: Find-Usages-context"]
+      "help": ["  drag-lint settings list|get|set|unset [<key> [<value>]] [--local] [--project <.dproj> | --db <db> | --in <file>] [--json|--format json]   (per-project settings in _D-RAG\\drag-lint-project.json; --local = this machine only, _D-RAG\\drag-lint-project.local.json; exit 0 done, 1 nothing to do, 2 refused)"]
     },
     {
       "type": "workflow",

@@ -24,7 +24,7 @@
           "arg": "<file.sqlite>"
         }
       ],
-      "helpOrder": 36,
+      "helpOrder": 32,
       "help": ["  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)"]
     }
   ],
