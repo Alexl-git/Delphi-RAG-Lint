@@ -81,7 +81,7 @@ try {
   $null = & { $ErrorActionPreference = 'Continue'; & $exe index "$fx\lib" --db $pairDb 2>&1 | ForEach-Object { "$_" } }; $null = & { $ErrorActionPreference = 'Continue'; & $exe index "$fx\vcl" --db $vclDb 2>&1 | ForEach-Object { "$_" } }
   function TEditOrder($dbs) {
     $a = @('query', '--name', 'TEdit', '--json', '--quiet'); foreach ($d in $dbs) { $a += @('--db', $d) }
-    $raw = (@(& { $ErrorActionPreference = 'Continue'; & $exe @a 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
+    $raw = (@(& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
     if (-not $raw.Trim()) { return @() }
     return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_.qualified_name })
   }

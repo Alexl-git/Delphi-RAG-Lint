@@ -89,8 +89,10 @@ Check 'the row is present' ($row.Count -eq 1) "rows: $($q -join ' | ')"
 Check 'ASSERT: the row names (full path:declaration line)' `
   (($row.Count -eq 1) -and ($row[0] -match ('\(' + $esc + ':' + $targetDecl + '\)'))) "got: $row"
 $qi = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name Hidden --db $db --exact 2>$null }) | Where-Object { $_ -match 'uWhere\.Hidden' }
-Check 'CONTROL: the location sits BEFORE the [impl-only] suffix, which stays at the end' `
-  (($qi -match ('\(' + $esc + ':' + $hiddenDecl + '\)')) -and ($qi -match '\[impl-only\]\s*$')) "got: $qi"
+# 1.56 TS-N: every text row ends in the place token (AI-USAGE: "text rows end in ` place=<p>`"), so [impl-only]
+# is the last suffix BEFORE it.
+Check 'CONTROL: the location sits BEFORE the [impl-only] suffix, which stays last before the place token' `
+  (($qi -match ('\(' + $esc + ':' + $hiddenDecl + '\)')) -and ($qi -match '\[impl-only\] place=project\s*$')) "got: $qi"
 
 Write-Host ''
 Write-Host 'find-callers --resolved (Q-RESOLVED-PATH, owner ruling D1 2026-11-03: ACCEPTED)' -ForegroundColor Cyan

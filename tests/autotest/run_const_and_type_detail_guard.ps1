@@ -149,7 +149,7 @@ Check 'built the fixture index' (Test-Path $Db)
 # still blank the fault is downstream; if this fails the popup cannot be right
 # whatever the renderer does.
 function SigOf([string]$name) {
-  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe query --name $name --db $Db --json 2>&1 | ForEach-Object { "$_" } }
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe query --name $name --db $Db --json 2>$null | ForEach-Object { "$_" } }
   $txt = ($raw | Where-Object { $_ -notmatch '^\(loaded defaults' }) -join "`n"
   try { $o = $txt | ConvertFrom-Json | ForEach-Object { $_ } } catch { return '<unparseable>' }
   if ($null -eq $o) { return '<absent>' }
