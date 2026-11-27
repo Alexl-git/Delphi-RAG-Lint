@@ -105,24 +105,40 @@ begin
   end;
 end;
 
-{ True when a group of same-named declarations is an overload set or an alias set the compiler accepts. }
-function IsBenignGroup(const AGroup: TArray<TUnitDecl>): Boolean;
+{ True when every other declaration of the group is a type alias that names AGroup[ATarget] (X = Unit.X): one type under two names. }
+function AllAliasOfTarget(const AGroup: TArray<TUnitDecl>; ATarget: Integer): Boolean;
+begin
+  Result:= True;
+  for var I: Integer:= 0 to High(AGroup) do
+    if I <> ATarget then
+      if (AGroup[I].Sym.Kind <> skTypeAlias)
+        or not SameText(AGroup[I].Sym.Signature, AGroup[ATarget].UnitName + '.' + AGroup[ATarget].Sym.Name) then
+        Exit(False);
+end;
+
+{ True when a group of same-named declarations is an overload set or an alias set the compiler accepts. }function IsBenignGroup(const AGroup: TArray<TUnitDecl>): Boolean;
 begin
   Result:= False;
   var AllRoutines: Boolean:= True;
   var AnyOverload: Boolean:= False;
   var AllAlias   : Boolean:= True;
   var SameSig    : Boolean:= True;
+  var AllConst   : Boolean:= True;
   for var I: Integer:= 0 to High(AGroup) do
   begin
     var S: TSymbol:= AGroup[I].Sym;
     if not IsRoutineKind(S.Kind) then AllRoutines:= False;
     if S.Directives.ToLower.Contains(OVERLOAD_WORD) or S.Modifiers.ToLower.Contains(OVERLOAD_WORD) then AnyOverload:= True;
     if S.Kind <> skTypeAlias then AllAlias:= False;
+    if S.Kind <> skConstDecl then AllConst:= False;
     if not SameText(S.Signature, AGroup[0].Sym.Signature) then SameSig:= False;
   end;
   if AllRoutines and AnyOverload and not SameSig then Exit(True);
   if AllAlias and SameSig then Exit(True);
+  { v156 FP-1: identical constants (same type and value) and X = Unit.X redirects cannot change what a reference means }
+  if AllConst and SameSig and (AGroup[0].Sym.Signature <> '') then Exit(True);
+  for var T: Integer:= 0 to High(AGroup) do
+    if AllAliasOfTarget(AGroup, T) then Exit(True);
 end;
 
 function HasMemberNamed(const AStore, ALibStore: ISymbolStore; const AName: string; AUnitIds: TDictionary<Int64, Boolean>): Boolean;

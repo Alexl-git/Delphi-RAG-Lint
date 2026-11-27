@@ -108,11 +108,13 @@ begin
       var FirstCol: Integer:= MaxInt;
       var FirstKind: string:= '';
       var Count: Integer:= 0;
+      var ReadCount: Integer:= 0;
       var Ok: Boolean:= True;
       for var R: TReference in Refs do
       begin
         if R.SymbolId <> Fld.Id then Continue;
         Inc(Count);
+        if R.Kind <> 'write' then Inc(ReadCount);
         if (R.EnclosingSymbolId = 0) or ((Routine <> 0) and (R.EnclosingSymbolId <> Routine)) then
         begin
           Ok:= False;
@@ -126,7 +128,8 @@ begin
           FirstKind:= R.Kind;
         end;
       end;
-      if not Ok or (Count = 0) or (FirstKind <> 'write') then Continue;
+      { a field that is never read is a write-only field, not a local-in-waiting (v156 FP-1) }
+      if not Ok or (Count = 0) or (ReadCount = 0) or (FirstKind <> 'write') then Continue;
       var Rtn: TSymbol;
       if not ById.TryGetValue(Routine, Rtn) then Continue;
       var ToLine: Integer:= Rtn.ImplEndLine;
