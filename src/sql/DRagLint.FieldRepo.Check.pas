@@ -70,7 +70,7 @@ uses
   System.StrUtils,
   System.Variants,
   DRagLint.FieldRepo.Schema,
-  DRagLint.FieldRepo.Kinds,
+  DRagLint.FieldRepo.Kinds, // dl:unit DRagLint.FieldRepo.Kinds accepted -- fr_event_columns is the event column list the kinds unit owns; Check reads nothing else of it
   DRagLint.FieldRepo.CrossTable;
 
 const

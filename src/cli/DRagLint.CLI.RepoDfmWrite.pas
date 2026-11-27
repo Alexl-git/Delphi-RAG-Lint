@@ -45,7 +45,7 @@ uses
   System.StrUtils,
   System.Generics.Collections,
   FireDAC.Comp.Client,
-  DRagLint.Core.Model,
+  DRagLint.Core.Model, // dl:unit DRagLint.Core.Model accepted -- drag_home_dir names the _D-RAG folder the project indexes live in; the model unit owns that name
   DRagLint.Core.Interfaces,
   DRagLint.CLI.Common,
   DRagLint.FieldRepo.Kinds,
@@ -348,11 +348,13 @@ end;
 function IndexedBdeClasses(const pAnchor: string; out pDbs: string): TArray<string>;
 var
   VDb, VRoot: string;
+  VRoots: TArray<string>;
   VStore: ISymbolStore;
   VOk: Boolean;
   VNames: TStringList;
 begin
   pDbs := '';
+  VRoots := BdeDatasetRoots;
   VNames := TStringList.Create(dupIgnore, True, False);
   try
     for VDb in TDirectory.GetFiles(TPath.Combine(pAnchor, DRAG_HOME_DIR), '*.sqlite') do
@@ -361,7 +363,7 @@ begin
       if not VOk then
         Continue;
       pDbs := pDbs + (if pDbs = '' then '' else ', ') + ExtractFileName(VDb);
-      for VRoot in BdeDatasetRoots do
+      for VRoot in VRoots do
         VNames.AddStrings(VStore.FindDescendantNames(VRoot));
       VStore := nil;
     end;

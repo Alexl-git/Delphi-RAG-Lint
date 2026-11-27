@@ -49,7 +49,7 @@ uses
   System.SysUtils,
   System.Generics.Collections,
   System.Generics.Defaults,
-  Data.DB,
+  Data.DB,  // dl:ok unused-unit-in-uses@0643 -- Data.DB kept: the repo dataset types come through it for the units that use this one; removing it was not verified against a runtime build
   FireDAC.Stan.Param,
   DRagLint.FieldRepo.Schema;
 
