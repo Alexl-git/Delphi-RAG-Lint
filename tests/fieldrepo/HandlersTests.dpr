@@ -224,7 +224,7 @@ end;
 
 procedure Refuses(const pName: string; const pFields: TArray<TFrhField>; const pReason: string);
 begin
-  Check(pName, CalcText(pFields).StartsWith('!') and ((pReason = '') or ContainsText(CalcText(pFields), pReason)), CalcText(pFields));
+  Check(pName, CalcText(pFields).StartsWith('!') and (pReason <> '') and ContainsText(CalcText(pFields), pReason), CalcText(pFields));
 end;
 
 function Deps(const pBody, pSelf: string): string;
@@ -253,8 +253,8 @@ begin
   Refuses('C5 a field the dataset does not have is refused', [Fld('A', 'tA', '{{A}}.AsFloat := {{NOPE}}.AsFloat;')], 'NOPE');
   CheckText('C6 a field may read and clear itself', CalcText([Fld('A', 'tA', '{{A}}.Clear; if {{A}}.IsNull then {{A}}.AsFloat := 1;')]),
     'begin // A|  tA.Clear; if tA.IsNull then tA.AsFloat := 1;|end;|');
-  Refuses('C7 a broken macro is refused', [Fld('A', 'tA', '{{A.AsFloat := 1;')], '');
-  Refuses('C7b TABLE.FIELD is refused', [Fld('A', 'tA', '{{A}}.AsFloat := {{T.A}}.AsFloat;')], '');
+  Refuses('C7 a broken macro is refused', [Fld('A', 'tA', '{{A.AsFloat := 1;')], 'unterminated {{');
+  Refuses('C7b TABLE.FIELD is refused', [Fld('A', 'tA', '{{A}}.AsFloat := {{T.A}}.AsFloat;')], 'other tables');
   Refuses('C8 a comment left open is refused', [Fld('A', 'tA', '{{A}}.AsFloat := 1; { x')], 'no end');
   Refuses('C9 a string left open is refused', [Fld('A', 'tA', '{{A}}.AsString := ''x;')], 'quote');
   Refuses('C10 a region marker in a body is refused', [Fld('A', 'tA', '{$ENDREGION}' + NL + '{{A}}.AsFloat := 1;')], 'directive');
@@ -338,7 +338,7 @@ var
   procedure Refused(const pName, pText: string; const pJob: TFrhJob; const pReason: string);
   begin
     VOut := Apply(pText, pJob, VState, VReason);
-    Check(pName, (VState = fhsRefused) and (VOut = pText) and (VReason <> '') and ((pReason = '') or ContainsText(VReason, pReason)), VReason);
+    Check(pName, (VState = fhsRefused) and (VOut = pText) and (VReason <> '') and (pReason <> '') and ContainsText(VReason, pReason), VReason);
   end;
 
 begin

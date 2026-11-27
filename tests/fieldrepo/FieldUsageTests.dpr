@@ -185,6 +185,55 @@ begin
   end;
 end;
 
+{ R1..R7: the same query over a REAL index (the engine indexed tests\fixtures\v156\UIM into pDbPath), not hand-built tables.
+  The code kind is asserted only when the engine that built the DB has the ds_field_accesses table (an older deployed
+  engine has none; that is stated as a NOTE, never a silent pass of R5). }
+procedure TestRealIndex(const pDbPath: string);
+var
+  vDb: TFDConnection;
+  vUses: TArray<TFieldUse>;
+  vUse: TFieldUse;
+  vLookupLine: Integer;
+  vHasCode: Boolean;
+begin
+  vDb := TFDConnection.Create(nil);
+  try
+    vDb.DriverName := 'SQLite';
+    vDb.Params.Values['Database'] := pDbPath;
+    vDb.LoginPrompt := False;
+    vDb.Connected := True;
+    vHasCode := vDb.ExecSQLScalar('SELECT COUNT(*) FROM sqlite_master WHERE name = ''ds_field_accesses''') > 0;
+    vUses := FindFieldUses(vDb, 'CUSTNAME');
+    Check('R1 real index: CUSTNAME is a control, a grid column and a lookup (the TStringField FieldName is none of them)',
+      (FieldUseKinds(vDb, 'CUSTNAME') - [fukCode]) = [fukDfmControl, fukGridColumn, fukLookup], IntToStr(Length(vUses)) + ' uses');
+    Check('R2 real index: CITY is a control and a lookup', (FieldUseKinds(vDb, 'CITY') - [fukCode]) = [fukDfmControl, fukLookup]);
+    Check('R3 real index: CUSTID (KeyField) is a lookup only', FieldUseKinds(vDb, 'CUSTID') = [fukLookup]);
+    Check('R4 real index: a field of no control has no use', Length(FindFieldUses(vDb, 'NOSUCH')) = 0);
+    vLookupLine := 0;
+    for vUse in vUses do
+      case vUse.Kind of
+        fukDfmControl:
+          Check('R6 control: component edName, TDBEdit, line 17, file UimMain.dfm',
+            (vUse.Component = 'edName') and (vUse.ComponentClass = 'TDBEdit') and (vUse.Line = 17) and
+            vUse.FilePath.EndsWith('UimMain.dfm'), vUse.Component + '/' + vUse.ComponentClass + '/' + IntToStr(vUse.Line));
+        fukGridColumn:
+          Check('R7 grid column: colName, line 29', (vUse.Component = 'colName') and (vUse.Line = 29), vUse.Component + '/' + IntToStr(vUse.Line));
+        fukLookup:
+          vLookupLine := vUse.Line;
+        fukCode:
+          Check('R5 code use: FieldByName literal at UimMain.pas line 24', (vUse.Line = 24) and vUse.FilePath.EndsWith('UimMain.pas'),
+            vUse.FilePath + ':' + IntToStr(vUse.Line));
+      end;
+    Check('R8 lookup: the ;-separated ListField element, line 33', vLookupLine = 33, IntToStr(vLookupLine));
+    if vHasCode then
+      Check('R5b code kind present beside the DFM kinds', fukCode in FieldUseKinds(vDb, 'CUSTNAME'))
+    else
+      Writeln('NOTE engine DB has no ds_field_accesses: the code kind (R5) is not exercised here');
+  finally
+    vDb.Free;
+  end;
+end;
+
 { I1..I5: a project DB written by the REAL indexer from tests\fixtures\v156\UIP (run_v156_UIM.ps1 passes --db FILE), so a
   change of the dfm_properties / dfm_objects schema fails here and not only in a hand-built table. The code kind is not
   covered: ds_field_accesses has rows only once the code extractor of the 1.56 EXT lanes is in the engine. }
@@ -199,7 +248,7 @@ begin
     vDb.LoginPrompt := False;
     vDb.Connected := True;
     Check('I1 an indexed DataField + grid column + lookup list: CUSTNAME is control, grid column and lookup',
-      FieldUseKinds(vDb, 'CUSTNAME') = [fukDfmControl, fukGridColumn, fukLookup]);
+      (FieldUseKinds(vDb, 'CUSTNAME') - [fukCode]) = [fukDfmControl, fukGridColumn, fukLookup]); { v156 INT: the code kind is R5's (an engine with the EXT-B3 emitter adds it) }
     Check('I2 CUSTID is only a lookup key', FieldUseKinds(vDb, 'custid') = [fukLookup]);
     Check('I3 CITY is only a lookup (second name of ListField)', FieldUseKinds(vDb, 'CITY') = [fukLookup]);
     Check('I4 an unused field has no kind', FieldUseKinds(vDb, 'NOSUCH') = []);
@@ -235,6 +284,8 @@ begin
       TestDfmControl;
       TestOtherKinds;
       TestOldIndex;
+      if ParamCount >= 1 then
+        TestRealIndex(ParamStr(1));
     except
       on E: Exception do
       begin
