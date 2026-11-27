@@ -5603,7 +5603,6 @@ begin
 
       finally
         InjIds.Free;
-        InjIds:= nil;
         PropAccessors.Free;
         PropAccessors:= nil;  // dl:ok overwrite-before-read@5eed -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       end;
