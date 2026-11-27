@@ -293,6 +293,7 @@ uses
   , DRagLint.CLI.ConfigAnchor { 1.53 BUGS: the lint config of the project an index was built from }
   , DRagLint.CLI.RuleScope { rules disable / enable (1.52 FRAME; lane DISRULE) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
+  , DRagLint.CLI.MigrateReports { v156 QE-3 }
   , DRagLint.CLI.MigrateDbs { migrate-dbs verb + the manifest pair rule (v1511 SPLIT) }
   , DRagLint.CLI.Workspace { workspace / forms-csv / menu-tree / menu-drift verbs (v1511 SPLIT) }
   , DRagLint.CLI.Sql { sql verb (v1511 SPLIT) }
@@ -1002,6 +1003,7 @@ begin
   { `ask`, `protocol` and `mcp-config` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg,
     DRagLint.MCP.ClientConfig) and print nothing else: no defaults note on stderr }
   { 1.52.2: the no-config warning (TManifestIO.Load) stays off where stderr must stay clean. }
+  if Result.Command = MIGRATE_REPORTS_VERB then begin TManifestIO.QuietNoManifest:= True; Exit; end; { v156 QE-3: own flags, DRagLint.CLI.MigrateReports }
   var SelfParsing:= MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover']);
   TManifestIO.QuietNoManifest:= SelfParsing or HasSwitch('--quiet') or JsonOutputRequested;
   if SelfParsing then Exit;
@@ -30044,6 +30046,7 @@ begin
     else if Args.Command = 'init'              then Result:= RunInitVerbFromCommandLine
     else if Args.Command = 'syntax-count'      then Result:= RunSyntaxCountVerb { GAP-SYNTAXQ: own flags, DRagLint.Query.SyntaxCountVerb }
     else if Args.Command = 'uses-recover'      then Result:= RunUsesRecoverVerb { 148 HP: own flags, DRagLint.CLI.UsesRecover }
+    else if Args.Command = MIGRATE_REPORTS_VERB then Result:= RunMigrateReportsVerb { v156 QE-3: own flags, DRagLint.CLI.MigrateReports }
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
     else if Args.Command = 'exception-facts'   then Result:= DoExceptionFacts  (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)
