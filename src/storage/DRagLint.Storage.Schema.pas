@@ -627,6 +627,15 @@ const
   /// <summary>Index into SCHEMA_DDL_V156_ALTER: symbol_facts.must_writes.</summary>
   V156_ALTER_MUST_WRITES = 1;
 
+  /// <summary>1.56 lane EXT-S2: the index a ref-to-ref join on one source line needs
+  /// (`a.file_id = b.file_id AND a.start_line = b.start_line`, the by-position joins of data_flows,
+  /// call_literal_args and the lock-site queries). Run by Migrate through TryExec on a writable
+  /// open.</summary>
+  /// <remarks>ADDITIVE: no reader depends on it (an index built by an older engine answers the same
+  /// rows, slower). Measured by lane THR-S on the drag-lint index (795k refs): 78 s to 2.8 s for the
+  /// argument lookup. idx_refs_file (file_id alone) stays: SCHEMA_DDL is frozen.</remarks>
+  SCHEMA_DDL_V156_REFS_LINE_INDEX = 'CREATE INDEX IF NOT EXISTS idx_refs_file_line ON refs(file_id, start_line)';
+
   /// <summary>1.56 CONCEPT: the FTS5 mirror of concept_texts (external content, NO triggers: the
   /// writer refills it with `INSERT INTO concept_texts_fts(concept_texts_fts) VALUES('rebuild')`).
   /// Run by Migrate only when FTS5 is available; a reader probes for the table.</summary>
