@@ -116,7 +116,10 @@ try {
   $t = @((Of 'KillInt') | Where-Object { $_.dst_line -eq $M.'M-KILL' })
   Check 'KillInt: POSITIVE CONTROL -- B reaches the sink' (Has $t { $_.src_kind -eq 'param' -and $_.src_index -eq 1 -and $_.val_class -eq 'int' })
   Check 'NEGATIVE: KillInt: the overwritten A does not reach the sink' (-not (Has $t { $_.src_kind -eq 'param' -and $_.src_index -eq 0 }))
-  Check 'NEGATIVE: no raise / dsfield row without the self-test hooks' (-not (Has $all { $_.dst_kind -in @('raise', 'dsfield') -or $_.src_kind -eq 'dsfield' }))
+  # v156 INT: since EXT-B2 (raise) and EXT-B3 (dsfield) are merged the REAL emitters write these kinds in a plain run;
+  # the old negative ('none without the self-test hooks') held only for an engine with EXT-B1 alone.
+  $real = @($all | Where-Object { $_.dst_kind -in @('raise', 'dsfield') -or $_.src_kind -eq 'dsfield' })
+  Check 'plain run: the real emitters (EXT-B2 raise, EXT-B3 dsfield) write their rows' ($real.Count -gt 0) "rows=$($real.Count)"
 
   if ($BaseExe -ne '') {
     Write-Host 'V4 the old row set is untouched' -ForegroundColor Cyan
@@ -141,7 +144,7 @@ try {
   Check 'write hook: a dsfield destination row at the accessor write' (Has $t { $_.dst_kind -eq 'dsfield' -and $_.dst_line -eq $M.'M-HOOK-WRITE' -and $_.dst_receiver -eq 'M.T' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 })
   Check 'statement hook: Msg reaches the raise (dst raise, argument 0)' (Has $t { $_.dst_kind -eq 'raise' -and $_.dst_line -eq $M.'M-HOOK-RAISE' -and $_.dst_index -eq 0 -and $_.dst_name -eq 'EHookStub' -and $_.src_kind -eq 'param' -and $_.src_index -eq 2 -and $_.val_class -eq '' })
   $kh = @($hk | Where-Object { $_.dst_kind -notin @('raise', 'dsfield') -and $_.src_kind -ne 'dsfield' } | ForEach-Object { (Row-Key $_) + '|' + $_.val_class } | Sort-Object)
-  $ka = @($all | ForEach-Object { (Row-Key $_) + '|' + $_.val_class } | Sort-Object)
+  $ka = @($all | Where-Object { $_.dst_kind -notin @('raise', 'dsfield') -and $_.src_kind -ne 'dsfield' } | ForEach-Object { (Row-Key $_) + '|' + $_.val_class } | Sort-Object)
   Check 'hooks only ADD rows: every other row is identical to the plain run' (@(Compare-Object $ka $kh).Count -eq 0 -and $ka.Count -gt 0) "plain=$($ka.Count) hooked-rest=$($kh.Count)"
 
   Write-Host ''

@@ -171,12 +171,13 @@ foreach ($m in $okLines) {
   $perSyx[$m.Groups[1].Value]  = [int]$m.Groups[5].Value
 }
 # dfa / loops / cla = the seeded count exactly; syx >= it (the parser's parameter rows ride along).
-function Seeded-Ok([string]$File, [int]$N) {
-  return ($perFile[$File] -eq "$N,$N,$N") -and $perSyx.ContainsKey($File) -and ($perSyx[$File] -ge $N)
+# v156 INT: $Loops = the seed + the loops EXT-B3's real emitter writes for that file (SumTo of uExtsB has one for-loop).
+function Seeded-Ok([string]$File, [int]$N, [int]$Loops = $N) {
+  return ($perFile[$File] -eq "$N,$Loops,$N") -and $perSyx.ContainsKey($File) -and ($perSyx[$File] -ge $N)
 }
 Check 'T6 seeded run ends with exit 0' ($r2.rc -eq 0) "(rc $($r2.rc))"
 Check 'T6 uExtsA.pas read back 3 rows of each fact (syx >= 3)' (Seeded-Ok 'uExtsA.pas' 3) "($($perFile['uExtsA.pas']),$($perSyx['uExtsA.pas']))"
-Check 'T6 uExtsB.pas read back 1 row of each fact (syx >= 1)'  (Seeded-Ok 'uExtsB.pas' 1) "($($perFile['uExtsB.pas']),$($perSyx['uExtsB.pas']))"
+Check 'T6 uExtsB.pas read back 1 row of each fact + the real loop of SumTo (syx >= 1)'  (Seeded-Ok 'uExtsB.pas' 1 2) "($($perFile['uExtsB.pas']),$($perSyx['uExtsB.pas']))"
 Check 'T6 no read-back difference reported' ($r2.log -notmatch 'reads back differently')
 # must_writes: the REAL analysis, read back by the self-check and printed per routine.
 $mustLines = @([regex]::Matches($r2.log, 'v156-store-selfcheck: must file=(\S+) routine=(\S+) must_writes=\[([^\]]*)\]'))
@@ -195,7 +196,7 @@ function Seed-Counts([string]$Db) {
 }
 $c2 = Seed-Counts $db2
 $c2Text = ($c2.Keys | ForEach-Object { "$_=$($c2[$_])" }) -join ' '
-Check 'T6 four rows of every per-file fact, one indirect edge' (($c2.dfa -eq 4) -and ($c2.loops -eq 4) -and ($c2.cla -eq 4) -and ($c2.syx -eq 4) -and ($c2.flows -eq 4) -and ($c2.must -eq 4) -and ($c2.edges -eq 1)) "($c2Text)"
+Check 'T6 four rows of every per-file fact (loops: 4 seeded + 1 real), one indirect edge' (($c2.dfa -eq 4) -and ($c2.loops -eq 5) -and ($c2.cla -eq 4) -and ($c2.syx -eq 4) -and ($c2.flows -eq 4) -and ($c2.must -eq 4) -and ($c2.edges -eq 1)) "($c2Text)"
 $fillMust = @(Lane-Sql $db2 "SELECT f.must_writes AS m FROM symbol_facts f JOIN symbols s ON s.id = f.symbol_id WHERE s.name = 'Fill'")
 Check 'T6 control: must_writes is not seeded (Fill stores FTotal, not Result)' (($fillMust.Count -eq 1) -and ($fillMust[0].m -eq 'FTotal')) "($(($fillMust | ForEach-Object m) -join ','))"
 $names = @(Lane-Sql $db2 "SELECT a.field_name AS f, s.name AS n FROM ds_field_accesses a JOIN symbols s ON s.id = a.symbol_id ORDER BY a.file_id, a.ordinal")

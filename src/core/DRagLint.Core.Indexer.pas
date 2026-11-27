@@ -1165,6 +1165,7 @@ const
   SELF_CHECK_HOOK     = 'v156-store-selfcheck';
   SELF_CHECK_CALLEE   = 'SelfCheckCall';
   SELF_CHECK_ARGS     = 2;
+  SELF_CHECK_DATASET  = 'tblSelf';
 
 var
   { the routine the self-check's indirect-edges pass links to itself (tests only) }
@@ -1188,12 +1189,12 @@ begin
   A.Line       := ACtx.Sym.ImplStartLine;
   A.Col        := 1;
   A.Shape      := DSFA_SHAPE_BYNAME;
-  A.DatasetText:= 'tblSelf';
+  A.DatasetText:= SELF_CHECK_DATASET;
   A.FieldName  := ACtx.Sym.Name;
   A.NameKind   := DSFA_NAME_LITERAL;
   A.Accessor   := 'AsInteger';
   A.RootKind   := DSFA_ROOT_OTHER;
-  A.RootName   := 'tblSelf';
+  A.RootName   := SELF_CHECK_DATASET;
   A.RootIndex  := -1;
   A.StmtLine   := ACtx.Sym.ImplStartLine;
   A.StmtCol    := 1;
@@ -1301,15 +1302,20 @@ procedure SelfCheckRoutineReaders(const AStore: ISymbolStore; AFileId: Int64; co
   const ASeed: TDsFieldAccessRow);
 var
   Flows: TArray<TDataFlowRow>;
+  Flow : TDataFlowRow;
+  Seen : Integer;
 begin
-  SelfCheckExpect(Length(AStore.GetDsFieldAccesses(0, ASeed.SymbolId)) = 1, 'ds_field_accesses by routine', AFilePath);
-  SelfCheckExpect(Length(AStore.GetLoopFacts(0, ASeed.SymbolId)) = 1, 'loop_facts by routine', AFilePath);
+  { v156 INT: the real emitters (EXT-B2 / EXT-B3) write rows of the same routine beside the seed, so the
+    by-routine readers are held to "the seed is there", not to "the seed is alone" }
+  SelfCheckExpect(Length(AStore.GetDsFieldAccesses(0, ASeed.SymbolId)) >= 1, 'ds_field_accesses by routine', AFilePath);
+  SelfCheckExpect(Length(AStore.GetLoopFacts(0, ASeed.SymbolId)) >= 1, 'loop_facts by routine', AFilePath);
   SelfCheckExpect(Length(AStore.GetCallLiteralArgs(AFileId, ASeed.Line, ASeed.Col)) >= 1, 'call_literal_args by call', AFilePath);
   SelfCheckExpect(Length(AStore.FindCallLiteralArgs(SELF_CHECK_CALLEE, ASeed.FieldName)) >= 1, 'call_literal_args by name', AFilePath);
   Flows:= AStore.GetDataFlowsOf(ASeed.SymbolId, DF_DST_DSFIELD);
-  SelfCheckExpect(Length(Flows) = 1, 'data_flows dsfield count', AFilePath);
-  SelfCheckExpect(Flows[0].ValClass = DF_VAL_INT, 'data_flows.val_class', AFilePath);
-  SelfCheckExpect(Flows[0].SrcKind = DF_SRC_EXCEPT, 'data_flows.src_kind', AFilePath);
+  Seen:= 0;
+  for Flow in Flows do
+    if (Flow.DstName = ASeed.FieldName) and (Flow.ValClass = DF_VAL_INT) and (Flow.SrcKind = DF_SRC_EXCEPT) then Inc(Seen);
+  SelfCheckExpect(Seen = 1, 'data_flows seeded dsfield row', AFilePath);
 end;
 
 procedure TIndexer.VerifyStoreSelfCheck(AFileId: Int64; const AFilePath: string; const AFacts: TExtFileFacts;
@@ -1333,7 +1339,8 @@ begin
   begin
     SelfCheckExpect(Dfa[I].Ordinal = I, 'ds_field_accesses ordinal', AFilePath);
     SelfCheckExpect(SelfCheckSig(Dfa[I]) = SelfCheckSig(AFacts.DsFieldAccesses[I]), 'ds_field_accesses row', AFilePath);
-    SelfCheckRoutineReaders(FStore, AFileId, AFilePath, AFacts.DsFieldAccesses[I]);
+    if AFacts.DsFieldAccesses[I].DatasetText = SELF_CHECK_DATASET then
+      SelfCheckRoutineReaders(FStore, AFileId, AFilePath, AFacts.DsFieldAccesses[I]);
   end;
   for I:= 0 to High(Loops) do
     SelfCheckExpect(SelfCheckSig(Loops[I]) = SelfCheckSig(AFacts.LoopFacts[I]), 'loop_facts row', AFilePath);
