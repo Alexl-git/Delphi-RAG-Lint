@@ -1,0 +1,12 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>SbomApp.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DelphiCompile Include="$(MainSource)">
+      <MainSource>MainSource</MainSource>
+    </DelphiCompile>
+    <DCCReference Include="AppMain.pas"/>
+    <DCCReference Include="..\shared\SharedUnit.pas"/>
+  </ItemGroup>
+</Project>

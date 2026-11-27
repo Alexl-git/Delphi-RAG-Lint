@@ -1,0 +1,5 @@
+{
+  "libraries": [
+    { "key": "acme", "name": "Acme Widgets", "pathz": ["\\AcmeWidgets\\"] }
+  ]
+}
