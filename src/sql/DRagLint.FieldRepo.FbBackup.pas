@@ -102,7 +102,7 @@ function ServerBackupFile(const pDatabase, pFolder, pFile: string): string;  // 
 /// <summary>The IPv4 addresses of this computer: what its own name resolves to.</summary>
 /// <returns>Dotted addresses; empty when the name does not resolve or Winsock does not start.</returns>
 /// <remarks>Q16 A (1.55): a Server key holding one of them is this machine, like localhost.</remarks>
-function OwnAddresses: TArray<string>;  // dl:ok unused-public-symbol@0000 -- REVIEWED 2026-11-26 REVFIX: test seam; BackupTests.dpr (outside the indexed project) needs an own address for the Q16 positive control
+function OwnAddresses: TArray<string>;  // dl:ok unused-public-symbol@bb41 -- REVIEWED 2026-11-26 REVFIX: public as a test seam; BackupTests.dpr R0-R3 (outside the indexed project) calls it
 
 /// <summary>What the attachment check of an opened connection refuses.</summary>
 /// <param name="pHost">The host of the connection string, already found to be this machine ('' = none given).</param>
@@ -112,7 +112,7 @@ function OwnAddresses: TArray<string>;  // dl:ok unused-public-symbol@0000 -- RE
 /// the port to another machine, which is what the check is for. Through the own name or an own IPv4 address of this computer it
 /// is that own address, on a local and on a remote server alike, so the check cannot tell and is not applied: the host itself
 /// is the evidence (Q16 A).</remarks>
-function RemoteAttachmentHost(const pHost, pAttachment: string): string;
+function RemoteAttachmentHost(const pHost, pAttachment: string): string;  // dl:ok unused-public-symbol@9765 -- REVIEWED 2026-11-26 REVFIX: public as a test seam; BackupTests.dpr R0-R3 (outside the indexed project) calls it
 
 /// <summary>The path of a new automatically named backup on the disk of another machine.</summary>
 /// <param name="pDatabase">The database file as the server reports it.</param>
@@ -122,7 +122,7 @@ function RemoteAttachmentHost(const pHost, pAttachment: string): string;
 /// <remarks>Nothing on the server can be looked at and gbak replaces a file of the same name, so the name carries the
 /// milliseconds: two backups of one second get different names. Two of the same millisecond would still collide; that is
 /// not checked. The purge recognises the name as an automatic one.</remarks>
-function RemoteBackupFile(const pDatabase, pFolder: string; pNow: TDateTime): string;
+function RemoteBackupFile(const pDatabase, pFolder: string; pNow: TDateTime): string;  // dl:ok unused-public-symbol@d3a8 -- REVIEWED 2026-11-26 REVFIX: public as a test seam; BackupTests.dpr R0-R3 (outside the indexed project) calls it
 
 /// <summary>The backup folder to use: the command line's, else the project's, else none.</summary>
 /// <param name="pConnection">The --connection value.</param>

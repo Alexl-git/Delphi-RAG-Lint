@@ -352,6 +352,7 @@ uses
   System.Classes,
   System.IOUtils,
   System.RegularExpressions,
+  System.Math,
   System.StrUtils;
 
 const
@@ -1422,7 +1423,7 @@ end;
 
 function TDfmUnitDocument.IsWordToken(pIndex: Integer): Boolean;
 begin
-  Result := (pIndex >= 0) and (pIndex <= High(FTokens)) and (FTokens[pIndex].Text <> '') and
+  Result := InRange(pIndex, 0, High(FTokens)) and (FTokens[pIndex].Text <> '') and
     (CharInSet(FTokens[pIndex].Text[1], ['A'..'Z', 'a'..'z', '_', '&']));
 end;
 
@@ -1431,6 +1432,7 @@ end;
 function TDfmUnitDocument.OpenContext(pOpen: Integer): Integer;
 var
   VBefore: string;
+  VIndexedName: Boolean;
 begin
   Result := STRING_PLAIN;
   if pOpen < 1 then
@@ -1438,8 +1440,8 @@ begin
   VBefore := FTokens[pOpen - 1].Text;
   if FTokens[pOpen].Text = '[' then
   begin
-    if (VBefore = ')') or (VBefore = ']') or (VBefore = '^') or (IsWordToken(pOpen - 1) and not MatchText(VBefore, NO_INDEX_WORDS)
-      and not MatchText(VBefore, STATEMENT_STOPS)) then
+    VIndexedName := IsWordToken(pOpen - 1) and not MatchText(VBefore, NO_INDEX_WORDS) and not MatchText(VBefore, STATEMENT_STOPS);
+    if VIndexedName or MatchStr(VBefore, [')', ']', '^']) then
       Result := STRING_FIELD;
   end
   else if MatchText(VBefore, REFERENCE_CALLS) then
@@ -1473,7 +1475,7 @@ var
 begin
   Result := STRING_PLAIN;
   VDepth := 0;
-  VI := pIndex - 1;
+  VI := Min(pIndex, Length(FTokens)) - 1;
   while (VI >= 0) and (Result = STRING_PLAIN) do
   begin
     VText := FTokens[VI].Text;
