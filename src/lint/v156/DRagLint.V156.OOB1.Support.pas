@@ -49,6 +49,7 @@ implementation
 uses
   System.IOUtils
   , System.RegularExpressions
+  , System.StrUtils
   ;
 
 const
@@ -82,11 +83,7 @@ begin
         var Tok: string:= LowerCase(M.Value);
         if (Tok = 'begin') or (Tok = 'try') or (Tok = 'case') or (Tok = 'asm') then Inc(Depth)
         else if Tok = 'end' then Dec(Depth);
-        if (Tok = ';') or (Tok = 'begin') or (Tok = 'try') or (Tok = 'end') or (Tok = 'finally') or (Tok = 'except') or (Tok = 'repeat') then
-          Prefix:= ''
-        else
-          Prefix:= Prefix + ' ' + Tok;
-        if (Tok = 'case') then Prefix:= '';
+        Prefix:= if MatchText(Tok, [';', 'begin', 'try', 'end', 'finally', 'except', 'repeat', 'case']) then '' else Prefix + ' ' + Tok;
       end;
       Result:= (Depth = 1) and (Prefix = '');
     finally

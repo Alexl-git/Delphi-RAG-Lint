@@ -110,10 +110,9 @@ function AllAliasOfTarget(const AGroup: TArray<TUnitDecl>; ATarget: Integer): Bo
 begin
   Result:= True;
   for var I: Integer:= 0 to High(AGroup) do
-    if I <> ATarget then
-      if (AGroup[I].Sym.Kind <> skTypeAlias)
-        or not SameText(AGroup[I].Sym.Signature, AGroup[ATarget].UnitName + '.' + AGroup[ATarget].Sym.Name) then
-        Exit(False);
+    if (I <> ATarget) and ((AGroup[I].Sym.Kind <> skTypeAlias)
+      or not SameText(AGroup[I].Sym.Signature, AGroup[ATarget].UnitName + '.' + AGroup[ATarget].Sym.Name)) then
+      Exit(False);
 end;
 
 { True when a group of same-named declarations is an overload set or an alias set the compiler accepts. }function IsBenignGroup(const AGroup: TArray<TUnitDecl>): Boolean;
