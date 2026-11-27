@@ -19,7 +19,8 @@
   Q12 1.55 keys and the 1.55 text line survive (A18)
   Q13 --place usage error / narrowing (A19)     Q14 library place and its note (A20)
   Q15 --kind with the new kinds                 Q16 text detail lines
-  Q17 notes: not copied yet, not found at index time      Q18 unresolved table = ?.FIELD
+  Q17 notes: not copied (directory scan), not found at index time; the pre-1.56 note: run_v156_CONQ_e2e.ps1 E-D7
+  Q18 unresolved table = ?.FIELD
 
   Positive control of the whole script: run with -Exe <an engine whose ConceptRepo is the FRAME-1
   stub> -- every check on place / tier / repository hits FAILS.
@@ -241,7 +242,7 @@ Check 'Q18 words no text holds give no repository hit' (@($r.hits | Where-Object
 # ---- Q17 -----------------------------------------------------------------------------------
 $r = Run-Concept $base 'customer name'
 $rp = @($r.json.places | Where-Object { $_.place -eq 'repository' }) | Select-Object -First 1
-Check 'Q17 no repo_copy row: "repository: not copied yet", state not-copied-yet, symbol hits still answer' (($r.rc -eq 0) -and ($r.err -match '(?m)^repository: not copied yet \(index made before 1\.56\); run: drag-lint index --project ') -and $rp -and ($rp.state -eq 'not-copied-yet') -and (@($r.hits | Where-Object { $_.place -eq 'project' }).Count -ge 1)) "(err: $($r.err.Trim()))"
+Check 'Q17 no repo_copy row in a directory-scan index: "repository: not copied (this index was made by a directory scan ...", state not-copied-yet, symbol hits still answer' (($r.rc -eq 0) -and ($r.err -match '(?m)^repository: not copied \(this index was made by a directory scan and has no project file\); repository hits need a project index: drag-lint index --project ') -and ($r.err -notmatch 'made before 1\.56') -and $rp -and ($rp.state -eq 'not-copied-yet') -and (@($r.hits | Where-Object { $_.place -eq 'project' }).Count -ge 1)) "(err: $($r.err.Trim()))"
 $r = Run-Concept $dbs['missing'] 'customer name'
 Check 'Q17 state missing: "repository: not found at index time: <path>"' ([bool]($r.err -match '(?m)^repository: not found at index time: .+App\.dlrepo'))
 $r = Run-Concept $A 'zzzqqq nothing'

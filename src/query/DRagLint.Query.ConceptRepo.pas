@@ -100,6 +100,8 @@ const
   STATE_UNREADABLE     = 'unreadable';
   STATE_NOT_COPIED_YET = 'not-copied-yet';
   STATE_NO_CONCEPT     = 'no-concept-table';
+  META_SCAN_TYPE       = 'scan_type';
+  SCAN_PROJECT         = 'project';
   LINK_PERSISTENT = 'persistent-field';
   LINK_GRID       = 'grid-column';
   LINK_EDIT       = 'edit-control';
@@ -183,6 +185,7 @@ type
     FRepoState, FRepoPath, FRepoError, FRepoNote: string;
     FRepoSize, FRepoMTime, FRepoCopiedAt: Int64;
     FRepoStale : Boolean;
+    FDirScan   : Boolean;
     function  ParseFlags(out pError: string): Boolean;
     procedure SplitKinds;
     function  KindWanted(const pKind: string): Boolean;
@@ -191,6 +194,7 @@ type
     procedure ReadRepoCopy;
     procedure FinishRepoNote(pHasRepoHit: Boolean);
     function  WhenText: string;
+    function  ProjectText: string;
     function  RefreshCommand: string;
     function  EntityFor(const pTable, pField: string): Integer;
     procedure ScanTexts;
@@ -446,6 +450,9 @@ var
   Q: TFDQuery;
 begin
   FRepoState:= STATE_NOT_COPIED_YET;
+  { A directory scan (index <dir>) never runs the copy step (design 2.3): its missing repo_copy row is
+    not "an index made before 1.56". schema_meta.scan_type is 'project' only for index --project. }
+  FDirScan:= not SameText(FStore.GetMetaValue(META_SCAN_TYPE), SCAN_PROJECT);
   if plRepository not in FPlaces then
   begin
     FRepoState:= STATE_SKIPPED;
@@ -473,12 +480,14 @@ begin
   Result:= FormatDateTime('yyyy-mm-dd hh:nn', UnixLocal(FRepoCopiedAt));
 end; // function
 
-function TConceptRun.RefreshCommand: string;
-var
-  Project: string;
+function TConceptRun.ProjectText: string;
 begin
-  Project:= if FQuery.ProjectFile = '' then '<X.dproj>' else FQuery.ProjectFile;
-  Result:= Format('drag-lint index --project %s --db %s', [Project, FQuery.DbPath]);
+  Result:= if FQuery.ProjectFile = '' then '<X.dproj>' else FQuery.ProjectFile;
+end; // function
+
+function TConceptRun.RefreshCommand: string;
+begin
+  Result:= Format('drag-lint index --project %s --db %s', [ProjectText, FQuery.DbPath]);
 end; // function
 
 { The one repository note of the run (design 1.6). The live file is only STATed. }
@@ -488,7 +497,10 @@ var
 begin
   FRepoNote:= '';
   FRepoStale:= False;
-  if FRepoState = STATE_NOT_COPIED_YET then
+  if (FRepoState = STATE_NOT_COPIED_YET) and FDirScan then
+    FRepoNote:= 'repository: not copied (this index was made by a directory scan and has no project file); ' +
+      'repository hits need a project index: drag-lint index --project ' + ProjectText
+  else if FRepoState = STATE_NOT_COPIED_YET then
     FRepoNote:= 'repository: not copied yet (index made before 1.56); run: ' + RefreshCommand
   else if FRepoState = STATE_NOT_CONFIGURED then
     FRepoNote:= 'repository: not configured'

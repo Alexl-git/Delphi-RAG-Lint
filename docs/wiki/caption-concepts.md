@@ -109,7 +109,8 @@ parseable. In `--json` the same line is `places[].note`.
 | Line starts with | Meaning |
 |---|---|
 | `repository: not configured` | the project names no field repository |
-| `repository: not copied yet` | the index was made before 1.56; run `index --project` once |
+| `repository: not copied yet` | the project index was made before 1.56; run `index --project` once |
+| `repository: not copied (this index was made by a directory scan` | `index <dir>` has no project file, so it never copies a repository; build a project index with `index --project` to get repository hits |
 | `repository: not found at index time:` | the configured file did not exist when the index ran |
 | `repository: not readable at index time:` | it could not be opened; the previous copy answers, when there is one |
 | `repository: copy from <when> is stale` | the repository file changed since the copy; the line carries the refresh command |
