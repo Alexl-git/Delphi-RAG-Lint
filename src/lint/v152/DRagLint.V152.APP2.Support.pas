@@ -12,6 +12,7 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , DRagLint.Core.Model
+  , DRagLint.Core.Interfaces  // ISymbolStore
   , DRagLint.V151.Api  // TProgramConsoleProbe
   ;
 
@@ -24,8 +25,12 @@ type
   /// <remarks>
   /// Source-text based like the v151 per-file rule: a routine is matched by its simple name,
   /// restricted to the units the console program uses (transitively), so a same-named routine in an
-  /// unused unit never matches. Only stand-alone routines are followed (a method call needs a receiver
-  /// type, which text alone cannot give). Stateless; class methods only.
+  /// unused unit never matches. The text pass follows stand-alone routines only (a method call needs a
+  /// receiver type, which text alone cannot give). 1.56 G-62: when the run has an index, a second pass
+  /// follows METHODS through the resolved call edges (certain, routine calls) back from every routine that
+  /// shows a dialog or carries a ui_affinity, over at most 8 hops with a visited set per seed (cycles end),
+  /// to a console program's main block or to a method of a TService descendant, and prints the chain.
+  /// Its findings are added only at call sites the text pass did not report. Stateless; class methods only.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.V152.APP2.TV152APP2Rules.CheckProject (DRagLint.V152.APP2.pas)</para>
   /// <para>Used in units: DRagLint.V152.APP2</para>
@@ -38,7 +43,8 @@ type
     /// <param name="AProjectPath">The --project file, or '' for a database-wide run; when set, only the program with that base name is checked.</param>
     /// <param name="AProgramHasConsole">The run's program probe (lint-all's, as writeln-in-gui-app gets it); nil = unknown.
     /// A program is a console program when its own directives say so (ProgramSrcHasConsole) or the probe does.</param>
-    /// <returns>One warning per call, located in the program file; nil when there is none.</returns>
+    /// <param name="AStore">The run's index; nil = text pass only (no method following).</param>
+    /// <returns>One warning per call, located in the program file (or, for a service, in the calling method's file); nil when there is none.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.V152.APP2.TV152APP2Rules.CheckProject (DRagLint.V152.APP2.pas)</para>
@@ -52,7 +58,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Run(const AFilePaths: TArray<string>; const AProjectPath: string;
-      const AProgramHasConsole: TProgramConsoleProbe): TArray<TLintFinding>; static;
+      const AProgramHasConsole: TProgramConsoleProbe; const AStore: ISymbolStore = nil): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -61,6 +67,7 @@ uses
   System.Math
   , System.IOUtils
   , System.RegularExpressions
+  , DRagLint.Core.Encoding  // ReadSourceFileLines
   , DRagLint.V151.APP.Support
   ;
 
@@ -72,6 +79,9 @@ const
   USES_RE    = '\buses\b([^;]*);';
   IDENT_RE   = '[A-Za-z_][\w\.]*';
   DECL_LOOKBACK = 24;  { chars before a name that cover procedure / function plus blanks }
+  MAX_HOPS      = 8;   { G-62: resolved call hops walked back from a dialog routine }
+  CONF_CERTAIN  = 'certain';
+  UNIT_CLASS_METHOD_PARTS = 3;  { Unit.Class.Method }
 
 type
   /// <summary>One scanned file of the run.</summary>
@@ -212,10 +222,158 @@ begin
   end;
 end;
 
+function ShortQName(const AQName: string): string;
+var
+  Parts: TArray<string>;
+begin
+  Parts:= AQName.Split(['.']);
+  Result:= if Length(Parts) >= 2 then Parts[High(Parts) - 1] + '.' + Parts[High(Parts)] else AQName;
+end;
+
+{ True when the routine's body (ImplStartLine..ImplEndLine) holds a dialog call outside a // comment. }
+function BodyShowsDialog(const ALines: TArray<string>; const ASym: TSymbol): Boolean;
+var
+  I: Integer;
+begin
+  Result:= False;
+  if (ALines = nil) or (ASym.ImplStartLine <= 0) or (ASym.ImplEndLine > Length(ALines)) then Exit;
+  for I:= ASym.ImplStartLine to ASym.ImplEndLine do
+    if not Trim(ALines[I - 1]).StartsWith('//') and TRegEx.IsMatch(ALines[I - 1], DIALOG_RE, [roIgnoreCase]) then
+      Exit(True);
+end;
+
+{ G-62: walks the resolved call edges back from every dialog routine to a console program's main block
+  (caller id 0 in a program file) or to a method of a TService descendant; one finding per call site. }
+procedure FollowMethods(const AStore: ISymbolStore; AProgramPaths: TList<string>; AAcc: TList<TLintFinding>);
+type
+  TStep = record
+    SymId: Int64;
+    Chain: string;
+  end;
+var
+  Services, Emitted, Reported: TDictionary<string, Boolean>;
+  Lines: TDictionary<string, TArray<string>>;
+  Visited: TDictionary<Int64, Boolean>;
+  Frontier, Next: TList<TStep>;
+  SF: TSymbolFacts;
+  U, Caller: TSymbol;
+  Step, First: TStep;
+  C: TResolvedCaller;
+  F: TLintFinding;
+  Hop: Integer;
+  Why, Key, Name, Where: string;
+  Parts: TArray<string>;
+
+  function LinesOf(const APath: string): TArray<string>;
+  begin
+    if not Lines.TryGetValue(APath, Result) then
+    begin
+      try
+        Result:= ReadSourceFileLines(APath);
+      except  // dl:ok bare-except@8ac3 -- REVIEWED 2026-11-27 v156 G62R: one unreadable source file must cost its own findings, never abort the lint run
+        Result:= nil;
+      end;
+      Lines.Add(APath, Result);
+    end;
+  end;
+
+  function IsServiceMethod(const ASym: TSymbol): Boolean;
+  begin
+    Parts:= ASym.QualifiedName.Split(['.']);
+    Result:= (Length(Parts) >= UNIT_CLASS_METHOD_PARTS) and Services.ContainsKey(LowerCase(Parts[High(Parts) - 1]));
+  end;
+
+begin
+  Services:= TDictionary<string, Boolean>.Create;
+  Emitted:= TDictionary<string, Boolean>.Create;
+  Reported:= TDictionary<string, Boolean>.Create;
+  Lines:= TDictionary<string, TArray<string>>.Create;
+  Visited:= TDictionary<Int64, Boolean>.Create;
+  Frontier:= TList<TStep>.Create;
+  Next:= TList<TStep>.Create;
+  try
+    for Name in AStore.FindDescendantNames('TService') do Services.AddOrSetValue(LowerCase(Name), True);
+    Services.Remove('tservice');
+    if (Services.Count = 0) and (AProgramPaths.Count = 0) then Exit;
+    for F in AAcc do Reported.AddOrSetValue(LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine), True);
+    for SF in AStore.GetAllSymbolFacts do
+    begin
+      U:= AStore.GetSymbolById(SF.SymbolId);
+      if U.Id = 0 then Continue;
+      if SF.UiAffinity <> '' then Why:= 'touches ' + SF.UiAffinity
+      else if BodyShowsDialog(LinesOf(AStore.GetFilePath(U.FileId)), U) then Why:= 'shows a dialog'
+      else Continue;
+      Visited.Clear;
+      Visited.Add(U.Id, True);
+      Frontier.Clear;
+      First.SymId:= U.Id;
+      First.Chain:= ShortQName(U.QualifiedName);
+      Frontier.Add(First);
+      for Hop:= 1 to MAX_HOPS do
+      begin
+        Next.Clear;
+        for Step in Frontier do
+          for C in AStore.FindResolvedCallers(Step.SymId) do
+          begin
+            if (C.Mode <> '') or (C.Confidence <> CONF_CERTAIN) or (C.FullPath = '') or (C.CallSiteLine <= 0) then Continue;
+            if C.EnclosingSymbolId = 0 then
+            begin
+              if not AProgramPaths.Contains(LowerCase(C.FullPath)) then Continue;
+              Where:= 'in a console program';
+              Caller:= Default(TSymbol);
+            end
+            else
+            begin
+              if Visited.ContainsKey(C.EnclosingSymbolId) then Continue;
+              Caller:= AStore.GetSymbolById(C.EnclosingSymbolId);
+              if Caller.Id = 0 then Continue;
+              if not IsServiceMethod(Caller) then
+              begin
+                Visited.Add(C.EnclosingSymbolId, True);
+                First.SymId:= Caller.Id;
+                First.Chain:= ShortQName(Caller.QualifiedName) + ' -> ' + Step.Chain;
+                Next.Add(First);
+                Continue;
+              end;
+              Where:= 'in a method of a Windows service';
+            end;
+            Key:= LowerCase(C.FullPath) + '|' + IntToStr(C.CallSiteLine);
+            if Reported.ContainsKey(Key) or Emitted.ContainsKey(Key) then Continue;
+            Emitted.Add(Key, True);
+            F:= Default(TLintFinding);
+            F.RuleId   := APP2_RULE_UI_CALL;
+            F.FilePath := C.FullPath;
+            F.StartLine:= C.CallSiteLine;
+            F.EndLine  := C.CallSiteLine;
+            F.StartCol := 1;
+            F.EndCol   := 1;
+            F.Severity := 'warning';
+            F.Message  := 'Call chain ' + (if Caller.Id = 0 then '' else ShortQName(Caller.QualifiedName) + ' -> ') + Step.Chain +
+              ' reaches a routine that ' + Why + ' ' + Where +
+              ' -- there is no desktop to show it on, so the call blocks forever or fails.';
+            AAcc.Add(F);
+          end;
+        if Next.Count = 0 then Break;
+        Frontier.Clear;
+        Frontier.AddRange(Next);
+      end;
+    end;
+  finally
+    Next.Free;
+    Frontier.Free;
+    Visited.Free;
+    Lines.Free;
+    Reported.Free;
+    Emitted.Free;
+    Services.Free;
+  end;
+end;
+
 class function TApp2CrossUnit.Run(const AFilePaths: TArray<string>; const AProjectPath: string;
-  const AProgramHasConsole: TProgramConsoleProbe): TArray<TLintFinding>;
+  const AProgramHasConsole: TProgramConsoleProbe; const AStore: ISymbolStore): TArray<TLintFinding>;
 var
   Units: TDictionary<string, TApp2File>;
+  ProgramPaths: TList<string>;
   Programs: TList<TApp2File>;
   Acc: TList<TLintFinding>;
   P, Text, ProjBase: string;
@@ -226,6 +384,7 @@ begin
   Units:= TDictionary<string, TApp2File>.Create;
   Programs:= TList<TApp2File>.Create;
   Acc:= TList<TLintFinding>.Create;
+  ProgramPaths:= TList<string>.Create;
   try
     try
       for P in AFilePaths do
@@ -245,12 +404,15 @@ begin
           Item.Src.Free;
       end;
       for Item in Programs do CheckProgram(Item.Path, Item.Src, Units, Acc);
+      for Item in Programs do ProgramPaths.Add(LowerCase(Item.Path));
+      if AStore <> nil then FollowMethods(AStore, ProgramPaths, Acc);
       Result:= Acc.ToArray;
     finally
       for Item in Programs do Item.Src.Free;
       for Item in Units.Values do Item.Src.Free;
     end;
   finally
+    ProgramPaths.Free;
     Acc.Free;
     Programs.Free;
     Units.Free;
