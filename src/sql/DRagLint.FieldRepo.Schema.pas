@@ -18,8 +18,9 @@ const
   /// <summary>Schema version a NEW repository is created with; mirrored in PRAGMA user_version and DL_META.
   /// Version 2 (1.53) adds DL_FIELDS_INFO.CALC_BODY, DL_LAYOUT_EVENTS and DL_EXCEPTIONS; version 3 (1.54) the six event
   /// columns of DL_FIELDS_INFO and DL_GRID_COLUMNS; version 4 (1.55) DL_RELATIONS, DL_RELATION_COLUMNS and
-  /// DL_FIELD_INPUTS (design 2026-11-26-cross-table-fields-design.md 2.2).</summary>
-  REPO_SCHEMA_VERSION = 4;
+  /// DL_FIELD_INPUTS (design 2026-11-26-cross-table-fields-design.md 2.2); version 5 (1.56) no table, four columns:
+  /// DL_GRID_COLUMNS.PROPERTIES_CLASS_NAME / PROPERTIES and DL_FIELDS_INFO.NOTES / DERIVED_KIND.</summary>
+  REPO_SCHEMA_VERSION = 5;
   /// <summary>Oldest schema version OpenRepository still accepts (1 = the 1.52 five-table layout).</summary>
   REPO_SCHEMA_MIN_VERSION = 1;
   /// <summary>Name of the layout event code table (schema 2): event code of non-DBTable layouts and of views (FIELD_NAME '').</summary>
@@ -28,6 +29,15 @@ const
   REPO_TABLE_EXCEPTIONS = 'DL_EXCEPTIONS';
   /// <summary>Name of the grid column order table (schema 3): one row per form + grid view + column.</summary>
   REPO_TABLE_GRID_COLUMNS = 'DL_GRID_COLUMNS';
+  /// <summary>DL_GRID_COLUMNS columns of schema 5: the column's `PropertiesClassName` and its `Properties.*` lines
+  /// (format: TFrGridColumn.Properties). Both NULL = the column has no editor of its own.</summary>
+  REPO_COL_PROPERTIES_CLASS_NAME = 'PROPERTIES_CLASS_NAME';
+  REPO_COL_PROPERTIES = 'PROPERTIES';
+  /// <summary>DL_FIELDS_INFO columns of schema 5 (design 2026-11-27-derived-field-lineage-design.md section 3): free
+  /// text per field, holding at most one machine-written lineage block, and the derived marker (FR_DERIVED_*; NULL or
+  /// '' = not derived).</summary>
+  REPO_COL_NOTES = 'NOTES';
+  REPO_COL_DERIVED_KIND = 'DERIVED_KIND';
   /// <summary>LAYOUT_TYPE 1.54 development builds gave a TField event in DL_LAYOUT_EVENTS. The event columns of schema 3
   /// replaced it: migration moves such rows, `repo check` reports one that is left.</summary>
   REPO_LAYOUT_FIELD = 'Field';
@@ -179,8 +189,9 @@ function RepoTables: TArray<TRepoTable>;  // dl:ok unused-public-symbol@15fa -- 
 /// <summary>The table set of one schema version: v1 = the five 1.52 tables; v2 = the same order with
 /// DL_FIELDS_INFO.CALC_BODY appended as its last column, then DL_LAYOUT_EVENTS and DL_EXCEPTIONS; v3 = v2 with the six
 /// event columns appended to DL_FIELDS_INFO, then DL_GRID_COLUMNS; v4 = v3, then DL_RELATIONS, DL_RELATION_COLUMNS and
-/// DL_FIELD_INPUTS. RepoTables is RepoTablesFor(REPO_SCHEMA_VERSION).</summary>
-/// <param name="pVersion">1, 2, 3 or 4.</param>
+/// DL_FIELD_INPUTS; v5 = the tables of v4 with NOTES and DERIVED_KIND appended to DL_FIELDS_INFO and
+/// PROPERTIES_CLASS_NAME and PROPERTIES appended to DL_GRID_COLUMNS. RepoTables is RepoTablesFor(REPO_SCHEMA_VERSION).</summary>
+/// <param name="pVersion">1, 2, 3, 4 or 5.</param>
 /// <returns>A fresh array of table descriptions.</returns>
 /// <exception cref="ERepoError">The version is outside REPO_SCHEMA_MIN_VERSION..REPO_SCHEMA_VERSION.</exception>
 function RepoTablesFor(pVersion: Integer): TArray<TRepoTable>;
@@ -255,7 +266,7 @@ function DefaultRepoPath(const pProjectFile: string): string;
 
 /// <summary>Creates a new repository file with every table of the given schema version.</summary>
 /// <param name="pFileName">Target file; its folder is created.</param>
-/// <param name="pVersion">Schema version to create; default REPO_SCHEMA_VERSION (3). 1 and 2 exist for
+/// <param name="pVersion">Schema version to create; default REPO_SCHEMA_VERSION (5). The older ones exist for
 /// restoring an older backup into a missing file and for tests.</param>
 /// <exception cref="ERepoError">The file already exists.</exception>
 /// <remarks>
@@ -378,7 +389,7 @@ function CountRepoRowChanges(pConnection: TFDConnection; pFrom: Integer): TRepoR
 
 /// <summary>Brings rows of an older schema to schema pTo: FIELD_KIND 2 for ISCALCULATED rows (from schema 1),
 /// Field events into the event columns (from schema 2 or older, when pTo is 3 or later), ALIGNMENT -2 to NULL (pTo 3 or
-/// later), DL_META schema_version = pTo. Schema 4 adds tables only: no row step of its own.</summary>
+/// later), DL_META schema_version = pTo. Schema 4 adds tables only and schema 5 NULL-able columns only: no row step of their own.</summary>
 /// <param name="pConnection">Open read-write connection whose tables have the columns of schema pTo.</param>
 /// <param name="pFrom">Schema version the rows were written with, below pTo.</param>
 /// <param name="pTo">The file's schema: REPO_SCHEMA_VERSION for a migration, the target file's own schema for a restore
@@ -409,6 +420,8 @@ const
   VERSION_MODEL = 2;
   VERSION_EVENT_COLUMNS = 3;
   VERSION_CROSS_TABLE = 4;
+  VERSION_EDITOR_NOTES = 5; // grid column editor properties, NOTES, DERIVED_KIND
+  DERIVED_KIND_LEN = 10;
   { column widths of the schema-4 tables }
   TABLE_NAME_LEN = 68;
   IDENT_LEN = 63;
@@ -530,9 +543,11 @@ begin
   if pVersion >= VERSION_EVENT_COLUMNS then
     Result.Columns := Result.Columns + [Txt('ONGETTEXT_BODY'), Txt('ONSETTEXT_BODY'), Txt('ONVALIDATE_BODY'),
       Txt('ONCHANGE_BODY'), Txt('GRID_DISPLAYTEXT_BODY'), Txt('GRID_DRAWCELL_BODY')];
+  if pVersion >= VERSION_EDITOR_NOTES then
+    Result.Columns := Result.Columns + [Txt(REPO_COL_NOTES), Str(REPO_COL_DERIVED_KIND, DERIVED_KIND_LEN)];
 end;
 
-function GridColumnsTable: TRepoTable;
+function GridColumnsTable(pVersion: Integer): TRepoTable;
 begin
   Result := MakeTable(REPO_TABLE_GRID_COLUMNS, '', [
     Str('FORM_NAME', COMPONENT_NAME_LEN, True, 1),
@@ -541,6 +556,8 @@ begin
     Str('TABLE_NAME', 68),  // dl:ok large-magic-number@1b56, magic-literal@1b56 -- REVIEWED 2026-11-23 EVCOLS: column width of a schema table definition, named by the column beside it
     Str('FIELD_NAME', 68),  // dl:ok large-magic-number@0f83, magic-literal@0f83 -- REVIEWED 2026-11-23 EVCOLS: column width of a schema table definition, named by the column beside it
     Col('COLUMN_INDEX', rckInteger, 0, True, '', 0)]);
+  if pVersion >= VERSION_EDITOR_NOTES then
+    Result.Columns := Result.Columns + [Str(REPO_COL_PROPERTIES_CLASS_NAME, COMPONENT_NAME_LEN), Txt(REPO_COL_PROPERTIES)];
 end;
 
 function DomainsTable: TRepoTable;
@@ -677,7 +694,7 @@ begin
     Result := Result + [LayoutEventsTable, ExceptionsTable, DomainsTable, ConstraintsTable,
       ConstraintColumnsTable, GeneratorsTable];
   if pVersion >= VERSION_EVENT_COLUMNS then
-    Result := Result + [GridColumnsTable];
+    Result := Result + [GridColumnsTable(pVersion)];
   if pVersion >= VERSION_CROSS_TABLE then
     Result := Result + [RelationsTable, RelationColumnsTable, FieldInputsTable];
 end;

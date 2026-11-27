@@ -1,8 +1,9 @@
 unit DRagLint.FieldRepo.Migrate;
 
-{ drag-lint 1.53 -- lane FR-MODEL, 1.54 -- lane EVCOLS, 1.55 -- lane XTABLE: `repo migrate`, a repository file of schema 1,
-  2 or 3 to the current schema 4 (design 2026-11-22-field-repository-v2-design.md section 4.7, rulings 2026-11-23 R2 /
-  R5 / R6; schema 4: 2026-11-26-cross-table-fields-design.md 2.3).
+{ drag-lint 1.53 -- lane FR-MODEL, 1.54 -- lane EVCOLS, 1.55 -- lane XTABLE, 1.56 -- lane GC-S: `repo migrate`, a repository
+  file of schema 1, 2, 3 or 4 to the current schema 5 (design 2026-11-22-field-repository-v2-design.md section 4.7, rulings
+  2026-11-23 R2 / R5 / R6; schema 4: 2026-11-26-cross-table-fields-design.md 2.3; schema 5: plan 2026-11-27-v156-plan.md
+  GRIDCOL2 and 2026-11-27-derived-field-lineage-design.md section 3).
   No table, column or value is dropped or renamed; event code of layout type Field moves into the event columns. }
 
 interface
@@ -29,10 +30,12 @@ type
 /// <summary>Plans or applies the migration of a repository file to REPO_SCHEMA_VERSION.</summary>
 /// <param name="pFileName">Repository file.</param>
 /// <param name="pApply">False = dry run (the file is opened read-only and not a byte changes); True = write.</param>
-/// <returns>The result; Plan reads `v3 -> v4: create DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, ALIGNMENT -2 to
-/// NULL in N rows, user_version 4`; from schema 2 also `add DL_FIELDS_INFO.ONGETTEXT_BODY, ...`, DL_GRID_COLUMNS and `move N
-/// Field events into columns`; from schema 1 also the schema-2 tables and columns and FIELD_KIND 2. `add` is left out when
-/// no column is new.</returns>
+/// <returns>The result; Plan reads `v4 -> v5: add DL_FIELDS_INFO.NOTES, DERIVED_KIND, add DL_GRID_COLUMNS.PROPERTIES_CLASS_NAME,
+/// PROPERTIES, ALIGNMENT -2 to NULL in N rows, user_version 5`; from schema 3 also `create DL_RELATIONS, DL_RELATION_COLUMNS,
+/// DL_FIELD_INPUTS`; from schema 2 also the event columns, `create DL_GRID_COLUMNS, ...` (a table the old schema lacks is
+/// created whole, never altered) and `move N Field events into columns`; from schema 1 also the schema-2 tables and
+/// columns and FIELD_KIND 2. One `add` per table that gets columns, in table order; `create` is left out when no table
+/// is new.</returns>
 /// <exception cref="ERepoError">The file is missing.</exception>
 /// <exception cref="ERepoSchemaError">The file is not a repository of a known schema.</exception>
 /// <remarks>An apply first writes `&lt;repo&gt;.before-migrate-&lt;yyyymmdd-hhnnss&gt;.txt` (the text backup in the file's old
@@ -50,10 +53,8 @@ uses
   DRagLint.FieldRepo.TextBackup;
 
 const
-  FIELDS_TABLE = 'DL_FIELDS_INFO';
   KIND_VERSION = 2; // the schema that introduced FIELD_KIND 2 for ISCALCULATED rows
   EVENTS_VERSION = 3; // the schema whose event columns took the Field events of DL_LAYOUT_EVENTS
-  FIELDS_SQL = '"DL_FIELDS_INFO"';
 
 { New columns and tables are derived from the two table sets, so one that a lane adds to a schema migrates with no edit
   here. }
@@ -71,18 +72,28 @@ begin
   Result := False;
 end;
 
-{ Columns of DL_FIELDS_INFO the current schema has and schema pFrom has not. }
-function NewColumns(pFrom: Integer): TArray<TRepoColumn>;
+{ The tables schema pFrom already has that get columns: each with ONLY the columns the current schema adds, in the
+  table order of the current schema. }
+function AlteredTables(pFrom: Integer): TArray<TRepoTable>;
 var
   VCol, VOldCol: TRepoColumn;
-  VNew, VOld: TRepoTable;
+  VNew, VOld, VAdd: TRepoTable;
+  VOldTables: TArray<TRepoTable>;
 begin
   Result := nil;
-  FindTable(RepoTablesFor(REPO_SCHEMA_VERSION), FIELDS_TABLE, VNew);
-  FindTable(RepoTablesFor(pFrom), FIELDS_TABLE, VOld);
-  for VCol in VNew.Columns do
-    if not VOld.FindColumn(VCol.Name, VOldCol) then
-      Result := Result + [VCol];
+  VOldTables := RepoTablesFor(pFrom);
+  for VNew in RepoTablesFor(REPO_SCHEMA_VERSION) do
+  begin
+    if not FindTable(VOldTables, VNew.Name, VOld) then
+      Continue;
+    VAdd := VNew;
+    VAdd.Columns := nil;
+    for VCol in VNew.Columns do
+      if not VOld.FindColumn(VCol.Name, VOldCol) then
+        VAdd.Columns := VAdd.Columns + [VCol];
+    if VAdd.Columns <> nil then
+      Result := Result + [VAdd];
+  end;
 end;
 
 function NewTables(pFrom: Integer): TArray<TRepoTable>;
@@ -102,8 +113,9 @@ var
 begin
   pConn.StartTransaction;
   try
-    for VCol in NewColumns(pFrom) do
-      pConn.ExecSQL('ALTER TABLE ' + FIELDS_SQL + ' ADD COLUMN ' + ColumnDdl(VCol, False));
+    for VTable in AlteredTables(pFrom) do
+      for VCol in VTable.Columns do
+        pConn.ExecSQL('ALTER TABLE ' + QuoteRepoIdent(VTable.Name) + ' ADD COLUMN ' + ColumnDdl(VCol, False));
     for VTable in NewTables(pFrom) do
       pConn.ExecSQL(RepoTableDdl(VTable));
     MigrateRepoRows(pConn, pFrom);
@@ -121,16 +133,19 @@ var
   VTable: TRepoTable;
   VColumns, VTables: TArray<string>;
 begin
-  VColumns := nil;
-  for VCol in NewColumns(pFrom) do
-    VColumns := VColumns + [VCol.Name];
+  Result := Format('v%d -> v%d: ', [pFrom, REPO_SCHEMA_VERSION]);
+  for VTable in AlteredTables(pFrom) do
+  begin
+    VColumns := nil;
+    for VCol in VTable.Columns do
+      VColumns := VColumns + [VCol.Name];
+    Result := Result + Format('add %s.%s, ', [VTable.Name, string.Join(', ', VColumns)]);  // dl:ok concat-in-loop@00a4 -- REVIEWED 2026-11-26 GC-S: one piece per altered table (two in schema 5); a TStringBuilder adds nothing
+  end;
   VTables := nil;
   for VTable in NewTables(pFrom) do
     VTables := VTables + [VTable.Name];
-  Result := Format('v%d -> v%d: ', [pFrom, REPO_SCHEMA_VERSION]);
-  if VColumns <> nil then
-    Result := Result + Format('add %s.%s, ', [FIELDS_TABLE, string.Join(', ', VColumns)]);
-  Result := Result + Format('create %s, ', [string.Join(', ', VTables)]);
+  if VTables <> nil then
+    Result := Result + Format('create %s, ', [string.Join(', ', VTables)]);
   if pFrom < KIND_VERSION then
     Result := Result + Format('FIELD_KIND 2 for %d ISCALCULATED rows, ', [pResult.CalcRows]);
   Result := Result + Format('ALIGNMENT -2 to NULL in %d rows, ', [pResult.AlignmentRows]);

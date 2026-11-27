@@ -240,7 +240,7 @@ var
   vOut: TStringList;
   vLine, vCur: string;
 begin
-  vLines := pV1Text.Replace('#DLREPO 1', '#DLREPO 4').Replace('META_VALUE=1', 'META_VALUE=4').Split([#13#10]);
+  vLines := pV1Text.Replace('#DLREPO 1', '#DLREPO 5').Replace('META_VALUE=1', 'META_VALUE=5').Split([#13#10]);
   vOut := TStringList.Create;
   try
     vCur := '';
@@ -310,9 +310,9 @@ begin
   vAfter := TFile.ReadAllBytes(vPath);
   Check('M1a dry run reports 2 calc rows and the plan line (NULL and 1 count, 10 does not)',
     (not vRes.AlreadyCurrent) and (not vRes.Applied) and (vRes.CalcRows = 2)
-    and (vRes.Plan = 'v1 -> v4: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, ONGETTEXT_BODY, ONSETTEXT_BODY, ONVALIDATE_BODY, '
-      + 'ONCHANGE_BODY, GRID_DISPLAYTEXT_BODY, GRID_DRAWCELL_BODY, create DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, '
-      + 'DL_CONSTRAINT_COLUMNS, DL_GENERATORS, DL_GRID_COLUMNS, DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, FIELD_KIND 2 for 2 ISCALCULATED rows, ALIGNMENT -2 to NULL in 0 rows, user_version 4'), vRes.Plan);
+    and (vRes.Plan = 'v1 -> v5: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, ONGETTEXT_BODY, ONSETTEXT_BODY, ONVALIDATE_BODY, '
+      + 'ONCHANGE_BODY, GRID_DISPLAYTEXT_BODY, GRID_DRAWCELL_BODY, NOTES, DERIVED_KIND, create DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, '
+      + 'DL_CONSTRAINT_COLUMNS, DL_GENERATORS, DL_GRID_COLUMNS, DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, FIELD_KIND 2 for 2 ISCALCULATED rows, ALIGNMENT -2 to NULL in 0 rows, user_version 5'), vRes.Plan);
   Check('M1b dry run leaves the file byte-identical', (Length(vBefore) = Length(vAfter))
     and CompareMem(@vBefore[0], @vAfter[0], Length(vBefore)));
   Check('M1c dry run wrote no backup file', Length(TDirectory.GetFiles(GDir, ExtractFileName(vPath) + '.before-migrate-*')) = 0);
@@ -323,8 +323,8 @@ begin
   Check('M2b the before-migrate backup is the v1 text byte for byte', FileBytesText(vRes.BackupFile) = vV1Text);
   vConn := OpenRepository(vPath, False);
   try
-    Check('M2c user_version 4 and DL_META schema_version 4', (RepoSchemaVersion(vConn) = 4)
-      and (ScalarStr(vConn, 'SELECT "META_VALUE" FROM "DL_META" WHERE "META_KEY" = ''schema_version''') = '4'));
+    Check('M2c user_version 5 and DL_META schema_version 5', (RepoSchemaVersion(vConn) = 5)
+      and (ScalarStr(vConn, 'SELECT "META_VALUE" FROM "DL_META" WHERE "META_KEY" = ''schema_version''') = '5'));
     Check('M2d ISCALCULATED rows with kind NULL / 1 became kind 2',
       (ScalarInt(vConn, 'SELECT "FIELD_KIND" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" = ''CALCX''') = 2)
       and (ScalarInt(vConn, 'SELECT "FIELD_KIND" FROM "DL_FIELDS_INFO" WHERE "FIELD_NAME" = ''CALCY''') = 2));
@@ -338,8 +338,8 @@ begin
     vConn.Free;
   end;
   vText := FileBytesText(TPath.Combine(GDir, 'v2-after.txt'));
-  Check('M2g backup(migrated) starts with #DLREPO 4 and ends with the empty trailers',
-    vText.StartsWith('#DLREPO 4' + #13#10) and vText.EndsWith('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10 + '#end DL_GRID_COLUMNS 0' + #13#10 + '#end DL_RELATIONS 0' + #13#10 + '#end DL_RELATION_COLUMNS 0' + #13#10 + '#end DL_FIELD_INPUTS 0' + #13#10));
+  Check('M2g backup(migrated) starts with #DLREPO 5 and ends with the empty trailers',
+    vText.StartsWith('#DLREPO 5' + #13#10) and vText.EndsWith('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10 + '#end DL_GRID_COLUMNS 0' + #13#10 + '#end DL_RELATIONS 0' + #13#10 + '#end DL_RELATION_COLUMNS 0' + #13#10 + '#end DL_FIELD_INPUTS 0' + #13#10));
   vExpect := ExpectedMigrated(vV1Text);
   Check('M2i the v1 backup restored into a v3 file = the migrated file', RestoredIntoV3('v1-before.txt') = vText, RestoredIntoV3('v1-before.txt'));
   Check('M2h the migrated backup differs from the v1 backup ONLY by magic, schema_version, FIELD_KIND 2 and the trailers',
@@ -353,7 +353,7 @@ end;
 { The v2 backup text as the migration must change it: TOTAL has its OnGetText column, AMOUNT no ALIGNMENT. }
 function ExpectedFromV2(const pText: string): string;
 begin
-  Result := pText.Replace('#DLREPO 2', '#DLREPO 4').Replace('META_VALUE=2', 'META_VALUE=4').Replace('ALIGNMENT=-2' + #13#10, '')
+  Result := pText.Replace('#DLREPO 2', '#DLREPO 5').Replace('META_VALUE=2', 'META_VALUE=5').Replace('ALIGNMENT=-2' + #13#10, '')
     .Replace(' |{{TOTAL}} := {{AMOUNT}} * 2;' + #13#10, ' |{{TOTAL}} := {{AMOUNT}} * 2;' + #13#10 + 'ONGETTEXT_BODY:' + #13#10
       + ' |Text := ''T'';' + #13#10)
     .Replace('[DL_LAYOUT_EVENTS ORDERS|TOTAL|Field|OnGetText]' + #13#10 + 'EVENT_CODE:' + #13#10 + ' |Text := ''T'';' + #13#10 + #13#10, '')
@@ -429,8 +429,8 @@ begin
   vBefore := TFile.ReadAllBytes(vPath);
   vRes := MigrateRepository(vPath, False);
   vAfter := TFile.ReadAllBytes(vPath);
-  Check('M5a v2 -> v4 plan', vRes.Plan = 'v2 -> v4: add DL_FIELDS_INFO.ONGETTEXT_BODY, ONSETTEXT_BODY, ONVALIDATE_BODY, ONCHANGE_BODY, '
-    + 'GRID_DISPLAYTEXT_BODY, GRID_DRAWCELL_BODY, create DL_GRID_COLUMNS, DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, ALIGNMENT -2 to NULL in 1 rows, move 1 Field events into columns, user_version 4', vRes.Plan);
+  Check('M5a v2 -> v5 plan', vRes.Plan = 'v2 -> v5: add DL_FIELDS_INFO.ONGETTEXT_BODY, ONSETTEXT_BODY, ONVALIDATE_BODY, ONCHANGE_BODY, '
+    + 'GRID_DISPLAYTEXT_BODY, GRID_DRAWCELL_BODY, NOTES, DERIVED_KIND, create DL_GRID_COLUMNS, DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, ALIGNMENT -2 to NULL in 1 rows, move 1 Field events into columns, user_version 5', vRes.Plan);
   Check('M5b dry run leaves the file byte-identical', (Length(vBefore) = Length(vAfter)) and CompareMem(@vBefore[0], @vAfter[0], Length(vBefore)));
   vRes := MigrateRepository(vPath, True);
   vText := FileBytesText(TPath.Combine(GDir, 'v2-before.txt'));

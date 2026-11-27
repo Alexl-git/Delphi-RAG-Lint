@@ -183,7 +183,7 @@ var
   vPath: string;
 begin
   vTabs := RepoTablesFor(4);
-  Check('S1 REPO_SCHEMA_VERSION is 4', REPO_SCHEMA_VERSION = 4, IntToStr(REPO_SCHEMA_VERSION));
+  Check('S1 REPO_SCHEMA_VERSION is 4 or later (1.56: 5)', REPO_SCHEMA_VERSION >= 4, IntToStr(REPO_SCHEMA_VERSION));
   Check('S2 schema 4 = schema 3 + DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS (last, in this order)',
     TableNames(vTabs) = TableNames(RepoTablesFor(3)) + ',DL_RELATIONS,DL_RELATION_COLUMNS,DL_FIELD_INPUTS', TableNames(vTabs));
   vPk := '';
@@ -197,15 +197,16 @@ begin
       vPk := vPk + IfThen(vPk = '', '', ',') + vCol.Name;
   Check('S4 DL_RELATION_COLUMNS key = RELATION_NAME, POSITION', vPk = 'RELATION_NAME,POSITION', vPk);
   vPath := NewPath;
-  CreateRepository(vPath);
+  CreateRepository(vPath, 4);
   vConn := OpenRepository(vPath, True);
   try
-    Check('S5 a new repository is user_version 4 and validates', RepoSchemaVersion(vConn) = 4);
+    Check('S5 a new schema-4 repository is user_version 4 and validates', RepoSchemaVersion(vConn) = 4);
     Check('S6 the cross-table tables are side tables: a new repository is empty', RepoIsEmpty(vConn));
   finally
     vConn.Free;
   end;
-  Check('S7 RepoTablesFor(5) raises (control: the range ends at 4)', RaisedClass(procedure begin RepoTablesFor(5); end) = 'ERepoError');
+  Check('S7 RepoTablesFor(current + 1) raises (control: the range ends at the current schema)',
+    RaisedClass(procedure begin RepoTablesFor(REPO_SCHEMA_VERSION + 1); end) = 'ERepoError');
 end;
 
 procedure TestMigrate;
@@ -226,8 +227,9 @@ begin
   end;
   vHash := FileHash(vPath);
   vRes := MigrateRepository(vPath, False);
-  Check('M1 v3 -> v4 dry run plan: three CREATEs, nothing else', vRes.Plan =
-    'v3 -> v4: create DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, ALIGNMENT -2 to NULL in 0 rows, user_version 4', vRes.Plan);
+  Check('M1 v3 -> v5 dry run plan: the schema-5 columns, three CREATEs, nothing else', vRes.Plan =
+    'v3 -> v5: add DL_FIELDS_INFO.NOTES, DERIVED_KIND, add DL_GRID_COLUMNS.PROPERTIES_CLASS_NAME, PROPERTIES, ' +
+    'create DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, ALIGNMENT -2 to NULL in 0 rows, user_version 5', vRes.Plan);
   Check('M2 the dry run changes no byte', vHash = FileHash(vPath));
   vRes := MigrateRepository(vPath, True);
   Check('M3 apply: migrated and a before-migrate backup written', vRes.Applied and TFile.Exists(vRes.BackupFile));
@@ -235,8 +237,8 @@ begin
   Check('M4 the before-migrate backup is the schema-3 text', vText.StartsWith('#DLREPO 3' + #13#10), Copy(vText, 1, 20));
   vConn := OpenRepository(vPath, True);
   try
-    Check('M5 user_version 4, DL_META schema_version 4, the row kept',
-      (RepoSchemaVersion(vConn) = 4) and (GetRepoMeta(vConn, 'schema_version') = '4') and (RepoRowCount(vConn, 'DL_FIELDS_INFO') = 1));
+    Check('M5 user_version 5, DL_META schema_version 5, the row kept',
+      (RepoSchemaVersion(vConn) = 5) and (GetRepoMeta(vConn, 'schema_version') = '5') and (RepoRowCount(vConn, 'DL_FIELDS_INFO') = 1));
     Check('M6 the three new tables exist, empty', (RepoRowCount(vConn, REPO_TABLE_RELATIONS) = 0) and
       (RepoRowCount(vConn, REPO_TABLE_RELATION_COLUMNS) = 0) and (RepoRowCount(vConn, REPO_TABLE_FIELD_INPUTS) = 0));
   finally
@@ -246,9 +248,9 @@ begin
   vPath := NewPath;
   CreateRepository(vPath, 2);
   vRes := MigrateRepository(vPath, False);
-  Check('M8 v2 -> v4 plan also creates the three tables and still moves Field events',
+  Check('M8 v2 -> v5 plan also creates the three tables and still moves Field events',
     vRes.Plan.Contains('create DL_GRID_COLUMNS, DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS,') and
-    vRes.Plan.Contains('move 0 Field events into columns') and vRes.Plan.EndsWith('user_version 4'), vRes.Plan);
+    vRes.Plan.Contains('move 0 Field events into columns') and vRes.Plan.EndsWith('user_version 5'), vRes.Plan);
 end;
 
 procedure TestBackup;
@@ -263,7 +265,7 @@ begin
   vOld := TStringList.Create;
   try
     BackupRepositoryToStrings(vConn, vLines);
-    Check('B1 a schema-4 backup starts with #DLREPO 4', vLines[0] = '#DLREPO 4', vLines[0]);
+    Check('B1 a current-schema backup starts with #DLREPO 5', vLines[0] = '#DLREPO 5', vLines[0]);
     Check('B2 it carries the relation, its columns and the input row',
       vLines.Text.Contains('[DL_RELATIONS FK_IPCHART_INSP]') and vLines.Text.Contains('[DL_RELATION_COLUMNS FK_INSP_MSC|1]') and
       vLines.Text.Contains('[DL_FIELD_INPUTS IPCHART|FTRNAME||MSC]'), vLines.Text);
@@ -293,15 +295,15 @@ begin
       RestoreRepositoryFromStrings(vOther, vOld, False);
       vAgain.Clear;
       BackupRepositoryToStrings(vOther, vAgain);
-      Check('B4 a #DLREPO 3 backup restores into schema 4: the same rows, #DLREPO 4 and three empty trailers',
-        vAgain.Text = vOld.Text.Replace('#DLREPO 3', '#DLREPO 4').Replace('META_VALUE=3', 'META_VALUE=4') +
+      Check('B4 a #DLREPO 3 backup restores into schema 5: the same rows, #DLREPO 5 and three empty trailers',
+        vAgain.Text = vOld.Text.Replace('#DLREPO 3', '#DLREPO 5').Replace('META_VALUE=3', 'META_VALUE=5') +
         '#end DL_RELATIONS 0' + #13#10 + '#end DL_RELATION_COLUMNS 0' + #13#10 + '#end DL_FIELD_INPUTS 0' + #13#10, vAgain.Text);
     finally
       vOther.Free;
     end;
     vOther := OpenRepository(vV3, False);
     try
-      Check('B5 a #DLREPO 4 backup into a schema-3 file is refused (migrate first)',
+      Check('B5 a #DLREPO 5 backup into a schema-3 file is refused (migrate first)',
         RaisedClass(procedure begin RestoreRepositoryFromStrings(vOther, vLines, True); end) = 'ERepoError');
     finally
       vOther.Free;
