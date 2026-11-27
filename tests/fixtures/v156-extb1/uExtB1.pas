@@ -21,9 +21,35 @@ type
     procedure Next;
   end;
 
+  { lane EXT-B1F: fields, a unit variable and function results of DECLARED scalar type }
+  TOrderStub = class
+  private
+    FQty  : Integer;
+    FTotal: Currency;
+    FName : string;
+    FCode : Integer;
+  public
+    procedure SetQty(pQty: Integer);
+    function Total: Currency;
+    procedure Recalc;
+    procedure Describe;
+    procedure Ambiguous;
+  end;
+
+  { the same field name with another type: FCode has no single class in this unit }
+  TOtherStub = class
+  private
+    FCode: string;
+  end;
+
+var
+  GLastTotal: Currency;
+  GLastName : string;
+
 procedure SinkI(N: Integer);
 procedure SinkD(D: TDateTime);
 procedure SinkS(const S: string);
+function Twice(pN: Integer): Integer;
 
 implementation
 
@@ -143,6 +169,61 @@ begin
   M.T.AsFloat := d; { M-HOOK-WRITE }
   if d < 0 then
     raise EHookStub.Create(Msg); { M-HOOK-RAISE }
+end;
+
+{ ---- lane EXT-B1F: a source of DECLARED scalar type keeps its pre-1.56 row and gains a value row ---- }
+
+function Twice(pN: Integer): Integer;
+begin
+  Result := pN * 2;
+end;
+
+procedure TOrderStub.SetQty(pQty: Integer);
+begin
+  FQty := pQty;
+end;
+
+function TOrderStub.Total: Currency;
+begin
+  Result := FTotal;
+end;
+
+{ (a) a Currency field assigned to a unit variable; NEGATIVE: the string pair gains nothing }
+procedure TOrderStub.Recalc;
+begin
+  GLastTotal := FTotal; { M-F-GLOBAL }
+  GLastName := FName; { M-F-GLOBAL-STR }
+end;
+
+{ (b) an Integer field as a direct argument }
+procedure TOrderStub.Describe;
+begin
+  SinkS(IntToStr(FQty)); { M-F-ARG }
+end;
+
+{ NEGATIVE: FCode is Integer here and string in TOtherStub -- no class is claimed }
+procedure TOrderStub.Ambiguous;
+begin
+  SinkI(FCode); { M-F-AMBIG }
+end;
+
+{ (c) the result of a function this unit declares, passed as an argument }
+procedure Feed(pOrder: TOrderStub; pCount: Integer);
+begin
+  pOrder.SetQty(Twice(pCount)); { M-F-FUNC }
+end;
+
+{ (d) a method called without parentheses: the source is its result, not only the object }
+procedure Report(pOrder: TOrderStub);
+begin
+  GLastTotal := pOrder.Total; { M-F-NOPAREN }
+end;
+
+{ a member this unit does not declare, written to a Currency unit variable: the object is the
+  source of a currency value }
+procedure Untyped(pOrder: TOrderStub);
+begin
+  GLastTotal := pOrder.Extra; { M-F-DST }
 end;
 
 end.

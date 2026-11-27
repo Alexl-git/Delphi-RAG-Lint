@@ -15,7 +15,14 @@
     V5  hook seam: with DRAGLINT_TEST_V156_DFHOOK=1 the unit's self-test hooks (statement hook on
         `raise`, expression hook on `.AsFloat`, write hook) add 'raise' / 'dsfield' rows; without the
         variable there is none.
-  Positive control: run with -Exe <the base engine> -- V1 FAILS (no value rows at all).
+    V6  (lane EXT-B1F) a source of DECLARED scalar type -- a field, a unit variable, the result of a
+        function the unit declares -- keeps its pre-1.56 row (val_class '') and gains a value row of
+        the declared class: (a) GLastTotal := FTotal, (b) IntToStr(FQty), (c) SetQty(Twice(pCount)),
+        (d) a paren-less method call (the result is a source, not only the object); a scalar unit
+        variable types what is written to it. NEGATIVE: a string pair, and a field name that has two
+        types in the unit, gain nothing.
+  Positive control: run with -Exe <the base engine> -- V1 FAILS (no value rows at all); with
+  -Exe <the EXT-B1 engine, 7cfa2be7a> V6 FAILS (5 checks) and the rest passes.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -117,6 +124,29 @@ try {
   Check 'KillInt: POSITIVE CONTROL -- B reaches the sink' (Has $t { $_.src_kind -eq 'param' -and $_.src_index -eq 1 -and $_.val_class -eq 'int' })
   Check 'NEGATIVE: KillInt: the overwritten A does not reach the sink' (-not (Has $t { $_.src_kind -eq 'param' -and $_.src_index -eq 0 }))
   Check 'NEGATIVE: no raise / dsfield row without the self-test hooks' (-not (Has $all { $_.dst_kind -in @('raise', 'dsfield') -or $_.src_kind -eq 'dsfield' }))
+
+  Write-Host 'V6 declared scalar types (lane EXT-B1F)' -ForegroundColor Cyan
+  $t = @((Of 'Recalc') | Where-Object { $_.dst_kind -eq 'global' -and $_.dst_name -eq 'GLastTotal' -and $_.dst_line -eq $M.'M-F-GLOBAL' -and $_.src_kind -eq 'field' -and $_.src_name -eq 'FTotal' })
+  Check '(a) GLastTotal := FTotal: POSITIVE CONTROL -- the pre-1.56 row is kept (val_class empty)' (Has $t { $_.val_class -eq '' })
+  Check '(a) GLastTotal := FTotal: a value row, val_class currency' (Has $t { $_.val_class -eq 'currency' }) "classes=[$(($t | ForEach-Object { $_.val_class }) -join ',')]"
+  $t = @((Of 'Recalc') | Where-Object { $_.dst_line -eq $M.'M-F-GLOBAL-STR' })
+  Check '(a) GLastName := FName: POSITIVE CONTROL -- the string row exists' (Has $t { $_.dst_kind -eq 'global' -and $_.src_kind -eq 'field' -and $_.src_name -eq 'FName' -and $_.val_class -eq '' })
+  Check 'NEGATIVE: (a) a string field written to a string unit variable gains no value row' (-not (Has $t { $_.val_class -ne '' }))
+  $t = @((Of 'Describe') | Where-Object { $_.dst_kind -eq 'arg' -and $_.dst_name -eq 'IntToStr' -and $_.dst_index -eq 0 -and $_.dst_line -eq $M.'M-F-ARG' -and $_.src_kind -eq 'field' -and $_.src_name -eq 'FQty' })
+  Check '(b) IntToStr(FQty): POSITIVE CONTROL -- the pre-1.56 argument row is kept' (Has $t { $_.val_class -eq '' })
+  Check '(b) IntToStr(FQty): a value row, val_class int' (Has $t { $_.val_class -eq 'int' }) "classes=[$(($t | ForEach-Object { $_.val_class }) -join ',')]"
+  $t = @((Of 'Feed') | Where-Object { $_.dst_kind -eq 'arg' -and $_.dst_name -eq 'SetQty' -and $_.dst_index -eq 0 -and $_.dst_receiver -eq 'pOrder' -and $_.dst_line -eq $M.'M-F-FUNC' -and $_.src_kind -eq 'ref' -and $_.src_name -eq 'Twice' -and $_.src_line -eq $M.'M-F-FUNC' })
+  Check '(c) SetQty(Twice(pCount)): POSITIVE CONTROL -- the pre-1.56 ref row is kept' (Has $t { $_.val_class -eq '' })
+  Check '(c) SetQty(Twice(pCount)): the function result is a value row, val_class int' (Has $t { $_.val_class -eq 'int' }) "classes=[$(($t | ForEach-Object { $_.val_class }) -join ',')]"
+  $t = @((Of 'Report') | Where-Object { $_.dst_kind -eq 'global' -and $_.dst_name -eq 'GLastTotal' -and $_.dst_line -eq $M.'M-F-NOPAREN' })
+  Check '(d) GLastTotal := pOrder.Total: POSITIVE CONTROL -- the pre-1.56 object row is kept' (Has $t { $_.src_kind -eq 'param' -and $_.src_index -eq 0 -and $_.val_class -eq '' })
+  Check '(d) GLastTotal := pOrder.Total: the source is the method result (ref Total), val_class currency' (Has $t { $_.src_kind -eq 'ref' -and $_.src_name -eq 'Total' -and $_.src_line -eq $M.'M-F-NOPAREN' -and $_.val_class -eq 'currency' }) "rows=$(($t | ForEach-Object { $_.src_kind + ':' + $_.src_name + ':' + $_.val_class }) -join ',')"
+  Check 'NEGATIVE: (d) no class-less ref row is invented for the paren-less call' (-not (Has $t { $_.src_kind -eq 'ref' -and $_.val_class -eq '' }))
+  $t = @((Of 'Untyped') | Where-Object { $_.dst_kind -eq 'global' -and $_.dst_line -eq $M.'M-F-DST' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 })
+  Check 'Untyped: a Currency unit variable types what is written to it (param row, val_class currency)' ((Has $t { $_.val_class -eq '' }) -and (Has $t { $_.val_class -eq 'currency' })) "classes=[$(($t | ForEach-Object { $_.val_class }) -join ',')]"
+  $t = @((Of 'Ambiguous') | Where-Object { $_.dst_line -eq $M.'M-F-AMBIG' })
+  Check 'Ambiguous: POSITIVE CONTROL -- the FCode argument row exists' (Has $t { $_.dst_kind -eq 'arg' -and $_.src_kind -eq 'field' -and $_.src_name -eq 'FCode' -and $_.val_class -eq '' })
+  Check 'NEGATIVE: a field name with two declared types in the unit gets no class' (-not (Has $t { $_.val_class -ne '' }))
 
   if ($BaseExe -ne '') {
     Write-Host 'V4 the old row set is untouched' -ForegroundColor Cyan
