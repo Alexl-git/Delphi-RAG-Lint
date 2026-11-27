@@ -37,7 +37,7 @@ implementation
 uses
   System.SysUtils
 , System.StrUtils
-, DRagLint.Query.HappensBefore.Verb
+, DRagLint.Query.HappensBefore.Verb // dl:unit DRagLint.Query.HappensBefore.Verb accepted -- the preset names, event separator and kind codes are the event grammar the verb parses; presets must build specs in exactly that grammar
   ;
 
 const

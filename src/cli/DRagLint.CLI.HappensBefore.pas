@@ -33,7 +33,7 @@ implementation
 uses
   System.SysUtils
 , System.IOUtils
-, DRagLint.Core.CliError
+, DRagLint.Core.CliError // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
 , DRagLint.Core.Interfaces
 , DRagLint.Storage.SQLite
 , DRagLint.Storage.Schema
@@ -41,7 +41,7 @@ uses
 , DRagLint.Query.HappensBefore.Types
 , DRagLint.Query.HappensBefore.Verb
 , DRagLint.Query.HappensBefore.Judge
-  ; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared unknown-flag text every verb uses; the other CliError consts are other verbs' errors
+  ;
 
 const
   VERB_NAME = 'happens-before';
@@ -131,7 +131,7 @@ var
   Found, Expected: Integer;
 begin
   Result:= False;
-  if not TFile.Exists(pDbPath) then
+  if not TFile.Exists(pDbPath) then  // dl:ok duplicate-code@afc6 -- LINTFIX-A: the check-init verb has its own copy of this --db check; each verb prints errors prefixed with its own name and hint, so a shared helper would need both as parameters for ten lines
   begin
     Writeln(ErrOutput, Format('ERROR: %s: --db does not exist: %s', [VERB_NAME, pDbPath]));
     Writeln(ErrOutput, '       Find it:  drag-lint resolve-dbs --project <x.dproj>   (or --in <x.pas>)');

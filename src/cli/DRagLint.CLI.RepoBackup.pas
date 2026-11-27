@@ -86,7 +86,7 @@ uses
   FireDAC.ConsoleUI.Wait, // the services need a wait-cursor factory; a connection does not
   DRagLint.Core.ContextDefaults,
   DRagLint.FieldRepo.BackupManifest,  // dl:ok uses-global-census@e975 -- REVIEWED 2026-11-24 INT-W2: the state names the manifest writes are the names the verb prints
-  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.Schema, // dl:unit DRagLint.FieldRepo.Schema accepted -- repo_schema_version is the schema version the backup stamps into the file it writes; the schema unit owns it
   DRagLint.FieldRepo.TextBackup,
   DRagLint.FieldRepo.SqlBackup,
   DRagLint.FieldRepo.ZipBackup,

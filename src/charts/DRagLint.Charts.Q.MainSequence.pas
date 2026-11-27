@@ -126,7 +126,7 @@ begin
   var Pairs:= TDictionary<string, Boolean>.Create;
   var Cache:= TDictionary<string, TArray<string>>.Create;
   var Missing:= 0;
-  try
+  try  // dl:ok duplicate-code@5643 -- LINTFIX-A: this question and the dependency matrix both read the unit list into their own record (TUnitMetrics / TUnitInfo); a shared reader would need a common record both questions do not want
     var UnitRows:= Index.Query('SELECT s.qualified_name AS q, s.file_id AS fid, f.path AS path, s.start_line AS line' + sLineBreak +
       '  FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.kind = ''unit'' ORDER BY LOWER(s.qualified_name), s.id');
     try

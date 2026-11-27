@@ -470,7 +470,7 @@ begin
   ProjectText:= if pProjectFile = '' then '<X.dproj>' else pProjectFile;
   Refresh:= Format('drag-lint index --project %s --db %s', [ProjectText, Db]);
   When:= FormatDateTime('yyyy-mm-dd hh:nn', UnixToDateTime(CopiedAt, False));
-  if (State = STATE_NOT_COPIED_YET) and DirScan then
+  if (State = STATE_NOT_COPIED_YET) and DirScan then  // dl:ok duplicate-code@ab3f -- LINTFIX-A: the design-1.6 repository note wording is built here from locals and in ConceptRepo from run fields and both must print the same text; one shared note builder over a copy-state record is the follow-up, not done in a lint lane because it reshapes ConceptRepo's run state
     Result:= 'repository: not copied (this index was made by a directory scan and has no project file); ' +
       'repository hits need a project index: drag-lint index --project ' + ProjectText
   else if State = STATE_NOT_COPIED_YET then

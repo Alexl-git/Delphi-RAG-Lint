@@ -45,7 +45,7 @@ uses
   FireDAC.Comp.Client,
   DRagLint.Storage.SQLite,
   DRagLint.FieldRepo.Schema,
-  DRagLint.FieldRepo.WikiGen;
+  DRagLint.FieldRepo.WikiGen; // dl:unit DRagLint.FieldRepo.WikiGen accepted -- wiki_page_mark is the marker line of a generated page; the verb must recognise exactly what the generator writes
 
 const
   EXIT_OK    = 0;

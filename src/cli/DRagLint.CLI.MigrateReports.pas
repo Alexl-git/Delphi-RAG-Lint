@@ -49,7 +49,8 @@ implementation
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.StrUtils, System.Math, System.JSON,
   System.Generics.Collections, System.Generics.Defaults,
-  DRagLint.Charts.ReportHeader, DRagLint.Charts.Adapters, DRagLint.Charts.Snapshot;
+  DRagLint.Charts.ReportHeader, DRagLint.Charts.Adapters,
+  DRagLint.Charts.Snapshot; // dl:unit DRagLint.Charts.Snapshot accepted -- snapshot_ext_forms / _graph / _report are the three extensions migrate-reports rewrites; they are the snapshot unit's own names for them
 
 const
   EXIT_OK = 0;

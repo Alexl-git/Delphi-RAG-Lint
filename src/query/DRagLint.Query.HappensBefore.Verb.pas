@@ -85,7 +85,7 @@ unit DRagLint.Query.HappensBefore.Verb;
 interface
 
 uses
-  DRagLint.Query.HappensBefore.Types
+  DRagLint.Query.HappensBefore.Types // dl:unit DRagLint.Query.HappensBefore.Types accepted -- the default budget consts travel with the options record the verb takes; the other two Types consts belong to the lower solvers
   ;
 
 const

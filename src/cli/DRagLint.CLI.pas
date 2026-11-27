@@ -300,7 +300,7 @@ uses
   , DRagLint.CLI.ConfigAnchor { 1.53 BUGS: the lint config of the project an index was built from }
   , DRagLint.CLI.RuleScope { rules disable / enable (1.52 FRAME; lane DISRULE) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
-  , DRagLint.CLI.MigrateReports { v156 QE-3 }
+  , DRagLint.CLI.MigrateReports { v156 QE-3 } // dl:unit DRagLint.CLI.MigrateReports accepted -- migrate_reports_verb is the verb name the dispatcher routes to that unit
   , DRagLint.CLI.MigrateDbs { migrate-dbs verb + the manifest pair rule (v1511 SPLIT) }
   , DRagLint.CLI.Workspace { workspace / forms-csv / menu-tree / menu-drift verbs (v1511 SPLIT) }
   , DRagLint.CLI.Sql { sql verb (v1511 SPLIT) }
@@ -9639,7 +9639,7 @@ begin
             var Local: TSymbol:= Store.FindChildSymbolByName(Wr.EnclosingSymbolId, Wr.NameText);
             if (Local.Id > 0) and (Local.Kind in [skLocalVar, skParam, skVarDecl, skConstDecl]) then Continue;
           end;
-          Refs:= Refs + [Wr];
+          Refs:= Refs + [Wr];  // dl:ok duplicate-code@3e1c -- LINTFIX-A: a sort comparer over TReference here and over TRisk in the risk chart; unrelated record types, a shared generic helper would be larger than either copy
         end;
         TArray.Sort<TReference>(Refs, TComparer<TReference>.Construct(
           function(const L, R: TReference): Integer
