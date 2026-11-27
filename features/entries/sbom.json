@@ -5,14 +5,14 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.56.0-alpha",
-  "summary": "Writes a CycloneDX 1.6 JSON software bill of materials for a project from its index: the application, one component per library its units reach, and their dependencies (v1: source closure, no MAP input)",
-  "intro": "Read this when a customer, an auditor or the EU Cyber Resilience Act asks which third-party code your application contains. sbom reads the project index and the library index, groups every unit of the compile closure into components, and names each one from an editable library catalogue (supplier, version, licence, purl). A library the catalogue does not know is still listed, as 'unknown supplier'. v1 works from source only: what it cannot see (units linked from DCUs, packages, DLLs) is stated inside the document.",
+  "summary": "Writes a CycloneDX 1.6 JSON software bill of materials for a project from its index: the application, one component per library its units reach, and their dependencies (source closure; --map marks the units the linker linked, --bsi adds the BSI TR-03183-2 fields)",
+  "intro": "Read this when a customer, an auditor or the EU Cyber Resilience Act asks which third-party code your application contains. sbom reads the project index and the library index, groups every unit of the compile closure into components, and names each one from an editable library catalogue (supplier, version, licence, purl). A library the catalogue does not know is still listed, as 'unknown supplier'. Without a linker map it works from source only; with --map it marks which units the linker really linked, and with --bsi it writes the fields of the BSI TR-03183-2 profile and names every field it cannot fill instead of inventing a value. What it still cannot see (runtime packages, DLLs) is stated inside the document.",
   "wikiPage": "sbom",
   "surfaces": [
     {
       "type": "cli",
       "verb": "sbom",
-      "usage": "drag-lint sbom --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]",
+      "usage": "drag-lint sbom --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>] [--map <file.map>] [--bsi] [--creator <name>] [--creator-email <address>]",
       "flags": [
         {
           "name": "--project",
@@ -41,10 +41,25 @@
         {
           "name": "--catalogue",
           "arg": "<file.json>"
+        },
+        {
+          "name": "--map",
+          "arg": "<file.map>"
+        },
+        {
+          "name": "--bsi"
+        },
+        {
+          "name": "--creator",
+          "arg": "<name>"
+        },
+        {
+          "name": "--creator-email",
+          "arg": "<address>"
         }
       ],
       "helpOrder": 115,
-      "help": ["  drag-lint sbom               --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]", "                               [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]", "                               CycloneDX 1.6 JSON software bill of materials from the project index (v1 slice: source closure).", "                               One component per unit group: every unit of the project index, each unit its uses rows reach in a", "                               library index (transitively), and each used unit with no source. The catalogue", "                               rules\\sbom-libraries.json (edit it, or --catalogue) gives supplier, name, version, licence, purl;", "                               a group with no row is listed with the supplier \"unknown supplier\", never dropped (NOTE on stderr).", "                               metadata.component = the application; --app-version states its version, --exe adds the SHA-512 of", "                               the delivered file. dependencies = uses edges between the groups. Read-only.", "                               v1 limits, stated in the document (compositions \"incomplete\", drag-lint:sbom:scope): no MAP input,", "                               so units linked from DCUs that no indexed source names, runtime packages and DLLs are not listed;", "                               no BSI TR-03183-2 profile; no VEX. --library-db none = direct uses only.", "                               Exit 0 = written (--out, else stdout); 1 = an index, the catalogue or --exe cannot be read;", "                               2 = no --project / no index for it; 3 = unknown flag."]
+      "help": ["  drag-lint sbom               --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]", "                               [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]", "                               [--map <file.map>] [--bsi [--creator <name>] [--creator-email <address>]]", "                               CycloneDX 1.6 JSON software bill of materials from the project index (source closure).", "                               One component per unit group: every unit of the project index, each unit its uses rows reach in a", "                               library index (transitively), and each used unit with no source. The catalogue", "                               rules\\sbom-libraries.json (edit it, or --catalogue) gives supplier, name, version, licence, purl;", "                               a group with no row is listed with the supplier \"unknown supplier\", never dropped (NOTE on stderr).", "                               metadata.component = the application; --app-version states its version, --exe adds the SHA-512 of", "                               the delivered file. dependencies = uses edges between the groups. Read-only.", "                               --map reads a DETAILED linker map (DCC_MapFile=3, \"Detailed map of segments\") and marks every", "                               component drag-lint:linked = yes|partial|no with one linkedUnit / notLinkedUnit per unit; a unit", "                               the map does not name is reported as not linked, never dropped; units only the map names are", "                               listed in the metadata. --bsi adds the BSI TR-03183-2 fields (--creator / --creator-email = the", "                               SBOM creator; bsi:component:* file properties of --exe if it has an MZ header); what cannot be", "                               filled is NOT invented, it is named per component as drag-lint:bsi:unfilled (summary on stderr).", "                               Limits, stated in the document (compositions \"incomplete\", drag-lint:sbom:scope): runtime packages", "                               and DLLs are not listed; no VEX. --library-db none = direct uses only.", "                               Exit 0 = written (--out, else stdout); 1 = an index, the catalogue, --exe or --map cannot be read;", "                               2 = no --project / no index for it / --creator-email is no address; 3 = unknown flag."]
     }
   ],
   "audience": "both",
@@ -60,6 +75,14 @@
     {
       "ask": "Which libraries does the SBOM list as unknown supplier, so I can add them to the catalogue?",
       "command": "drag-lint sbom --project <App.dproj> --out <App.cdx.json>   (the NOTE lines on stderr name each one and its directory)"
+    },
+    {
+      "ask": "Which units of the closure did the linker really link into my executable?",
+      "command": "drag-lint sbom --project <App.dproj> --map <App.map> --out <App.cdx.json>   (build with DCC_MapFile=3; drag-lint:linked and notLinkedUnit on every component)"
+    },
+    {
+      "ask": "Which BSI TR-03183-2 fields can drag-lint fill, and which stay open?",
+      "command": "drag-lint sbom --project <App.dproj> --exe <App.exe> --app-version <1.2.3> --bsi --creator <name> --creator-email <address> --out <App.cdx.json>   (every unfilled field is named as drag-lint:bsi:unfilled)"
     }
   ],
   "access": "cli-only"

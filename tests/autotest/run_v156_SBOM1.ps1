@@ -22,7 +22,7 @@
   POSITIVE CONTROLS: P1 `--library-db none` loses Spring4D and turns the Acme units sourceless (the walk
   and the library index are live); P2 another --catalogue changes supplier / version and folds a
   firstParty row into the application (the catalogue is what attributes); P3 --exe / --app-version;
-  P4 --out; P5 refusals incl. --map and --bsi (exit 3: not registered); P6 the project index is not written.
+  P4 --out; P5 refusals incl. --map of a missing file (SBOM-2 registered --map / --bsi); P6 the project index is not written.
 
   SCHEMA: the document of run 1 is validated with Test-Json against the CycloneDX 1.6 schema vendored in
   tests\fixtures\sbom\schema (bom-1.6.schema.json + spdx.schema.json, Apache-2.0, unchanged). Its two
@@ -227,9 +227,9 @@ if (Test-Path $OutFile) {
 
 Write-Host '-- P5: refusals' -ForegroundColor Cyan
 $r = Run @('sbom', '--project', $Dproj, '--db', $ProjDb, '--map', 'x.map')
-Check 'P5 --map is not registered in v1 (exit 3, no document)' (($r.Code -eq 3) -and ($r.Out -notmatch 'bomFormat')) "exit $($r.Code)"
+Check 'P5 --map x.map (SBOM-2: registered) with a file that does not exist: exit 1, no document' (($r.Code -eq 1) -and ($r.Out -notmatch 'bomFormat')) "exit $($r.Code)"
 $r = Run @('sbom', '--project', $Dproj, '--db', $ProjDb, '--bsi')
-Check 'P5 --bsi is not registered in v1 (exit 3, no document)' (($r.Code -eq 3) -and ($r.Out -notmatch 'bomFormat')) "exit $($r.Code)"
+Check 'P5 --bsi (SBOM-2: registered) writes a document, exit 0' (($r.Code -eq 0) -and ($r.Out -match 'bomFormat')) "exit $($r.Code)"
 $r = Run @('sbom', '--db', $ProjDb)
 Check 'P5 no --project: usage, exit 2' (($r.Code -eq 2) -and ($r.Err -match '--project')) "exit $($r.Code)"
 $r = Run @('sbom', '--project', $Dproj, '--db', (Join-Path $WorkDir 'none.sqlite'))

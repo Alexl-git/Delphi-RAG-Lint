@@ -2,7 +2,9 @@ unit DRagLint.CLI.Sbom;
 
 { drag-lint 1.56 -- lane SBOM-1: the `sbom` verb.
   G-49, v1 slice: `sbom --project X.dproj [--out F] [--exe F] [--app-version V] [--db D] [--library-db D]...
-  [--catalogue F]` writes a CycloneDX 1.6 JSON document (DRagLint.Report.CycloneDx).
+  [--catalogue F] [--map F.map] [--bsi [--creator N] [--creator-email A]]` writes a CycloneDX 1.6 JSON document
+  (DRagLint.Report.CycloneDx). --map (lane SBOM-2) marks which units of the closure the linker really linked
+  (DRagLint.Report.MapFile); --bsi adds the BSI TR-03183-2 fields and names, never invents, what it cannot fill.
   Parses its own flags (like uses-recover and syntax-count): DRagLint.CLI.ParseArgs returns before its flag loop
   for this verb, so the flags, the database resolution and the usage text all live here. The accepted flags are
   in ONE table named SBOM_FLAG_NAMES, so the docs-sync guard (check 9) can read it once INT teaches it this unit.
@@ -14,8 +16,8 @@ unit DRagLint.CLI.Sbom;
   with the default unit aliases and then with the project's unit-scope names (DCC_Namespace). Every unit
   also uses System and SysInit, which no uses clause names. Read-only: no index is written.
 
-  WHAT IS NOT READ (v1, owner ruling Q2 2026-11-27): no MAP file (--map), no BSI profile (--bsi), no VEX.
-  Those flags are not accepted until they are built; the document states its own scope. }
+  WHAT IS NOT READ: no VEX. Without --map the document is the source closure only and says so; with --map it
+  still cannot list a DLL or a runtime package, and states that. }
 
 interface
 
@@ -33,7 +35,7 @@ uses
   System.Generics.Collections, System.RegularExpressions, FireDAC.Comp.Client,
   DRagLint.Core.CliError, DRagLint.Core.Model, DRagLint.Storage.SQLite,
   DRagLint.Storage.Schema, DRagLint.Index.Manifest, DRagLint.CLI.Common, DRagLint.CLI.HelpText,
-  DRagLint.CLI.LibraryReady, DRagLint.Report.CycloneDx; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
+  DRagLint.CLI.LibraryReady, DRagLint.Report.CycloneDx, DRagLint.Report.MapFile; // dl:unit DRagLint.Core.CliError accepted -- the verb reports an unknown flag with the shared cli_err_unknown_flag text every verb uses; the other CliError consts are other verbs' errors
 
 const
   CVerb = 'sbom';
@@ -50,8 +52,11 @@ const
   CJsonIndent = 2;
   CDprojMemberPattern = '<DCCReference\s+Include="([^"]+)"';
   CTimestampFormat = 'yyyy"-"mm"-"dd"T"hh":"nn":"ss"Z"';
+  CEmailPattern = '^[^@\s]+@[^@\s]+\.[^@\s]+$';
+  CPeMagic: array[0..1] of Byte = (Ord('M'), Ord('Z'));
   CUsage = 'usage: drag-lint sbom --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] ' +
-    '[--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]';
+    '[--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>] ' +
+    '[--map <file.map>] [--bsi] [--creator <name>] [--creator-email <address>]';
   SQL_FILES = 'select id, path from files';
   SQL_USES = 'select file_id, unit_name, target_file_id from unit_uses order by file_id, start_line, start_col';
   SQL_NAMESPACES = 'select distinct value from project_settings where setting = ''DCC_Namespace'' order by ordinal';
@@ -72,14 +77,16 @@ const
 
 type
   /// <summary>The flags sbom accepts.</summary>
-  TSbomFlag = (sfProject, sfOut, sfExe, sfAppVersion, sfDb, sfLibraryDb, sfCatalogue, sfHelp, sfOutputEncoding);
+  TSbomFlag = (sfProject, sfOut, sfExe, sfAppVersion, sfDb, sfLibraryDb, sfCatalogue, sfMap, sfBsi, sfCreator,
+    sfCreatorEmail, sfHelp, sfOutputEncoding);
 
 const
   /// <summary>The spelling of each flag: the verb's whole accepted-flag set (docs-sync check 9 reads this table).</summary>
   SBOM_FLAG_NAMES: array[TSbomFlag] of string = ('--project', '--out', '--exe', '--app-version', '--db',
-    '--library-db', '--catalogue', '--help', '--output-encoding');
+    '--library-db', '--catalogue', '--map', '--bsi', '--creator', '--creator-email', '--help', '--output-encoding');
   /// <summary>The flags that take the next token as their value.</summary>
-  SBOM_VALUE_FLAGS = [sfProject, sfOut, sfExe, sfAppVersion, sfDb, sfLibraryDb, sfCatalogue, sfOutputEncoding];
+  SBOM_VALUE_FLAGS = [sfProject, sfOut, sfExe, sfAppVersion, sfDb, sfLibraryDb, sfCatalogue, sfMap, sfCreator,
+    sfCreatorEmail, sfOutputEncoding];
 
 type
   /// <summary>The parsed flags of one sbom run.</summary>
@@ -92,6 +99,10 @@ type
     LibraryDbs: TArray<string>;
     NoLibrary : Boolean;
     Catalogue : string;
+    MapPath   : string;
+    Bsi       : Boolean;
+    Creator   : string;
+    CreatorEmail: string;
     ShowHelp  : Boolean;
   end;
 
@@ -508,6 +519,10 @@ begin
         else
           pOpts.LibraryDbs:= pOpts.LibraryDbs + [ExpandFileName(LValue)];
       sfCatalogue : pOpts.Catalogue:= ExpandFileName(LValue);
+      sfMap       : pOpts.MapPath:= ExpandFileName(LValue);
+      sfBsi       : pOpts.Bsi:= True;
+      sfCreator   : pOpts.Creator:= LValue;
+      sfCreatorEmail: pOpts.CreatorEmail:= LValue;
       sfHelp      : pOpts.ShowHelp:= True;
       sfOutputEncoding: ; { consumed by Run before the dispatch; accepted so it is not "unknown" }
     end;
@@ -608,12 +623,100 @@ begin
   end;
 end;
 
+{ True when the file starts with the PE "MZ" header. }
+function HasPeHeader(const pPath: string): Boolean;
+var
+  LStream: TFileStream;
+  LHead: array[0..1] of Byte;
+begin
+  LStream:= TFileStream.Create(pPath, fmOpenRead or fmShareDenyNone);
+  try
+    Result:= (LStream.Read(LHead, SizeOf(LHead)) = SizeOf(LHead)) and (LHead[0] = CPeMagic[0]) and (LHead[1] = CPeMagic[1]);
+  finally
+    LStream.Free;
+  end;
+end;
+
+{ Reads --map into the model. False (pError set) when the map cannot be used. }
+function LoadMap(const pOpts: TSbomOptions; const pModel: TSbomModel; out pError: string): Boolean;
+begin
+  pError:= '';
+  if pOpts.MapPath = '' then
+    Exit(True);
+  Result:= ReadLinkerMap(pOpts.MapPath, pModel.LinkedUnits, pError);
+  if Result then
+    pModel.MapFile:= ExtractFileName(pOpts.MapPath);
+end;
+
+{ Writes the stderr notes for --map: how many closure units the MAP does not link. }
+procedure NoteMap(const pModel: TSbomModel);
+var
+  LUnit: TSbomUnit;
+  LNotLinked, LNotInClosure: Integer;
+  LClosure: TStringList;
+  LName: string;
+begin
+  LNotLinked:= 0;
+  LNotInClosure:= 0;
+  LClosure:= TStringList.Create;
+  try
+    LClosure.CaseSensitive:= False;
+    for LUnit in pModel.Units do
+    begin
+      LClosure.Add(LUnit.Name);
+      if pModel.LinkedUnits.IndexOf(LUnit.Name) < 0 then
+        Inc(LNotLinked);
+    end;
+    for LName in pModel.LinkedUnits do
+      if LClosure.IndexOf(LName) < 0 then
+        Inc(LNotInClosure);
+  finally
+    LClosure.Free;
+  end;
+  Writeln(ErrOutput, Format('NOTE: %s: --map %s: %d of %d unit(s) of the closure are not linked (drag-lint:notLinkedUnit, ' +
+    'components kept); %d unit(s) the MAP links are in no indexed source (sbom:mapUnitNotInClosure)',
+    [CVerb, pModel.MapFile, LNotLinked, pModel.Units.Count, LNotInClosure]));
+end;
+
+{ Writes the stderr note for --bsi: how many fields stayed unfilled, per field name. }
+procedure NoteBsi(const pUnfilled: TArray<string>);
+var
+  LCounts: TStringList;
+  LLine, LField, LSummary: string;
+  I: Integer;
+begin
+  LCounts:= TStringList.Create;
+  try
+    LCounts.Sorted:= True;
+    for LLine in pUnfilled do
+    begin
+      LField:= LLine.Substring(LLine.IndexOf(#9) + 1);
+      LField:= LField.Substring(0, LField.IndexOf(':'));
+      I:= LCounts.IndexOf(LField);
+      if I < 0 then
+        LCounts.AddObject(LField, TObject(1))
+      else
+        LCounts.Objects[I]:= TObject(NativeInt(LCounts.Objects[I]) + 1);
+    end;
+    LSummary:= '';
+    for I:= 0 to LCounts.Count - 1 do
+      LSummary:= LSummary + (if LSummary = '' then '' else ', ') + LCounts[I] + ' x' + IntToStr(NativeInt(LCounts.Objects[I]));
+  finally
+    LCounts.Free;
+  end;
+  Writeln(ErrOutput, Format('NOTE: %s: BSI TR-03183-2: %d field(s) unfilled, named per component as ' +
+    'drag-lint:bsi:unfilled (nothing was invented): %s', [CVerb, Length(pUnfilled), LSummary]));
+end;
+
 { Fills the model's document fields. False (pError set) when --exe cannot be hashed. }
 function FillHeader(const pOpts: TSbomOptions; const pModel: TSbomModel; out pError: string): Boolean;
 begin
   pError:= '';
   pModel.AppName:= TPath.GetFileNameWithoutExtension(pOpts.Project);
   pModel.AppVersion:= pOpts.AppVersion;
+  pModel.Bsi:= pOpts.Bsi;
+  pModel.CreatorName:= pOpts.Creator;
+  pModel.CreatorEmail:= pOpts.CreatorEmail;
   pModel.ToolVersion:= DRAGLINT_VERSION;
   pModel.Timestamp:= FormatDateTime(CTimestampFormat, TTimeZone.Local.ToUniversalTime(Now));
   pModel.SerialNumber:= 'urn:uuid:' + LowerCase(TGUID.NewGuid.ToString.Trim(['{', '}']));
@@ -627,6 +730,7 @@ begin
   try
     pModel.ExeSha512:= LowerCase(THashSHA2.GetHashStringFromFile(pOpts.ExePath, THashSHA2.TSHA2Version.SHA512));
     pModel.ExeName:= ExtractFileName(pOpts.ExePath);
+    pModel.ExeIsPe:= HasPeHeader(pOpts.ExePath);
     Result:= True;
   except
     on E: Exception do
@@ -663,6 +767,17 @@ begin
   Result:= True;
 end;
 
+{ Why the flags cannot be used before any index is read; '' when they can. }
+function OptionsProblem(const pOpts: TSbomOptions): string;
+begin
+  if not FileExists(pOpts.Project) then
+    Result:= 'project file not found: ' + pOpts.Project
+  else if (pOpts.CreatorEmail <> '') and not TRegEx.IsMatch(pOpts.CreatorEmail, CEmailPattern) then
+    Result:= '--creator-email is not an e-mail address: ' + pOpts.CreatorEmail
+  else
+    Result:= '';
+end;
+
 function Execute(var pOpts: TSbomOptions): Integer;
 var
   LRun: TSbomRun;
@@ -670,11 +785,12 @@ var
   LManifest: TIndexManifest;
   LHasManifest: Boolean;
   LError, LLine: string;
-  LUnknown: TArray<string>;
+  LUnknown, LUnfilled: TArray<string>;
   LDoc: TJSONObject;
 begin
-  if not FileExists(pOpts.Project) then
-    Exit(Usage('project file not found: ' + pOpts.Project));
+  LError:= OptionsProblem(pOpts);
+  if LError <> '' then
+    Exit(Usage(LError));
   LHasManifest:= LoadManifest(LManifest);
   if not ResolveProjectIndex(pOpts, LManifest) then
     Exit(CExitUsage);
@@ -689,15 +805,19 @@ begin
     if not LCatalogue.LoadFromFile(pOpts.Catalogue, LError) then
       Exit(Fail(LError + ' (pass --catalogue <file.json>)'));
     if not (LRun.LoadIndex(pOpts.DbPath, LError) and LoadLibraries(LRun, pOpts, LManifest, LHasManifest, LError)
-      and FillHeader(pOpts, LRun.Model, LError)) then
+      and FillHeader(pOpts, LRun.Model, LError) and LoadMap(pOpts, LRun.Model, LError)) then
       Exit(Fail(LError));
     LRun.Walk;
-    LDoc:= BuildCycloneDx(LRun.Model, LCatalogue, LUnknown);
+    LDoc:= BuildCycloneDx(LRun.Model, LCatalogue, LUnknown, LUnfilled);
     try
       Result:= WriteDocument(LDoc.Format(CJsonIndent), pOpts.OutPath);
     finally
       LDoc.Free;
     end;
+    if pOpts.MapPath <> '' then
+      NoteMap(LRun.Model);
+    if pOpts.Bsi then
+      NoteBsi(LUnfilled);
     for LLine in LUnknown do
       Writeln(ErrOutput, 'NOTE: ' + CVerb + ': no catalogue row (listed as "' + SBOM_UNKNOWN_SUPPLIER + '"): ' +
         LLine.Replace(#9, '  '));
