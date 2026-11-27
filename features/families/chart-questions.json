@@ -39,6 +39,8 @@
     "architecture":     { "emitter": "charts\\src\\Emit-Architecture.ps1" },
     "cycles":           { "emitter": "charts\\src\\Emit-Cycles.ps1" },
     "consumers":        { "emitter": "charts\\src\\Emit-Consumers.ps1" },
-    "shown-where":      { "emitter": "charts\\src\\Emit-ShownWhere.ps1" }
+    "shown-where":      { "emitter": "charts\\src\\Emit-ShownWhere.ps1" },
+    "dependency-matrix": { "aliases": ["uses matrix", "dsm", "unit dependency matrix"] },
+    "main-sequence":    { "aliases": ["abstractness", "instability", "zone of pain"] }
   }
 }
