@@ -191,7 +191,7 @@ begin
     and vTabs[6].FindColumn('REASON', vCol) and vCol.NotNull and (vCol.PkOrder = 0));
   Check('12f RepoTablesFor(1) keeps 40 columns without CALC_BODY (positive control against 12c)',
     (Length(RepoTablesFor(1)[1].Columns) = 40) and not RepoTablesFor(1)[1].FindColumn('CALC_BODY', vCol));
-  Check('12g RepoTablesFor(5) raises ERepoError', RaisedClass(procedure begin RepoTablesFor(5); end) = 'ERepoError');
+  Check('12g RepoTablesFor(6) raises ERepoError (1.56: the range ends at 5)', RaisedClass(procedure begin RepoTablesFor(6); end) = 'ERepoError');
   Check('12h FindRepoTable finds a schema-2 table', FindRepoTable('dl_exceptions', vTab));
 
   vFile := NewPath('v2new');
@@ -218,8 +218,8 @@ begin
   finally
     vV1.Free;
   end;
-  Check('14e CreateRepository version 5 raises ERepoError',
-    RaisedClass(procedure begin CreateRepository(NewPath('v5'), 5); end) = 'ERepoError');
+  Check('14e CreateRepository version 6 raises ERepoError',
+    RaisedClass(procedure begin CreateRepository(NewPath('v6'), 6); end) = 'ERepoError');
 
   vRaw := RawConn(vFile, 'ReadWrite');
   try
