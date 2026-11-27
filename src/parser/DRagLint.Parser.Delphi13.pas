@@ -1285,6 +1285,24 @@ begin
       Exit(AState.HandlerFrames[i]);
 end; // function
 
+{ 1.56 EXT-ATTR: the `attribute` ref of one attribute NAME node -- an `identifier`
+  (`[Inject]`) or an `exprDot` (`[Spring.Container.Common.Inject]`, whose rhs is the
+  attribute's own name). A dotted name whose rightmost segment is not a plain
+  identifier (a broken parse) emits nothing: no name, no ref. Any other node keeps
+  the pre-1.56 row (its whole text). }
+procedure EmitAttributeNameRef(const ANameNode: TTSNode; const AState: TWalkState);
+var
+  Own: TTSNode;
+begin
+  Own:= ANameNode;
+  if Own.NodeType = 'exprDot' then
+  begin
+    Own:= Own.ChildByField('rhs');
+    if Own.IsNull or (Own.NodeType <> 'identifier') then Exit;
+  end;
+  AState.EmitRef('attribute', NodeText(Own, AState.Source), Own);
+end;
+
 procedure EmitRaiseReference(const ANode: TTSNode; const AState: TWalkState);
 var
   Expr, Callee, Ctor, TypeNode, Root: TTSNode;
@@ -4902,13 +4920,18 @@ begin
       begin
         var Item:= ANode.NamedChild(i);
         if Item.IsNull then Continue;
-        if Item.NodeType = 'identifier' then
-          AState.EmitRef('attribute', NodeText(Item, AState.Source), Item)
+        { 1.56 EXT-ATTR: the unit-qualified forms. `[Unit.Scope.Inject]` arrives as an
+          `exprDot` item, which no arm took (NO ref at all), and `[Unit.Scope.Named('x')]`
+          as an exprCall whose entity is that exprDot, which emitted the whole dotted text
+          as the name (a name no declaration has). Both now emit the SAME row as the bare
+          form: name_text = the attribute's own name, span = that name, the qualifier is
+          the source text left of the span -- the shape of every dotted type use. }
+        if (Item.NodeType = 'identifier') or (Item.NodeType = 'exprDot') then
+          EmitAttributeNameRef(Item, AState)
         else if Item.NodeType = 'exprCall' then
         begin
           var Ent:= Item.ChildByField('entity');
-          if not Ent.IsNull then
-            AState.EmitRef('attribute', NodeText(Ent, AState.Source), Ent);
+          if not Ent.IsNull then EmitAttributeNameRef(Ent, AState);
           var Args:= Item.ChildByField('args');
           if not Args.IsNull then
             Walk(Args, AState, AParentSymbolIdx, AParentQualifiedName);

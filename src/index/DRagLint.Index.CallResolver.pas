@@ -4512,6 +4512,22 @@ type
     /// </remarks>
     function ResolveExceptionType(const ARef: TReference; out AReason: string): Int64;
 
+    /// <summary>1.56 EXT-ATTR: the attribute class an `attribute` row names -- `[Inject]`,
+    /// `[Unit.Scope.Inject]`, `[InjectAttribute]` all name InjectAttribute.</summary>
+    /// <param name="ARef">The attribute ref; name_text is the attribute's own name (no unit
+    /// qualifier), the span is that name.</param>
+    /// <param name="AReason">OUT: '' when bound; 'ambiguous' when the name as written and the
+    /// name + 'Attribute' are two different classes; else the reason the lookup of the name
+    /// as written gives, or 'not-class' when only a non-class type of the name is in scope.</param>
+    /// <returns>The class's id, or 0.</returns>
+    /// <remarks>
+    /// Two lookups through LookupTypeName (same scope order, a unit qualifier left of the
+    /// span honoured): the name as written and the name + 'Attribute'. Only a class binds.
+    /// Certain or nothing: one answer, or both lookups agreeing. Identity only, not counted
+    /// into TypeUseStats.
+    /// </remarks>
+    function ResolveAttribute(const ARef: TReference; out AReason: string): Int64;
+
     /// <summary>X6 / gap G1 (2026-10-25): the ENUM type a hard cast `TEnum(x)`
     /// names -- certain or nothing.</summary>
     /// <param name="ARef">The `call` ref the cast was extracted as (name_text =
@@ -12031,6 +12047,35 @@ end;
 function TCallResolver.ResolveExceptionType(const ARef: TReference; out AReason: string): Int64;
 begin
   Result:= LookupTypeName(ARef, AReason);
+end;
+
+function TCallResolver.ResolveAttribute(const ARef: TReference; out AReason: string): Int64;
+const
+  ATTRIBUTE_CLASS_SUFFIX = 'Attribute';
+var
+  Probe    : TReference;
+  AsWritten: Int64;
+  Suffixed : Int64;
+  ProbeWhy : string;
+begin
+  Result:= 0;
+  AsWritten:= LookupTypeName(ARef, AReason);
+  if (AsWritten > 0) and (SymbolById(AsWritten).Kind <> skClass) then
+  begin
+    AsWritten:= 0;
+    AReason  := 'not-class';
+  end;
+  Probe:= ARef;
+  Probe.NameText:= ARef.NameText + ATTRIBUTE_CLASS_SUFFIX;
+  Suffixed:= LookupTypeName(Probe, ProbeWhy);
+  if (Suffixed > 0) and (SymbolById(Suffixed).Kind <> skClass) then Suffixed:= 0;
+  if (AsWritten > 0) and (Suffixed > 0) and (AsWritten <> Suffixed) then
+  begin
+    AReason:= 'ambiguous';
+    Exit;
+  end;
+  Result:= if Suffixed > 0 then Suffixed else AsWritten;
+  if Result > 0 then AReason:= '';
 end;
 
 function TCallResolver.ResolveEnumCast(const ARef: TReference; out AReason: string): Int64;

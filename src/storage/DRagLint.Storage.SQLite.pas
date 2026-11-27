@@ -983,6 +983,25 @@ type
       procedure ResolveExceptionTypeRefs(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>1.56 EXT-ATTR: binds every `attribute` row to its attribute class,
+      /// through TCallResolver.ResolveAttribute.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// none is stale.</param>
+      /// <param name="ACandidates">Out: rows offered to the resolver -- an `attribute` row
+      /// whose name, or name + 'Attribute', is the name of an indexed class.</param>
+      /// <param name="ABound">Out: rows whose symbol_id was set.</param>
+      /// <remarks>
+      /// IDENTITY ONLY, no call edge. No other writer binds an `attribute` row, so NULLing
+      /// them in scope first can never erase another stream's answer. An attribute class the
+      /// DB does not hold (a project DB and Spring.Container.Common) stays NULL.
+      /// </remarks>
+      procedure ResolveAttributeRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
       /// <summary>The query-and-bind loop shared by the identity-only streams
       /// (ResolveTypeUseRefs, ResolveEnumCastRefs): selects the refs matching
       /// AUniverse + ASuffix, asks ABind for each, and sets refs.symbol_id when
@@ -16111,6 +16130,13 @@ begin
 end; // function
 
 function TSQLiteSymbolStore.FindCallersByName( const ACalleeName: string): TArray<TReference>;
+const
+  { 1.56 EXT-ATTR: `[Inject]` is a site of InjectAttribute although its name_text is `Inject`.
+    The attribute stream bound the row to the class, so a query for the CLASS name takes the
+    rows bound to a class of that name too. Binding, not spelling: an unbound `[Inject]`
+    (the class is not in this DB) is not guessed. }
+  ATTR_BOUND_TO_NAME = ' OR (refs.kind = ''attribute'' AND refs.symbol_id IN ' +
+                       '(SELECT id FROM symbols WHERE kind = ''class'' AND name = :name COLLATE NOCASE))';
 var
   Q   : TFDQuery         ;
   List: TList<TReference>;
@@ -16147,11 +16173,11 @@ begin
         'SELECT refs.*, ma.mode AS access_mode, ce.confidence AS edge_conf' + HostCols + ' FROM refs ' +
         'LEFT JOIN member_accesses ma ON ma.ref_id = refs.id ' +
         'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
-        'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line'
+        'WHERE (refs.name_text = :name COLLATE NOCASE' + ATTR_BOUND_TO_NAME + ') ORDER BY refs.file_id, refs.start_line'
       else
         'SELECT refs.*, ce.confidence AS edge_conf' + HostCols + ' FROM refs ' +
         'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
-        'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line';
+        'WHERE (refs.name_text = :name COLLATE NOCASE' + ATTR_BOUND_TO_NAME + ') ORDER BY refs.file_id, refs.start_line';
     Q.ParamByName('name').AsWideString:= ACalleeName;
     Q.Open;
     while not Q.Eof do
@@ -21668,6 +21694,25 @@ begin
   BindRefStream(EXC_UNIVERSE, REF_KIND_RAISE, Suffix, AResolver.ResolveExceptionType, ACandidates, ABound);
 end;
 
+{ 1.56 EXT-ATTR: the attribute stream. The contract lives on the declaration. }
+procedure TSQLiteSymbolStore.ResolveAttributeRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  ATTR_KIND     = 'attribute';
+  ATTR_ROWS     = 'refs.kind = ''' + ATTR_KIND + '''';
+  CLASS_NAMES   = '(SELECT name FROM symbols WHERE kind = ''class'')';
+  ATTR_UNIVERSE = ATTR_ROWS + ' AND (refs.name_text COLLATE NOCASE IN ' + CLASS_NAMES +
+                  ' OR (refs.name_text || ''Attribute'') COLLATE NOCASE IN ' + CLASS_NAMES + ')';
+var
+  Suffix: string;
+begin
+  Suffix:= '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + ATTR_ROWS + ' AND refs.symbol_id IS NOT NULL' + Suffix);  // dl:ok sql-injection-concat@0f74 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveExceptionTypeRefs uses.
+  BindRefStream(ATTR_UNIVERSE, ATTR_KIND, Suffix, AResolver.ResolveAttribute, ACandidates, ABound);
+end;
+
 { X6 / G1: the enum hard-cast stream. The contract lives on the declaration. }
 procedure TSQLiteSymbolStore.ResolveEnumCastRefs(AResolver: TCallResolver;
   const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
@@ -22496,6 +22541,8 @@ var
   TypeBound      : Int64    ; { of those, the rows whose symbol_id was set                  }
   ExcCandidates  : Int64    ; { b5: raise / handle rows offered to the resolver             }
   ExcBound       : Int64    ; { of those, the rows whose symbol_id was set                  }
+  AttrCandidates : Int64    ; { 1.56 EXT-ATTR: attribute rows offered to the resolver       }
+  AttrBound      : Int64    ; { of those, the rows whose symbol_id was set                  }
   CastCandidates : Int64    ; { X6/G1 enum-cast stream -- unbound enum-named call rows offered }
   CastBound      : Int64    ; { of those, the rows whose symbol_id was set                  }
   TReadCandidates: Int64    ; { GAP-CALLERS type-read stream -- unbound type-named read rows offered }
@@ -22639,6 +22686,8 @@ begin
   TypeBound      := 0;
   ExcCandidates  := 0;
   ExcBound       := 0;
+  AttrCandidates := 0;
+  AttrBound      := 0;
   CastCandidates := 0;
   CastBound      := 0;
   TReadCandidates:= 0;
@@ -23047,6 +23096,8 @@ begin
       ResolveExceptionTypeRefs(Resolver, ScopeWhere, StaleWhere, ExcCandidates, ExcBound);
       Resolver.ProfEnd(cpsStreamException, PfMark);
       TExc:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
+      { 1.56 EXT-ATTR: attribute rows -> their attribute class, identity only. }
+      ResolveAttributeRefs(Resolver, ScopeWhere, StaleWhere, AttrCandidates, AttrBound);
       { X6 / G1 (2026-10-25): the EIGHTH stream, enum hard casts, identity only. }
       PfMark:= Resolver.ProfBegin(cpsStreamEnumCast); { 151 PF }
       ResolveEnumCastRefs(Resolver, ScopeWhere, StaleWhere, CastCandidates, CastBound);
@@ -23320,6 +23371,7 @@ begin
        Resolver.TypeUseStats.Generic, Resolver.TypeUseStats.Qualified, Resolver.TypeUseStats.Unlisted,
        Resolver.TypeUseStats.Ambiguous, Resolver.TypeUseStats.NotFound, Resolver.TypeUseStats.Unreadable]));
     ResolveLog(Format('calls      exception-types: %d of %d raise/handle ref(s) bound  [%.1fs]', [ExcBound, ExcCandidates, TExc]));
+    ResolveLog(Format('calls      attributes: %d of %d attribute ref(s) bound', [AttrBound, AttrCandidates]));
     { X6 / G1 (2026-10-25). The enum hard-cast stream. }
     ResolveLog(Format('calls      enum-casts: %d of %d enum-named call ref(s) bound', [CastBound, CastCandidates]));
     ResolveLog(Format('calls      type-reads: %d of %d type-named read ref(s) bound', [TReadBound, TReadCandidates]));
