@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.52.0-alpha",
   "summary": "Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET)",
-  "intro": "Ask it before adding an Assigned guard or reordering initialization: it names the writers of a unit variable, class var or field and says whether one of them runs before the use on every path, with the reason code and the witness when it cannot prove it. Exit 0 = all SET, 1 = some MAY-BE-UNSET or NEVER-SET, 2 = error.",
+  "intro": "Ask it before adding an Assigned guard or reordering initialization: it names the writers of a unit variable, class var or field and says whether one of them runs before the use on every path, with the reason code and the witness when it cannot prove it. Exit 0 = all SET, 1 = some MAY-BE-UNSET or NEVER-SET, 2 = error. Since 1.56 it reads the index indirect-call edges: a routine only named as a callback, procedural variable or event of a project class is judged at the call sites of its slot, and such a SET carries the reason code relied-on-indirect-edges.",
   "wikiPage": "check-init",
   "surfaces": [
     {

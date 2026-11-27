@@ -896,17 +896,17 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 | Group | Features | Wiki |
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 19 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
-| [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 38 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 85 (+ 463 rules, 131 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 40 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 91 (+ 478 rules, 131 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 13 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 24 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
-| [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 25 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
-| [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 25 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
-| [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 27 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
+| [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 26 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
+| [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 28 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
+| [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 35 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 13 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
 | [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 29 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
-| [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 31 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
+| [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 37 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
 | [Uses and Dependencies](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#uses-and-dependencies) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#uses-and-dependencies) |
 <!-- dl:registry:end feature-summary -->
 

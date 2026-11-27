@@ -13,6 +13,16 @@
       "type": "cli",
       "verb": "lint",
       "example": "drag-lint lint <file.pas> --rule container-items-leak --db <index.sqlite>"
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas> --rule fresh-instance-as-argument --db <index.sqlite>"
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <file.pas> --rule class-passed-as-interface --db <index.sqlite>"
     }
   ],
   "audience": "both"

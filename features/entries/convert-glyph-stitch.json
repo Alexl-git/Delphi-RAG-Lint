@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.56.0-alpha",
-  "summary": "convert-apply and convert-validate --glyph-stitch: slices and stitches a TBitmap glyph strip per a book's G[I/N] expressions; advertised as info capability glyph_stitch",
+  "summary": "convert-apply and convert-validate --glyph-stitch slices and stitches a TBitmap glyph strip per a book G[I/N] expressions; info capability glyph_stitch",
   "intro": "Convert a form whose images are glyph strips: add --glyph-stitch and the G[I/N] links of the book are realised on the .dfm surface instead of refused.",
   "wikiPage": "convert-glyph-stitch",
   "surfaces": [

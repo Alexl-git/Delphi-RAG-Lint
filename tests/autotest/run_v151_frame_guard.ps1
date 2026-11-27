@@ -13,9 +13,9 @@
 # declared in a lane Catalog in a scratch build makes check 1 fail with 318.
 param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe",
-  [int]$ExpectTotal = 463,   # 1.54 FLOW +8, SCHEMA +3, EXPR +6, DFM +7; 1.54 SQL: +2 sql-param-mismatch (ON), query-in-loop (OFF);   # 1.53 FR-LINT: +2 schema-maxlen-drift, schema-length-bound (ON);   # 1.52 (was 423 at 1.51.0)
+  [int]$ExpectTotal = 478,   # 1.56 INT: +15 = the live catalog of the merged 1.56 lanes (rules --json: builtin 366, external 112);   # 1.54 FLOW +8, SCHEMA +3, EXPR +6, DFM +7; 1.54 SQL: +2 sql-param-mismatch (ON), query-in-loop (OFF);   # 1.53 FR-LINT: +2 schema-maxlen-drift, schema-length-bound (ON);   # 1.52 (was 423 at 1.51.0)
   [int]$ExpectFixable = 131,   # live at 1.52 BATTERY152 (125 at 1.51.0-alpha; +6 = fixable-ids.txt)
-  [int]$ExpectOn = 375   # 1.54 FLOW +3 ON (5 OFF), SCHEMA +2 ON (1 OFF), EXPR +6 ON, DFM +4 ON (3 OFF); 1.54 SQL: +1 sql-param-mismatch ON.   # 1.53 FR-LINT: +2 schema rules ON (owner Q23 D).     # 1.52.2: +1 param-name-prefix ON (owner Q7); 1.52 was 355 (341 at 1.51.0)
+  [int]$ExpectOn = 385   # 1.56 INT: +10 ON (the other 5 new ids ship OFF).   # 1.54 FLOW +3 ON (5 OFF), SCHEMA +2 ON (1 OFF), EXPR +6 ON, DFM +4 ON (3 OFF); 1.54 SQL: +1 sql-param-mismatch ON.   # 1.53 FR-LINT: +2 schema rules ON (owner Q23 D).     # 1.52.2: +1 param-name-prefix ON (owner Q7); 1.52 was 355 (341 at 1.51.0)
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path

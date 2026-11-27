@@ -15,7 +15,7 @@ answer and writes nothing: no index refresh, no commit, no file.
 
 ## What counts as changed
 
-The working copy as it is on disk now (committed, staged and not yet committed edits together) is compared
+The working copy as it is on disk now (committed, staged and uncommitted edits together) is compared
 with the revision.
 
 | Case | Result |

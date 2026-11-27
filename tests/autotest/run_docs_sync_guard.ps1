@@ -1268,6 +1268,30 @@ $urFlags = @($(if ($urSpan -and $urSpan.Success) { [regex]::Matches($urSpan.Grou
 Check 'check 9: the uses-recover verb''s own flag table was read' ($urFlags.Count -ge 6) `
   "only $($urFlags.Count) flag(s) read from USES_RECOVER_FLAG_NAMES in $urSrcPath -- was the table renamed or moved?"
 foreach ($uf in $urFlags) { [void]$accepted.Add($uf) }
+# `metrics` likewise, from METRICS_FLAG_NAMES of DRagLint.CLI.Metrics (MET-1); same control.
+$metSrcPath = Join-Path $Repo 'src\cli\DRagLint.CLI.Metrics.pas'
+$metSpan = $(if (Test-Path -LiteralPath $metSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($metSrcPath), "(?s)METRICS_FLAG_NAMES\s*:\s*array\[TMetricsFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$metFlags = @($(if ($metSpan -and $metSpan.Success) { [regex]::Matches($metSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the metrics verb''s own flag table was read' ($metFlags.Count -ge 6) `
+  "only $($metFlags.Count) flag(s) read from METRICS_FLAG_NAMES in $metSrcPath -- was the table renamed or moved?"
+foreach ($f in $metFlags) { [void]$accepted.Add($f) }
+# `sbom` likewise, from SBOM_FLAG_NAMES of DRagLint.CLI.Sbom (SBOM-1); same control.
+$sbSrcPath = Join-Path $Repo 'src\cli\DRagLint.CLI.Sbom.pas'
+$sbSpan = $(if (Test-Path -LiteralPath $sbSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($sbSrcPath), "(?s)SBOM_FLAG_NAMES\s*:\s*array\[TSbomFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$sbFlags = @($(if ($sbSpan -and $sbSpan.Success) { [regex]::Matches($sbSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the sbom verb''s own flag table was read' ($sbFlags.Count -ge 6) `
+  "only $($sbFlags.Count) flag(s) read from SBOM_FLAG_NAMES in $sbSrcPath -- was the table renamed or moved?"
+foreach ($f in $sbFlags) { [void]$accepted.Add($f) }
+# `happens-before` likewise, from HAPPENS_BEFORE_FLAG_NAMES of DRagLint.CLI.HappensBefore (HB4); same control.
+$hbSrcPath = Join-Path $Repo 'src\cli\DRagLint.CLI.HappensBefore.pas'
+$hbSpan = $(if (Test-Path -LiteralPath $hbSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($hbSrcPath), "(?s)HAPPENS_BEFORE_FLAG_NAMES\s*:\s*array\[THappensBeforeFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$hbFlags = @($(if ($hbSpan -and $hbSpan.Success) { [regex]::Matches($hbSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the happens-before verb''s own flag table was read' ($hbFlags.Count -ge 6) `
+  "only $($hbFlags.Count) flag(s) read from HAPPENS_BEFORE_FLAG_NAMES in $hbSrcPath -- was the table renamed or moved?"
+foreach ($f in $hbFlags) { [void]$accepted.Add($f) }
 
 $helpSet = Get-FlagSet $helpText $FlagRx
 
@@ -1317,7 +1341,7 @@ $CrossCuttingFlags = [ordered]@{
   '--help'            = 'every verb; the banner says so once'
   '--output-encoding' = 'every verb; documented in the global section of --help (entry output-encoding)'
 }
-$selfParsing = [ordered]@{ 'ask' = $askFlags; 'protocol' = $protoFlags; 'mcp-config' = $mcpCfgFlags; 'syntax-count' = $scFlags; 'uses-recover' = $urFlags }
+$selfParsing = [ordered]@{ 'ask' = $askFlags; 'protocol' = $protoFlags; 'mcp-config' = $mcpCfgFlags; 'syntax-count' = $scFlags; 'uses-recover' = $urFlags; 'metrics' = $metFlags; 'sbom' = $sbFlags; 'happens-before' = $hbFlags }
 $f1v = New-Object System.Collections.Generic.List[string]
 foreach ($sv in $selfParsing.Keys) {
   $svBlock = New-Object System.Text.StringBuilder

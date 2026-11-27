@@ -14515,7 +14515,7 @@ begin
     GTaintStaleNoted:= True;
     Writeln(ErrOutput, 'taint: no data_flows rows for the routines in scope -- either the index was built ' +
       'before extractor 1.26.0 (re-index it) or none of them passes a value to a call or writes a ' +
-      'field; taint-sql-injection / taint-command-injection / taint-path-traversal have nothing to examine');
+      'field; the taint rules (taint-sql-injection / taint-command-injection / taint-path-traversal / taint-deserialization / taint-html-output / taint-log) have nothing to examine');
   end;
   if (GetEnvironmentVariable('DRAGLINT_DEBUG') <> '') or (GetEnvironmentVariable('DRAGLINT_PROFILE') <> '') then
     Writeln(ErrOutput, Stats.ToLine);

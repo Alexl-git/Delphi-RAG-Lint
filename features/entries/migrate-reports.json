@@ -1,0 +1,24 @@
+{
+  "id": "migrate-reports",
+  "title": "Migrate saved reports",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "Rewrites the old PowerShell-style COMMAND line of saved reports to the CLI style and lists every file it left alone, with the reason",
+  "intro": "Read this when saved compare reports still carry -Target / -Project. migrate-reports changes only the COMMAND line (--target, --project), is optional because compare reads both styles, and never treats a left-alone file as an error.",
+  "wikiPage": "migrate-reports",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "migrate-reports",
+      "example": "drag-lint migrate-reports <folder> --dry-run --json"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha"
+  }
+}

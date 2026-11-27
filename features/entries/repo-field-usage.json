@@ -5,8 +5,8 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.56.0-alpha",
-  "summary": "Tells for each field name whether the project index finds it in a DFM control, a grid column, a lookup or code; the Select Fields dialog of the IDE draws its usage icons from it",
-  "intro": "Read this when you want to know which fields of a table are really used before you edit, rename or drop them. drag-lint repo field-usage --fields \"ID,QTY\" --json answers from the project index, per field, with the places it is used: dfm, grid, lookup, code. A field nothing uses is left out. The IDE Select Fields dialog runs it to show the icons.",
+  "summary": "Tells per field name whether the project index finds it in a DFM control, a grid column, a lookup or code; the IDE Select Fields dialog uses it",
+  "intro": "Read this when you want to know which fields of a table are really used before you edit, rename or drop them. drag-lint repo field-usage --fields \"ID,QTY\" --json answers from the project index, per field, with the places it is used: dfm, grid, lookup, code. A field nothing uses is left out. The IDE Select Fields dialog runs it to show the icons. The Select Fields dialog shows the answer as a 16-icon strip in a Used in column (dfm, grid, lookup and code add up to one icon).",
   "wikiPage": "repo-field-usage",
   "surfaces": [
     {

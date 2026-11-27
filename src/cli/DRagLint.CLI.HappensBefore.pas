@@ -51,31 +51,6 @@ const
   VALUE_FLAGS = [hbfA, hbfB, hbfPreset, hbfDb, hbfMaxRoutines, hbfMaxSeconds, hbfOutputEncoding];
   USAGE_LINE = 'usage: drag-lint happens-before (--a <event> --b <event> | --preset <name>) --db <db> ' +
     '[--json] [--max-routines N] [--max-seconds S]';
-  { Printed for --help until DRagLint.CLI.HelpText carries the verb's block (INT merges it from the
-    lane's help text); the two must say the same. }
-  HELP_LINES: array[0..21] of string = (
-    'happens-before  has event A happened before event B, on every execution?   (read-only, on demand)',
-    '  drag-lint happens-before --a <event> --b <event> --db <db> [--json] [--max-routines N] [--max-seconds S]',
-    '  drag-lint happens-before --preset <name> --db <db> [--json]',
-    '  <event>:  write:<QName>   the writers of a unit variable, class var or instance field',
-    '            read:<QName>    its reads',
-    '            call:<QName>    the call sites the index resolves to that routine',
-    '            extcall:<Name>  the calls of a routine the index does not hold (RTL, a library), by name',
-    '            site:<file>:<line>[:<col>]   one source position',
-    '  --preset randomize        A = extcall:Randomize, B = extcall:Random',
-    '  Answers  YES  every site of B runs after A (proven)',
-    '           NO   a B runs with no A before it (proven): A has no site, or every A runs after a B',
-    '           MAY  not proven either way -- every doubt answers MAY, each judged site says why',
-    '  Proofs: same-routine, callee (a certain call of a routine that always performs A), callers (A before',
-    '  every call of B''s routine), check-init (write:T before read:T through the check-init solver).',
-    '  Reasons: a-never-happens, b-first, a-not-on-every-path, a-in-other-routine, a-site-uncertain,',
-    '  a-sites-incomplete, b-sites-incomplete, no-b-site, no-routine-body, budget.',
-    '  Limits: sites are not instances (instance-insensitive); extcall: matches by name (matched-by-name);',
-    '  order between initialization sections / the program block is proven for write: / read: pairs only.',
-    '  --max-routines N  routine bodies to solve (default 2000);  --max-seconds S  wall-clock cap (default 60, 0 = none)',
-    '  Exit: 0 = YES, 1 = NO or MAY, 2 = usage / unknown target / missing or stale --db, 3 = unknown flag.',
-    '  Example: drag-lint happens-before --a call:TConn.Open --b call:TConn.Exec --db App\_D-RAG\App.sqlite',
-    '  Example: drag-lint happens-before --preset randomize --db App\_D-RAG\App.sqlite --json');
 
 type
   { The parsed command line of one run. }
@@ -230,8 +205,7 @@ begin
   end;
   if Args.ShowHelp then
   begin
-    if not WriteVerbHelp(VERB_NAME) then
-      for var L in HELP_LINES do Writeln(L);
+    WriteVerbHelp(VERB_NAME);
     Exit(EXIT_OK);
   end;
   Error:= Validate(Args, Options);

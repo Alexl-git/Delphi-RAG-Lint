@@ -5,8 +5,8 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.52.0-alpha",
-  "summary": "Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent",
-  "intro": "Read this to see when member-could-be-private reports a public member, which members it never touches, and why component-create-without-override was refused in favour of hides-ancestor-virtual.",
+  "summary": "Hint (OFF) on a public member used only in its own unit, now proposing the tighter visibility; published, virtual, interface and attributed members stay silent",
+  "intro": "Read this to see when member-could-be-private reports a public member, which members it never touches, and why component-create-without-override was refused in favour of hides-ancestor-virtual. Also proposes tighter visibility (1.56): private to strict private, protected to strict protected or strict private, public to protected (descendant-only use); same rule id.",
   "wikiPage": "v152-atlb-rules",
   "surfaces": [
     {

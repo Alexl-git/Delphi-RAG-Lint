@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.56.0-alpha",
-  "summary": "Writes a CycloneDX 1.6 JSON software bill of materials for a project from its index: the application, one component per library its units reach, and their dependencies (v1: source closure, no MAP input)",
+  "summary": "Writes a CycloneDX 1.6 JSON software bill of materials for a project from its index: the application, its library components and their dependencies",
   "intro": "Read this when a customer, an auditor or the EU Cyber Resilience Act asks which third-party code your application contains. sbom reads the project index and the library index, groups every unit of the compile closure into components, and names each one from an editable library catalogue (supplier, version, licence, purl). A library the catalogue does not know is still listed, as 'unknown supplier'. v1 works from source only: what it cannot see (units linked from DCUs, packages, DLLs) is stated inside the document.",
   "wikiPage": "sbom",
   "surfaces": [

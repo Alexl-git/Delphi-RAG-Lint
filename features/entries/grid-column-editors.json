@@ -15,8 +15,8 @@
     }
   ],
   "audience": "both",
-  "aliases": ["PropertiesClassName", "Properties", "PROPERTIES_CLASS_NAME", "column editor", "in-place editor"],
-  "related": ["repo-read-dfm", "repo-write-dfm", "field-repository-handlers", "field-repository"],
+  "aliases": ["PROPERTIES_CLASS_NAME", "Properties", "PropertiesClassName", "column editor", "in-place editor"],
+  "related": ["field-repository", "field-repository-handlers", "repo-read-dfm", "repo-write-dfm"],
   "questions": [
     {
       "ask": "Which editor does each grid column of a form have, and how do I keep it in the field repository?",

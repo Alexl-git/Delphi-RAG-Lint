@@ -44,27 +44,7 @@
         }
       ],
       "helpOrder": 117,
-      "help": [
-        "  drag-lint happens-before     (--a <event> --b <event> | --preset <name>) --db <db> [--json] [--max-routines N] [--max-seconds S]",
-        "                               has event A happened before event B, on every execution? (read-only, on demand)",
-        "                               <event>: write:<QName> | read:<QName> (unit variable, class var, instance field), call:<QName> (the call sites",
-        "                               the index resolves to that routine), extcall:<Name> (calls of a routine the index does not hold, by name),",
-        "                               site:<file>:<line>[:<col>].",
-        "                               YES = every site of B runs after A (proven). NO = a B runs with no A before it (proven: A has no site, or",
-        "                               every site of A runs after a site of B). MAY = not proven either way; every doubt answers MAY and each",
-        "                               judged site carries a reason: a-not-on-every-path, a-in-other-routine, a-site-uncertain, a-sites-incomplete,",
-        "                               b-sites-incomplete, no-b-site, no-routine-body, budget (NO: a-never-happens, b-first).",
-        "                               Proofs: same-routine, callee (a certain call of a routine that always performs A), callers (A before every",
-        "                               call of B's routine), check-init (write:T before read:T through the check-init solver).",
-        "                               --preset randomize = --a extcall:Randomize --b extcall:Random.",
-        "                               Limits: sites are not instances (instance-insensitive); extcall: matches by name (matched-by-name); order",
-        "                               between initialization sections and the program block is proven for write: / read: pairs only.",
-        "                               --max-routines N = routine bodies to solve (default 2000); --max-seconds S = wall-clock cap (default 60, 0 = none).",
-        "                               json: verb, preset?, a / b {event, kind, name, complete, incomplete[], sites[{file, line, col, routine, definite, note}]},",
-        "                               verdict, proven, summary, reasons[], methods[], judged[{side, file, line, col, routine, proven, method, reason, why}],",
-        "                               limits[], budget{routines, ms, exhausted}.",
-        "                               Exit 0 = YES, 1 = NO or MAY, 2 = usage / unknown target / missing or stale --db, 3 = unknown flag."
-      ]
+      "help": ["  drag-lint happens-before     (--a <event> --b <event> | --preset <name>) --db <db> [--json] [--max-routines N] [--max-seconds S]", "                               has event A happened before event B, on every execution? (read-only, on demand)", "                               <event>: write:<QName> | read:<QName> (unit variable, class var, instance field), call:<QName> (the call sites", "                               the index resolves to that routine), extcall:<Name> (calls of a routine the index does not hold, by name),", "                               site:<file>:<line>[:<col>].", "                               YES = every site of B runs after A (proven). NO = a B runs with no A before it (proven: A has no site, or", "                               every site of A runs after a site of B). MAY = not proven either way; every doubt answers MAY and each", "                               judged site carries a reason: a-not-on-every-path, a-in-other-routine, a-site-uncertain, a-sites-incomplete,", "                               b-sites-incomplete, no-b-site, no-routine-body, budget (NO: a-never-happens, b-first).", "                               Proofs: same-routine, callee (a certain call of a routine that always performs A), callers (A before every", "                               call of B's routine), check-init (write:T before read:T through the check-init solver).", "                               --preset randomize = --a extcall:Randomize --b extcall:Random.", "                               Limits: sites are not instances (instance-insensitive); extcall: matches by name (matched-by-name); order", "                               between initialization sections and the program block is proven for write: / read: pairs only.", "                               --max-routines N = routine bodies to solve (default 2000); --max-seconds S = wall-clock cap (default 60, 0 = none).", "                               json: verb, preset?, a / b {event, kind, name, complete, incomplete[], sites[{file, line, col, routine, definite, note}]},", "                               verdict, proven, summary, reasons[], methods[], judged[{side, file, line, col, routine, proven, method, reason, why}],", "                               limits[], budget{routines, ms, exhausted}.", "                               Exit 0 = YES, 1 = NO or MAY, 2 = usage / unknown target / missing or stale --db, 3 = unknown flag."]
     }
   ],
   "audience": "both",

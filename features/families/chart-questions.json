@@ -40,11 +40,13 @@
     "cycles":           { "emitter": "charts\\src\\Emit-Cycles.ps1" },
     "consumers":        { "emitter": "charts\\src\\Emit-Consumers.ps1" },
     "shown-where":      { "emitter": "charts\\src\\Emit-ShownWhere.ps1" },
-    "class-diagram":    { "aliases": ["uml class diagram", "has-a links"] },
-    "sequence":         { "aliases": ["sequence diagram", "call sequence"] },
-    "dependency-matrix": { "aliases": ["uses matrix", "dsm", "unit dependency matrix"] },
-    "main-sequence":    { "aliases": ["abstractness", "instability", "zone of pain"] },
-    "control-flow":    { "aliases": ["flow graph", "basic blocks"] },
-    "sent-not-handled": { "aliases": ["unhandled commands", "commands never handled"] }
+    "value-origin":     { "wikiPage": "value-charts", "aliases": ["where does this value come from", "data flow in"] },
+    "value-use":        { "wikiPage": "value-charts", "aliases": ["where does this value go", "data flow out"] },
+    "class-diagram":    { "wikiPage": "ask-class-diagram", "aliases": ["uml class diagram", "has-a links"] },
+    "sequence":         { "wikiPage": "ask-sequence", "aliases": ["sequence diagram", "call sequence"] },
+    "dependency-matrix": { "wikiPage": "ask-dependency-matrix", "aliases": ["uses matrix", "dsm", "unit dependency matrix"] },
+    "main-sequence":    { "wikiPage": "ask-main-sequence", "aliases": ["abstractness", "instability", "zone of pain"] },
+    "control-flow":    { "wikiPage": "ask-control-flow", "aliases": ["flow graph", "basic blocks"] },
+    "sent-not-handled": { "wikiPage": "ask-sent-not-handled", "aliases": ["unhandled commands", "commands never handled"] }
   }
 }

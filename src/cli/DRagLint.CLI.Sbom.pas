@@ -732,8 +732,7 @@ begin
   end
   else if LOpts.ShowHelp then
   begin
-    if not WriteVerbHelp(CVerb) then
-      Writeln(CUsage);
+    WriteVerbHelp(CVerb);
     Result:= CExitOk;
   end
   else

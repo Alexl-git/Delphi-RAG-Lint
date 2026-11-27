@@ -115,9 +115,11 @@ Find symbols, callers, callees, text and types in the index.
 | [Go to Declaration](Go-to-Declaration) | Structure form: Go to Declaration |  |
 | [Go to Definition](Go-to-Definition) | drag-lint > Go to Definition |  |
 | [Go to Implementation](Go-to-Implementation) | Structure form: Go to Implementation |  |
+| [happens-before](happens-before) | `happens-before` |  |
 | [helpers-of](helpers-of) | `helpers-of`; drag-lint > Inspect Symbol > Helpers of Type... |  |
 | [Hover at Cursor](Hover-at-Cursor) | drag-lint > Hover at Cursor; `hover` |  |
 | [outline](outline) | `outline`; drag-lint > Show Structure |  |
+| [query --concept: captions, places and field links](caption-concepts) | `query` |  |
 | [query --concept](concept-search) | `query` |  |
 | [query --kind --all](query-kind-all) | `query` |  |
 | [query --name-like](query-name-like) | `query` |  |
@@ -143,11 +145,11 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**463 rules. 131 have an auto-fix. 374 are on by default.** 350 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**478 rules. 131 have an auto-fix. 385 are on by default.** 366 are built-in checks; 112 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 169 | 40 |
+| bug-patterns | 177 | 40 |
 | complexity | 15 | 2 |
 | data-flow | 13 | 3 |
 | dead-code | 23 | 15 |
@@ -159,13 +161,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | other | 17 | 4 |
 | platform | 16 | 4 |
 | policy | 6 | - |
-| project-wide | 58 | 9 |
-| refactoring | 30 | 11 |
-| resource-lifetime | 22 | 9 |
+| project-wide | 59 | 9 |
+| refactoring | 31 | 11 |
+| resource-lifetime | 24 | 9 |
 | review-markers | 6 | 2 |
-| security | 28 | 2 |
+| security | 31 | 2 |
 | structure | 20 | 9 |
-| **Total** | **463** | **131** |
+| **Total** | **478** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -210,16 +212,22 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Initialization reaching a unit that initializes later (lint rule)](init-order-hazard) | `lint-all` |  |
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
+| [Lint only what changed since a revision](lint-changed-since) | `lint-all` |  |
+| [Lint rule for calls that never return (noreturn)](v156-noreturn-contract) | `lint` |  |
 | [Lint rules for form files: tab order, accelerators, shortcuts, actions, hints](v154-dfm-form-rules) | `lint` |  |
 | [Lint rules for repeated, impossible and misleading expressions and source text](v154-expr-rules) | `lint` |  |
 | [Lint rules for results, parameters, nested addresses and overlays](v154-flow-rules) | `lint` |  |
+| [Lint rules for unfreed container items and unowned instances](v156-mem-rules) | `lint`; `lint`; `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
 | [Lint rules schema-unknown-column, -type-mismatch and -required-not-set](v154-schema-rules) | `lint-all` |  |
 | [Lint rules sql-param-mismatch and query-in-loop](v154-sql-rules) | `lint` |  |
 | [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
-| [Lint rules](rules) | 463 rules, 131 fixable; `rules` |  |
+| [Lint rules: ambiguous uses, narrowing assignments, open abstracts, dead handlers](v156-oo-a-rules) | `lint`; `lint-all`; `lint-all`; `lint-all` |  |
+| [Lint rules: class and literal hygiene (locals, literals, DUnitX, Variant loops)](v156-oob-rules) | `lint-all`; `lint`; `lint`; `lint` |  |
+| [Lint rules](rules) | 478 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
+| [Lock order inversion rule](v156-lock-order-rule) | `lint-all` |  |
 | [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |
 | [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](memory-string-pointer-rules) | `lint-all` |  |
 | [Object-model lint rules (Equals/hash, events, GUIDs, exports)](object-model-rules) | `lint-all` |  |
@@ -241,7 +249,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Schema-aware lint (lint rules)](schema-lint) | `lint-all` |  |
 | [Stream buffer used after free (lint rule)](stream-buffer-after-free) | `lint-all` |  |
 | [Style, loop and ordering rules](v151-style-loop-rules) | `lint` |  |
-| [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
+| [Taint analysis (SQL, command, path, deserialization, HTML, log)](taint-analysis) | `lint-all` |  |
 | [Target compiler (--target-compiler)](target-compiler) | `lint`; `lint-all`; `rules`; `index`; `lsp workspace/executeCommand`; drag-lint > Code Quality > Run Lint All (Full Report)... |  |
 | [Text rules: bidi, invisible, control chars, TODO, header, strings](text-rules) | `lint-all` |  |
 | [Third-party code in a project lint-all](v154-own-filter) | `lint-all` |  |
@@ -325,6 +333,7 @@ Rule-driven migration of legacy component types.
 | [Curate rule books](convrules-editor-curate) | `ConvRulesEditor.exe` (File > Curate...) |  |
 | [Examine: mark the properties a form uses](convrules-editor-examine) | `ConvRulesEditor.exe` (Conversion > Examine...); `ConvRulesEditor.exe` (Conversion > Clear marks) |  |
 | [Glyph expressions (G[I/N])](convrules-editor-glyph) | `ConvRulesEditor.exe` (Mapping > Glyph expression...) |  |
+| [Glyph strip stitching](convert-glyph-stitch) | procedure: `docs\wiki\convert-glyph-stitch.md` |  |
 | [glyph-vacuum](glyph-vacuum) | `glyph-vacuum` |  |
 | [Inherited units, ancestors first](convrules-editor-inherited-units) | `ConvRulesEditor.exe` (Convert tab > Add... (offers ancestors root first)) |  |
 | [Member migration (#migrate)](convrules-editor-migrate) | `ConvRulesEditor.exe` (Work list tab > Migrate...); `ConvRulesEditor.exe` (Classes tab > Members list > Add...) |  |
@@ -361,9 +370,12 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Forms for testers (CSV)](Generate-Test-Helper-CSV) | drag-lint > Reports > Forms for testers (CSV)...; `forms-csv` |  |
 | [Impact / Blast Radius (symbol)](Impact-Blast-Radius-symbol) | drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...; `impact` |  |
 | [Interface Implementors Report](interface-implementors) | `implementors`; `query implementors`; `mcp get_implementors`; `lsp textDocument/implementation`; `lsp textDocument/codeLens` |  |
+| [metrics](metrics) | `metrics` |  |
+| [Migrate saved reports](migrate-reports) | `migrate-reports` |  |
 | [Overview (first-turn summary)](Overview-first-turn) | `overview` |  |
 | [Reverse Call Tree (clickable, Messages window)](Reverse-Call-Tree-clickable-Messages-window) | `reverse-calltree`; drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... |  |
 | [Reverse Call Tree (who calls this, N-deep)](Reverse-Call-Tree-who-calls-this-N-deep) | drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...; `reverse-calltree` |  |
+| [sbom](sbom) | `sbom` |  |
 | [Scan TODOs / FIXMEs](Scan-TODOs-FIXMEs) | drag-lint > Code Quality > Scan TODOs / FIXMEs...; `todos` |  |
 | [Show in Call Graph](Show-in-Call-Graph) | Structure form: Show in Call Graph; `reverse-calltree` |  |
 | [Show Wiring (Spring4D DI + DFM events)](Show-Wiring-Spring4D-DI-DFM-events) | drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...; `wiring` |  |
@@ -377,7 +389,7 @@ Ask a question about a symbol and get a clickable chart.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [ask](ask) | `ask`; drag-lint > Reports |  |
-| [Chart questions](Diagrams-and-Charts) | 27 questions; `ask`; drag-lint > Reports |  |
+| [Chart questions](Diagrams-and-Charts) | 35 questions; `ask`; drag-lint > Reports |  |
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md`; drag-lint > Reports |  |
 | [Click-to-source: the draglint:// handler](Draglint-Protocol-Handler) | `protocol`; `drag-lint-open.exe` |  |
 | [Compare a report with current code](compare) | `compare`; drag-lint > Reports > Compare a Saved Report or Chart with Current Code... |  |
@@ -458,6 +470,8 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [ambiguous-calls](ambiguous-calls) | `ambiguous-calls` |  |
 | [bench-context](bench-context) | `bench-context` |  |
 | [contrast-selftest](Maintenance) | `contrast-selftest` | internal |
+| [Copy events and columns between grid views](repo-copy-grid) | `repo copy-grid` |  |
+| [Datasets of an inherited form or data module](repo-read-dfm-ancestor) | `repo read-dfm` |  |
 | [diff](diff) | `diff` |  |
 | [doc-facts-selftest](Maintenance) | `doc-facts-selftest` | internal |
 | [dump-call-edges](dump-call-edges) | `dump-call-edges` |  |
@@ -467,9 +481,12 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](dump-refs) | `dump-refs` |  |
 | [Feature registry](Feature-Registry) | `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [featuregen](featuregen) | `featuregen.exe`; `build\_build_featuregen_local.bat builds featuregen.exe from this checkout`; `tools\featuregen-gate.ps1 -Repo -Full`; procedure: `docs\wiki\featuregen.md` | internal |
+| [Field repository backup formats: text, SQL, zip](repo-backup-formats) | `repo backup`; `repo restore` |  |
+| [Field repository wiki pages](repo-gen-wiki) | `repo` |  |
 | [Field repository: fields of a form in the IDE](field-repository-forms) | drag-lint > Field Repository > Read Fields from Dataset...; drag-lint > Field Repository > Read Fields of All Datasets of Form...; drag-lint > Field Repository > Select Fields of Dataset...; drag-lint > Field Repository > Copy Grid Columns... |  |
 | [Field repository: generated handlers](field-repository-handlers) | `repo gen-handlers`; `repo gen-maxlen`; `repo renumber-regions` |  |
 | [Field repository](field-repository) | `dl-field-repo.exe`; `dl-field-repo-std.exe`; `repo init`; `repo info`; `repo import-fb`; `repo seed-fb`; `repo refresh-schema`; `repo backup`; `repo restore`; `repo gen-memtable`; `repo gen-param-array`; `repo gen-orm`; `repo update-orm`; `repo upgrade-orm-headers`; `repo gen-dataservice`; `repo migrate`; `repo check`; `repo paths`; `repo gen-const`; `repo check-const`; drag-lint > Field Repository > Open Field Repository Editor...; drag-lint > Field Repository > Refresh Schema from Database...; drag-lint > Field Repository > FDMemTable from CSV...; drag-lint > Field Repository > Generate / Update ORM Source...; drag-lint > Field Repository > Generate DataService Units...; drag-lint > Field Repository > Param Array Assistant...; `repo` |  |
+| [Grid column editors in the field repository](grid-column-editors) | procedure: `docs\wiki\grid-column-editors.md` |  |
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
@@ -484,6 +501,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [stop-now](Features) | `stop-now` |  |
 | [test-store-freshness](Maintenance) | `test-store-freshness` | internal |
 | [Verified database backups and their purge](repo-db-backup) | `repo backup` |  |
+| [Where a field is used](repo-field-usage) | `repo field-usage` |  |
 | [Write the field repository into a form](repo-write-dfm) | `repo write-dfm` |  |
 
 ## Uses and Dependencies

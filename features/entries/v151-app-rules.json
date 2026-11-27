@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.51.0-alpha",
   "summary": "Whole-program lint rules: TLS checks off, UI calls in console/service apps, DUnitX tests without asserts, weak ciphers, asm without Win64, GUI WriteLn",
-  "intro": "Read this to see what each application-level rule reports, which ship ON or OFF, and how the checks avoid the common false positives (writeln-in-gui-app and ui-call-in-console-or-service ask the program: its .dpr directives and .dproj DCC_ConsoleTarget decide console or GUI).",
+  "intro": "Read this to see what each application-level rule reports, which ship ON or OFF, and how the checks avoid the common false positives (writeln-in-gui-app and ui-call-in-console-or-service ask the program: its .dpr directives and .dproj DCC_ConsoleTarget decide console or GUI). Since 1.56 ui-call-in-console-or-service also follows methods across units, by resolved call edges, from a console program main block or a TService descendant method (8 hops, cycle-guarded) and names the chain in the message; it needs an index (lint-all).",
   "wikiPage": "application-level-rules",
   "surfaces": [
     {

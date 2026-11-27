@@ -5,8 +5,8 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.37.0-alpha",
-  "summary": "taint-sql-injection, taint-command-injection taint-path-traversal, taint-deserialization, taint-html-output and taint-log follow index data_flows facts from a source to a sink",
-  "intro": "Read this when you want to find tainted values reaching a SQL, command or file-path sink across routines and units. The rules run in lint-all and in lint with a store; the catalogues of sources, sinks and propagators are editable JSON.",
+  "summary": "Six taint rules (SQL, command, path, deserialization, HTML, log) follow index data_flows facts from a source to a sink",
+  "intro": "Read this when you want to find tainted values reaching a SQL, command or file-path sink across routines and units. The rules run in lint-all and in lint with a store; the catalogues of sources, sinks and propagators are editable JSON. Since 1.56 the deserialization, HTML-output and log rules are built in, and a value flowing through the else part of an except block is followed (wiki section Taint through exceptions).",
   "wikiPage": "taint-analysis",
   "surfaces": [
     {

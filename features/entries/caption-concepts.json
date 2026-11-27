@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.56.0-alpha",
   "summary": "Find a database field by its screen caption; every hit says which place it came from and where the field is shown, edited and used",
-  "intro": "Read this when you know what the screen calls a field but not its table or column. query --concept searches the project index, the copy of the field repository inside it and the library index, ranks exact caption words above fuzzy identifier matches, and lists the persistent fields, grid columns, edit controls, forms and code of each field.",
+  "intro": "Read this when you know what the screen calls a field but not its table or column. query --concept searches the project index, the copy of the field repository inside it and the library index, ranks exact caption words above fuzzy identifier matches, and lists the persistent fields, grid columns, edit controls, forms and code of each field. query (exact and fuzzy), query --text and find-unit take --place too and end each row with `place=<p>`.",
   "wikiPage": "caption-concepts",
   "surfaces": [
     {
@@ -46,7 +46,7 @@
   ],
   "audience": "both",
   "requires": ["index"],
-  "pitfalls": ["the repository is searched through the copy made by index --project; a changed repository file prints a stale note until the next index run.", "by name only = a FieldByName literal whose dataset has no known table; it is listed under every table that has a field of that name and never raises a rank.", "the library place is the resolved database named library-*.sqlite; --place project,repository skips it.", "no stemming in captions: name does not find names."],
+  "pitfalls": ["the repository is searched through the copy made by index --project; a changed repository file prints a stale note until the next index run.", "by name only = a FieldByName literal whose dataset has no known table; it is listed under every table that has a field of that name and never raises a rank.", "the library place is the resolved database named library-*.sqlite; --place project,repository skips it.", "no stemming in captions: name does not find names.", "a directory-scan index (`index <dir>`) has no project file and no repository copy: query --concept says \"repository: not copied (this index was made by a directory scan and has no project file)\" and places[].state stays not-copied-yet; run `index --project <X.dproj>`.", "`place=<p>` is appended to a symbol or find-unit line, so a consumer that anchors on the end of the line (the [impl-only] or forward-at-line suffix) must allow it."],
   "questions": [
     {
       "ask": "Which field does the screen call \"customer name\"?",

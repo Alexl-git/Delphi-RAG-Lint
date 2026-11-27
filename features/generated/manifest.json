@@ -1109,7 +1109,7 @@
       "status": "shipped",
       "since": "1.52.0-alpha",
       "summary": "Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET)",
-      "intro": "Ask it before adding an Assigned guard or reordering initialization: it names the writers of a unit variable, class var or field and says whether one of them runs before the use on every path, with the reason code and the witness when it cannot prove it. Exit 0 = all SET, 1 = some MAY-BE-UNSET or NEVER-SET, 2 = error.",
+      "intro": "Ask it before adding an Assigned guard or reordering initialization: it names the writers of a unit variable, class var or field and says whether one of them runs before the use on every path, with the reason code and the witness when it cannot prove it. Exit 0 = all SET, 1 = some MAY-BE-UNSET or NEVER-SET, 2 = error. Since 1.56 it reads the index indirect-call edges: a routine only named as a callback, procedural variable or event of a project class is judged at the call sites of its slot, and such a SET carries the reason code relied-on-indirect-edges.",
       "wikiPage": "check-init",
       "surfaces": [
         {
@@ -1957,6 +1957,77 @@
       }
     },
     {
+      "id": "happens-before",
+      "title": "happens-before",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Answers whether one event (a write, a read, a call, a source line) has happened before another on every execution: YES, NO or MAY",
+      "intro": "Ask it when the order of two things matters and you want a proof, not a guess: is the connection opened before every query, is the flag written before it is read, is Randomize called before Random. It reads the index, names every site of both events and answers YES or NO only when it can prove it; everything else is MAY, with the reason per site. Exit 0 = YES, 1 = NO or MAY, 2 = error.",
+      "wikiPage": "happens-before",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "happens-before",
+          "example": "drag-lint happens-before --a call:TConn.Open --b call:TConn.Exec --db <db>",
+          "usage": "drag-lint happens-before (--a <event> --b <event> | --preset <name>) --db <db> [--json] [--max-routines N] [--max-seconds S]",
+          "flags": [
+            {
+              "name": "--a",
+              "arg": "<event>"
+            },
+            {
+              "name": "--b",
+              "arg": "<event>"
+            },
+            {
+              "name": "--preset",
+              "arg": "<name>"
+            },
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--max-routines",
+              "arg": "N"
+            },
+            {
+              "name": "--max-seconds",
+              "arg": "S"
+            }
+          ],
+          "helpOrder": 117,
+          "help": ["  drag-lint happens-before     (--a <event> --b <event> | --preset <name>) --db <db> [--json] [--max-routines N] [--max-seconds S]", "                               has event A happened before event B, on every execution? (read-only, on demand)", "                               <event>: write:<QName> | read:<QName> (unit variable, class var, instance field), call:<QName> (the call sites", "                               the index resolves to that routine), extcall:<Name> (calls of a routine the index does not hold, by name),", "                               site:<file>:<line>[:<col>].", "                               YES = every site of B runs after A (proven). NO = a B runs with no A before it (proven: A has no site, or", "                               every site of A runs after a site of B). MAY = not proven either way; every doubt answers MAY and each", "                               judged site carries a reason: a-not-on-every-path, a-in-other-routine, a-site-uncertain, a-sites-incomplete,", "                               b-sites-incomplete, no-b-site, no-routine-body, budget (NO: a-never-happens, b-first).", "                               Proofs: same-routine, callee (a certain call of a routine that always performs A), callers (A before every", "                               call of B's routine), check-init (write:T before read:T through the check-init solver).", "                               --preset randomize = --a extcall:Randomize --b extcall:Random.", "                               Limits: sites are not instances (instance-insensitive); extcall: matches by name (matched-by-name); order", "                               between initialization sections and the program block is proven for write: / read: pairs only.", "                               --max-routines N = routine bodies to solve (default 2000); --max-seconds S = wall-clock cap (default 60, 0 = none).", "                               json: verb, preset?, a / b {event, kind, name, complete, incomplete[], sites[{file, line, col, routine, definite, note}]},", "                               verdict, proven, summary, reasons[], methods[], judged[{side, file, line, col, routine, proven, method, reason, why}],", "                               limits[], budget{routines, ms, exhausted}.", "                               Exit 0 = YES, 1 = NO or MAY, 2 = usage / unknown target / missing or stale --db, 3 = unknown flag."]
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "Is Open always called before Exec?",
+          "command": "drag-lint happens-before --a call:TConn.Open --b call:TConn.Exec --db <db>"
+        },
+        {
+          "ask": "Is this flag written before it is read, on every execution?",
+          "command": "drag-lint happens-before --a write:Unit.GFlag --b read:Unit.GFlag --db <db>"
+        },
+        {
+          "ask": "Does this line always run before that line?",
+          "command": "drag-lint happens-before --a site:<file>:<line> --b site:<file>:<line> --db <db> --json"
+        },
+        {
+          "ask": "Is Randomize called before every Random?",
+          "command": "drag-lint happens-before --preset randomize --db <db>"
+        }
+      ],
+      "notes": "Shipped 1.56 (lane HB4, gap G-56; spec docs\\superpowers\\specs\\2026-11-17-happens-before-design.md sec. 2.4). Units src\\query\\DRagLint.Query.HappensBefore.Verb.pas and src\\cli\\DRagLint.CLI.HappensBefore.pas; guard tests\\autotest\\run_v156_HB4.ps1. Built preset: randomize. Not built: use-after-free, lock-held-when, format-settings, before-app-run, finalization (they need a may-reach analysis or the solver's ordered roots for call / site events)."
+    },
+    {
       "id": "helpers-of",
       "title": "helpers-of",
       "group": "search-navigation",
@@ -2142,25 +2213,33 @@
       }
     },
     {
-      "id": "concept-search",
-      "title": "query --concept",
+      "id": "caption-concepts",
+      "title": "query --concept: captions, places and field links",
       "group": "search-navigation",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.38.0-alpha",
-      "summary": "Ranked BM25 concept search over identifier words and doc-comment prose",
-      "intro": "Read this when you know what the code does but not what it is called. It ranks symbols by how well their camelCase-split name and their doc-comment summary and remarks match your words, best first, with no re-parse needed to enable it.",
-      "wikiPage": "concept-search",
+      "since": "1.56.0-alpha",
+      "summary": "Find a database field by its screen caption; every hit says which place it came from and where the field is shown, edited and used",
+      "intro": "Read this when you know what the screen calls a field but not its table or column. query --concept searches the project index, the copy of the field repository inside it and the library index, ranks exact caption words above fuzzy identifier matches, and lists the persistent fields, grid columns, edit controls, forms and code of each field. query (exact and fuzzy), query --text and find-unit take --place too and end each row with `place=<p>`.",
+      "wikiPage": "caption-concepts",
       "surfaces": [
         {
           "type": "cli",
           "verb": "query",
-          "example": "drag-lint query --concept \"apply row changes\" --db <db>",
-          "usage": "drag-lint query --concept \"<words>\" [--limit N] [--kind k,...] [--json] --db <db>",
+          "example": "drag-lint query --concept \"customer name\" --db <db>",
+          "usage": "drag-lint query --concept \"<words>\" [--place library,project,repository] [--links N] [--limit N] [--kind k,...] [--json] --db <db>",
           "flags": [
             {
               "name": "--concept",
               "arg": "<words>"
+            },
+            {
+              "name": "--place",
+              "arg": "<list>"
+            },
+            {
+              "name": "--links",
+              "arg": "N"
             },
             {
               "name": "--limit",
@@ -2181,7 +2260,75 @@
       ],
       "audience": "both",
       "requires": ["index"],
-      "pitfalls": ["approximate matched column: first 5 letters of a word stand in for porter stemming.", "no synonyms and no embeddings: remove does not find delete.", "exit 3 = this index has no concept-search table yet; run index once (backfills from existing rows, no re-parse)."],
+      "pitfalls": ["the repository is searched through the copy made by index --project; a changed repository file prints a stale note until the next index run.", "by name only = a FieldByName literal whose dataset has no known table; it is listed under every table that has a field of that name and never raises a rank.", "the library place is the resolved database named library-*.sqlite; --place project,repository skips it.", "no stemming in captions: name does not find names.", "a directory-scan index (`index <dir>`) has no project file and no repository copy: query --concept says \"repository: not copied (this index was made by a directory scan and has no project file)\" and places[].state stays not-copied-yet; run `index --project <X.dproj>`.", "`place=<p>` is appended to a symbol or find-unit line, so a consumer that anchors on the end of the line (the [impl-only] or forward-at-line suffix) must allow it."],
+      "questions": [
+        {
+          "ask": "Which field does the screen call \"customer name\"?",
+          "command": "drag-lint query --concept \"customer name\" --db <db>"
+        },
+        {
+          "ask": "Where is a field shown, edited and used in code?",
+          "command": "drag-lint query --concept \"<caption words>\" --kind repo-field --links 20 --db <db>"
+        },
+        {
+          "ask": "How do I search only the field repository?",
+          "command": "drag-lint query --concept \"<words>\" --place repository --db <db>"
+        },
+        {
+          "ask": "Which place did a hit come from?",
+          "command": "drag-lint query --concept \"<words>\" --json --db <db>"
+        }
+      ]
+    },
+    {
+      "id": "concept-search",
+      "title": "query --concept",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.38.0-alpha",
+      "summary": "Ranked BM25 concept search over identifiers, doc-comment prose and (1.56) field captions, in the project, its repository copy and the library",
+      "intro": "Read this when you know what the code does but not what it is called. It ranks symbols by how well their camelCase-split name and their doc-comment summary and remarks match your words, best first, with no re-parse needed to enable it. Since 1.56 it also searches three places (project, repository copy, library), says which place each hit came from (place, tier) and finds fields by their screen caption; see caption-concepts.",
+      "wikiPage": "concept-search",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query",
+          "example": "drag-lint query --concept \"apply row changes\" --db <db>",
+          "usage": "drag-lint query --concept \"<words>\" [--place library,project,repository] [--links N] [--limit N] [--kind k,...] [--json] --db <db>",
+          "flags": [
+            {
+              "name": "--concept",
+              "arg": "<words>"
+            },
+            {
+              "name": "--limit",
+              "arg": "N"
+            },
+            {
+              "name": "--place",
+              "arg": "<library,project,repository>"
+            },
+            {
+              "name": "--links",
+              "arg": "N"
+            },
+            {
+              "name": "--kind",
+              "arg": "<k,...>"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--db"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "pitfalls": ["approximate matched column: first 5 letters of a word stand in for porter stemming.", "no synonyms and no embeddings: remove does not find delete.", "exit 3 = this index has no concept-search table yet; run index once (backfills from existing rows, no re-parse).", "a project index made before 1.56 prints \"repository: not copied yet (index made before 1.56); run: ...\"; a directory-scan index prints \"repository: not copied (this index was made by a directory scan and has no project file); repository hits need a project index: `drag-lint index --project <X.dproj>`\"."],
       "questions": [
         {
           "ask": "Which code does something like this, when I do not know the name?",
@@ -2194,6 +2341,10 @@
         {
           "ask": "What does exit code 3 mean?",
           "command": "drag-lint index --project <X.dproj> --db <db>"
+        },
+        {
+          "ask": "Which field has this screen caption?",
+          "command": "drag-lint query --concept \"<caption words>\" --place repository --db <db>"
         }
       ],
       "verified": {
@@ -3337,7 +3488,7 @@
       "status": "shipped",
       "since": "1.51.0-alpha",
       "summary": "Whole-program lint rules: TLS checks off, UI calls in console/service apps, DUnitX tests without asserts, weak ciphers, asm without Win64, GUI WriteLn",
-      "intro": "Read this to see what each application-level rule reports, which ship ON or OFF, and how the checks avoid the common false positives (writeln-in-gui-app and ui-call-in-console-or-service ask the program: its .dpr directives and .dproj DCC_ConsoleTarget decide console or GUI).",
+      "intro": "Read this to see what each application-level rule reports, which ship ON or OFF, and how the checks avoid the common false positives (writeln-in-gui-app and ui-call-in-console-or-service ask the program: its .dpr directives and .dproj DCC_ConsoleTarget decide console or GUI). Since 1.56 ui-call-in-console-or-service also follows methods across units, by resolved call edges, from a console program main block or a TService descendant method (8 hops, cycle-guarded) and names the chain in the message; it needs an index (lint-all).",
       "wikiPage": "application-level-rules",
       "surfaces": [
         {
@@ -5186,6 +5337,44 @@
       }
     },
     {
+      "id": "lint-changed-since",
+      "title": "Lint only what changed since a revision",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "`lint-all --changed-since <rev>` keeps the findings on lines changed since a git or hg revision; unknown revision or no working copy is refused with exit 2",
+      "intro": "Read this when a lint gate should judge only new work. The whole project is linted, then the report, the exit code and the baseline see only findings on lines that changed since the revision you name, in a git or a Mercurial working copy. The engine refuses with the reason instead of guessing.",
+      "wikiPage": "lint-changed-since",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <db> --changed-since <rev>"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "v156-noreturn-contract",
+      "title": "Lint rule for calls that never return (noreturn)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "One rule on the stored noreturn fact: code after a call that never comes back, and a routine that never returns but is not declared noreturn",
+      "intro": "Read this to see what noreturn-contract reports, what it leaves to the compiler (W1080, E2037, E2211) and how the flow graph reads the noreturn fact of the index.",
+      "wikiPage": "v156-noreturn-contract",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule noreturn-contract --db <index.sqlite>"
+        }
+      ],
+      "audience": "both"
+    },
+    {
       "id": "v154-dfm-form-rules",
       "title": "Lint rules for form files: tab order, accelerators, shortcuts, actions, hints",
       "group": "linting",
@@ -5259,6 +5448,35 @@
         "build": "1.54.0-alpha",
         "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
       }
+    },
+    {
+      "id": "v156-mem-rules",
+      "title": "Lint rules for unfreed container items and unowned instances",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Three rules: new objects in a container that does not own them, a new instance passed to a routine that only reads it, a class instance passed as an interface",
+      "intro": "Read this to see what each of the three rules reports, when it stays silent, and which two you have to turn on.",
+      "wikiPage": "v156-mem-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule container-items-leak --db <index.sqlite>"
+        },
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule fresh-instance-as-argument --db <index.sqlite>"
+        },
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule class-passed-as-interface --db <index.sqlite>"
+        }
+      ],
+      "audience": "both"
     },
     {
       "id": "ref-type-rules",
@@ -5358,6 +5576,80 @@
         "by": "alexanderl",
         "build": "1.51.1-alpha"
       }
+    },
+    {
+      "id": "v156-oo-a-rules",
+      "title": "Lint rules: ambiguous uses, narrowing assignments, open abstracts, dead handlers",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Warns about a name two used units declare, a wide integer assigned to a narrow one, an open abstract method, a handler for an exception nothing raises",
+      "intro": "Read this to see what each of the four object-model rules reports, what it leaves alone and how to turn it off.",
+      "wikiPage": "v156-oo-a-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --db <project.sqlite> --rule assignment-narrows"
+        },
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule ambiguous-unit-reference"
+        },
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule abstract-method-not-overridden"
+        },
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule handler-type-never-raised"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-26",
+        "by": "ENGINE",
+        "build": "1.56.0-alpha",
+        "surfaceHash": "pending"
+      }
+    },
+    {
+      "id": "v156-oob-rules",
+      "title": "Lint rules: class and literal hygiene (locals, literals, DUnitX, Variant loops)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Finds private fields that could be locals, string literals typed five or more times, DUnitX attribute mistakes and Variant use inside loops",
+      "intro": "Read this to see what each of the four OO-B rules reports, which of them are off by default and what each leaves alone.",
+      "wikiPage": "v156-oob-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule repeated-string-literal"
+        },
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule field-could-be-local"
+        },
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule dunitx-attribute-hygiene"
+        },
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule variant-in-loop"
+        }
+      ],
+      "audience": "both"
     },
     {
       "id": "lint-rules",
@@ -5572,14 +5864,33 @@
       }
     },
     {
+      "id": "v156-lock-order-rule",
+      "title": "Lock order inversion rule",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "One project-wide lint rule: two places take the same two locks in opposite order, directly or through a called routine, so two threads can deadlock",
+      "intro": "Read this when a threaded program hangs with no exception and no log, or before you add a second lock to a class. Run `drag-lint lint-all --db <project.sqlite> --rule lock-order-inversion`; the rule reads the project index, so it sees both places even when they are in different units. It is ON by default.",
+      "wikiPage": "v156-lock-order-rule",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule lock-order-inversion"
+        }
+      ],
+      "audience": "both"
+    },
+    {
       "id": "v152-atlb-rules",
       "title": "member-could-be-private lint rule (lane ATLB)",
       "group": "linting",
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.52.0-alpha",
-      "summary": "Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent",
-      "intro": "Read this to see when member-could-be-private reports a public member, which members it never touches, and why component-create-without-override was refused in favour of hides-ancestor-virtual.",
+      "summary": "Hint (OFF) on a public member used only in its own unit, now proposing the tighter visibility; published, virtual, interface and attributed members stay silent",
+      "intro": "Read this to see when member-could-be-private reports a public member, which members it never touches, and why component-create-without-override was refused in favour of hides-ancestor-virtual. Also proposes tighter visibility (1.56): private to strict private, protected to strict protected or strict private, public to protected (descendant-only use); same rule id.",
       "wikiPage": "v152-atlb-rules",
       "surfaces": [
         {
@@ -6386,13 +6697,13 @@
     },
     {
       "id": "taint-analysis",
-      "title": "Taint analysis (SQL, command, path)",
+      "title": "Taint analysis (SQL, command, path, deserialization, HTML, log)",
       "group": "linting",
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.37.0-alpha",
-      "summary": "taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink",
-      "intro": "Read this when you want to find tainted values reaching a SQL, command or file-path sink across routines and units. The rules run in lint-all and in lint with a store; the catalogues of sources, sinks and propagators are editable JSON.",
+      "summary": "Six taint rules (SQL, command, path, deserialization, HTML, log) follow index data_flows facts from a source to a sink",
+      "intro": "Read this when you want to find tainted values reaching a SQL, command or file-path sink across routines and units. The rules run in lint-all and in lint with a store; the catalogues of sources, sinks and propagators are editable JSON. Since 1.56 the deserialization, HTML-output and log rules are built in, and a value flowing through the else part of an except block is followed (wiki section Taint through exceptions).",
       "wikiPage": "taint-analysis",
       "surfaces": [
         {
@@ -10075,6 +10386,41 @@
       }
     },
     {
+      "id": "convert-glyph-stitch",
+      "title": "Glyph strip stitching",
+      "group": "component-conversion",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "convert-apply and convert-validate --glyph-stitch slices and stitches a TBitmap glyph strip per a book G[I/N] expressions; info capability glyph_stitch",
+      "intro": "Convert a form whose images are glyph strips: add --glyph-stitch and the G[I/N] links of the book are realised on the .dfm surface instead of refused.",
+      "wikiPage": "convert-glyph-stitch",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\convert-glyph-stitch.md"
+        }
+      ],
+      "audience": "both",
+      "aliases": ["--glyph-stitch", "G[I/N]", "glyph_stitch"],
+      "related": ["convert-apply", "convert-validate", "convrules-glyph"],
+      "questions": [
+        {
+          "ask": "Convert a form whose images are glyph strips",
+          "command": "drag-lint convert-apply --unit <F.pas> --rules <book.rules> --db <file.sqlite> --castlib <casts> --glyph-stitch --apply"
+        },
+        {
+          "ask": "Does the book have a glyph link the engine cannot read the slot count of?",
+          "command": "drag-lint convert-validate --rules <book.rules> --glyph-stitch --db <file.sqlite>"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-11-26",
+        "by": "ENGINE"
+      }
+    },
+    {
       "id": "glyph-vacuum",
       "title": "glyph-vacuum",
       "group": "component-conversion",
@@ -11877,6 +12223,97 @@
       }
     },
     {
+      "id": "metrics",
+      "title": "metrics",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Size and complexity rows from the index per routine, class, unit and folder, repeated parameter groups, single implementors, and a saved trend",
+      "intro": "Read this when you want numbers about a codebase instead of findings: where the complexity sits, how big each unit and folder is, how coupled they are, which parameter lists repeat and which interfaces have a single implementor. Every number is read from the index; nothing is estimated, and --save / --trend show how the numbers moved between two index runs.",
+      "wikiPage": "metrics",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "metrics",
+          "usage": "drag-lint metrics --db <file.sqlite> [--level routine,class,unit,folder|all] [--in <path prefix>] [--top <n>] [--save] [--trend] [--json]",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--level",
+              "arg": "routine,class,unit,folder|all"
+            },
+            {
+              "name": "--in",
+              "arg": "<path prefix>"
+            },
+            {
+              "name": "--top",
+              "arg": "<n>"
+            },
+            {
+              "name": "--save"
+            },
+            {
+              "name": "--trend"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "helpOrder": 115,
+          "help": ["  drag-lint metrics            --db <db> [--level routine,class,unit,folder|all] [--in <path prefix>] [--top <n>] [--save] [--trend] [--json]", "                               size and complexity rows from the index (read-only): a total, then folders, units, classes and", "                               routines with cyclomatic (sum / max), routines, body_loc, lines, comment lines, params, fan_in, fan_out.", "                               fan: routine = distinct callers / callees; class = heirs in the index / declared ancestors;", "                               unit = units using it / units it uses; folder = the same across the folder boundary.", "                               A folder row covers the units directly in it. Nothing is estimated: a routine without stored facts has no row.", "                               Then two sections: repeated parameter groups (3+ parameters shared by 3+ differently named routines)", "                               and one implementor / one descendant (interfaces and classes with exactly one heir inside this index).", "                               Text shows the --top rows (default 20, 0 = all) with the highest cyclomatic value; --json is never cut.", "                               --level picks the row tables; --in keeps the files under a path (fan still counted over the index).", "                               --save appends a snapshot (total + unit rows) to <db>.metrics.jsonl beside the index; the index is not written.", "                               --trend compares the last two snapshots: total deltas, and each unit added / removed / changed.", "                               --trend with fewer than two snapshots is refused and says how many the file holds. --save --trend = save, then compare.", "                               json: schema \"metrics/1\", db, indexed_at_unix, total{row}, folders[], units[], classes[], routines[] (row = level, name,", "                               parent, kind, file, line, symbol_id, nested, units, classes, interfaces, routines, cyclomatic, cyclomatic_max, body_loc,", "                               body_loc_max, lines, comment_lines, params, fan_in, fan_out; null fan = not measured),", "                               param_groups[{params[], routines[{name, file, line}]}], single_heirs[{kind, name, file, line, heir, heir_file, heir_line}].", "                               --trend --json: schema \"metrics-trend/1\", snapshots, from, to, total{number: {from, to, delta}},", "                               units[{status added|removed|changed, name, file, numbers}], units_unchanged.", "                               Exit 0 = answered; 1 = history file unreadable / not writable; 2 = no --db, missing or unreadable index,", "                               unknown --level, --save/--trend with --in, --trend with fewer than two snapshots; 3 = unknown flag."]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Which routines are the most complex in this project?",
+          "command": "drag-lint metrics --db <db> --level routine"
+        },
+        {
+          "ask": "How big and how coupled is each unit and folder?",
+          "command": "drag-lint metrics --db <db> --level unit,folder --top 0"
+        },
+        {
+          "ask": "Which parameter lists repeat across routines, and which interfaces have one implementor?",
+          "command": "drag-lint metrics --db <db> --json"
+        },
+        {
+          "ask": "Did complexity go up since the last index run?",
+          "command": "drag-lint metrics --db <db> --save --trend"
+        }
+      ],
+      "access": "cli-only"
+    },
+    {
+      "id": "migrate-reports",
+      "title": "Migrate saved reports",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Rewrites the old PowerShell-style COMMAND line of saved reports to the CLI style and lists every file it left alone, with the reason",
+      "intro": "Read this when saved compare reports still carry -Target / -Project. migrate-reports changes only the COMMAND line (--target, --project), is optional because compare reads both styles, and never treats a left-alone file as an error.",
+      "wikiPage": "migrate-reports",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "migrate-reports",
+          "example": "drag-lint migrate-reports <folder> --dry-run --json"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha"
+      }
+    },
+    {
       "id": "overview-first-turn",
       "title": "Overview (first-turn summary)",
       "group": "graphs-reports",
@@ -12056,6 +12493,72 @@
         "build": "1.42.0-alpha",
         "surfaceHash": "e60cfc49531e1e410c6d70d085a50a63a0d1bf7da7f52284e63fa98c6343486e"
       }
+    },
+    {
+      "id": "sbom",
+      "title": "sbom",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Writes a CycloneDX 1.6 JSON software bill of materials for a project from its index: the application, its library components and their dependencies",
+      "intro": "Read this when a customer, an auditor or the EU Cyber Resilience Act asks which third-party code your application contains. sbom reads the project index and the library index, groups every unit of the compile closure into components, and names each one from an editable library catalogue (supplier, version, licence, purl). A library the catalogue does not know is still listed, as 'unknown supplier'. v1 works from source only: what it cannot see (units linked from DCUs, packages, DLLs) is stated inside the document.",
+      "wikiPage": "sbom",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "sbom",
+          "usage": "drag-lint sbom --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>] [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]",
+          "flags": [
+            {
+              "name": "--project",
+              "arg": "<x.dproj>"
+            },
+            {
+              "name": "--out",
+              "arg": "<file.cdx.json>"
+            },
+            {
+              "name": "--exe",
+              "arg": "<delivered.exe>"
+            },
+            {
+              "name": "--app-version",
+              "arg": "<v>"
+            },
+            {
+              "name": "--db",
+              "arg": "<project.sqlite>"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<db>|none"
+            },
+            {
+              "name": "--catalogue",
+              "arg": "<file.json>"
+            }
+          ],
+          "helpOrder": 115,
+          "help": ["  drag-lint sbom               --project <x.dproj> [--out <file.cdx.json>] [--exe <delivered.exe>] [--app-version <v>]", "                               [--db <project.sqlite>] [--library-db <db>|none]... [--catalogue <file.json>]", "                               CycloneDX 1.6 JSON software bill of materials from the project index (v1 slice: source closure).", "                               One component per unit group: every unit of the project index, each unit its uses rows reach in a", "                               library index (transitively), and each used unit with no source. The catalogue", "                               rules\\sbom-libraries.json (edit it, or --catalogue) gives supplier, name, version, licence, purl;", "                               a group with no row is listed with the supplier \"unknown supplier\", never dropped (NOTE on stderr).", "                               metadata.component = the application; --app-version states its version, --exe adds the SHA-512 of", "                               the delivered file. dependencies = uses edges between the groups. Read-only.", "                               v1 limits, stated in the document (compositions \"incomplete\", drag-lint:sbom:scope): no MAP input,", "                               so units linked from DCUs that no indexed source names, runtime packages and DLLs are not listed;", "                               no BSI TR-03183-2 profile; no VEX. --library-db none = direct uses only.", "                               Exit 0 = written (--out, else stdout); 1 = an index, the catalogue or --exe cannot be read;", "                               2 = no --project / no index for it; 3 = unknown flag."]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Which third-party libraries does this application contain, with supplier and licence?",
+          "command": "drag-lint sbom --project <App.dproj> --out <App.cdx.json>"
+        },
+        {
+          "ask": "How do I produce the SBOM of the version I deliver, with the hash of the executable?",
+          "command": "drag-lint sbom --project <App.dproj> --exe <App.exe> --app-version <1.2.3> --out <App.cdx.json>"
+        },
+        {
+          "ask": "Which libraries does the SBOM list as unknown supplier, so I can add them to the catalogue?",
+          "command": "drag-lint sbom --project <App.dproj> --out <App.cdx.json>   (the NOTE lines on stderr name each one and its directory)"
+        }
+      ],
+      "access": "cli-only"
     },
     {
       "id": "scan-todos-fixmes",
@@ -15346,6 +15849,131 @@
       }
     },
     {
+      "id": "repo-copy-grid",
+      "title": "Copy events and columns between grid views",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Copies the events of a grid view, its columns and their events to another view of the same form, or one event, as a change set; dry run by default",
+      "intro": "Read this when a second grid view of a form should behave like the first. `drag-lint repo copy-grid --dfm <form.dfm> --from <view> --to <view>` prints the events and the columns it would copy; --apply or --select writes them with a backup, and a --select file must hold the plan id of the dry run its ids are from. With --event only that one event is copied. Both views are in ONE form; --list shows the views and their events.",
+      "wikiPage": "repo-copy-grid",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "copy-grid",
+          "usage": "drag-lint repo copy-grid --dfm <file.dfm> [--unit <file.pas>] (--from <view> --to <view> [--event <name> [--from-column <col> [--to-column <col>]]] | --list [--from <view>]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]",
+          "flags": [
+            {
+              "name": "--dfm",
+              "arg": "<file.dfm>"
+            },
+            {
+              "name": "--unit",
+              "arg": "<file.pas>"
+            },
+            {
+              "name": "--from",
+              "arg": "<view>"
+            },
+            {
+              "name": "--to",
+              "arg": "<view>"
+            },
+            {
+              "name": "--event",
+              "arg": "<name>"
+            },
+            {
+              "name": "--from-column",
+              "arg": "<col>"
+            },
+            {
+              "name": "--to-column",
+              "arg": "<col>"
+            },
+            {
+              "name": "--list"
+            },
+            {
+              "name": "--repo",
+              "arg": "<file>"
+            },
+            {
+              "name": "--project",
+              "arg": "<project file>"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--select",
+              "arg": "<id file>"
+            },
+            {
+              "name": "--dry-run"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "helpOrder": 115,
+          "help": ["  drag-lint repo copy-grid      --dfm <file.dfm> [--unit <file.pas>] (--from <view> --to <view> [--event <name> [--from-column <col> [--to-column <col>]]] | --list [--from <view>]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]   (copies the events of a grid view, its columns and their events to another view of the SAME form, between table / banded table / card / layout views, or with --event ONE event; a new column is declared in the unit; every byte outside a change stays, the new text is checked by the Delphi reader first, each changed file gets a backup; what cannot be settled is BLOCKED, what needs a look is unchecked; --list shows the views and, with --from, their events; the repository is not opened; no --apply = dry run; a --select file needs the # plan line of its dry run; exit 1 view / event / write failure or a changed plan, 2 usage)"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How do I give a banded or card view the events and columns of my table view?",
+          "command": "drag-lint repo copy-grid --dfm <form.dfm> --from <tableView> --to <otherView> --repo <file>"
+        },
+        {
+          "ask": "How do I copy just one event handler to another grid view?",
+          "command": "drag-lint repo copy-grid --dfm <form.dfm> --from <view> --to <view> --event OnCustomDrawCell --repo <file>"
+        },
+        {
+          "ask": "Which views and events does a form have?",
+          "command": "drag-lint repo copy-grid --dfm <form.dfm> --list --from <view> --repo <file>"
+        }
+      ]
+    },
+    {
+      "id": "repo-read-dfm-ancestor",
+      "title": "Datasets of an inherited form or data module",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "repo read-dfm follows link sources, lookups and grid datasets, and inherited datasets, into the ancestor DFM, and finds modules of used units in the project",
+      "intro": "Read this when repo read-dfm reports a memory table or a lookup as unresolved although its source is a dataset of an inherited data module. drag-lint finds the ancestor class in the unit beside the DFM and reads the one DFM of the same folder that has it, also for inherited datasets; a module of a used unit elsewhere in the project folder is found too. What it cannot follow is a warning that names the reason; nothing is picked. AttachTable(X.Table) links to dataset X.",
+      "wikiPage": "repo-read-dfm-ancestor",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "read-dfm"
+        }
+      ],
+      "audience": "both",
+      "related": ["repo-read-dfm"],
+      "questions": [
+        {
+          "ask": "Why is a memory table copied from a dataset of an inherited data module unresolved, and which table does it hold?",
+          "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file>"
+        },
+        {
+          "ask": "Which ancestor DFM did repo read-dfm read a dataset from, and why was an ancestor not followed?",
+          "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file> --json"
+        }
+      ],
+      "verified": {
+        "date": "2026-11-26",
+        "by": "alexanderl",
+        "build": "1.55.0-alpha"
+      }
+    },
+    {
       "id": "diff",
       "title": "diff",
       "group": "maintenance",
@@ -15744,6 +16372,108 @@
       }
     },
     {
+      "id": "repo-backup-formats",
+      "title": "Field repository backup formats: text, SQL, zip",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Backs the field repository up as the diffable text file (default), an SQL script or a zip of a consistent copy, and restores each of them",
+      "intro": "Read this when you want a copy of the field repository for something other than a code review. The default stays the diffable text backup; --format sql writes the DDL and one INSERT per row (a script any SQLite tool reads), --format zip zips a consistent copy of the repository file. repo restore takes the same --format, validates the whole file first and changes nothing when it is damaged.",
+      "wikiPage": "repo-backup-formats",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "backup",
+          "usage": "drag-lint repo backup (--repo <file> | --project <project file>) [--format text|sql|zip] [--output <file>]",
+          "flags": [
+            {
+              "name": "--format",
+              "arg": "text|sql|zip",
+              "default": "text"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "restore",
+          "usage": "drag-lint repo restore --in <backup file> (--repo <file> | --project <project file>) [--format text|sql|zip] [--replace]",
+          "flags": [
+            {
+              "name": "--format",
+              "arg": "text|sql|zip",
+              "default": "text"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How do I get a copy of the field repository that I can open without drag-lint?",
+          "command": "drag-lint repo backup --project App.dproj --format zip"
+        },
+        {
+          "ask": "How do I back the field repository up as SQL?",
+          "command": "drag-lint repo backup --project App.dproj --format sql --output repo.sql"
+        },
+        {
+          "ask": "How do I restore a repository from a zip or an SQL backup?",
+          "command": "drag-lint repo restore --project App.dproj --format zip --in repo.dlrepo.zip --replace"
+        }
+      ]
+    },
+    {
+      "id": "wikigen-gen-wiki",
+      "title": "Field repository wiki pages",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Writes one Markdown page per repository table with a section per field: caption, type, kind, descriptions and where the project index shows, edits and uses it",
+      "intro": "Read this to produce a browsable wiki of the field repository. repo gen-wiki writes one page per table (or one per field with --per-field) and a second run with no change writes nothing; pages of tables that left the repository are listed as stale, never deleted.",
+      "wikiPage": "repo-gen-wiki",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "repo",
+          "example": "drag-lint repo gen-wiki --project <x.dproj> --out <dir> --per-field",
+          "usage": "drag-lint repo gen-wiki (--repo <file> | --project <file>) --out <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]",
+          "flags": [
+            {
+              "name": "--out",
+              "arg": "<dir>"
+            },
+            {
+              "name": "--per-field"
+            },
+            {
+              "name": "--table",
+              "arg": "<T,...>"
+            },
+            {
+              "name": "--db",
+              "arg": "<project db>"
+            },
+            {
+              "name": "--dry-run"
+            },
+            {
+              "name": "--json"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-27",
+        "by": "ENGINE",
+        "build": "1.55.0-alpha"
+      }
+    },
+    {
       "id": "field-repository-forms",
       "title": "Field repository: fields of a form in the IDE",
       "group": "maintenance",
@@ -16010,7 +16740,7 @@
         {
           "type": "cli",
           "verb": "repo",
-          "usage": "drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|upgrade-orm-headers|gen-dataservice|migrate|check|paths|gen-const|check-const|read-dfm> (--repo <file> | --project <project file>) [--connection \"<Firebird connection string>\"] [--ddl <file.sql>[;...]] [--select <file>] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--apply] [--dry-run] [--json] [--unit <UnitName>] [--datamodule <Name>] [--unit-file <file.pas>] [--dfm <file.dfm>[;...]] [--dataset <Name>] [--direction dfm-to-repo] [--from <table>] [--to <table>] [--depth <n>] [--stats]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)",
+          "usage": "drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|upgrade-orm-headers|gen-dataservice|migrate|check|paths|gen-const|check-const|read-dfm> (--repo <file> | --project <project file>) [--connection \"<Firebird connection string>\"] [--ddl <file.sql>[;...]] [--select <file>] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--apply] [--dry-run] [--json] [--unit <UnitName>] [--datamodule <Name>] [--unit-file <file.pas>] [--dfm <file.dfm>[;...]] [--dataset <Name>] [--direction dfm-to-repo] [--from <table>] [--to <table>] [--depth <n>] [--stats] [--format text|sql|zip] [--db <project index>]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)",
           "flags": [
             {
               "name": "--all"
@@ -16093,7 +16823,15 @@
               "arg": "<id file>"
             },
             {
+              "name": "--db",
+              "arg": "<project index>"
+            },
+            {
               "name": "--dry-run"
+            },
+            {
+              "name": "--format",
+              "arg": "text|sql|zip"
             },
             {
               "name": "--in",
@@ -16161,7 +16899,7 @@
             }
           ],
           "helpOrder": 110,
-          "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; ALIGNMENT -2 becomes NULL; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (fill an EMPTY repository from the Firebird schema or a DDL script; prints the change set and writes nothing unless --apply or --select; read-only on Firebird)", "  drag-lint repo refresh-schema (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (re-read the schema into a filled repository as a change set: new and changed values are checked, vanished ones are unchecked deletes; hand-edited columns are never touched; no --apply = dry run; --select <id file> writes exactly the listed ids)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup of the field repository; default <repo>.txt; a backup of the DATABASE is repo backup --connection)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints \"line <n>: ...\" and exits 2, nothing changed)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)", "  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)", "  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)", "  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--overwrite-edited <id,...|all>] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; a region of an id it does not generate (DB-RAD 99) is hand code and kept; a unit whose markers cannot be trusted is REFUSED and left unchanged, the others are written, exit 1 with --apply (a dry run lists them, exit 0); each regenerated start marker carries the hash of its body (a legacy marker gets one on its first write), and a region whose body no longer matches its hash is hand-edited: kept and listed as REFUSED region (exit 1 with --apply) unless --overwrite-edited names it or all, or you answer YES at the console question (asked only when stdin is a console); --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)", "  drag-lint repo upgrade-orm-headers (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (one-time, 1.54: replaces the generated with-header of Assign / AssignTo and the unused Reader locals in the existing u<T> units, and AssignI by the overloaded Assign in each i<T> + u<T> pair (both units or neither); dry-run diff unless --apply; a hand-edited header or pair is listed and left alone; every remaining call of AssignI is listed as file(line) and never edited; run repo update-orm as well, it rewrites the regions)", "  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)", "  drag-lint repo migrate        (--repo <file> | --project <project file>) [--apply]   (schema 1, 2 or 3 -> 4: adds DL_RELATIONS, DL_RELATION_COLUMNS and DL_FIELD_INPUTS (cross-table fields), from schema 2 also the event columns of DL_FIELDS_INFO and DL_GRID_COLUMNS, from schema 1 also CALC_BODY, DL_LAYOUT_EVENTS, DL_EXCEPTIONS, the schema-fact tables and FIELD_KIND 2 for ISCALCULATED rows; ALIGNMENT -2 becomes NULL; no --apply = dry run that changes no byte; --apply writes <repo>.before-migrate-<yyyymmdd-hhnnss>.txt first; a schema-4 file prints already at schema 4)", "  drag-lint repo check          (--repo <file> | --project <project file>) [--json]   (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc and event macros, dependency cycles, ALIGNMENT, layout-event and grid-column rows; schema 4: {{ALIAS.FIELD}} inputs, their paths and bindings, relations and their parent keys; exit 0 clean, 1 findings)", "  drag-lint repo paths          (--from <table> --to <table> | --stats) [--depth <n>] (--repo <file> | --project <project file>) [--json]   (read-only, 1.55: the relation paths from a home table UP to a parent table within --depth steps (default 3): FKs onto a PK / UNIQUE of the schema facts plus confirmed FORM / HAND relations; a parent with no key is never an edge; each path with its default input alias (TABLE, TABLE_2, ...) and the rule that chooses it: stored IS_DEFAULT, exactly one path, or ambiguous (asked once, never chosen by data); --stats instead counts the reachable and ambiguous table pairs at depth 1..n; exit 0 listed, 1 no path, 2 usage)", "  drag-lint repo gen-const      (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run]   (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)", "  drag-lint repo check-const    (--repo <file> | --project <project file>) --unit-file <file.pas>   (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)", "  drag-lint repo read-dfm       --dfm <file.dfm>[;...] [--dataset <Name>] --direction dfm-to-repo (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]   (the persistent fields of a form's datasets as a change set: data, calc, lookup, internal-calc and aggregate fields, captions / formats / widths, lookup wiring, OnCalcFields code as CALC_BODY with {{FIELD}} component macros, OnGetText / OnSetText / OnValidate / OnChange code and OnGetDisplayText / OnCustomDrawCell code of TcxGridDBTableView columns, the column order of table and banded grid views (DL_GRID_COLUMNS); code in generated DLFR regions is not read back; needs a schema-4 repository; text or binary DFM, BDE or FireDAC; the table comes from UpdateTableName, TableName or a one-table SELECT, a join gives every field its own table, a calc reading several tables goes to the child end with {{ALIAS.FIELD}} inputs (alias = the table name) and DL_FIELD_INPUTS / DL_RELATIONS rows (the form's ON / WHERE joins choose the path; a join on a parent key with no FK is offered as a FORM relation, unchecked), a memory table takes the source of its AttachedTo or of a literal AttachTable / CloneCursor / CopyDataSet / CopyData / AppendData / Data := (cycle or two sources = unresolved), anything else is listed as UNRESOLVED; with --dataset --json also lists the persistent fields and the repository fields of the table; no --apply = dry run; exit 1 read / apply failure, 2 usage or a bad --select file)"]
+          "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; ALIGNMENT -2 becomes NULL; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (fill an EMPTY repository from the Firebird schema or a DDL script; prints the change set and writes nothing unless --apply or --select; read-only on Firebird)", "  drag-lint repo refresh-schema (--connection \"<Firebird connection string>\" | --ddl <file.sql>[;...]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--json]   (re-read the schema into a filled repository as a change set: new and changed values are checked, vanished ones are unchecked deletes; hand-edited columns are never touched; no --apply = dry run; --select <id file> writes exactly the listed ids)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--format text|sql|zip] [--output <file>]   (write a backup of the field repository: text = the diffable text file (the default, <repo>.txt), sql = an SQL script of the DDL and one INSERT per row (<repo>.sql), zip = a zip of a consistent copy of the repository file (<repo>.zip); a backup of the DATABASE is repo backup --connection)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--format text|sql|zip] [--replace]   (create the repository when missing; give the --format the file was written in; a malformed or damaged backup prints a message, exits 2 and changes nothing)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)", "  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)", "  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)", "  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--overwrite-edited <id,...|all>] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; a region of an id it does not generate (DB-RAD 99) is hand code and kept; a unit whose markers cannot be trusted is REFUSED and left unchanged, the others are written, exit 1 with --apply (a dry run lists them, exit 0); each regenerated start marker carries the hash of its body (a legacy marker gets one on its first write), and a region whose body no longer matches its hash is hand-edited: kept and listed as REFUSED region (exit 1 with --apply) unless --overwrite-edited names it or all, or you answer YES at the console question (asked only when stdin is a console); --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)", "  drag-lint repo upgrade-orm-headers (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (one-time, 1.54: replaces the generated with-header of Assign / AssignTo and the unused Reader locals in the existing u<T> units, and AssignI by the overloaded Assign in each i<T> + u<T> pair (both units or neither); dry-run diff unless --apply; a hand-edited header or pair is listed and left alone; every remaining call of AssignI is listed as file(line) and never edited; run repo update-orm as well, it rewrites the regions)", "  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)", "  drag-lint repo migrate        (--repo <file> | --project <project file>) [--apply]   (schema 1, 2, 3 or 4 -> 5: adds DL_FIELDS_INFO.NOTES / DERIVED_KIND and DL_GRID_COLUMNS.PROPERTIES_CLASS_NAME / PROPERTIES, from schema 3 also DL_RELATIONS, DL_RELATION_COLUMNS and DL_FIELD_INPUTS (cross-table fields), from schema 2 also the event columns of DL_FIELDS_INFO and DL_GRID_COLUMNS, from schema 1 also CALC_BODY, DL_LAYOUT_EVENTS, DL_EXCEPTIONS, the schema-fact tables and FIELD_KIND 2 for ISCALCULATED rows; ALIGNMENT -2 becomes NULL; no --apply = dry run that changes no byte; --apply writes <repo>.before-migrate-<yyyymmdd-hhnnss>.txt first; a schema-5 file prints already at schema 5)", "  drag-lint repo check          (--repo <file> | --project <project file>) [--json]   (read-only: FIELD_KIND vs ISCALCULATED/ISLOOKUP, lookup wiring, calc and event macros, dependency cycles, ALIGNMENT, layout-event and grid-column rows; schema 4: {{ALIAS.FIELD}} inputs, their paths and bindings, relations and their parent keys; exit 0 clean, 1 findings)", "  drag-lint repo paths          (--from <table> --to <table> | --stats) [--depth <n>] (--repo <file> | --project <project file>) [--json]   (read-only, 1.55: the relation paths from a home table UP to a parent table within --depth steps (default 3): FKs onto a PK / UNIQUE of the schema facts plus confirmed FORM / HAND relations; a parent with no key is never an edge; each path with its default input alias (TABLE, TABLE_2, ...) and the rule that chooses it: stored IS_DEFAULT, exactly one path, or ambiguous (asked once, never chosen by data); --stats instead counts the reachable and ambiguous table pairs at depth 1..n; exit 0 listed, 1 no path, 2 usage)", "  drag-lint repo gen-const      (--repo <file> | --project <project file>) [--unit <UnitName>] --output <file.pas> [--table <T,...>] [--datamodule <Name>] [--dry-run]   (the repository as ONE read-only Pascal unit shared by SERVER and CLIENT: constant record arrays per table; with --datamodule <Name> instead a data module unit plus its .dfm whose TFDMemTables open PRE-FILLED and read only, no fill code; default tables DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES; writes only --output and the .dfm beside it; exit 2 on a bad --table / --unit / --datamodule / --output)", "  drag-lint repo check-const    (--repo <file> | --project <project file>) --unit-file <file.pas>   (does a unit written by gen-const still match the repository? exit 0 current, 1 stale naming the changed tables or the edited form, 2 the check could not be made; a pre-build step)", "  drag-lint repo read-dfm       --dfm <file.dfm>[;...] [--dataset <Name>] --direction dfm-to-repo (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json] [--db <project index>]   (the persistent fields of a form's datasets as a change set: data, calc, lookup, internal-calc and aggregate fields, captions / formats / widths, lookup wiring, OnCalcFields code as CALC_BODY with {{FIELD}} component macros, OnGetText / OnSetText / OnValidate / OnChange code and OnGetDisplayText / OnCustomDrawCell code of TcxGridDBTableView columns, the column order of table and banded grid views and each column's in-place editor, PropertiesClassName and its Properties.* lines as the form has them (DL_GRID_COLUMNS; the editor needs schema 5, an older repository gets a warning); code in generated DLFR regions is not read back; needs a schema-4 repository or later; text or binary DFM, BDE or FireDAC; the table comes from UpdateTableName, TableName or a one-table SELECT, a join gives every field its own table, a calc reading several tables goes to the child end with {{ALIAS.FIELD}} inputs (alias = the table name) and DL_FIELD_INPUTS / DL_RELATIONS rows (the form's ON / WHERE joins choose the path; a join on a parent key with no FK is offered as a FORM relation, unchecked), a memory table takes the source of its AttachedTo or of a literal AttachTable / CloneCursor / CopyDataSet / CopyData / AppendData / Data := (cycle or two sources = unresolved), a link source, a lookup dataset and a grid's dataset that the module only inherits are read from the DFM of the ancestor form / data module (ancestor class from the unit beside the DFM, the one DFM of the same folder with that root class; not found or two = a warning, nothing picked), AttachTable(X.Table, ...) links to dataset X, an inherited dataset of an inherited form or module is itself read from the ancestor DFM (handler code from the unit of the form that states it), a module dmX.tblY that is not in the form's folder is found through the units the form's unit uses, in the project folder (nearest folder with a .dpr/.dproj/.dpk, up to three levels up) and below it, folders starting with __ or . left out, two candidates = a warning, nothing picked, anything else is listed as UNRESOLVED; with --dataset --json also lists the persistent fields and the repository fields of the table; --db <project index> = the index the lineage facts are read from: a persistent data field without a table column that code fills from other fields is proposed as insert DL_FIELDS_INFO T|F: derived(direct|aggregate); inputs {{..}} + insert DL_FIELD_INPUTS T|F||ALIAS, all unchecked (write them with --select), without it one warning lineage: skipped (no index); no --apply = dry run; exit 1 read / apply failure, 2 usage or a bad --select file)"]
         }
       ],
       "audience": "both",
@@ -16221,6 +16959,41 @@
         "build": "1.55.0-alpha",
         "surfaceHash": "bbf8410e53bf53f7bd8cb8a307a9912cf90b438969d11af9d6924c57a28d97e0"
       }
+    },
+    {
+      "id": "grid-column-editors",
+      "title": "Grid column editors in the field repository",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "The field repository keeps the in-place editor of each cxGrid column: its PropertiesClassName and its Properties.* lines as the form has them",
+      "intro": "Read this when the editor of a grid column (combo box, image combo, currency edit, ...) should be kept with the column in the field repository. drag-lint repo read-dfm stores PropertiesClassName and the Properties.* lines of every column of a table or banded view in DL_GRID_COLUMNS (schema 5), as the text of the form, and shows a changed editor as one update per value. A schema-4 repository is read as before and the run says the editors were left out.",
+      "wikiPage": "grid-column-editors",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\grid-column-editors.md"
+        }
+      ],
+      "audience": "both",
+      "aliases": ["PROPERTIES_CLASS_NAME", "Properties", "PropertiesClassName", "column editor", "in-place editor"],
+      "related": ["field-repository", "field-repository-handlers", "repo-read-dfm", "repo-write-dfm"],
+      "questions": [
+        {
+          "ask": "Which editor does each grid column of a form have, and how do I keep it in the field repository?",
+          "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file> --apply"
+        },
+        {
+          "ask": "Did the editor of a grid column change since the form was last read?",
+          "command": "drag-lint repo read-dfm --dfm <form.dfm> --direction dfm-to-repo --repo <file>"
+        },
+        {
+          "ask": "Why does read-dfm say the editor properties of grid columns are not read?",
+          "command": "drag-lint repo migrate --repo <file> --apply"
+        }
+      ],
+      "access": "cli-only"
     },
     {
       "id": "info",
@@ -17059,6 +17832,35 @@
       }
     },
     {
+      "id": "repo-field-usage",
+      "title": "Where a field is used",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.56.0-alpha",
+      "summary": "Tells per field name whether the project index finds it in a DFM control, a grid column, a lookup or code; the IDE Select Fields dialog uses it",
+      "intro": "Read this when you want to know which fields of a table are really used before you edit, rename or drop them. drag-lint repo field-usage --fields \"ID,QTY\" --json answers from the project index, per field, with the places it is used: dfm, grid, lookup, code. A field nothing uses is left out. The IDE Select Fields dialog runs it to show the icons. The Select Fields dialog shows the answer as a 16-icon strip in a Used in column (dfm, grid, lookup and code add up to one icon).",
+      "wikiPage": "repo-field-usage",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "field-usage"
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Which of these fields is used in a form, a grid, a lookup or code?",
+          "command": "drag-lint repo field-usage --fields \"ID,QTY,PRICE\" --db <project index> --json"
+        },
+        {
+          "ask": "Is this field safe to drop, or does a DFM control or code still name it?",
+          "command": "drag-lint repo field-usage --fields \"PRICE\" --project <project file>"
+        }
+      ]
+    },
+    {
       "id": "repo-write-dfm",
       "title": "Write the field repository into a form",
       "group": "maintenance",
@@ -17241,6 +18043,26 @@
         "wikiAnchor": "abstract-method-instantiation"
       },
       {
+        "id": "rule.abstract-method-not-overridden",
+        "title": "abstract-method-not-overridden",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Class leaves an inherited abstract method open (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule abstract-method-not-overridden"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "abstract-method-not-overridden"
+      },
+      {
         "id": "rule.address-of-local-returned",
         "title": "address-of-local-returned",
         "group": "linting",
@@ -17279,6 +18101,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "address-of-nested-routine"
+      },
+      {
+        "id": "rule.ambiguous-unit-reference",
+        "title": "ambiguous-unit-reference",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Name declared by two used units: the last one in the uses list wins (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule ambiguous-unit-reference"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "ambiguous-unit-reference"
       },
       {
         "id": "rule.ancestor-not-in-project",
@@ -17439,6 +18281,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "assert-with-side-effect"
+      },
+      {
+        "id": "rule.assignment-narrows",
+        "title": "assignment-narrows",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Wider integer assigned to a narrower integer variable (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule assignment-narrows"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "assignment-narrows"
       },
       {
         "id": "rule.bad-bit-mask",
@@ -17799,6 +18661,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "circular-uses"
+      },
+      {
+        "id": "rule.class-passed-as-interface",
+        "title": "class-passed-as-interface",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Object of a reference-counted class passed to an interface parameter (resource-lifetime, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule class-passed-as-interface"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "class-passed-as-interface"
       },
       {
         "id": "rule.classname-string-compare",
@@ -18279,6 +19161,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "constructor-call-on-instance"
+      },
+      {
+        "id": "rule.container-items-leak",
+        "title": "container-items-leak",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Objects added to a container that does not own them are never freed (resource-lifetime, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule container-items-leak"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "container-items-leak"
       },
       {
         "id": "rule.contract-unit-declares-class",
@@ -19461,6 +20363,26 @@
         "wikiAnchor": "double-free"
       },
       {
+        "id": "rule.dunitx-attribute-hygiene",
+        "title": "dunitx-attribute-hygiene",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "DUnitX fixture without a test, [Ignore] without a reason, or [Setup] / [TearDown] used twice in one fixture (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule dunitx-attribute-hygiene"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "dunitx-attribute-hygiene"
+      },
+      {
         "id": "rule.dunitx-test-without-assert",
         "title": "dunitx-test-without-assert",
         "group": "linting",
@@ -20141,6 +21063,26 @@
         "wikiAnchor": "field-by-name-in-loop"
       },
       {
+        "id": "rule.field-could-be-local",
+        "title": "field-could-be-local",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Private field is used in one routine only and written before it is read: it could be a local variable (bug-patterns, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule field-could-be-local"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "field-could-be-local"
+      },
+      {
         "id": "rule.field-created-not-freed",
         "title": "field-created-not-freed",
         "group": "linting",
@@ -20667,7 +21609,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "A freshly created object is passed as an argument -- it leaks unless the callee takes ownership or the parameter is an interface (C... (resource-lifetime, info)",
+        "summary": "Freshly created object passed to a parameter that the callee only reads (CWE-401) (resource-lifetime, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -20939,6 +21881,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "handle-leak"
+      },
+      {
+        "id": "rule.handler-type-never-raised",
+        "title": "handler-type-never-raised",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Exception handler for a project type that nothing raises or builds (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule handler-type-never-raised"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "handler-type-never-raised"
       },
       {
         "id": "rule.hanging-handler",
@@ -22121,6 +23083,26 @@
         "wikiAnchor": "locale-sensitive-conversion"
       },
       {
+        "id": "rule.lock-order-inversion",
+        "title": "lock-order-inversion",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Two locks are taken in opposite order in two places (directly or through a call) -- two threads can deadlock (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule lock-order-inversion"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "lock-order-inversion"
+      },
+      {
         "id": "rule.loop-condition-invariant",
         "title": "loop-condition-invariant",
         "group": "linting",
@@ -22919,6 +23901,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "nonminimal-bool"
+      },
+      {
+        "id": "rule.noreturn-contract",
+        "title": "noreturn-contract",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Code after a call to a noreturn routine, or a routine that never returns and is not declared noreturn (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule noreturn-contract"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "noreturn-contract"
       },
       {
         "id": "rule.not-assigned-interface",
@@ -24001,6 +25003,26 @@
         "wikiAnchor": "repeated-else-if-condition"
       },
       {
+        "id": "rule.repeated-string-literal",
+        "title": "repeated-string-literal",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "The same string literal of 9 or more characters is typed at 5 or more sites (project-wide, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule repeated-string-literal"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "repeated-string-literal"
+      },
+      {
         "id": "rule.repeated-type-switch",
         "title": "repeated-type-switch",
         "group": "linting",
@@ -24899,6 +25921,66 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "taint-command-injection"
+      },
+      {
+        "id": "rule.taint-deserialization",
+        "title": "taint-deserialization",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Tainted data reaches a deserializer sink -- a catalogued source (request body) flows across routines into a component / object reader (CWE-... (security, error)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule taint-deserialization"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "taint-deserialization"
+      },
+      {
+        "id": "rule.taint-html-output",
+        "title": "taint-html-output",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Tainted data reaches an HTML response write -- a catalogued source (request field) flows across routines into a response content member (CW... (security, error)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule taint-html-output"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "taint-html-output"
+      },
+      {
+        "id": "rule.taint-log",
+        "title": "taint-log",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Tainted data reaches a log sink -- a catalogued source flows across routines into a log call (CWE-117 log forging); an encoded value stop... (security, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule taint-log"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "taint-log"
       },
       {
         "id": "rule.taint-path-traversal",
@@ -26099,6 +27181,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "var-param-never-written"
+      },
+      {
+        "id": "rule.variant-in-loop",
+        "title": "variant-in-loop",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Arithmetic on a Variant inside a loop (late-bound calls) (refactoring, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule variant-in-loop"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "variant-in-loop"
       },
       {
         "id": "rule.virtual-method-in-constructor",
@@ -27331,6 +28433,262 @@
         "parent": "chart-questions",
         "subgroup": "Table or column (typed name)",
         "emitter": "charts\\src\\Emit-ShownWhere.ps1"
+      },
+      {
+        "id": "chart.value-origin",
+        "title": "Where this value comes from",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Where this value comes from -- chart question (Field, property or grid column at the cursor)",
+        "wikiPage": "value-charts",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Where this value comes from..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question value-origin"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question value-origin"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "graphviz"],
+        "aliases": ["data flow in", "where does this value come from"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "Field, property or grid column at the cursor"
+      },
+      {
+        "id": "chart.value-use",
+        "title": "Where this value goes",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Where this value goes -- chart question (Field, property or grid column at the cursor)",
+        "wikiPage": "value-charts",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Where this value goes..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question value-use"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question value-use"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "graphviz"],
+        "aliases": ["data flow out", "where does this value go"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "Field, property or grid column at the cursor"
+      },
+      {
+        "id": "chart.class-diagram",
+        "title": "Class diagram of this type",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Class diagram of this type -- chart question (Type at the cursor)",
+        "wikiPage": "ask-class-diagram",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Class diagram of this type..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question class-diagram"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question class-diagram"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "graphviz"],
+        "aliases": ["has-a links", "uml class diagram"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "Type at the cursor"
+      },
+      {
+        "id": "chart.sequence",
+        "title": "Sequence of calls in this routine",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Sequence of calls in this routine -- chart question (Routine at the cursor)",
+        "wikiPage": "ask-sequence",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Sequence of calls in this routine..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question sequence"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question sequence"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "graphviz"],
+        "aliases": ["call sequence", "sequence diagram"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "Routine at the cursor"
+      },
+      {
+        "id": "chart.control-flow",
+        "title": "Control flow of this routine",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Control flow of this routine -- chart question (Routine at the cursor)",
+        "wikiPage": "ask-control-flow",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Control flow of this routine..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question control-flow"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question control-flow"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "graphviz"],
+        "aliases": ["basic blocks", "flow graph"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "Routine at the cursor"
+      },
+      {
+        "id": "chart.sent-not-handled",
+        "title": "Commands sent but never handled",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Commands sent but never handled -- chart question (This project)",
+        "wikiPage": "ask-sent-not-handled",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Commands sent but never handled..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question sent-not-handled"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question sent-not-handled"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "graphviz"],
+        "aliases": ["commands never handled", "unhandled commands"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "This project"
+      },
+      {
+        "id": "chart.dependency-matrix",
+        "title": "Unit dependency matrix",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Unit dependency matrix -- chart question (This project)",
+        "wikiPage": "ask-dependency-matrix",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Unit dependency matrix..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question dependency-matrix"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question dependency-matrix"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "graphviz"],
+        "aliases": ["dsm", "unit dependency matrix", "uses matrix"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "This project"
+      },
+      {
+        "id": "chart.main-sequence",
+        "title": "Abstractness and instability (main sequence)",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Abstractness and instability (main sequence) -- chart question (This project)",
+        "wikiPage": "ask-main-sequence",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Abstractness and instability (main sequence)..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question main-sequence"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question main-sequence"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "graphviz"],
+        "aliases": ["abstractness", "instability", "zone of pain"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "This project"
       }
     ]
   }

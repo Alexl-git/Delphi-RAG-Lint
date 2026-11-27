@@ -1,0 +1,48 @@
+{
+  "id": "wikigen-gen-wiki",
+  "title": "Field repository wiki pages",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "Writes one Markdown page per repository table with a section per field: caption, type, kind, descriptions and where the project index shows, edits and uses it",
+  "intro": "Read this to produce a browsable wiki of the field repository. repo gen-wiki writes one page per table (or one per field with --per-field) and a second run with no change writes nothing; pages of tables that left the repository are listed as stale, never deleted.",
+  "wikiPage": "repo-gen-wiki",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "repo",
+      "example": "drag-lint repo gen-wiki --project <x.dproj> --out <dir> --per-field",
+      "usage": "drag-lint repo gen-wiki (--repo <file> | --project <file>) --out <dir> [--per-field] [--table <T,...>] [--db <project db>] [--dry-run] [--json]",
+      "flags": [
+        {
+          "name": "--out",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--per-field"
+        },
+        {
+          "name": "--table",
+          "arg": "<T,...>"
+        },
+        {
+          "name": "--db",
+          "arg": "<project db>"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-27",
+    "by": "ENGINE",
+    "build": "1.55.0-alpha"
+  }
+}

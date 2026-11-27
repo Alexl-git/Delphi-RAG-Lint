@@ -1,11 +1,11 @@
 {
   "id": "v156-oo-a-rules",
-  "title": "Lint rules for ambiguous uses order, narrowing assignments, open abstract methods and dead exception handlers",
+  "title": "Lint rules: ambiguous uses, narrowing assignments, open abstracts, dead handlers",
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.56.0-alpha",
-  "summary": "Warns about a name two used units both declare, a wide integer assigned to a narrow one, a class leaving an abstract method open, a handler for an exception nothing raises",
+  "summary": "Warns about a name two used units declare, a wide integer assigned to a narrow one, an open abstract method, a handler for an exception nothing raises",
   "intro": "Read this to see what each of the four object-model rules reports, what it leaves alone and how to turn it off.",
   "wikiPage": "v156-oo-a-rules",
   "surfaces": [
@@ -18,6 +18,16 @@
       "type": "cli",
       "verb": "lint-all",
       "example": "drag-lint lint-all --db <project.sqlite> --rule ambiguous-unit-reference"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule abstract-method-not-overridden"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule handler-type-never-raised"
     }
   ],
   "audience": "both",
