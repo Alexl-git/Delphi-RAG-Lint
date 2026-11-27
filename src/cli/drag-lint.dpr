@@ -254,6 +254,7 @@ uses
   DRagLint.FieldRepo.ZipBackup in '..\sql\DRagLint.FieldRepo.ZipBackup.pas',
   DRagLint.FieldRepo.SqlBackup in '..\sql\DRagLint.FieldRepo.SqlBackup.pas',
   DRagLint.CLI.RepoGridCopy in 'DRagLint.CLI.RepoGridCopy.pas',
+  DRagLint.CLI.RepoFieldUsage in 'DRagLint.CLI.RepoFieldUsage.pas',
   DRagLint.CLI.RepoWiki in 'DRagLint.CLI.RepoWiki.pas',
   DRagLint.CLI.MigrateReports in 'DRagLint.CLI.MigrateReports.pas',
   DRagLint.Query.PlaceRows in '..\query\DRagLint.Query.PlaceRows.pas',

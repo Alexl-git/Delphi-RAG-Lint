@@ -76,7 +76,8 @@ uses
   DRagLint.CLI.RepoAlter,
   DRagLint.CLI.RepoBackup,
   DRagLint.CLI.RepoWiki,
-  DRagLint.CLI.RepoGridCopy
+  DRagLint.CLI.RepoGridCopy,
+  DRagLint.CLI.RepoFieldUsage { v156 FUSAGE }
   ;
 
 const
@@ -95,7 +96,8 @@ const
   SAVE_FORM_CURRENT = 1;
   SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, upgrade-orm-headers, migrate, check, paths, gen-const, check-const, read-dfm, alter-table'
     + REPO_DFMWRITE_SUBS + REPO_HANDLERS_SUBS + REPO_FIB_SUBS // 1.54 scaffolds: '' until their lane names a sub-verb
-    + REPO_WIKI_SUBS + REPO_GRIDCOPY_SUBS; // 1.56 scaffolds (WIKIGEN gen-wiki, GCP-C grid copy): '' until their lane names a sub-verb
+    + REPO_WIKI_SUBS + REPO_GRIDCOPY_SUBS
+    + REPO_FIELDUSAGE_SUBS; { v156 FUSAGE: field-usage } // 1.56 scaffolds (WIKIGEN gen-wiki, GCP-C grid copy): '' until their lane names a sub-verb
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -477,6 +479,7 @@ function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile
   pReplace, pJson: Boolean): Integer;
 begin
   if SameText(pSub, 'gen-param-array') then Exit(RunGenParamArray(pProject, pInFile, pJson)); // reads no repository: dispatched before ResolveRepoPath
+  if IsRepoFieldUsageSub(pSub) then Exit(RunRepoFieldUsageVerb(pSub, pProject, pJson)); { v156 FUSAGE: reads the project index, no repository }
   if IsRepoFibSub(pSub) then Exit(RunRepoFibVerb(pSub, pProject, pOutFile, pJson)); // 1.54 TT-FIB: reads no repository either
   if IsRepoDbBackup(pSub, pConnection) then Exit(RunRepoDbBackup(pRepo, pConnection, pJson)); // 1.54 ALTERBK: a database backup needs no repository
   if not IsImplementedSub(pSub) then

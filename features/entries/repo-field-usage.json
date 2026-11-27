@@ -1,0 +1,29 @@
+{
+  "id": "repo-field-usage",
+  "title": "Where a field is used",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "Tells for each field name whether the project index finds it in a DFM control, a grid column, a lookup or code; the Select Fields dialog of the IDE draws its usage icons from it",
+  "intro": "Read this when you want to know which fields of a table are really used before you edit, rename or drop them. drag-lint repo field-usage --fields \"ID,QTY\" --json answers from the project index, per field, with the places it is used: dfm, grid, lookup, code. A field nothing uses is left out. The IDE Select Fields dialog runs it to show the icons.",
+  "wikiPage": "repo-field-usage",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "field-usage"
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "Which of these fields is used in a form, a grid, a lookup or code?",
+      "command": "drag-lint repo field-usage --fields \"ID,QTY,PRICE\" --db <project index> --json"
+    },
+    {
+      "ask": "Is this field safe to drop, or does a DFM control or code still name it?",
+      "command": "drag-lint repo field-usage --fields \"PRICE\" --project <project file>"
+    }
+  ]
+}
