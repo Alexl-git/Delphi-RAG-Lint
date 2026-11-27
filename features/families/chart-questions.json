@@ -39,6 +39,8 @@
     "architecture":     { "emitter": "charts\\src\\Emit-Architecture.ps1" },
     "cycles":           { "emitter": "charts\\src\\Emit-Cycles.ps1" },
     "consumers":        { "emitter": "charts\\src\\Emit-Consumers.ps1" },
-    "shown-where":      { "emitter": "charts\\src\\Emit-ShownWhere.ps1" }
+    "shown-where":      { "emitter": "charts\\src\\Emit-ShownWhere.ps1" },
+    "class-diagram":    { "aliases": ["uml class diagram", "has-a links"] },
+    "sequence":         { "aliases": ["sequence diagram", "call sequence"] }
   }
 }
