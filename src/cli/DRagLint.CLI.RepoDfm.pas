@@ -35,6 +35,7 @@ uses
   DRagLint.FieldRepo.ChangeSet,
   DRagLint.FieldRepo.DfmReadSelection,
   DRagLint.FieldRepo.DfmRead,
+  DRagLint.FieldRepo.DfmReadLinks,
   DRagLint.FieldRepo.DfmReadPlan;
 
 const
@@ -65,6 +66,9 @@ type
     JoinLookup: Integer;
     JoinData: Integer;
     JoinWithout: Integer; // fields of joins without a table
+    Links: array[TDfmrLinkKind] of Integer; // datasets whose source came through a link of that kind first
+    LinkTotal: Integer;
+    LinkFailed: Integer;  // datasets with a link that gives no source
     procedure Add(const pReport: TDfmrDatasetReport);
   end;
 
@@ -97,7 +101,16 @@ procedure TTotals.Add(const pReport: TDfmrDatasetReport);
 var
   VKind: TFrFieldKind;
   VRef: TDfmrFieldRef;
+  VLink: TDfmrLinkKind;
 begin
+  for VLink := Low(TDfmrLinkKind) to High(TDfmrLinkKind) do
+    if SameText(pReport.LinkKind, DfmrLinkKindName(VLink)) then
+    begin
+      Inc(Links[VLink]);
+      Inc(LinkTotal);
+    end;
+  if pReport.LinkFailed then
+    Inc(LinkFailed);
   if (pReport.TableName = '') and (Length(pReport.JoinTables) = 0) then
     Inc(Unresolved);
   if Length(pReport.JoinTables) > 0 then
@@ -148,6 +161,23 @@ begin
     Result := 'JOIN ' + string.Join(' ', pReport.JoinTables)
   else
     Result := 'UNRESOLVED (' + pReport.Unresolved + ')';
+  if pReport.Via <> '' then
+    Result := Result + ' (via ' + pReport.Via + ')';
+end;
+
+{ `links: N datasets got a source: AttachedTo 2, ...; M unresolved`; '' when no dataset has a link. }
+function LinksText(const pTotals: TTotals): string;
+var
+  VLink: TDfmrLinkKind;
+begin
+  Result := '';
+  if pTotals.LinkTotal + pTotals.LinkFailed = 0 then
+    Exit;
+  for VLink := Low(TDfmrLinkKind) to High(TDfmrLinkKind) do
+    if pTotals.Links[VLink] > 0 then
+      Result := Result + (if Result = '' then '' else ', ') + DfmrLinkKindName(VLink) + ' ' + IntToStr(pTotals.Links[VLink]);
+  Result := Format('links: %d datasets got a source: %s; %d unresolved', [pTotals.LinkTotal,
+    if Result = '' then 'none' else Result, pTotals.LinkFailed]);
 end;
 
 procedure PrintText(const pPlan: TDfmrPlan);
@@ -173,6 +203,12 @@ begin
   if VTotals.Joins > 0 then
     Writeln(Format('joins: %d datasets; %d calc, %d lookup, %d data fields with a table; %d without', [VTotals.Joins,
       VTotals.JoinCalc, VTotals.JoinLookup, VTotals.JoinData, VTotals.JoinWithout]));
+  if pPlan.CrossTable.Placed + pPlan.CrossTable.Unresolved + pPlan.CrossTable.Offered > 0 then
+    Writeln(Format('cross-table calc: %d placed, %d unresolved; %d inputs; relations: %d FK used, %d offered',
+      [pPlan.CrossTable.Placed, pPlan.CrossTable.Unresolved, pPlan.CrossTable.Inputs, pPlan.CrossTable.FkUsed,
+      pPlan.CrossTable.Offered]));
+  if LinksText(VTotals) <> '' then
+    Writeln(LinksText(VTotals));
   for VLine in RenderChangeSetText(pPlan.ChangeSet) do
     Writeln(VLine);
   for VLine in pPlan.Warnings do
@@ -268,6 +304,7 @@ begin
     VItem.AddPair('noColumn', StringsJson(VReport.Unattributed));
     VItem.AddPair('join', StringsJson(VReport.JoinTables));
     VItem.AddPair('noTable', NoTableJson(VReport.NoTable));
+    VItem.AddPair('via', VReport.Via);
     if pRepo = nil then
       Continue;
     VItem.AddPair('persistent', PersistentJson(VReport));
@@ -278,7 +315,8 @@ end;
 function TotalsJson(const pPlan: TDfmrPlan): TJSONObject;
 var
   VTotals: TTotals;
-  VJoins: TJSONObject;
+  VJoins, VCross, VLinks: TJSONObject;
+  VLink: TDfmrLinkKind;
 begin
   VTotals := TotalsOf(pPlan);
   Result := TJSONObject.Create;
@@ -296,6 +334,19 @@ begin
   VJoins.AddPair('lookup', TJSONNumber.Create(VTotals.JoinLookup));
   VJoins.AddPair('data', TJSONNumber.Create(VTotals.JoinData));
   VJoins.AddPair('without', TJSONNumber.Create(VTotals.JoinWithout));
+  VCross := TJSONObject.Create;
+  Result.AddPair('crossTable', VCross);
+  VCross.AddPair('placed', TJSONNumber.Create(pPlan.CrossTable.Placed));
+  VCross.AddPair('unresolved', TJSONNumber.Create(pPlan.CrossTable.Unresolved));
+  VCross.AddPair('inputs', TJSONNumber.Create(pPlan.CrossTable.Inputs));
+  VCross.AddPair('fkUsed', TJSONNumber.Create(pPlan.CrossTable.FkUsed));
+  VCross.AddPair('offered', TJSONNumber.Create(pPlan.CrossTable.Offered));
+  VLinks := TJSONObject.Create;
+  Result.AddPair('links', VLinks);
+  for VLink := Low(TDfmrLinkKind) to High(TDfmrLinkKind) do
+    VLinks.AddPair(DfmrLinkKindName(VLink), TJSONNumber.Create(VTotals.Links[VLink]));
+  VLinks.AddPair('total', TJSONNumber.Create(VTotals.LinkTotal));
+  VLinks.AddPair('unresolved', TJSONNumber.Create(VTotals.LinkFailed));
 end;
 
 procedure PrintJson(const pPlan: TDfmrPlan; pRepo: TFDConnection; pApplied: Integer);

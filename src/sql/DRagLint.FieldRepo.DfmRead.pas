@@ -66,6 +66,9 @@ type
     Sql: string;
     /// <summary>OnCalcFields handler name; '' = none.</summary>
     OnCalcFields: string;
+    /// <summary>kbmMemTable AttachedTo as written (the dataset whose data it shares); '' = none (design
+    /// 2026-11-26-cross-table-fields 3.1).</summary>
+    AttachedTo: string;
     /// <summary>Persistent fields in DFM order.</summary>
     Fields: TArray<TDfmrField>;
     /// <summary>Fields this DFM only overrides: their FieldName is in the ancestor's DFM, so they are not read.</summary>
@@ -494,6 +497,7 @@ begin
   Result.TableName := pRows.Prop(pObject, 'TableName');
   Result.Sql := pRows.Prop(pObject, 'SQL.Strings');
   Result.OnCalcFields := pRows.Prop(pObject, 'OnCalcFields');
+  Result.AttachedTo := pRows.Prop(pObject, 'AttachedTo');
 end;
 
 function ReadColumn(const pRows: TDfmRows; pObject: Integer): TDfmrGridColumn;

@@ -53,11 +53,24 @@ begin
       Exit(VI);
 end;
 
+// The body without its ALIAS.FIELD macros (design 2026-11-26-cross-table-fields 2.4): a field of another table is no
+// field of this table to select; the caller refuses such a body itself.
+function OwnBody(const pBody: string): string;
+const
+  FOREIGN_PLACEHOLDER = 'DLFR_FOREIGN_INPUT';
+var
+  VMacro: string;
+begin
+  Result := pBody;
+  for VMacro in ForeignMacros(pBody) do
+    Result := StringReplace(Result, VMacro, FOREIGN_PLACEHOLDER, [rfReplaceAll, rfIgnoreCase]);
+end;
+
 function DependenciesOf(const pField: TFrSelectionField): TArray<string>;
 begin
   Result := nil;
   if FrKindHasBody(pField.Kind) then
-    Result := CalcDependencies(pField.Body, pField.Name)
+    Result := CalcDependencies(OwnBody(pField.Body), pField.Name)
   else if (pField.Kind = frkLookup) and (pField.SourceKey <> '') then
     Result := [pField.SourceKey];
 end;

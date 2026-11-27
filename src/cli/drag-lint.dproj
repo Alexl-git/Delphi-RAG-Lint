@@ -416,6 +416,7 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadSql.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadCalc.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadPlan.pas"/>
+        <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadLinks.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmReadSelection.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.SchemaFactsEx.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.DfmWrite.pas"/>

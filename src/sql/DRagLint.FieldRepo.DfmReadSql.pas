@@ -30,12 +30,31 @@ type
     Alias: string;
   end;
 
+  /// <summary>One equality `A.X = B.Y` between two different entries of the FROM clause: a JOIN's ON condition, or a
+  /// WHERE equality (design 2026-11-26-cross-table-fields-design.md 3.2 rule 2).</summary>
+  TDfmrSqlJoin = record
+    /// <summary>Clean table name, the qualifier as written (alias or table) and the upper-case column of the left side.</summary>
+    LeftTable: string;
+    LeftAlias: string;
+    LeftColumn: string;
+    /// <summary>The same for the right side.</summary>
+    RightTable: string;
+    RightAlias: string;
+    RightColumn: string;
+    /// <summary>True when the equality is in the WHERE clause, False for an ON condition.</summary>
+    InWhere: Boolean;
+  end;
+
   /// <summary>What a SELECT reads.</summary>
   TDfmrSqlSource = record
     /// <summary>Tables of the FROM clause in order; empty when Reason is set.</summary>
     Tables: TArray<TDfmrSqlTable>;
     /// <summary>Select list.</summary>
     Items: TArray<TDfmrSqlItem>;
+    /// <summary>The column equalities between FROM tables, in text order. Only an ON / WHERE condition that is a
+    /// conjunction (AND at its top level, no OR) gives equalities; each must be `qualifier.column = qualifier.column`
+    /// with two different FROM entries.</summary>
+    Joins: TArray<TDfmrSqlJoin>;
     /// <summary>'' = understood; otherwise why the SQL says nothing.</summary>
     Reason: string;
   end;
@@ -115,6 +134,7 @@ const
   TABLE_EXTENSIONS: array[0..1] of string = ('DB', 'DBF');
   FROM_END_WORDS: array[0..9] of string = ('WHERE', 'GROUP', 'ORDER', 'HAVING', 'PLAN', 'FETCH', 'ROWS', 'OFFSET', 'FOR',
     'WINDOW');
+  WHERE_END_WORDS: array[0..8] of string = ('GROUP', 'ORDER', 'HAVING', 'PLAN', 'FETCH', 'ROWS', 'OFFSET', 'FOR', 'WINDOW');
   { Words that are values, or start an expression, where a column may stand. }
   VALUE_WORDS: array[0..11] of string = ('NULL', 'NOT', 'TRUE', 'FALSE', 'USER', 'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP',
     'CURRENT_USER', 'CURRENT_ROLE', 'LOCALTIME', 'LOCALTIMESTAMP');
@@ -250,8 +270,8 @@ begin
   end;
 end;
 
-{ Splits a token run at depth-0 commas. }
-function SplitItems(const pTokens: TSqlTokens): TArray<TSqlTokens>;
+{ Splits a token run at its depth-0 separators: the symbol pSeparator, or the keyword pSeparator when pWord. }
+function SplitAtDepthZero(const pTokens: TSqlTokens; const pSeparator: string; pWord: Boolean): TArray<TSqlTokens>;
 var
   VDepth, VStart, VI: Integer;
 begin
@@ -263,12 +283,18 @@ begin
       Inc(VDepth)
     else if IsSymbol(pTokens[VI], CLOSE_PAREN) then
       Dec(VDepth)
-    else if (VDepth = 0) and IsSymbol(pTokens[VI], COMMA) then
+    else if (VDepth = 0) and (if pWord then IsKeyword(pTokens[VI], [pSeparator]) else IsSymbol(pTokens[VI], pSeparator)) then
     begin
       Result := Result + [Copy(pTokens, VStart, VI - VStart)];
       VStart := VI + 1;
     end;
   Result := Result + [Copy(pTokens, VStart, Length(pTokens) - VStart)];
+end;
+
+{ Splits a token run at depth-0 commas. }
+function SplitItems(const pTokens: TSqlTokens): TArray<TSqlTokens>;
+begin
+  Result := SplitAtDepthZero(pTokens, COMMA, False);
 end;
 
 { Reads `name` or `qualifier.name` (or `qualifier.*`) at the start of pItem; returns the tokens used, 0 = neither. }
@@ -355,11 +381,11 @@ begin
   Result := pReason = '';
 end;
 
-{ The FROM clause: pieces between depth-0 commas and JOIN words. }
-function ReadFrom(const pTokens: TSqlTokens; var pSource: TDfmrSqlSource): Boolean;
+{ The FROM clause: pieces between depth-0 commas and JOIN words. pConditions receives the token run of every ON. }
+function ReadFrom(const pTokens: TSqlTokens; var pSource: TDfmrSqlSource; var pConditions: TArray<TSqlTokens>): Boolean;
 var
-  VItem: TSqlTokens;
-  VStart, VNext: Integer;
+  VItem, VPiece: TSqlTokens;
+  VStart, VNext, VOn: Integer;
   VTable: TDfmrSqlTable;
 begin
   for VItem in SplitItems(pTokens) do
@@ -368,8 +394,12 @@ begin
     while VStart <= Length(VItem) do
     begin
       VNext := FindAtDepthZero(VItem, VStart, JOIN_WORDS);  // dl:ok index-possibly-out-of-range@3e33 -- REVIEWED 2026-11-23 TT-DFMREAD: VNext is tested against Length(VItem) in the same condition
-      if not ReadTable(Copy(VItem, VStart, VNext - VStart), VTable, pSource.Reason) then
+      VPiece := Copy(VItem, VStart, VNext - VStart);
+      if not ReadTable(VPiece, VTable, pSource.Reason) then
         Exit(False);
+      VOn := FindAtDepthZero(VPiece, 0, ['ON']);
+      if VOn < Length(VPiece) then
+        pConditions := pConditions + [Copy(VPiece, VOn + 1, Length(VPiece) - VOn - 1)];
       pSource.Tables := pSource.Tables + [VTable];
       while (VNext < Length(VItem)) and IsKeyword(VItem[VNext], JOIN_WORDS) do
         Inc(VNext);
@@ -451,11 +481,109 @@ begin
   end;
 end;
 
+{ Index of the FROM entry a qualifier names: its alias, else the table name of an entry without an alias; -1 = none or
+  more than one. }
+function FromEntry(const pSource: TDfmrSqlSource; const pQualifier: string): Integer;
+var
+  VI: Integer;
+begin
+  Result := -1;
+  for VI := 0 to High(pSource.Tables) do
+    if SameText(pSource.Tables[VI].Alias, pQualifier) then
+      Exit(VI);
+  for VI := 0 to High(pSource.Tables) do
+    if (pSource.Tables[VI].Alias = '') and SameText(pSource.Tables[VI].Name, CleanTableName(pQualifier)) then
+    begin
+      if Result >= 0 then
+        Exit(-1);
+      Result := VI;
+    end;
+end;
+
+{ pTokens without the parentheses that enclose all of it. }
+function Unwrapped(const pTokens: TSqlTokens): TSqlTokens;
+var
+  VDepth, VI: Integer;
+  VWhole: Boolean;
+begin
+  Result := pTokens;
+  while (Length(Result) >= 2) and IsSymbol(Result[0], OPEN_PAREN) and IsSymbol(Result[High(Result)], CLOSE_PAREN) do
+  begin
+    VDepth := 0;
+    VWhole := True;
+    for VI := 0 to High(Result) - 1 do
+    begin
+      if IsSymbol(Result[VI], OPEN_PAREN) then
+        Inc(VDepth)
+      else if IsSymbol(Result[VI], CLOSE_PAREN) then
+        Dec(VDepth);
+      if VDepth = 0 then
+      begin
+        VWhole := False;
+        Break;
+      end;
+    end;
+    if not VWhole then
+      Exit;
+    Result := Copy(Result, 1, Length(Result) - 2);
+  end;
+end;
+
+{ Splits a condition at its depth-0 AND words; nil when it has a depth-0 OR (a conjunct of `A AND B OR C` is not true
+  on every row). }
+function Conjuncts(const pTokens: TSqlTokens): TArray<TSqlTokens>;
+begin
+  if FindAtDepthZero(pTokens, 0, ['OR']) < Length(pTokens) then
+    Exit(nil);
+  Result := SplitAtDepthZero(pTokens, 'AND', True);
+end;
+
+{ True when pTokens[pAt..pAt+2] is `qualifier.column`. }
+function IsQualifiedColumn(const pTokens: TSqlTokens; pAt: Integer): Boolean;
+begin
+  Result := (pAt + 2 < Length(pTokens)) and IsName(pTokens[pAt]) and IsSymbol(pTokens[pAt + 1], DOT) and IsName(pTokens[pAt + 2]);
+end;
+
+{ Adds every `q1.c1 = q2.c2` conjunct of a condition between two different FROM entries. }
+procedure AddEqualities(var pSource: TDfmrSqlSource; const pCondition: TSqlTokens; pWhere: Boolean);
+const
+  EQUALITY_TOKENS = 7; // q . c = q . c
+  EQUALS_AT = 3;
+  RIGHT_AT = 4;
+var
+  VConjunct, VPart: TSqlTokens;
+  VJoin: TDfmrSqlJoin;
+  VLeft, VRight: Integer;
+begin
+  for VConjunct in Conjuncts(Unwrapped(pCondition)) do
+  begin
+    VPart := Unwrapped(VConjunct);
+    if (Length(VPart) <> EQUALITY_TOKENS) or (not IsSymbol(VPart[EQUALS_AT], '=')) then
+      Continue;
+    if not (IsQualifiedColumn(VPart, 0) and IsQualifiedColumn(VPart, RIGHT_AT)) then
+      Continue;
+    VLeft := FromEntry(pSource, VPart[0].Text);
+    VRight := FromEntry(pSource, VPart[RIGHT_AT].Text);
+    if (VLeft < 0) or (VRight < 0) or (VLeft = VRight) then
+      Continue;
+    VJoin.LeftTable := pSource.Tables[VLeft].Name;
+    VJoin.LeftAlias := VPart[0].Text;
+    VJoin.LeftColumn := UpperCase(VPart[2].Text);
+    VJoin.RightTable := pSource.Tables[VRight].Name;
+    VJoin.RightAlias := VPart[RIGHT_AT].Text;
+    VJoin.RightColumn := UpperCase(VPart[RIGHT_AT + 2].Text);
+    VJoin.InWhere := pWhere;
+    pSource.Joins := pSource.Joins + [VJoin];
+  end;
+end;
+
 function ReadSelectSource(const pSql: string): TDfmrSqlSource;
 var
   VTokens, VItem: TSqlTokens;
-  VFirst, VFrom, VEnd: Integer;
+  VConditions: TArray<TSqlTokens>;
+  VFirst, VFrom, VEnd, VWhereEnd: Integer;
 begin
+  VConditions := nil;
   Result := Default(TDfmrSqlSource);
   VTokens := Tokenize(pSql);
   if Length(VTokens) = 0 then
@@ -477,14 +605,21 @@ begin
   while (VEnd > VFrom) and (VEnd = Length(VTokens)) and IsSymbol(VTokens[VEnd - 1], ';') do
   begin
     SetLength(VTokens, Length(VTokens) - 1);
-    Dec(VEnd);
+    Dec(VEnd);  // dl:ok index-possibly-out-of-range@0aaf -- REVIEWED 2026-11-26 XTABLE X3: VEnd <= Length(VTokens) (FindAtDepthZero); the WHERE test reads VTokens[VEnd] only after VEnd < Length(VTokens) in the same condition
   end;
-  if ReadFrom(Copy(VTokens, VFrom + 1, VEnd - VFrom - 1), Result) and HasMacro(VTokens, VEnd) then
+  if ReadFrom(Copy(VTokens, VFrom + 1, VEnd - VFrom - 1), Result, VConditions) and HasMacro(VTokens, VEnd) then
     Result.Reason := 'the SQL has a macro';
   if Result.Reason <> '' then
   begin
     Result.Tables := nil;
     Exit;
+  end;
+  for VItem in VConditions do
+    AddEqualities(Result, VItem, False);
+  if (VEnd < Length(VTokens)) and IsKeyword(VTokens[VEnd], ['WHERE']) then
+  begin
+    VWhereEnd := FindAtDepthZero(VTokens, VEnd + 1, WHERE_END_WORDS);
+    AddEqualities(Result, Copy(VTokens, VEnd + 1, VWhereEnd - VEnd - 1), True);
   end;
   for VItem in SplitItems(Copy(VTokens, VFirst, VFrom - VFirst)) do
     Result.Items := Result.Items + [ReadItem(VItem)];

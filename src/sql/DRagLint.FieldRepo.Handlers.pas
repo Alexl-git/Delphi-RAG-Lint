@@ -377,6 +377,13 @@ var
 begin
   pCode := pBody;
   pReason := '';
+  VMacros := nil;
+  if Length(ForeignMacros(pBody)) > 0 then
+  begin
+    pReason := 'the code reads fields of other tables (' + string.Join(', ', ForeignMacros(pBody)) +
+      '): not generated before repo compose-sql brings them';
+    Exit(False);
+  end;
   try
     VMacros := ParseMacros(pBody);
   except

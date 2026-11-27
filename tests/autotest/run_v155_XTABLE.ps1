@@ -9,6 +9,12 @@
   form / default rules, keyless parent, depth, roles, loader). Part D drives `repo paths` on
   xtable\xtable_paths_v4.txt and the MICRONITEV6A counts: on a COPY of -V6aRepo, else of a repository seeded
   read-only from -V6aConnection (skipped, and said so, when neither is reachable); the original is checked unchanged.
+  Slice X3 (design 3.1, 3.2): Part E drives `repo read-dfm` on xtable\uXJoin.dfm + uXMem.dfm over the schema of
+  xtable\xtable_schema.sql: ON / WHERE conditions choose the path (rule 2), child-end home, `{{ALIAS.F}}` bodies,
+  no child end / a 1:1 pair / a table joined twice / OR = unresolved with the reason, an offered FORM relation
+  (unchecked), FK relation rows, apply + repo check clean + a second read idempotent; AttachedTo (chain, cycle),
+  AttachTable (array form not followed), CloneCursor / CopyDataSet / CopyData / AppendData / Data :=, two sources,
+  a field written after a copy; gen-handlers / write-dfm refuse a foreign input cleanly; schema 3 refused.
   Run: pwsh -File tests\autotest\run_v155_XTABLE.ps1 [-Exe <drag-lint.exe>] [-SkipBuild] [-V6aRepo <file>]
        [-V6aConnection <Firebird connection string>]
 #>
@@ -129,6 +135,65 @@ try {
   Check 'D9 usage: --from without --to exits 2' ($r.Code -eq 2) "exit=$($r.Code) $($r.Out)"
   $r = Run @('repo', 'paths', '--repo', $p, '--stats', '--depth', '0')
   Check 'D10 usage: --depth 0 exits 2' ($r.Code -eq 2) "exit=$($r.Code) $($r.Out)"
+
+  # ---- E: X3 read-dfm (design 3.1, 3.2): join conditions, child-end home, aliases + bindings, memtable links
+  $xf = Join-Path $work 'xforms'
+  [IO.Directory]::CreateDirectory($xf) | Out-Null
+  foreach ($n in 'uXJoin.dfm', 'uXJoin.pas', 'uXMem.dfm', 'uXMem.pas') { [IO.File]::Copy((Join-Path $fix "xtable\$n"), (Join-Path $xf $n)) }
+  $xr = Join-Path $work 'x3.dlrepo'
+  $null = Run @('repo', 'init', '--repo', $xr)
+  $s = Run @('repo', 'seed-fb', '--ddl', (Join-Path $fix 'xtable\xtable_schema.sql'), '--repo', $xr, '--apply')
+  Check 'E0 the X3 fixture schema seeds (FKs, keys, a keyless table, a 1:1 pair)' ($s.Code -eq 0) $s.Out
+  $dfms = (Join-Path $xf 'uXJoin.dfm') + ';' + (Join-Path $xf 'uXMem.dfm')
+  function X3([string[]]$more = @(), $rp = $xr) { Run (@('repo', 'read-dfm', '--repo', $rp, '--dfm', $dfms, '--direction', 'dfm-to-repo') + $more) }
+  $r = X3
+  $o = $r.Out
+  function Ch([string]$pat) { [regex]::IsMatch($o, $pat) }
+  Check 'E1 calc over IPCHART + MSCLIST: home IPCHART (the child end), foreign input as {{MSCLIST.DECIMALS}}' (Ch '(?m)^\[\d+\] insert DL_FIELDS_INFO IPCHART\|FTRNAME: [^\n]*CALC_BODY=\{\{FTRNAME\}\}\.AsString := FloatToStr\(\{\{RVAL\}\}\.AsFloat\) \+ IntToStr\(\{\{MSCLIST\.DECIMALS\}\}\.AsInteger\);') $o
+  Check 'E2 the ON conditions choose the path through INSPRSLT (rule 2, form); checked' ((Ch '(?m)^\[\d+\] insert DL_FIELD_INPUTS IPCHART\|FTRNAME\|\|MSCLIST:  -> PATH=FK_IPCHART_INSP>FK_INSP_MSC; TARGET_TABLE=MSCLIST \(rule form\)\r?\n\[') ) $o
+  Check 'E3 WHERE equalities between two FROM tables choose the path through IINSP' (Ch '(?m)^\[\d+\] insert DL_FIELD_INPUTS IPCHART\|ALTNAME\|\|MSCLIST:  -> PATH=FK_IPCHART_IINSP>FK_IINSP_MSC; TARGET_TABLE=MSCLIST \(rule form\)') $o
+  Check 'E4 a WHERE with OR gives no condition: two paths, unresolved, never picked' ((Ch 'no table: ORNAME: the calc code reads 2 tables: IPCHART MSCLIST; home IPCHART; 2 paths to MSCLIST, none chosen \(asked once\)') -and -not (Ch 'DL_FIELD_INPUTS IPCHART\|ORNAME')) $o
+  Check 'E5 an input that is a calc field of the home table stays {{DOUBLED}}; NOTATION is {{MSCLIST.NOTATION}}' (Ch 'insert DL_FIELDS_INFO IPCHART\|LABELX: [^\n]*CALC_BODY=\{\{LABELX\}\}\.AsString := \{\{DOUBLED\}\}\.AsString \+ \{\{MSCLIST\.NOTATION\}\}\.AsString;') $o
+  Check 'E6 a join on a parent key with no FK is OFFERED as a FORM relation (unchecked, XQ6); its input is unchecked' ((Ch '(?m)^\[\d+\] insert DL_RELATIONS IPCHART_TOOLGR:  -> IPCHART > TOOLGR; SOURCE=FORM; PARENT_KEY=PK_TOOLGR; IS_DEFAULT=False; COLUMNS=GRID=GRID\r?\n  \(unchecked\)') -and (Ch '(?m)^\[\d+\] insert DL_FIELD_INPUTS IPCHART\|GRTXT\|\|TOOLGR:  -> PATH=IPCHART_TOOLGR; TARGET_TABLE=TOOLGR \(rule form\)\r?\n  \(unchecked\)') -and (Ch '(?m)^\[\d+\] insert DL_FIELDS_INFO IPCHART\|GRTXT: [^\n]*\{\{TOOLGR\.GRNAME\}\}[^\n]*\r?\n  \(unchecked\)')) $o
+  Check 'E7 a join onto a keyless table: no child end, unresolved with the reason' (Ch 'no table: NKTXT: the calc code reads 2 tables: IPCHART NOKEY; no table of IPCHART NOKEY reaches all the others') $o
+  Check 'E8 a 1:1 pair: two child ends, unresolved (asked)' (Ch 'no table: PAIRTXT: the calc code reads 2 tables: PAIRA PAIRB; PAIRA PAIRB each reach all the others \(a 1:1 pair\)') $o
+  Check 'E9 a table joined twice: unresolved, not merged' (Ch 'no table: TWOMSC: the calc code reads 2 tables: IPCHART MSCLIST; MSCLIST is in the FROM 2 times') $o
+  $fkIns = @([regex]::Matches($o, '(?m)^\[\d+\] insert DL_RELATIONS (FK_\w+):  -> [^\n]*SOURCE=FK; CONSTRAINT_NAME=') | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
+  Check 'E10 the FK steps the bindings use are inserted once each (2.3: created when a binding first uses the step)' (($fkIns -join ',') -eq 'FK_IINSP_MSC,FK_INSP_MSC,FK_IPCHART_IINSP,FK_IPCHART_INSP') ($fkIns -join ',')
+  Check 'E11 summary line of the cross-table calc fields' (Ch '(?m)^cross-table calc: 4 placed, 4 unresolved; 4 inputs; relations: 4 FK used, 1 offered') $o
+  # memtable links (3.1)
+  Check 'E12 AttachedTo (DFM) gives the source''s table; a calc field of the memtable is read into it' ((Ch 'dataset uXMem\.dfm memA \(TkbmMemTable\) -> IPCHART \(via AttachedTo tblChart\): 2 data, 1 calc') -and (Ch 'insert DL_FIELDS_INFO IPCHART\|HALF: [^\n]*CALC_BODY=\{\{HALF\}\}\.AsFloat := \{\{RVAL\}\}\.AsFloat / 2;')) $o
+  Check 'E13 AttachedTo chain of two memtables' (Ch 'memB \(TkbmMemTable\) -> IPCHART \(via AttachedTo memA > AttachedTo tblChart\)') $o
+  Check 'E14 an AttachedTo cycle is guarded and unresolved' (Ch 'memC1 \(TkbmMemTable\) -> UNRESOLVED \(the links memC1 > memC2 > memC1 are a cycle\)') $o
+  Check 'E15 literal AttachTable followed; the array form not' ((Ch 'memD \(TkbmMemTable\) -> IPCHART \(via AttachTable tblChart\)') -and (Ch 'memE \(TkbmMemTable\) -> UNRESOLVED \(no TableName and no SQL in the DFM\)')) $o
+  Check 'E16 CopyDataSet with a comment in the argument; a field written after the copy keeps no origin' ((Ch 'memF \(TFDMemTable\) -> IPCHART \(via CopyDataSet tblChart\): 2 data[^\n]*\n  no table column: RVAL') -and (Ch 'warning: uXMem\.dfm memF RVAL: no table: written in code after the copy \(uXMem\.pas:51\)')) $o
+  Check 'E17 CloneCursor of a join: the memtable is that join' (Ch 'memG \(TFDMemTable\) -> JOIN IPCHART INSPRSLT MSCLIST \(via CloneCursor qryJ\)') $o
+  Check 'E18 Data :=, CopyData, AppendData, Self.CloneCursor' ((Ch 'memH \(TFDMemTable\) -> IPCHART \(via Data tblChart\)') -and (Ch 'memI \(TFDMemTable\) -> IPCHART \(via CopyData tblChart\)') -and (Ch 'memJ \(TFDMemTable\) -> IPCHART \(via AppendData tblChart\)') -and (Ch 'memL \(TFDMemTable\) -> IPCHART \(via CloneCursor tblChart\)')) $o
+  Check 'E19 two different sources for one target: reported, never picked' (Ch 'memK \(TFDMemTable\) -> UNRESOLVED \(linked to 2 sources: CopyDataSet tblChart \(uXMem\.pas:56\), CopyDataSet qryJ \(uXMem\.pas:57\)\)') $o
+  Check 'E20 links summary line per source kind' (Ch '(?m)^links: 9 datasets got a source: AttachedTo 2, AttachTable 1, CloneCursor 2, CopyDataSet 1, CopyData 1, AppendData 1, Data 1; 3 unresolved') $o
+  $j = X3 @('--json')
+  $jo = $null; try { $jo = $j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json } catch { }
+  $jm = if ($jo) { @($jo.datasets | Where-Object { $_.dataset -eq 'memB' })[0] } else { $null }
+  Check 'E21 --json: via of a dataset, totals.crossTable and totals.links' (($null -ne $jm) -and ($jm.via -eq 'AttachedTo memA > AttachedTo tblChart') -and ($jo.totals.crossTable.placed -eq 4) -and ($jo.totals.crossTable.inputs -eq 4) -and ($jo.totals.links.AttachedTo -eq 2) -and ($jo.totals.links.unresolved -eq 3)) $j.Out
+  # apply, check, idempotent
+  $r = X3 @('--apply')
+  $c = Run @('repo', 'check', '--repo', $xr)
+  Check 'E22 apply the checked changes: repo check is clean (inputs, FK relations, field rows agree)' (($r.Code -eq 0) -and ($c.Code -eq 0) -and ($c.Out -match 'check: clean')) "$($r.Out)`n$($c.Out)"
+  $info = (Run @('repo', 'info', '--repo', $xr)).Out
+  Check 'E23 three inputs and four FK relations stored; the offered FORM relation is not' (($info -match 'DL_FIELD_INPUTS: 3 rows') -and ($info -match 'DL_RELATIONS: 4 rows') -and ($info -match 'DL_RELATION_COLUMNS: 4 rows')) $info
+  $r = X3
+  Check 'E24 a second read proposes no input or FK relation again (the stored binding, rule 1)' ((-not ($r.Out -match 'insert DL_FIELD_INPUTS IPCHART\|(FTRNAME|ALTNAME|LABELX)')) -and (-not ($r.Out -match 'insert DL_RELATIONS FK_')) -and ($r.Out -match 'insert DL_RELATIONS IPCHART_TOOLGR')) $r.Out
+  # the generators refuse a foreign input cleanly (review nit)
+  $g = Run @('repo', 'gen-handlers', '--repo', $xr, '--dfm', (Join-Path $xf 'uXMem.dfm'), '--dataset', 'tblCalc')
+  Check 'E25 gen-handlers: a body with {{MSCLIST.DECIMALS}} is BLOCKED with the reason, no exception' (($g.Out -match 'FTRNAME: the code reads fields of other tables \(\{\{MSCLIST\.DECIMALS\}\}\): not generated before repo compose-sql') -and ($g.Out -notmatch 'Exception|reserved')) "exit=$($g.Code)`n$($g.Out)"
+  $w = Run @('repo', 'write-dfm', '--repo', $xr, '--dfm', (Join-Path $xf 'uXMem.dfm'), '--direction', 'repo-to-dfm', '--dataset', 'tblChart', '--names', 'FTRNAME')
+  Check 'E26 write-dfm: inserting that field is BLOCKED with the reason, no macro exception' (($w.Code -eq 0) -and ($w.Out -match 'BLOCKED: the code reads fields of other tables \(\{\{MSCLIST\.DECIMALS\}\}\): not written before repo compose-sql') -and ($w.Out -notmatch 'reserved')) "exit=$($w.Code)`n$($w.Out)"
+  # schema 4 minimum
+  $v3x = Join-Path $work 'v3x.dlrepo'
+  $null = Run @('repo', 'restore', '--repo', $v3x, '--in', (Join-Path $fix 'golden_v3.txt'))
+  $r = X3 @() $v3x
+  $g = Run @('repo', 'gen-handlers', '--repo', $v3x, '--dfm', (Join-Path $xf 'uXMem.dfm'))
+  Check 'E27 read-dfm and gen-handlers refuse schema 3 (run repo migrate)' (($r.Code -eq 1) -and ($r.Out -match 'the repository is schema 3: run repo migrate first') -and ($g.Code -ne 0) -and ($g.Out -match 'schema 3: run repo migrate first')) "$($r.Out)`n$($g.Out)"
 
   # MICRONITEV6A (design 3.2 measured check): the draft's pairs 274 / 1,089 / 1,653; more than one path 10 / 332 /
   # 1,165 with the two-column key FK_PROBLEMS12 counted ONCE (the draft's 11 / 334 / 1,168 counted it per column).

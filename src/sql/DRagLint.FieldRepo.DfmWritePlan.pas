@@ -1589,6 +1589,9 @@ begin
     Result := 'unknown FIELD_KIND'
   else if BdeBlockReason <> '' then
     Result := BdeBlockReason
+  else if FrKindHasBody(pRow.Kind) and (Length(ForeignMacros(pRow.Body)) > 0) then
+    Result := 'the code reads fields of other tables (' + string.Join(', ', ForeignMacros(pRow.Body)) +
+      '): not written before repo compose-sql brings them'
   else if FDataset.ObjKind <> OBJECT_KIND then
     Result := 'the dataset is inherited: its fields are in the ancestor''s DFM'
   else if FindClassByName(pClass) = nil then

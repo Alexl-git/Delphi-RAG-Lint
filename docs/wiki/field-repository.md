@@ -225,7 +225,7 @@ and are handled as their own schema until you run `repo migrate`. Nothing is dro
 | 3 (1.54) | the six event columns of `DL_FIELDS_INFO` (last, in this order): `ONGETTEXT_BODY`, `ONSETTEXT_BODY`, `ONVALIDATE_BODY`, `ONCHANGE_BODY`, `GRID_DISPLAYTEXT_BODY`, `GRID_DRAWCELL_BODY`; `DL_GRID_COLUMNS` |
 | 4 (1.55) | `DL_RELATIONS`, `DL_RELATION_COLUMNS`, `DL_FIELD_INPUTS` (cross-table fields, below); no column and no row changes |
 
-`read-dfm` and `gen-handlers` need schema 3 or later; the other verbs work on every schema.
+`read-dfm` and `gen-handlers` need schema 4 (1.55: read-dfm writes `DL_FIELD_INPUTS` / `DL_RELATIONS` rows); the other verbs work on every schema.
 
 ### Field kinds
 
@@ -307,9 +307,12 @@ A field belongs to its own table, also when its code reads other tables (owner r
 ```
 
 with `IPCHART | FTRNAME | '' | MSC | FK_IPCHART_INSP>FK_INSP_MSC | MSCLIST`. Selecting the field brings its inputs,
-transitively: a parent's calc field brings its own inputs with the paths joined. 1.55 stores and checks these rows
-and finds the paths (`repo paths`, below); reading them from forms and composing the SQL follow (design
-`docs/superpowers/specs/2026-11-26-cross-table-fields-design.md`, slices X3-X4).
+transitively: a parent's calc field brings its own inputs with the paths joined. 1.55 stores and checks these rows,
+finds the paths (`repo paths`, below) and reads them from forms: `repo read-dfm` places a join calc field over
+several tables in its child end and writes its inputs and the FK / FORM relations they use (see
+[Read a form into the field repository](repo-read-dfm)). `repo gen-handlers` and `repo write-dfm` refuse a body with
+`{{ALIAS.FIELD}}` as BLOCKED (`the code reads fields of other tables (...)`) until the SQL that brings those inputs is
+composed (design `docs/superpowers/specs/2026-11-26-cross-table-fields-design.md`, slice X4).
 
 `repo check` on schema 4: `input-alias-undeclared`, `input-unknown-field` (the target table has no such field),
 `input-no-field-row`, `input-path-broken` (an unknown relation, or a step that does not start where the last ended),
@@ -338,7 +341,7 @@ would multiply). `repo paths` lists every simple path up from `--from` to `--to`
 | `ambiguous` | several paths: the dialog asks once and stores the answer as `IS_DEFAULT` of each step; never chosen by data |
 | `none` | no path within the depth (exit 1) |
 
-(The stored binding of a field and the form's own joins come first; the read-dfm slice applies those.)
+(The stored binding of a field and the form's own joins come first: `repo read-dfm` applies those, see [Read a form into the field repository](repo-read-dfm).)
 
 ```
 repo paths IPCHART -> MSCLIST (depth 3): 2 path(s)

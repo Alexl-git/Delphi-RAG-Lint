@@ -64,6 +64,28 @@ type
     JoinTables: TArray<string>;
     /// <summary>Fields of a join without a table: Name = FieldName, Value = why (never a guess).</summary>
     NoTable: TArray<TDfmrPair>;
+    /// <summary>The links followed to the dataset's source (design 2026-11-26-cross-table-fields 3.1), e.g.
+    /// `AttachedTo memA > AttachedTo tblChart`; '' = none.</summary>
+    Via: string;
+    /// <summary>Kind of the first link (AttachedTo, AttachTable, CloneCursor, CopyDataSet, CopyData, AppendData, Data);
+    /// '' = the dataset has no link or the link gives no source.</summary>
+    LinkKind: string;
+    /// <summary>True when the dataset has a link that gives no source (cycle, two sources, no such dataset).</summary>
+    LinkFailed: Boolean;
+  end;
+
+  /// <summary>Calc fields of joins that read several tables (design 2026-11-26-cross-table-fields 3.1 CHILD END).</summary>
+  TDfmrCrossTotals = record
+    /// <summary>Placed: a home table and a chosen path to every other table they read.</summary>
+    Placed: Integer;
+    /// <summary>Not placed: no child end, two child ends, a table joined twice, a path not chosen.</summary>
+    Unresolved: Integer;
+    /// <summary>Distinct DL_FIELD_INPUTS rows (table, field, alias) the placed fields need.</summary>
+    Inputs: Integer;
+    /// <summary>Distinct FK relations the inputs' paths use.</summary>
+    FkUsed: Integer;
+    /// <summary>FORM relations offered (a form's join on a parent key with no FK, ruling XQ6).</summary>
+    Offered: Integer;
   end;
 
   /// <summary>What one change writes; parallel to the change set.</summary>
@@ -77,6 +99,11 @@ type
     ColumnName: string;
     /// <summary>Columns to write.</summary>
     Columns: TArray<TDfmrPair>;
+    /// <summary>DL_RELATIONS or DL_FIELD_INPUTS for a cross-table change (schema 4); '' = a field or grid change.</summary>
+    RowTable: string;
+    /// <summary>DL_RELATIONS only: the DL_RELATION_COLUMNS rows, Name = CHILD_COLUMN, Value = PARENT_COLUMN, in
+    /// position order.</summary>
+    SubColumns: TArray<TDfmrPair>;
   end;
 
   /// <summary>A planned read.</summary>
@@ -89,18 +116,29 @@ type
     Datasets: TArray<TDfmrDatasetReport>;
     /// <summary>Everything read but not turned into a change, and every fact to look at.</summary>
     Warnings: TArray<string>;
+    /// <summary>Calc fields of joins over several tables.</summary>
+    CrossTable: TDfmrCrossTotals;
   end;
 
 /// <summary>Reads DFMs and plans the changes that bring the repository in line with them.</summary>
-/// <param name="pRepo">Open repository connection, schema 3; only SELECTs run.</param>
+/// <param name="pRepo">Open repository connection, schema 4; only SELECTs run.</param>
 /// <param name="pFiles">DFM files; the unit of the same name is read for handler code when it exists.</param>
 /// <param name="pDataset">Dataset component name (case-insensitive); '' = every dataset of every file.</param>
 /// <returns>The plan. Every change is checked, except alternatives that contradict each other, a data field the
 /// repository knows as calc / lookup, a body or lookup wiring of a field that does not become that kind, and the delete
 /// of a grid column that is gone from the form; a value that cannot be stored is blocked.</returns>
 /// <exception cref="EDfmReadError">A file cannot be read, or no file holds the dataset.</exception>
-/// <exception cref="ERepoError">The repository is schema 1 or 2 (run repo migrate first).</exception>
-/// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids.</remarks>
+/// <exception cref="ERepoError">The repository is schema 1, 2 or 3 (run repo migrate first).</exception>
+/// <remarks>Ids are 1-based in plan order: the same DFMs and repository always give the same ids.
+/// <para>Cross-table (design 2026-11-26-cross-table-fields 3.1, 3.2; X3): a dataset without a table or SQL takes the
+/// source of its AttachedTo (DFM) or of a literal AttachTable / CloneCursor / CopyDataSet / CopyData / AppendData /
+/// `Data :=` in its unit, transitively; a cycle, or two different sources, is unresolved. A copied data field the unit
+/// also writes has no table. A join calc field reading several tables is placed in the CHILD END (the one table from
+/// which every other one is reached up the relation graph); every other table becomes an input alias (ruling XQ2: the
+/// table name) whose path is chosen by design 3.2 rules 1-5, with the form's ON / WHERE equalities as rule 2. The
+/// plan then inserts the DL_FIELD_INPUTS rows (checked) and the DL_RELATIONS rows their paths need: an FK step
+/// checked, a FORM relation offered for a join on a parent key without an FK unchecked (ruling XQ6), and an input that
+/// goes through an offered relation unchecked.</para></remarks>
 function PlanDfmRead(pRepo: TFDConnection; const pFiles: TArray<string>; const pDataset: string): TDfmrPlan;
 
 /// <summary>The fields the repository has for a table, as the field selection of a dataset sees them.</summary>
@@ -116,7 +154,8 @@ function TableFieldsOf(pRepo: TFDConnection; const pTable: string): TArray<TFrSe
 /// <param name="pChosen">Changes to apply (the checked ones, or those a --select file named).</param>
 /// <returns>One `replacing OLD with NEW` line per applied change.</returns>
 /// <exception cref="ERepoError">Two chosen changes set the same value, a chosen change is blocked, or it needs a row
-/// whose insert was not chosen; nothing is written.</exception>
+/// whose insert was not chosen (a DL_FIELD_INPUTS row needs its DL_FIELDS_INFO row and every DL_RELATIONS row of its
+/// PATH); nothing is written.</exception>
 function ApplyDfmRead(pRepo: TFDConnection; const pPlan: TDfmrPlan; const pChosen: TArray<TFrChange>): TArray<string>;
 
 implementation
@@ -128,17 +167,33 @@ uses
   System.StrUtils,
   System.Variants,
   System.Generics.Collections,
+  System.Generics.Defaults,
   Data.DB,
   FireDAC.Stan.Param,
   FireDAC.DApt,
   DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census@9edb -- REVIEWED 2026-11-23 TT-DFMREAD: the unit is used for its record types and functions; one table-name constant is what it needs
   DRagLint.FieldRepo.SchemaFacts,
   DRagLint.FieldRepo.DfmReadSql,
-  DRagLint.FieldRepo.DfmReadCalc;
+  DRagLint.FieldRepo.DfmReadCalc,
+  DRagLint.FieldRepo.DfmReadLinks,
+  DRagLint.FieldRepo.RelationGraph,
+  DRagLint.FieldRepo.RelationRepo,
+  DRagLint.FieldRepo.CrossTable;
 
 const
   FIELDS_TABLE = 'DL_FIELDS_INFO';
-  SCHEMA_WITH_EVENTS = 3;
+  SCHEMA_WITH_INPUTS = 4; // X3 writes DL_FIELD_INPUTS / DL_RELATIONS rows (design 2.3)
+  BOOL_FALSE = 'False';
+  COL_IS_DEFAULT = 'IS_DEFAULT';
+  COL_RELATION = 'RELATION_NAME';
+  COL_BINDING = 'BINDING';
+  COL_ALIAS = 'ALIAS';
+  COL_PATH = 'PATH';
+  SQL_RELATION_ROW = 'SELECT * FROM "DL_RELATIONS" WHERE "RELATION_NAME" = :N';
+  SQL_RELATION_COLUMNS = 'SELECT * FROM "DL_RELATION_COLUMNS" WHERE "RELATION_NAME" = :N';
+  SQL_INPUT_ROW = 'SELECT * FROM "DL_FIELD_INPUTS" WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F AND "BINDING" = :B ' +
+    'AND "ALIAS" = :A';
+  SQL_STORED_INPUTS = 'SELECT "TABLE_NAME", "FIELD_NAME", "ALIAS", "PATH" FROM "DL_FIELD_INPUTS" WHERE "BINDING" = ''''';
   COL_TABLE = 'TABLE_NAME';
   COL_FIELD = 'FIELD_NAME';
   COL_KIND = 'FIELD_KIND';
@@ -215,6 +270,22 @@ type
     Reason: string;
     IsJoin: Boolean;              // a SELECT over several tables: every field has its own table
     Columns: TDfmrColumnCheck;    // schema facts for unqualified columns; nil = none
+    Via: string;                  // links followed to the source: `AttachedTo memA > CopyDataSet tblX`; '' = none
+    LinkKind: string;             // kind of the first link; '' = none
+    Linked: Boolean;              // the dataset has a link (followed or not)
+    Written: TArray<TDfmrPair>;   // copied data fields the unit writes: upper FieldName -> `Unit.pas:line`
+  end;
+
+  { A DL_FIELD_INPUTS row a placed cross-table calc field needs (design 2.2, default binding). }
+  TPlannedInput = record
+    TableName: string;
+    FieldName: string;
+    Alias: string;
+    Target: string;
+    Rule: string;
+    Source: string;
+    Steps: TArray<TFrRelation>;
+    function Path: string;
   end;
 
   { The table and column of one field of a join; Table '' = none, Why says why. }
@@ -253,7 +324,36 @@ type
     FChanges: TList<TFrChange>;
     FItems: TList<TDfmrChangeItem>;
     FColumns: TDfmrColumnCheck; // the repository's schema facts, for SqlFieldColumn
+    FGraph: TFrRelationGraph;                      // the repository's relation graph (design 3.2)
+    FBaseRelations: TArray<TFrRelation>;           // FGraph's edges, to copy it with a form's offers
+    FKeys: TArray<TFrTableKey>;                    // PK / UNIQUE constraints of the schema facts
+    FStoredRelations: TArray<string>;              // upper-case DL_RELATIONS names
+    FStoredInputs: TDictionary<string, string>;    // TABLE|FIELD|ALIAS (default binding, upper) -> PATH
+    FOffers: TDictionary<string, TFrRelation>;     // upper name -> offered FORM relation
+    FOfferOrder: TList<TFrRelation>;
+    FInputs: TList<TPlannedInput>;
+    FUnitTexts: TDictionary<string, string>;       // lower-case .pas path -> source ('' = none)
+    FUnitLinks: TDictionary<string, TArray<TDfmrLink>>;
+    FCross: TDfmrCrossTotals;
+    FUnchecked: TDictionary<string, string>;      // KeyOf(table, field) of a placed field whose input needs an offer -> why
     procedure LoadRows;
+    procedure LoadCrossTable;
+    function UnitText(const pFile: string): string;
+    function CodeLinksTo(const pForm: TDfmrForm; const pDataset: TDfmrDataset): TArray<TDfmrLink>;
+    function LinkedSource(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pChain, pNames: TArray<string>): TDatasetSource;
+    function KeyOfTable(const pTable: string; const pColumns: TArray<string>): string;
+    function OfferFor(const pChild, pParent, pKey: string; const pChildColumns, pParentColumns: TArray<string>): TFrRelation;
+    function DatasetGraph(const pSource: TDatasetSource; out pFormRelations: TArray<string>): TFrRelationGraph;
+    function PlaceSeveral(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource;
+      const pContext: TDfmrCodeContext; pOrigins: TOrigins; pBodies: TDictionary<string, TDfmrBody>; const pKey: string;
+      pGraph: TFrRelationGraph; const pFormRelations: TArray<string>; out pWhy: string): Boolean;
+    procedure PlaceAllSeveral(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource;
+      const pContext: TDfmrCodeContext; pOrigins: TOrigins; pBodies: TDictionary<string, TDfmrBody>; pSeveral: TList<string>);
+    function AddRowChange(pOp: TFrChangeOp; const pTable, pKey, pProp, pOld, pNew: string;
+      const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer;
+    procedure PlanRelations;
+    procedure PlanInputs;
+    procedure UncheckOffered;
     function HasSchemaColumn(const pTable, pColumn: string; out pKnown: Boolean): Boolean;
     function CalcBodyOf(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pContext: TDfmrCodeContext;
       const pField: TDfmrField): TDfmrBody;
@@ -418,10 +518,20 @@ end;
 { The table and column of a persistent field; False = the DFM does not state it. A calc / lookup field of a join gets
   its table from TDfmRead.JoinOrigins, not here. }
 function FieldSource(const pSource: TDatasetSource; const pField: TDfmrField; out pTable, pColumn, pReason: string): Boolean;
+var
+  VWrite: TDfmrPair;
 begin
   pTable := pSource.TableName;
   pColumn := UpperCase(Trim(pField.FieldName));
   pReason := pSource.Reason;
+  if pField.Kind = frkData then
+    for VWrite in pSource.Written do
+      if SameText(VWrite.Name, pColumn) then
+      begin
+        pTable := '';
+        pReason := 'written in code after the copy (' + VWrite.Value + ')';
+        Exit(False);
+      end;
   if (pField.Kind = frkData) and pSource.HasSql and (pSource.Sql.Reason = '') then
     Exit(SqlFieldColumn(pSource.Sql, pField.FieldName, pField.Origin, pSource.Columns, pTable, pColumn, pReason));
   Result := pTable <> '';
@@ -504,6 +614,13 @@ begin
   FChanges := TList<TFrChange>.Create;
   FItems := TList<TDfmrChangeItem>.Create;
   FColumns := HasSchemaColumn;
+  FStoredInputs := TDictionary<string, string>.Create;
+  FOffers := TDictionary<string, TFrRelation>.Create;
+  FOfferOrder := TList<TFrRelation>.Create;
+  FInputs := TList<TPlannedInput>.Create;
+  FUnitTexts := TDictionary<string, string>.Create;
+  FUnitLinks := TDictionary<string, TArray<TDfmrLink>>.Create;
+  FUnchecked := TDictionary<string, string>.Create;
 end;
 
 function TDfmRead.HasSchemaColumn(const pTable, pColumn: string; out pKnown: Boolean): Boolean;
@@ -516,6 +633,14 @@ end;
 
 destructor TDfmRead.Destroy;
 begin
+  FUnchecked.Free;
+  FUnitLinks.Free;
+  FUnitTexts.Free;
+  FInputs.Free;
+  FOfferOrder.Free;
+  FOffers.Free;
+  FStoredInputs.Free;
+  FGraph.Free;
   FItems.Free;
   FChanges.Free;
   FGridSeen.Free;
@@ -558,6 +683,534 @@ begin
     end;
   finally
     VQuery.Free;
+  end;
+end;
+
+{ ---- cross-table (design 2026-11-26-cross-table-fields 3.1, 3.2) ---- }
+
+{ pTables in the order of the FROM clause. }
+function InFromOrder(const pSource: TDatasetSource; const pTables: TArray<string>): TArray<string>;
+var
+  VTable: TDfmrSqlTable;
+begin
+  Result := nil;
+  for VTable in pSource.Sql.Tables do
+    if MatchText(VTable.Name, pTables) and (not MatchText(VTable.Name, Result)) then
+      Result := Result + [VTable.Name];
+end;
+
+function TPlannedInput.Path: string;
+var
+  VStep: TFrRelation;
+begin
+  Result := '';
+  for VStep in Steps do
+    Result := Result + (if Result = '' then '' else REPO_PATH_SEPARATOR) + VStep.Name;
+end;
+
+function InputKey(const pTable, pField, pAlias: string): string;
+begin
+  Result := UpperCase(pTable + '|' + pField + '|' + pAlias);
+end;
+
+procedure TDfmRead.LoadCrossTable;
+var
+  VSkipped: TArray<string>;
+  VQuery: TFDQuery;
+begin
+  FGraph := LoadRelationGraph(FRepo, VSkipped);
+  FBaseRelations := FGraph.Relations;
+  FKeys := LoadTableKeys(FRepo);
+  FStoredRelations := LoadStoredRelationNames(FRepo);
+  VQuery := TFDQuery.Create(nil);
+  try
+    VQuery.Connection := FRepo;
+    VQuery.Open(SQL_STORED_INPUTS);
+    while not VQuery.Eof do
+    begin
+      FStoredInputs.AddOrSetValue(InputKey(VQuery.Fields[0].AsString, VQuery.Fields[1].AsString, VQuery.Fields[2].AsString),
+        VQuery.Fields[3].AsString);
+      VQuery.Next;
+    end;
+  finally
+    VQuery.Free;
+  end;
+end;
+
+{ The source of a form's unit, '' when there is none (cached: links and writes are read from it). }
+function TDfmRead.UnitText(const pFile: string): string;
+var
+  VPas: string;
+begin
+  VPas := LowerCase(ChangeFileExt(pFile, '.pas'));
+  if FUnitTexts.TryGetValue(VPas, Result) then
+    Exit;
+  Result := if TFile.Exists(VPas) then TFile.ReadAllText(VPas) else '';
+  FUnitTexts.Add(VPas, Result);
+end;
+
+{ The literal links of the form's unit whose receiver is the dataset (`X`, `Self.X`). }
+function TDfmRead.CodeLinksTo(const pForm: TDfmrForm; const pDataset: TDfmrDataset): TArray<TDfmrLink>;
+var
+  VKey: string;
+  VAll: TArray<TDfmrLink>;
+  VLink: TDfmrLink;
+begin
+  VKey := LowerCase(pForm.FileName);
+  if not FUnitLinks.TryGetValue(VKey, VAll) then
+  begin
+    VAll := ReadCodeLinks(UnitText(pForm.FileName));
+    FUnitLinks.Add(VKey, VAll);
+  end;
+  Result := nil;
+  for VLink in VAll do
+    if SameText(VLink.Target, pDataset.Name) then
+      Result := Result + [VLink];
+end;
+
+{ The source of a dataset, through AttachedTo and the literal link calls of its unit when it has no table and no SQL
+  (design 3.1). pChain holds `file|dataset` of the datasets already on the way (cycle guard), pNames their names. }
+function TDfmRead.LinkedSource(const pForm: TDfmrForm; const pDataset: TDfmrDataset;  // dl:ok too-many-exit-points@edb2 -- REVIEWED 2026-11-26 XTABLE X3: each Exit is one reason a link gives no source (none, two sources, no dataset, cycle, source without table, not a copy); guard clauses read in rule order
+  const pChain, pNames: TArray<string>): TDatasetSource;
+var
+  VLinks: TArray<TDfmrLink>;
+  VLink: TDfmrLink;
+  VSources, VWhere: TArray<string>;
+  VOwner: TDfmrForm;
+  VSource, VCandidate: TDfmrDataset;
+  VSub: TDatasetSource;
+  VLocal, VKey, VKind, VPas: string;
+  VFound: Boolean;
+  VFields, VWrites: TArray<TDfmrPair>;
+  VField: TDfmrField;
+  VPair: TDfmrPair;
+begin
+  Result := SourceOf(pDataset, FColumns);
+  if (Result.TableName <> '') or Result.HasSql then
+    Exit;
+  VLinks := CodeLinksTo(pForm, pDataset);
+  VPas := ExtractFileName(ChangeFileExt(pForm.FileName, '.pas'));
+  if pDataset.AttachedTo <> '' then
+  begin
+    VLink.Kind := dlkAttachedTo;
+    VLink.Target := pDataset.Name;
+    VLink.Source := pDataset.AttachedTo;
+    VLink.Line := 0;
+    VLinks := [VLink] + VLinks;
+  end;
+  if Length(VLinks) = 0 then
+    Exit;
+  Result.Linked := True;
+  VSources := nil;
+  VWhere := nil;
+  for VLink in VLinks do
+    if not MatchText(VLink.Source, VSources) then
+    begin
+      VSources := VSources + [VLink.Source];
+      VWhere := VWhere + [DfmrLinkKindName(VLink.Kind) + ' ' + VLink.Source + ' (' + (if VLink.Line = 0
+        then ExtractFileName(pForm.FileName) else VPas + ':' + IntToStr(VLink.Line)) + ')'];
+    end;
+  if Length(VSources) > 1 then
+  begin
+    Result.Reason := Format('linked to %d sources: %s', [Length(VSources), string.Join(', ', VWhere)]);
+    Exit;
+  end;
+  VLink := VLinks[0];
+  VKind := DfmrLinkKindName(VLink.Kind);
+  VFound := False;
+  VSource := Default(TDfmrDataset);
+  if OwnerForm(pForm, VLink.Source, VOwner, VLocal) then
+    for VCandidate in VOwner.Datasets do
+      if SameText(VCandidate.Name, VLocal) then
+      begin
+        VSource := VCandidate;
+        VFound := True;
+        Break;
+      end;
+  if not VFound then
+  begin
+    Result.Reason := Format('linked to %s (%s), which is no dataset of the form or of a module beside it', [VLink.Source, VKind]);
+    Exit;
+  end;
+  VKey := LowerCase(VOwner.FileName + '|' + VSource.Name);
+  if MatchText(VKey, pChain) then
+  begin
+    Result.Reason := 'the links ' + string.Join(' > ', pNames) + ' > ' + VSource.Name + ' are a cycle';
+    Exit;
+  end;
+  VSub := LinkedSource(VOwner, VSource, pChain + [VKey], pNames + [VSource.Name]);
+  if (VSub.TableName = '') and (not VSub.IsJoin) then
+  begin
+    Result.Reason := if VSub.Linked then VSub.Reason
+      else Format('linked to %s (%s), which has no table: %s', [VLink.Source, VKind, VSub.Reason]);
+    Exit;
+  end;
+  Result := VSub;
+  Result.Linked := True;
+  Result.LinkKind := VKind;
+  Result.Via := VKind + ' ' + VLink.Source + (if VSub.Via = '' then '' else ' > ' + VSub.Via);
+  Result.Written := nil;
+  if not DfmrLinkIsCopy(VLink.Kind) then
+    Exit;
+  VFields := nil;
+  for VField in pDataset.Fields do
+    if VField.Kind = frkData then
+      VFields := VFields + [MakePair(VField.CompName, VField.FieldName)];
+  VWrites := ReadFieldWrites(UnitText(pForm.FileName), pDataset.Name, VFields);
+  for VPair in VWrites do
+    Result.Written := Result.Written + [MakePair(VPair.Name, VPas + ':' + VPair.Value)];
+end;
+
+{ The PK / UNIQUE constraint of pTable on exactly pColumns (any order); '' = none. }
+function TDfmRead.KeyOfTable(const pTable: string; const pColumns: TArray<string>): string;
+var
+  VKey: TFrTableKey;
+  VLeft, VRight: TArray<string>;
+begin
+  Result := '';
+  VLeft := Copy(pColumns);
+  TArray.Sort<string>(VLeft, TIStringComparer.Ordinal);
+  for VKey in FKeys do
+    if SameText(VKey.TableName, pTable) then
+    begin
+      VRight := Copy(VKey.Columns);
+      TArray.Sort<string>(VRight, TIStringComparer.Ordinal);
+      if (Length(VLeft) > 0) and SameText(string.Join(',', VLeft), string.Join(',', VRight)) then
+        Exit(VKey.ConstraintName);
+    end;
+end;
+
+{ A FORM relation for a join on a parent key (ruling XQ6): the one already offered for the same child, parent and
+  columns, else a new one named `CHILD_PARENT` (`_2`, ... on a clash). }
+function TDfmRead.OfferFor(const pChild, pParent, pKey: string; const pChildColumns, pParentColumns: TArray<string>): TFrRelation;
+var
+  VRel: TFrRelation;
+  VBase: string;
+  VN: Integer;
+
+  function Taken(const pName: string): Boolean;
+  var
+    VBaseRel: TFrRelation;
+  begin
+    Result := FOffers.ContainsKey(UpperCase(pName)) or MatchText(pName, FStoredRelations);
+    for VBaseRel in FBaseRelations do
+      Result := Result or SameText(VBaseRel.Name, pName);
+  end;
+
+begin
+  for VRel in FOfferOrder do
+    if SameText(VRel.ChildTable, pChild) and SameText(VRel.ParentTable, pParent)
+      and SameText(string.Join(',', VRel.ChildColumns), string.Join(',', pChildColumns))
+      and SameText(string.Join(',', VRel.ParentColumns), string.Join(',', pParentColumns)) then
+      Exit(VRel);
+  Result := Default(TFrRelation);
+  VBase := UpperCase(pChild + '_' + pParent);
+  Result.Name := VBase;
+  VN := 1;
+  while Taken(Result.Name) do
+  begin
+    Inc(VN);
+    Result.Name := VBase + '_' + IntToStr(VN);
+  end;
+  Result.ChildTable := pChild;
+  Result.ParentTable := pParent;
+  Result.Source := REPO_RELATION_FORM;
+  Result.ParentKey := pKey;
+  Result.ChildColumns := pChildColumns;
+  Result.ParentColumns := pParentColumns;
+  FOffers.Add(UpperCase(Result.Name), Result);
+  FOfferOrder.Add(Result);
+end;
+
+function SamePairs(const pChildA, pParentA, pChildB, pParentB: TArray<string>): Boolean;
+var
+  VA, VB: TArray<string>;
+  VI: Integer;
+begin
+  Result := (Length(pChildA) = Length(pChildB)) and (Length(pChildA) = Length(pParentA)) and
+    (Length(pChildB) = Length(pParentB));
+  if not Result then
+    Exit;
+  VA := nil;
+  VB := nil;
+  for VI := 0 to High(pChildA) do  // dl:ok index-possibly-out-of-range@c1ec -- REVIEWED 2026-11-26 XTABLE X3: the four lengths are compared equal before the loop (Exit otherwise)
+  begin
+    VA := VA + [UpperCase(pChildA[VI] + '=' + pParentA[VI])];
+    VB := VB + [UpperCase(pChildB[VI] + '=' + pParentB[VI])];
+  end;
+  TArray.Sort<string>(VA);
+  TArray.Sort<string>(VB);
+  Result := string.Join(',', VA) = string.Join(',', VB);
+end;
+
+{ The relations the form's own joins use (design 3.2 rule 2): the equalities between two FROM entries, grouped per
+  entry pair, matched to the graph's one-step relations column for column; a group that matches none and ends on a
+  parent key is offered as a FORM relation (XQ6). Returns FGraph, or a copy of it with this dataset's offers (the
+  caller frees a copy): an offer is no edge for another dataset. }
+function TDfmRead.DatasetGraph(const pSource: TDatasetSource; out pFormRelations: TArray<string>): TFrRelationGraph;
+type
+  TJoinGroup = record
+    ATable, BTable, AAlias, BAlias: string;
+    ACols, BCols: TArray<string>;
+  end;
+var
+  VGroups: TArray<TJoinGroup>;
+  VGroup: TJoinGroup;
+  VJoin: TDfmrSqlJoin;
+  VI: Integer;
+  VFound, VMatched: Boolean;
+  VPath: TFrRelationPath;
+  VRel: TFrRelation;
+  VOffers: TArray<TFrRelation>;
+  VKeyA, VKeyB: string;
+begin
+  pFormRelations := nil;
+  VGroups := nil;
+  VOffers := nil;
+  for VJoin in pSource.Sql.Joins do
+  begin
+    if SameText(VJoin.LeftTable, VJoin.RightTable) then
+      Continue;
+    VGroup := Default(TJoinGroup);
+    if CompareText(VJoin.LeftAlias, VJoin.RightAlias) <= 0 then
+    begin
+      VGroup.ATable := VJoin.LeftTable;
+      VGroup.AAlias := VJoin.LeftAlias;
+      VGroup.BTable := VJoin.RightTable;
+      VGroup.BAlias := VJoin.RightAlias;
+      VGroup.ACols := [VJoin.LeftColumn];
+      VGroup.BCols := [VJoin.RightColumn];
+    end
+    else
+    begin
+      VGroup.ATable := VJoin.RightTable;
+      VGroup.AAlias := VJoin.RightAlias;
+      VGroup.BTable := VJoin.LeftTable;
+      VGroup.BAlias := VJoin.LeftAlias;
+      VGroup.ACols := [VJoin.RightColumn];
+      VGroup.BCols := [VJoin.LeftColumn];
+    end;
+    VFound := False;
+    for VI := 0 to High(VGroups) do
+      if SameText(VGroups[VI].AAlias, VGroup.AAlias) and SameText(VGroups[VI].BAlias, VGroup.BAlias) then
+      begin
+        VGroups[VI].ACols := VGroups[VI].ACols + VGroup.ACols;
+        VGroups[VI].BCols := VGroups[VI].BCols + VGroup.BCols;
+        VFound := True;
+      end;
+    if not VFound then
+      VGroups := VGroups + [VGroup];
+  end;
+  for VGroup in VGroups do
+  begin
+    VMatched := False;
+    for VPath in FGraph.FindPaths(VGroup.ATable, VGroup.BTable, 1) do
+      if SamePairs(VPath.Steps[0].ChildColumns, VPath.Steps[0].ParentColumns, VGroup.ACols, VGroup.BCols) then
+      begin
+        pFormRelations := pFormRelations + [VPath.Steps[0].Name];
+        VMatched := True;
+      end;
+    for VPath in FGraph.FindPaths(VGroup.BTable, VGroup.ATable, 1) do
+      if SamePairs(VPath.Steps[0].ChildColumns, VPath.Steps[0].ParentColumns, VGroup.BCols, VGroup.ACols) then
+      begin
+        pFormRelations := pFormRelations + [VPath.Steps[0].Name];
+        VMatched := True;
+      end;
+    if VMatched then
+      Continue;
+    VKeyA := KeyOfTable(VGroup.ATable, VGroup.ACols);
+    VKeyB := KeyOfTable(VGroup.BTable, VGroup.BCols);
+    if (VKeyB <> '') and (VKeyA = '') then
+      VRel := OfferFor(VGroup.ATable, VGroup.BTable, VKeyB, VGroup.ACols, VGroup.BCols)
+    else if (VKeyA <> '') and (VKeyB = '') then
+      VRel := OfferFor(VGroup.BTable, VGroup.ATable, VKeyA, VGroup.BCols, VGroup.ACols)
+    else
+      Continue;
+    VOffers := VOffers + [VRel];
+    pFormRelations := pFormRelations + [VRel.Name];
+  end;
+  if Length(VOffers) = 0 then
+    Exit(FGraph);
+  Result := TFrRelationGraph.Create;
+  for VRel in FBaseRelations do
+    Result.AddRelation(VRel);
+  for VRel in VOffers do
+    Result.AddRelation(VRel);
+end;
+
+{ Places a join calc field that reads several tables (design 3.1 CHILD END, 3.2 rules 1-5): the tables of the fields
+  its code reads directly; the home is the one of them from which every other is reached; every other table is an
+  input alias (XQ2: the table name) with the chosen path; the body is read again with ALIAS.COLUMN macros. False with
+  pWhy when it cannot be placed (never a pick). }
+function TDfmRead.PlaceSeveral(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource;  // dl:ok too-many-parameters@8c40 -- REVIEWED 2026-11-26 XTABLE X3: private step of JoinOrigins; the parameters are its per-dataset state (form, dataset, source, context, origins, bodies, field, graph, form relations, reason)
+  const pContext: TDfmrCodeContext; pOrigins: TOrigins; pBodies: TDictionary<string, TDfmrBody>; const pKey: string;
+  pGraph: TFrRelationGraph; const pFormRelations: TArray<string>; out pWhy: string): Boolean;
+var
+  VUsed, VTable, VOther, VHome, VField, VPrefix, VStored: string;
+  VTables, VHomes, VOrdered: TArray<string>;
+  VOrigin: TFieldOrigin;
+  VSqlTable: TDfmrSqlTable;
+  VCount, VI: Integer;
+  VReaches: Boolean;
+  VChoice: TFrPathChoice;
+  VInput: TPlannedInput;
+  VInputs: TArray<TPlannedInput>;
+  VContext: TDfmrCodeContext;
+  VDfmField: TDfmrField;
+  VStep: TFrRelation;
+begin
+  Result := False;
+  pWhy := '';
+  VTables := nil;
+  VField := '';
+  for VDfmField in pDataset.Fields do
+    if SameText(VDfmField.CompName, pKey) then
+      VField := UpperCase(Trim(VDfmField.FieldName));
+  for VUsed in pBodies[pKey].FieldsUsed do
+  begin
+    if VUsed = pKey then
+      Continue;
+    if pOrigins.TryGetValue(VUsed, VOrigin) and (VOrigin.Table <> '') then
+    begin
+      if not MatchText(VOrigin.Table, VTables) then
+        VTables := VTables + [VOrigin.Table];
+    end
+    else
+    begin
+      for VDfmField in pDataset.Fields do
+        if SameText(VDfmField.CompName, VUsed) then
+          pWhy := Format('the calc code reads %s, which has no table of its own', [VDfmField.FieldName]);
+      Exit;
+    end;
+  end;
+  VOrdered := InFromOrder(pSource, VTables);
+  if Length(VOrdered) < 2 then
+    Exit;
+  VPrefix := Format('the calc code reads %d tables: %s', [Length(VOrdered), string.Join(' ', VOrdered)]);
+  for VTable in VOrdered do
+  begin
+    VCount := 0;
+    for VSqlTable in pSource.Sql.Tables do
+      if SameText(VSqlTable.Name, VTable) then
+        Inc(VCount);
+    if VCount > 1 then
+    begin
+      pWhy := Format('%s; %s is in the FROM %d times', [VPrefix, VTable, VCount]);
+      Exit;
+    end;
+  end;
+  VHomes := nil;
+  for VTable in VOrdered do
+  begin
+    VReaches := True;
+    for VOther in VOrdered do
+      if (not SameText(VOther, VTable)) and (Length(pGraph.FindPaths(VTable, VOther)) = 0) then
+        VReaches := False;
+    if VReaches then
+      VHomes := VHomes + [VTable];
+  end;
+  if Length(VHomes) = 0 then
+    pWhy := Format('%s; no table of %s reaches all the others', [VPrefix, string.Join(' ', VOrdered)])
+  else if Length(VHomes) > 1 then
+    pWhy := Format('%s; %s each reach all the others (a 1:1 pair)', [VPrefix, string.Join(' ', VHomes)]);
+  if pWhy <> '' then
+    Exit;
+  VHome := VHomes[0];
+  VInputs := nil;
+  for VOther in VOrdered do
+  begin
+    if SameText(VOther, VHome) then
+      Continue;
+    VInput := Default(TPlannedInput);
+    VInput.TableName := VHome;
+    VInput.FieldName := VField;
+    VInput.Alias := DefaultInputAlias(VOther, 1);
+    VInput.Target := VOther;
+    VInput.Source := ExtractFileName(pForm.FileName) + ' ' + pDataset.Name;
+    if not FStoredInputs.TryGetValue(InputKey(VHome, VField, VInput.Alias), VStored) then
+      VStored := '';
+    VChoice := pGraph.Choose(VHome, VOther, VStored, pFormRelations);
+    if VChoice.Chosen < 0 then
+    begin
+      pWhy := Format('%s; home %s; %d paths to %s, none chosen (asked once)', [VPrefix, VHome, Length(VChoice.Paths), VOther]);
+      Exit;
+    end;
+    VInput.Steps := VChoice.Paths[VChoice.Chosen].Steps;
+    VInput.Rule := PathRuleName(VChoice.Rule);
+    VInputs := VInputs + [VInput];
+  end;
+  VContext := pContext;
+  VContext.Fields := Copy(pContext.Fields);
+  for VI := 0 to High(VContext.Fields) do
+    if pOrigins.TryGetValue(LowerCase(VContext.Fields[VI].CompName), VOrigin) and (VOrigin.Table <> '')
+      and (not SameText(VOrigin.Table, VHome)) and MatchText(VOrigin.Table, VOrdered) then
+      VContext.Fields[VI].MacroName := DefaultInputAlias(VOrigin.Table, 1) + '.' + VOrigin.Column;
+  for VDfmField in pDataset.Fields do
+    if SameText(VDfmField.CompName, pKey) then
+      pBodies[pKey] := CalcBodyOf(pForm, pDataset, VContext, VDfmField);
+  VOrigin := Default(TFieldOrigin);
+  VOrigin.Table := VHome;
+  VOrigin.Column := VField;
+  pOrigins.AddOrSetValue(pKey, VOrigin);
+  for VInput in VInputs do
+  begin
+    FInputs.Add(VInput);
+    for VStep in VInput.Steps do
+      if FOffers.ContainsKey(UpperCase(VStep.Name)) then
+        FUnchecked.AddOrSetValue(KeyOf(VHome, VField), Format('its input %s goes through the offered relation %s: ' +
+          'choose the relation, the input and the field together', [VInput.Alias, VStep.Name]));
+  end;
+  Result := True;
+end;
+
+{ Every join calc field of pSeveral (pass 1 found several tables), in DFM order, until none more is placed: a field
+  placed may let a field that reads it be placed. Offers of the dataset's joins are made even when no field needs them. }
+procedure TDfmRead.PlaceAllSeveral(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource;
+  const pContext: TDfmrCodeContext; pOrigins: TOrigins; pBodies: TDictionary<string, TDfmrBody>; pSeveral: TList<string>);
+var
+  VGraph: TFrRelationGraph;
+  VFormRelations, VOrder: TArray<string>;
+  VField: TDfmrField;
+  VKey, VWhy: string;
+  VPlaced: TDictionary<string, string>; // key -> '' placed, else why not
+  VChanged: Boolean;
+  VOrigin: TFieldOrigin;
+begin
+  VGraph := DatasetGraph(pSource, VFormRelations);
+  VPlaced := TDictionary<string, string>.Create;
+  try
+    VOrder := nil;
+    for VField in pDataset.Fields do
+      if pSeveral.Contains(LowerCase(VField.CompName)) then
+        VOrder := VOrder + [LowerCase(VField.CompName)];
+    repeat
+      VChanged := False;
+      for VKey in VOrder do
+        if not (VPlaced.TryGetValue(VKey, VWhy) and (VWhy = '')) then
+          if PlaceSeveral(pForm, pDataset, pSource, pContext, pOrigins, pBodies, VKey, VGraph, VFormRelations, VWhy) then
+          begin
+            VPlaced.AddOrSetValue(VKey, '');
+            VChanged := True;
+          end
+          else
+            VPlaced.AddOrSetValue(VKey, if VWhy = '' then '-' else VWhy);
+    until not VChanged;
+    for VKey in VOrder do
+      if VPlaced[VKey] = '' then
+        Inc(FCross.Placed)
+      else
+      begin
+        Inc(FCross.Unresolved);
+        if (VPlaced[VKey] <> '-') and pOrigins.TryGetValue(VKey, VOrigin) then
+        begin
+          VOrigin.Why := VPlaced[VKey];
+          pOrigins.AddOrSetValue(VKey, VOrigin);
+        end;
+      end;
+  finally
+    VPlaced.Free;
+    if VGraph <> FGraph then
+      VGraph.Free;
   end;
 end;
 
@@ -847,17 +1500,6 @@ begin
     VFacts.Add(COL_BODY, pField.Expression, '', VSource);
 end;
 
-{ pTables in the order of the FROM clause. }
-function InFromOrder(const pSource: TDatasetSource; const pTables: TArray<string>): TArray<string>;
-var
-  VTable: TDfmrSqlTable;
-begin
-  Result := nil;
-  for VTable in pSource.Sql.Tables do
-    if MatchText(VTable.Name, pTables) and (not MatchText(VTable.Name, Result)) then
-      Result := Result + [VTable.Name];
-end;
-
 { The table of a lookup field of a join: the one table of its key fields. }
 function LookupOrigin(const pDataset: TDfmrDataset; const pSource: TDatasetSource; const pField: TDfmrField): TFieldOrigin;
 var
@@ -899,7 +1541,7 @@ var
   VI: Integer;
   VNames: TDictionary<string, string>;
   VResults: TOrigins;
-  VQueue: TList<string>;
+  VQueue, VSeveral: TList<string>;
 begin
   VNames := TDictionary<string, string>.Create;
   try
@@ -928,6 +1570,7 @@ begin
       dataset (breadth first; a calc field already visited adds nothing, so a cycle is no error). }
     VResults := TOrigins.Create;
     VQueue := TList<string>.Create;
+    VSeveral := TList<string>.Create;
     try
       for VKey in pBodies.Keys do
       begin
@@ -974,7 +1617,10 @@ begin
         else if VMissing <> '' then
           VOrigin.Why := Format('the calc code reads %s, which has no table', [VMissing])
         else if Length(VTables) > 1 then
-          VOrigin.Why := Format('the calc code reads %d tables: %s', [Length(VTables), string.Join(' ', InFromOrder(pSource, VTables))])
+        begin
+          VOrigin.Why := Format('the calc code reads %d tables: %s', [Length(VTables), string.Join(' ', InFromOrder(pSource, VTables))]);
+          VSeveral.Add(VKey);
+        end
         else if Length(VCalcs) > 0 then
           VOrigin.Why := 'the calc code reads no table field, only calc fields: ' + string.Join(', ', VCalcs)
         else
@@ -983,7 +1629,9 @@ begin
       end;
       for VKey in VResults.Keys do
         pOrigins.AddOrSetValue(VKey, VResults[VKey]);
+      PlaceAllSeveral(pForm, pDataset, pSource, pContext, pOrigins, pBodies, VSeveral);
     finally
+      VSeveral.Free;
       VQueue.Free;
       VResults.Free;
     end;
@@ -1007,13 +1655,16 @@ var
   VBodies: TDictionary<string, TDfmrBody>;
   VBody: TDfmrBody;
 begin
-  VSource := SourceOf(pDataset, FColumns);
+  VSource := LinkedSource(pForm, pDataset, [LowerCase(pForm.FileName + '|' + pDataset.Name)], [pDataset.Name]);
   VContext := CodeContext(pForm, pDataset, VSource);
   VReport := Default(TDfmrDatasetReport);
   VReport.DfmName := ExtractFileName(pForm.FileName);
   VReport.Dataset := pDataset.Name;
   VReport.DatasetClass := pDataset.DatasetClass;
   VReport.TableName := VSource.TableName;
+  VReport.Via := VSource.Via;
+  VReport.LinkKind := VSource.LinkKind;
+  VReport.LinkFailed := VSource.Linked and (VSource.Via = '');
   if VSource.IsJoin then
     for VSqlTable in VSource.Sql.Tables do
       if not MatchText(VSqlTable.Name, VReport.JoinTables) then
@@ -1053,7 +1704,9 @@ begin
       begin
         VFound := FieldSource(VSource, VField, VTable, VColumn, VReason);
         if (not VFound) and VReason.StartsWith('conflict') then
-          FWarnings.Add(Format('%s %s %s: %s', [VReport.DfmName, pDataset.Name, VField.FieldName, VReason]));
+          FWarnings.Add(Format('%s %s %s: %s', [VReport.DfmName, pDataset.Name, VField.FieldName, VReason]))
+        else if (not VFound) and VReason.StartsWith('written in code') then
+          FWarnings.Add(Format('%s %s %s: no table: %s', [VReport.DfmName, pDataset.Name, VField.FieldName, VReason]));
       end;
       if VFound then
       begin
@@ -1503,6 +2156,165 @@ begin
       VForms := VForms + [Form(VFile).FormName];
       PlanGridForm(Form(VFile).FormName, pDeletes);
     end;
+  PlanRelations;
+  PlanInputs;
+end;
+
+function TDfmRead.AddRowChange(pOp: TFrChangeOp; const pTable, pKey, pProp, pOld, pNew: string;  // dl:ok too-many-parameters@e000 -- REVIEWED 2026-11-26 XTABLE X3: private: one change = op, table, key, prop, old, new, columns, checked, as TFrChange and TDfmrChangeItem hold them
+  const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer;
+var
+  VChange: TFrChange;
+  VItem: TDfmrChangeItem;
+begin
+  Result := FChanges.Count;
+  VChange := Default(TFrChange);
+  VChange.Id := Result + 1;
+  VChange.Op := pOp;
+  VChange.Target := pTable + ' ' + pKey;
+  VChange.Prop := pProp;
+  VChange.OldValue := pOld;
+  VChange.NewValue := pNew;
+  VChange.Checked := pChecked;
+  VItem := Default(TDfmrChangeItem);
+  VItem.RowTable := pTable;
+  VItem.Columns := pColumns;
+  FChanges.Add(VChange);
+  FItems.Add(VItem);
+end;
+
+{ A placed field whose input goes through an offered FORM relation is stored only together with that relation and the
+  input: its own changes are unchecked too (otherwise repo check finds an undeclared alias). }
+procedure TDfmRead.UncheckOffered;
+var
+  VI: Integer;
+  VWhy: string;
+begin
+  for VI := 0 to FItems.Count - 1 do
+    if (FItems[VI].RowTable = '') and (FItems[VI].FormName = '') and FChanges[VI].Checked
+      and FUnchecked.TryGetValue(KeyOf(FItems[VI].TableName, FItems[VI].FieldName), VWhy) then
+    begin
+      FChanges.List[VI].Checked := False;
+      FWarnings.Add(Format('%s.%s: unchecked: %s', [FItems[VI].TableName, FItems[VI].FieldName, VWhy]));
+    end;
+end;
+
+{ The DL_RELATIONS rows the planned inputs need (design 2.3: an FK step gets its row when a binding first uses it;
+  checked) and every offered FORM relation (XQ6: unchecked, confirmed once by choosing it). }
+procedure TDfmRead.PlanRelations;
+var
+  VInput: TPlannedInput;
+  VStep: TFrRelation;
+  VNeeded: TList<TFrRelation>;
+  VSeen, VFk: TDictionary<string, Boolean>;
+  VCols, VSub: TArray<TDfmrPair>;
+  VPairs, VText: string;
+  VI, VId: Integer;
+begin
+  VNeeded := TList<TFrRelation>.Create;
+  VSeen := TDictionary<string, Boolean>.Create;
+  VFk := TDictionary<string, Boolean>.Create;
+  try
+    for VInput in FInputs do
+      for VStep in VInput.Steps do
+      begin
+        if SameText(VStep.Source, REPO_RELATION_FK) then
+          VFk.AddOrSetValue(UpperCase(VStep.Name), True);
+        if (not MatchText(VStep.Name, FStoredRelations)) and VSeen.TryAdd(UpperCase(VStep.Name), True) then
+          VNeeded.Add(VStep);
+      end;
+    for VStep in FOfferOrder do
+      if VSeen.TryAdd(UpperCase(VStep.Name), True) then
+        VNeeded.Add(VStep);
+    FCross.FkUsed := VFk.Count;
+    FCross.Offered := FOfferOrder.Count;
+    for VStep in VNeeded do
+    begin
+      VPairs := '';
+      VSub := nil;
+      for VI := 0 to High(VStep.ChildColumns) do
+      begin
+        VPairs := VPairs + (if VI = 0 then '' else ',') + VStep.ChildColumns[VI] + '=' + VStep.ParentColumns[VI];
+        VSub := VSub + [MakePair(VStep.ChildColumns[VI], VStep.ParentColumns[VI])];
+      end;
+      VCols := [MakePair(COL_RELATION, VStep.Name), MakePair('CHILD_TABLE', VStep.ChildTable),
+        MakePair('PARENT_TABLE', VStep.ParentTable), MakePair('SOURCE', VStep.Source),
+        MakePair('CONSTRAINT_NAME', VStep.ConstraintName), MakePair('PARENT_KEY', VStep.ParentKey),
+        MakePair(COL_IS_DEFAULT, BOOL_FALSE)];
+      VText := VStep.ChildTable + ' > ' + VStep.ParentTable + '; SOURCE=' + VStep.Source +
+        (if VStep.ConstraintName = '' then '' else '; CONSTRAINT_NAME=' + VStep.ConstraintName) +
+        '; PARENT_KEY=' + VStep.ParentKey + '; IS_DEFAULT=' + BOOL_FALSE + '; COLUMNS=' + VPairs;
+      VId := AddRowChange(fcoInsert, REPO_TABLE_RELATIONS, VStep.Name, '', '', VText, VCols,
+        SameText(VStep.Source, REPO_RELATION_FK));
+      FItems.List[VId].SubColumns := VSub;
+    end;
+  finally
+    VFk.Free;
+    VSeen.Free;
+    VNeeded.Free;
+  end;
+end;
+
+{ One DL_FIELD_INPUTS change per (table, field, alias) of the default binding whose path is new or changed: an
+  insert is checked unless its path goes through an offered relation; a changed path, and datasets that disagree,
+  are unchecked alternatives. }
+procedure TDfmRead.PlanInputs;
+var
+  VKeys: TList<string>;
+  VByKey: TObjectDictionary<string, TList<TPlannedInput>>;
+  VList: TList<TPlannedInput>;
+  VInput, VOther: TPlannedInput;
+  VKey, VOld, VKeyText: string;
+  VStored, VOffered, VSeen: Boolean;
+  VStep: TFrRelation;
+  VCols: TArray<TDfmrPair>;
+begin
+  VKeys := TList<string>.Create;
+  VByKey := TObjectDictionary<string, TList<TPlannedInput>>.Create([doOwnsValues]);
+  try
+    for VInput in FInputs do
+    begin
+      VKey := InputKey(VInput.TableName, VInput.FieldName, VInput.Alias);
+      if not VByKey.TryGetValue(VKey, VList) then
+      begin
+        VList := TList<TPlannedInput>.Create;
+        VByKey.Add(VKey, VList);
+        VKeys.Add(VKey);
+      end;
+      VSeen := False;
+      for VOther in VList do
+        VSeen := VSeen or SameText(VOther.Path, VInput.Path);
+      if not VSeen then
+        VList.Add(VInput);
+    end;
+    FCross.Inputs := VKeys.Count;
+    for VKey in VKeys do
+    begin
+      VList := VByKey[VKey];
+      VStored := FStoredInputs.TryGetValue(VKey, VOld);
+      if (VList.Count = 1) and VStored and SameText(VOld, VList[0].Path) then
+        Continue;
+      for VInput in VList do
+      begin
+        VOffered := False;
+        for VStep in VInput.Steps do
+          VOffered := VOffered or FOffers.ContainsKey(UpperCase(VStep.Name));
+        VKeyText := VInput.TableName + '|' + VInput.FieldName + '||' + VInput.Alias;
+        VCols := [MakePair(COL_TABLE, VInput.TableName), MakePair(COL_FIELD, VInput.FieldName), MakePair(COL_BINDING, ''),
+          MakePair(COL_ALIAS, VInput.Alias), MakePair(COL_PATH, VInput.Path), MakePair('TARGET_TABLE', VInput.Target)];
+        if VStored then
+          AddRowChange(fcoUpdate, REPO_TABLE_FIELD_INPUTS, VKeyText, COL_PATH, VOld, VInput.Path, VCols, False)
+        else
+          AddRowChange(fcoInsert, REPO_TABLE_FIELD_INPUTS, VKeyText, '', '', Format('PATH=%s; TARGET_TABLE=%s (rule %s)',
+            [VInput.Path, VInput.Target, VInput.Rule]), VCols, (VList.Count = 1) and not VOffered);
+        if VList.Count > 1 then
+          FWarnings.Add(Format('%s.%s input %s: datasets disagree: %s says %s', [VInput.TableName, VInput.FieldName,
+            VInput.Alias, VInput.Source, VInput.Path]));
+      end;
+    end;
+  finally
+    VByKey.Free;
+    VKeys.Free;
+  end;
 end;
 
 function TDfmRead.Execute(const pFiles: TArray<string>; const pDataset: string): TDfmrPlan;
@@ -1515,6 +2327,7 @@ begin
   FPlan := Default(TDfmrPlan);
   FPlan.ChangeSet.Direction := fdDfmToRepo;
   LoadRows;
+  LoadCrossTable;
   for VFile in pFiles do
   begin
     VForm := Form(VFile);
@@ -1528,9 +2341,11 @@ begin
   if (pDataset <> '') and (Length(FPlan.Datasets) = 0) then
     raise EDfmReadError.CreateFmt('no dataset %s in the DFM', [pDataset]);
   PlanAll(pFiles, pDataset = '');
+  UncheckOffered;
   FPlan.ChangeSet.Changes := FChanges.ToArray;
   FPlan.Items := FItems.ToArray;
   FPlan.Warnings := FWarnings.ToStringArray;
+  FPlan.CrossTable := FCross;
   Result := FPlan;
 end;
 
@@ -1538,7 +2353,7 @@ function PlanDfmRead(pRepo: TFDConnection; const pFiles: TArray<string>; const p
 var
   VRead: TDfmRead;
 begin
-  if RepoSchemaVersion(pRepo) < SCHEMA_WITH_EVENTS then
+  if RepoSchemaVersion(pRepo) < SCHEMA_WITH_INPUTS then
     raise ERepoError.CreateFmt('the repository is schema %d: run repo migrate first', [RepoSchemaVersion(pRepo)]);
   VRead := TDfmRead.Create(pRepo);
   try
@@ -1648,6 +2463,85 @@ begin
   pQuery.Post;
 end;
 
+procedure ApplyRelation(pQuery: TFDQuery; const pChange: TFrChange; const pItem: TDfmrChangeItem);
+var
+  VPair: TDfmrPair;
+  VName: string;
+  VI: Integer;
+  VRel, VPos, VChild, VParent: TField;
+begin
+  VName := pItem.Columns[0].Value;
+  pQuery.Open(SQL_RELATION_ROW, [VName]);  // dl:ok dataset-open-without-close@85d7 -- REVIEWED 2026-11-26 XTABLE X3: the caller ApplyDfmRead owns the query: closes it per change and on an exception, frees it in finally
+  if not pQuery.Eof then
+    raise ERepoError.CreateFmt('change %d: the row of %s already exists', [pChange.Id, pChange.Target]);
+  pQuery.Append;
+  for VPair in pItem.Columns do
+    if VPair.Name = COL_IS_DEFAULT then
+      pQuery.FieldByName(VPair.Name).AsBoolean := SameText(VPair.Value, 'True')
+    else
+      SetColumn(pQuery, VPair.Name, VPair.Value);
+  pQuery.Post;
+  pQuery.Close;
+  pQuery.Open(SQL_RELATION_COLUMNS, [VName]);
+  VRel := pQuery.FieldByName(COL_RELATION);
+  VPos := pQuery.FieldByName('POSITION');
+  VChild := pQuery.FieldByName('CHILD_COLUMN');
+  VParent := pQuery.FieldByName('PARENT_COLUMN');
+  for VI := 0 to High(pItem.SubColumns) do
+  begin
+    pQuery.Append;
+    VRel.AsString := VName;
+    VPos.AsInteger := VI + 1;
+    VChild.AsString := pItem.SubColumns[VI].Name;
+    VParent.AsString := pItem.SubColumns[VI].Value;
+    pQuery.Post;
+  end;
+end;
+
+function ItemValue(const pItem: TDfmrChangeItem; const pName: string): string;
+var
+  VPair: TDfmrPair;
+begin
+  Result := '';
+  for VPair in pItem.Columns do
+    if VPair.Name = pName then
+      Exit(VPair.Value);
+end;
+
+{ A DL_FIELD_INPUTS row; its field row and every relation of its PATH must be in the repository by then. }
+procedure ApplyInput(pQuery: TFDQuery; const pChange: TFrChange; const pItem: TDfmrChangeItem);
+var
+  VPair: TDfmrPair;
+  VStep, VTable, VField: string;
+begin
+  VTable := ItemValue(pItem, COL_TABLE);
+  VField := ItemValue(pItem, COL_FIELD);
+  pQuery.Open(SQL_FIELD_ROW, [VTable, VField]);  // dl:ok dataset-open-without-close@16d4 -- REVIEWED 2026-11-26 XTABLE X3: the caller ApplyDfmRead owns the query: closes it per change and on an exception, frees it in finally
+  if pQuery.Eof then
+    raise ERepoError.CreateFmt('change %d: %s needs the row DL_FIELDS_INFO %s|%s (select its insert too)',
+      [pChange.Id, pChange.Target, VTable, VField]);
+  pQuery.Close;
+  for VStep in SplitInputPath(ItemValue(pItem, COL_PATH)) do
+  begin
+    pQuery.Open(SQL_RELATION_ROW, [VStep]);
+    if pQuery.Eof then
+      raise ERepoError.CreateFmt('change %d: %s needs the relation %s in DL_RELATIONS (select its insert too)',
+        [pChange.Id, pChange.Target, VStep]);
+    pQuery.Close;
+  end;
+  pQuery.Open(SQL_INPUT_ROW, [VTable, VField, ItemValue(pItem, COL_BINDING), ItemValue(pItem, COL_ALIAS)]);
+  if (pChange.Op = fcoInsert) <> pQuery.Eof then
+    raise ERepoError.CreateFmt('change %d: the row of %s %s', [pChange.Id, pChange.Target,
+      if pQuery.Eof then 'does not exist' else 'already exists']);
+  if pChange.Op = fcoInsert then
+    pQuery.Append
+  else
+    pQuery.Edit;
+  for VPair in pItem.Columns do
+    pQuery.FieldByName(VPair.Name).AsString := VPair.Value; // BINDING '' is the default binding, not NULL
+  pQuery.Post;
+end;
+
 { Refuses a blocked change and two changes of one value. }
 procedure CheckChosen(const pChosen: TArray<TFrChange>);
 var
@@ -1684,7 +2578,11 @@ begin
     try
       for VChange in pChosen do
       begin
-        if pPlan.Items[VChange.Id - 1].FormName = '' then
+        if pPlan.Items[VChange.Id - 1].RowTable = REPO_TABLE_RELATIONS then
+          ApplyRelation(VQuery, VChange, pPlan.Items[VChange.Id - 1])
+        else if pPlan.Items[VChange.Id - 1].RowTable = REPO_TABLE_FIELD_INPUTS then
+          ApplyInput(VQuery, VChange, pPlan.Items[VChange.Id - 1])
+        else if pPlan.Items[VChange.Id - 1].FormName = '' then
           ApplyField(VQuery, VChange, pPlan.Items[VChange.Id - 1])
         else
           ApplyGrid(VQuery, VChange, pPlan.Items[VChange.Id - 1]);

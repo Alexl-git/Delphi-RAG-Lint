@@ -165,6 +165,27 @@ as step 2a). Micronite2027: one site (`FIgnoreTbl.CloneCursor(FRegionsTbl, ...)`
 two fields of a view model, no DFM dataset): the CLIENT fills its memory tables through the pipe (cmdDelta), so these
 sources resolve about nothing there; its origins need the delta / view-model path (not designed).
 
+As built (X3, 2026-11-26): `DfmReadSql` gives `Joins` (ON equalities, and WHERE equalities between two FROM entries;
+a condition with a top-level OR gives none). `DfmReadPlan` places a SEVERAL calc field in the child end over the
+tables of the fields its code reads DIRECTLY (a calc field read is taken with its own home, fields placed in DFM order
+until none more is placed); unresolved with the reason: no child end, two (1:1), a table in the FROM twice, a path not
+chosen (`home A; 2 paths to B, none chosen (asked once)`). The form's equalities are grouped per FROM entry pair and
+matched to one-step relations column for column (rule 2); a group that matches none and whose one side is exactly a
+PK / UNIQUE is offered as FORM relation `CHILD_PARENT[_n]` -- an edge only in a copy of the graph for that dataset; the
+offer, the inputs through it and the field itself are unchecked. FK steps get a DL_RELATIONS row (checked) the first time
+a planned input uses them. Links: new unit `DfmReadLinks` (comments / strings blanked by `ScanPascal`; receiver and
+source `X`, `Self.X` or `module.X`; arrays, chains and call results are not links); a data field written after a COPY
+(`FieldByName('F').X :=`, `FieldValues['F'] :=`, `D['F'] :=`, `FieldComp.X :=`, anywhere in the unit) keeps no table.
+Measured (182 M2022 DFMs over a copy of the MICRONITEV6A schema facts migrated to 4; dry run): unresolved datasets
+245 -> 185; SEVERAL calc 110 (107 + 3 of joins reached by links): 99 placed with home + full binding (92 inputs by rule
+form, 2 single), 11 not (4 two paths, 1 no child end, 1 1:1 pair OPERAT / FOLDERS, 5 read a field without a table); 94
+inputs, 11 FK relations used, 9 FORM relations offered (TOOLASSG_TOOLFLDR, TOOLFLDR_TOOLGR12, ...); links: 60 datasets
+got a source (CopyDataSet 59, CloneCursor 1), 33 did not (22 name a dataset of the ancestor of an inherited data module,
+`dmlGlbReadings.X`: not followed; 7 a source without a table; 3 two or three sources; 1 `X.Table`). Sample of 20 inputs
+read by hand: every home is the FK child end (e.g. `INSPRSLT.MINS` = `{{MIN}}` + `{{MSCLIST.DECIMALS}}`). Micronite2027
+(119 CLIENT DFMs): 99 -> 96 unresolved, no SEVERAL calc, CopyDataSet 3 (9 links unresolved). Runtime of the M2022 read
+18 s -> 25 s.
+
 ### 3.2 The relation graph and the path (N2, N3, P1 B)
 
 Nodes: tables. Edge child -> parent when the child columns equal a parent key (PK or UNIQUE constraint) column for
