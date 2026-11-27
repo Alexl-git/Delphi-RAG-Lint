@@ -121,6 +121,7 @@ implementation
 uses
   System.Math,
   Winapi.Windows,
+  Winapi.Winsock2,
   System.Classes,
   System.IOUtils,
   System.StrUtils,
@@ -410,13 +411,42 @@ begin
   end;
 end;
 
+{ True when pHost is an IPv4 address of this computer (what its own name resolves to). }
+function IsOwnAddress(const pHost: string): Boolean;
+var
+  VData: TWSAData;
+  VEntry: PHostEnt;
+  VList: PPAnsiChar;
+  VAddress: TInAddr;
+  VName: AnsiString;
+begin
+  Result := False;
+  if (pHost = '') or not CharInSet(pHost[1], ['0'..'9']) or (WSAStartup($0202, VData) <> 0) then
+    Exit;
+  try
+    VName := AnsiString(GetEnvironmentVariable('COMPUTERNAME'));
+    VEntry := gethostbyname(PAnsiChar(VName));
+    if (VEntry = nil) or (VEntry.h_addrtype <> AF_INET) then
+      Exit;
+    VList := PPAnsiChar(VEntry.h_addr_list);
+    while (VList <> nil) and (VList^ <> nil) and not Result do
+    begin
+      VAddress := PInAddr(VList^)^;
+      Result := string(inet_ntoa(VAddress)) = pHost;
+      Inc(VList);
+    end;
+  finally
+    WSACleanup;
+  end;
+end;
+
 function RemoteTargetHost(const pTarget: TFbTarget): string;
 const
   LOCAL_HOSTS: array[0..4] of string = ('', 'localhost', '127.0.0.1', '::1', '[::1]');  // dl:ok hardcoded-ip-address@2bf6 -- REVIEWED 2026-11-23 ALTERBK: the loopback names are what "this machine" means; nothing to configure
 begin
   Result := '';
   if (pTarget.Kind = ftkOther) or ((pTarget.Kind = ftkTcp) and not MatchText(pTarget.Host, LOCAL_HOSTS) and
-    not SameText(pTarget.Host, GetEnvironmentVariable('COMPUTERNAME'))) then
+    not SameText(pTarget.Host, GetEnvironmentVariable('COMPUTERNAME')) and not IsOwnAddress(pTarget.Host)) then
     Result := pTarget.Host;
 end;
 

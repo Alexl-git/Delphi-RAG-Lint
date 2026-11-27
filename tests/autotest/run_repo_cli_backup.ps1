@@ -161,6 +161,8 @@ COMMIT;
   Check 'C1f a variable that names another machine -> exit 1' (($r.Code -eq 1) -and ($r.Out -match 'not on this machine \(srv\.invalid\)')) $r.Out
   $r = Run @('repo', 'backup', '--connection', "Server=srv.invalid;Server=localhost;Database=$fdb;User_Name=SYSDBA;Password=$pw")
   Check 'C1g a key given twice -> exit 1' (($r.Code -eq 1) -and ($r.Out -match 'Server is given twice') -and ($r.Out -notmatch $pw)) $r.Out
+  $r = Run @('repo', 'backup', '--repo', $repo, '--json')
+  Check 'C1h Q15: --json on the text backup: an error that says --json is not supported, without a word about --repo; nothing written' (($r.Code -ne 0) -and ($r.Out -match 'repo backup: --json is not supported by repo backup') -and ($r.Out -notmatch '--repo') -and -not (Test-Path -LiteralPath "$repo.txt")) $r.Out
   Check 'C6d the foreign file and the database are untouched' ((Test-Path -LiteralPath $foreign) -and (Test-Path -LiteralPath $fdb))
 } finally {
   $env:FIREBIRD = $savedFb

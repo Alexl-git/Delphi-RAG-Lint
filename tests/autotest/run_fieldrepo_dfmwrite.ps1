@@ -496,7 +496,17 @@ end
   Put (Join-Path $bd2 'uBind.pas') "unit uBind;`ninterface`nuses Data.DB;`ntype`n  TfrmBind = class(TForm)`n  end;`nimplementation`nprocedure P;`nbegin`n  Q.Locate('ID;F10', V, []);`n  ShowMessage('F11 is a word of a text');`n  Q.Filter := 'F13 > 1';`n  Q.IndexFieldNames := 'F14:D';`n  Q.MasterFields := 'A;F15';`n  S := 'F16X, XF16';`nend;`nend.`n"
   $r = Write-Dfm @('--dataset', 'qryMain', '--names', 'ID') $bdf
   $state = (1..16 | ForEach-Object { $m = [regex]::Match($r.Out, "delete uBind\.dfm qryMainF$($_): [^\n]*\n  (BLOCKED: [^\n]*|\(unchecked\))"); if (-not $m.Success) { '?' } elseif ($m.Value -match 'BLOCKED') { 'B' } else { '-' } }) -join ''
-  Check 'W13c DataField, IndexFieldNames, Expression, KeyFields, MasterFields, a SQL parameter, a grid column; Locate, Filter, IndexFieldNames, MasterFields and any word of a string in the code; not a caption, a selected column, the field of another dataset, a longer word' ($state -eq 'BBBBBB--BBB-BBB-') ($state + "`n" + $r.Out)
+  Check 'W13c DataField, IndexFieldNames, Expression, KeyFields, MasterFields, a SQL parameter, a grid column; Locate, Filter, IndexFieldNames, MasterFields and a string in the code that is a reference (FieldByName / Locate / a property of the list); not a word of any other string (ShowMessage), a caption, a selected column, the field of another dataset, a longer word' ($state -eq 'BBBBBB--BB--BBB-') ($state + "`n" + $r.Out)
+  # Q17 B (owner 2026-11-26): only REAL references block a field delete -- a caption in the DFM or a word of a message in the code does not
+  $q = Join-Path $work 'q17'; [IO.Directory]::CreateDirectory($q) | Out-Null
+  $qdfm = Join-Path $q 'uQ.dfm'
+  Put $qdfm ("object frmQ: TfrmQ`n  object dsMain: TDataSource`n    DataSet = qryMain`n  end`n  object Lbl: TLabel`n    Caption = 'G1'`n  end`n  object Edit: TDBEdit`n    DataField = 'G2'`n    DataSource = dsMain`n  end`n" +
+    "  object qryMain: TFDQuery`n    UpdateOptions.UpdateTableName = 'ORDERS'`n    object qryMainID: TIntegerField`n      FieldName = 'ID'`n    end`n    object qryMainG1: TIntegerField`n      FieldName = 'G1'`n    end`n    object qryMainG2: TIntegerField`n      FieldName = 'G2'`n    end`n" +
+    "    object qryMainG3: TIntegerField`n      FieldName = 'G3'`n    end`n    object qryMainG4: TIntegerField`n      FieldName = 'G4'`n    end`n  end`nend`n")
+  Put (Join-Path $q 'uQ.pas') "unit uQ;`ninterface`nuses Data.DB;`ntype`n  TfrmQ = class(TForm)`n  end;`nimplementation`nprocedure P;`nbegin`n  ShowMessage('G1 is a caption, G4 a word');`n  V := qryMain.FieldByName('G3').AsInteger;`nend;`nend.`n"
+  $r = Write-Dfm @('--dataset', 'qryMain', '--names', 'ID') $qdfm
+  $state = (1..4 | ForEach-Object { $m = [regex]::Match($r.Out, "delete uQ\.dfm qryMainG$($_): [^\n]*\n  (BLOCKED: [^\n]*|\(unchecked\))"); if (-not $m.Success) { '?' } elseif ($m.Value -match 'BLOCKED') { 'B' } else { '-' } }) -join ''
+  Check 'W13d Q17: a caption (G1) and a word of a message (G1, G4) do not block; DataField (G2) and FieldByName (G3) do' ($state -eq '-BB-') ($state + "`n" + $r.Out)
   # ---- M2: the plan id ----
   $pd = NewForms 'plan'
   $pdfm = Join-Path $pd 'uAllKinds.dfm'; $ppas = Join-Path $pd 'uAllKinds.pas'

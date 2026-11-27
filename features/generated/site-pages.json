@@ -400,7 +400,7 @@
     "version": "1.54.1-alpha"
   },
   "features/field-repository.md": {
-    "hash": "a7541755bd3dffee24067e6fcbc2adb55ddcde7926896d10ee35986de2ea5589",
+    "hash": "01edd7f1ad4fcded97c9c93d8eab48ace57e36fe64a99b50a8f234894b0e3545",
     "version": "1.54.1-alpha"
   },
   "features/finalization-after-dependency.md": {
@@ -700,7 +700,7 @@
     "version": "1.51.0-alpha"
   },
   "features/project-settings.md": {
-    "hash": "9a62e6b2368379b9303ce490d4d05bbcb0347e54880c8ab62f4c4d42fc4f022f",
+    "hash": "5692bff97fa2edeb44eb837632f522a566dc89730a9b92b6dc1d7afdc07bc92e",
     "version": "1.54.1-alpha"
   },
   "features/proptree.md": {
@@ -800,7 +800,7 @@
     "version": "1.54.1-alpha"
   },
   "features/repo-db-backup.md": {
-    "hash": "2a29b47e38a352ba2b0216f91a5998598128216d0fc5c151ea5fed5bc0a247f6",
+    "hash": "4f50c98257642a4a8403ac6aaf438f5a8a2184f1c05eba23dcfeb000aa66f6bf",
     "version": "1.54.1-alpha"
   },
   "features/repo-read-dfm.md": {
@@ -808,7 +808,7 @@
     "version": "1.54.1-alpha"
   },
   "features/repo-write-dfm.md": {
-    "hash": "0f36022e7a073e3e212310058018364f58199a1368630b1cceaba7742f53f2ab",
+    "hash": "7cce0ab5edb9a829928b8d019e9fa749f893f7954607060bc8a58e54ed06ab82",
     "version": "1.54.1-alpha"
   },
   "features/rescan-this-unit.md": {

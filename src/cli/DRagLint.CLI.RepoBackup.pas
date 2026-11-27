@@ -178,6 +178,9 @@ begin
   if pRepo <> '' then
   begin
     VStray := StrayArgument(WORD_ARG, ['--repo', '--project', '--output', '--out', '--report'], []);
+    if VStray = FLAG_JSON then
+      Exit('--json is not supported by repo backup of a repository (only the database backup, with --connection, prints ' +
+        'JSON): drop --json; nothing was written');
     Exit(Format('"%s" is not an option of the text backup of the repository, which takes --repo, --project and ' +
       '--output only: drop "%s" (a database backup takes --connection instead of --repo); nothing was written', [VStray, VStray]));
   end;

@@ -59,7 +59,7 @@ in `--json` (`file`, `host`) and in the list is a path on the server, and the li
 - `--backup-name` is REFUSED with a remote server (exit 1 before connecting): an existing file of that name on the server cannot be seen from here and the Firebird service replaces it without a word. The automatic time-stamped name is used there, so nothing is overwritten.
 - The backup is not verified at all, and says so: the report, `--json` (`verified`) and `repo backup list` show `remote, not verified` (`NOT verified`), never `quick`; `repo alter-table --apply` prints the same for its backup.
 - `purge` never deletes an entry that has a host (it is skipped, with the reason); `list` shows it, size 0 (unknown).
-- A server whose name is the name of this computer, or `localhost`, stays a local server with every check above.
+- A server whose name is the name of this computer, or `localhost`, or one of this computer's own IPv4 addresses (1.55), stays a local server with every check above.
 
 ## What a local server must do
 
