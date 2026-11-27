@@ -235,16 +235,18 @@ end;
 function Ensure(pSite: TDataFlowSite; const pNode: TTSNode): Boolean;
 var
   Recording, Hit: Boolean;
+  Sim           : Boolean;
   At            : UInt32;
   Top           : TTSNode;
 begin
   Recording:= pSite.IsRecording;
   At:= pNode.StartByte;
-  Hit:= GCache.Valid and (pNode.tree = GCache.Tree) and (At >= GCache.TopStart) and (At < GCache.TopEnd);
+  Sim:= GetEnvironmentVariable('DRAGLINT_DFX_TEST_REUSE') = '1';
+  Hit:= GCache.Valid and (Sim or (pNode.tree = GCache.Tree)) and (At >= GCache.TopStart) and (At < GCache.TopEnd);
   if (not Hit) or (GCache.LastRecording and not Recording) then
   begin
     Top:= RoutineOf(pNode);
-    if not (Hit and (Top.id = GCache.TopId) and (Top.StartByte = GCache.TopStart) and (Top.EndByte = GCache.TopEnd)) then
+    if not (Hit and (Sim or (Top.id = GCache.TopId)) and (Top.StartByte = GCache.TopStart) and (Top.EndByte = GCache.TopEnd)) then
       Rebuild(pSite, Top);
   end;
   GCache.LastRecording:= Recording;
