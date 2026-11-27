@@ -397,6 +397,15 @@ type
     /// are deliberately not (an ordinary call's var argument, e.g. SetLength,
     /// and a dot LHS are both absent by design).</remarks>
     MutatesParams    : string           ;
+    /// <summary>1.56 B5: what the routine writes on EVERY path that returns normally --
+    /// <c>Result</c>, var / out parameters and own fields by name, comma separated in
+    /// first-write order. '' when nothing is proven or the index predates 1.56.</summary>
+    /// <remarks>RAW PASSTHROUGH of symbol_facts.must_writes (TSymbolFacts.MustWrites). A PROOF
+    /// fact, not a display string: uncapped, and absent whenever DRagLint.Doc.SymbolFacts'
+    /// AnalyzeMustWrites could not prove the write (a nil write, a partial write, a call's
+    /// var argument and a write under <c>with</c> are all left out by design). Not rendered
+    /// into the doc comment.</remarks>
+    MustWrites       : string           ;
     /// <summary>Purity v2: the stored interprocedural verdict, RAW PASSTHROUGH
     /// of symbol_facts.effect_free (-1 not computed / 0 not proven / 1 proven),
     /// effect_summary and effect_witness. The renderer prints
@@ -5628,6 +5637,8 @@ begin
   // v(ADP3 T11): var/out parameter writes -- same raw-passthrough contract
   // again (capped and formatted at analysis time by AnalyzeMutatesParams).
   Result.MutatesParams:= SFacts.MutatesParams;
+  // 1.56 B5: must-write facts -- raw passthrough, never re-derived here.
+  Result.MustWrites:= SFacts.MustWrites;
   // Purity v2: the stored verdict, same passthrough contract. SFacts.EffectFree
   // is -1 when the row is absent or the column is NULL (GetSymbolFacts maps
   // both), so a pre-purity index renders no effect line at all rather than
