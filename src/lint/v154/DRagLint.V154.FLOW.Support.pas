@@ -1319,7 +1319,7 @@ begin
   Path:= PathOf(AUse);
   Up  := Path.Parent;
   if IsAssignTarget(Path) or IsAddressOf(Up) or MatchStr(Up.NodeType, ['with', 'inherited', 'exprParens']) then Exit(False);
-  if (Up.NodeType = 'foreach') and (Up.NamedChild(1) = Path) then Exit(False);
+  if (Up.NodeType = 'foreach') and (Up.ChildByField('iterable') = Path) then Exit(False);
   if (AUse.Parent.NodeType = 'exprDot') and (not MemberOnlyRead(Text(AUse.Parent.ChildByField('rhs')), AType)) then Exit(False);
   Result:= (Up.NodeType <> 'exprArgs') or ArgumentOnlyRead(Path, Up);
 end;

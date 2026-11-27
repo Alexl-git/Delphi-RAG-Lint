@@ -240,6 +240,7 @@ uses
   DRagLint.Analysis.DataFlow,
   DRagLint.Analysis.Flow.Lattices,
   System.Math,
+  DRagLint.V156.FACTA.Support,
   DRagLint.Lint.RefTypeRules; { TExprTypeReader: the receiver's static type, index fact F1 }
 
 { FLOWCHECKER SUB-BREAKDOWN. INBOX-flowchecker-is-half-of-lint-all.
@@ -841,7 +842,10 @@ begin
     twelve sampled findings) and lives in System.RegularExpressions, which a
     project index does not contain. }
   if SameText(Head, 'TRegEx') or SameText(Head, 'TMatch') or SameText(Head, 'TMatchCollection')  // dl:ok boolean-expression-complexity@7804 -- REVIEWED 2026-11-21 SLZ-S04: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
-     or SameText(Head, 'TGUID') or SameText(Head, 'TPoint') or SameText(Head, 'TRect') then
+     or SameText(Head, 'TGUID') or SameText(Head, 'TPoint') or SameText(Head, 'TRect')
+     { 1.56 FIX-FLOW: RTL record types with a Create class function (INBOX-object-leak-record-thashsha2) }
+     or SameText(Head, 'THashSHA2') or SameText(Head, 'THashSHA1') or SameText(Head, 'THashMD5')
+     or SameText(Head, 'THashBobJenkins') or SameText(Head, 'TStopwatch') or SameText(Head, 'TTimeSpan') then
     Exit(True);
   Result:= (Length(Head) >= 2) and (Head[1] = 'I') and CharInSet(Head[2], ['A'..'Z']);
 end;
@@ -4064,6 +4068,7 @@ var
   SameUnitClassKinds: TDictionary<string, Boolean>; { when the store answers tcUnknown }
   CalleeProcs : TDictionary<string, TArray<TNamedProc>>; { path -> its routines; built by OwnsOracle on first need }
   MethodModes : TMethodArgModes; { built on the first candidate finding of the file }
+  NoRetFacts  : TNoReturnFacts;  { 1.56 FIX-FLOW: the stored noreturn fact, one per file; the flow graph reads it }
   SlFacts     : TSlUnitFacts;    { v151 WID-FLOW member facts, built on first need }
   SlKinds     : TDictionary<string, Integer>; { memo for SlMemberKind }
   ArgMode     : TArgModeAt;      { the three out-arg / by-value rules; see ScanItemArgs }
@@ -4386,7 +4391,8 @@ var
     TickAt := TStopwatch.GetTimeStamp;
     TickEx := 0;
     Scans := nil;
-    Cfg := TCfgBuilder.Build(AProc, PF.Src, True);
+    if NoRetFacts = nil then NoRetFacts := TNoReturnFacts.Create(AStore, ALibStore, AFileId, AFile, PF.Src);
+    Cfg := TCfgBuilder.Build(AProc, PF.Src, True, NoRetFacts.Oracle());
     FlowTick(0, TickAt, TickEx);
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
     FlowTick(1, TickAt, TickEx);
@@ -5674,6 +5680,7 @@ begin
   SameUnitClassKinds := nil; { built on first need, see CheckRoutine }
   CalleeProcs := nil;
   MethodModes := nil;
+  NoRetFacts := nil;
   SlFacts := nil;
   SlKinds := nil;
   { PF E-LINTALL-SLOWER: the two OFF out-arg/by-value passes cost lint-all on Micronite2027
@@ -5699,6 +5706,7 @@ begin
     Result := Findings.ToArray;
   finally
     CalleeProcs.Free;
+    NoRetFacts.Free;
     MethodModes.Free;
     SameUnitClassKinds.Free;
     SlFacts.Free;
