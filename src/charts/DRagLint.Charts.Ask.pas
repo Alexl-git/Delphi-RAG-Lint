@@ -246,10 +246,10 @@ const
   { New-DiagramArtifact's per-question regenerate arguments }
   REGEN_DEPTH: array[0..8] of string = ('butterfly', 'who-calls', 'what-it-calls', 'change-impact',
     'exception-paths', 'round-trip', 'class-diagram', 'value-origin', 'value-use');
-  REGEN_CAP: array[0..20] of string = ('who-writes', 'who-reads', 'hierarchy', 'wiring', 'protocol-trace',
+  REGEN_CAP: array[0..21] of string = ('who-writes', 'who-reads', 'hierarchy', 'wiring', 'protocol-trace',
     'shown-where', 'tested-by', 'crosses-boundary', 'exception-paths', 'consumers', 'feeds-from',
     'lands-where', 'path', 'class-diagram', 'sequence', 'control-flow', SENT_NOT_HANDLED, 'dependency-matrix',
-    'main-sequence', 'value-origin', 'value-use');
+    'main-sequence', 'hotspots', 'value-origin', 'value-use');
 
   { New-DiagramArtifact.ps1's index.html, its $note for a chart question and its footer, verbatim; 
     the @@NAME@@ tokens are the here-string's variables (the template holds '%', so no Format). }

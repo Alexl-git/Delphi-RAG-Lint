@@ -445,6 +445,7 @@
         <DCCReference Include="..\charts\DRagLint.Charts.Q.DepMatrix.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.Q.MainSequence.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.Q.ArchDelta.pas"/>
+        <DCCReference Include="..\charts\DRagLint.Charts.Q.Hotspots.pas"/>
         <DCCReference Include="DRagLint.CLI.Metrics.pas"/>
         <DCCReference Include="DRagLint.CLI.Coverage.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.Q.Risk.pas"/>
