@@ -555,6 +555,9 @@ type
     Replace     : Boolean; // --replace  (repo import-fb / restore)
     RuleScope   : string ; // --scope line|unit|project  (rules disable / enable only; other verbs keep DocForgetScope)
     Reason      : string ; // --reason "<text>"  (rules disable: stored beside the entry)
+    // 1.56 W2FRAME (tranche 2): flags whose readers live in their own units.
+    ChangedSince: string ; // --changed-since <rev>  (lint-all: only findings on lines changed since the revision; DRagLint.CLI.ChangedSince, lane VCS-1; '' = absent)
+    Place       : string ; // --place <list>  (query --name / --text, find-unit: the places to answer from; DRagLint.Query.PlaceRows, lane TS-N; '' = every place)
   end; // record
 
   /// <summary>The post-apply refresh of the unit's project index (C9,
