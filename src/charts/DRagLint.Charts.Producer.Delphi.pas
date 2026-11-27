@@ -277,7 +277,7 @@ begin
   Req.Engine:= pOptions.EnginePath;
   Req.NeedServer:= QuestionReadsServerIndex(Req.Question);
   Req.NeedSql:= QuestionReadsSqlIndex(Req.Question);
-  Req.WantOther:= SameText(Req.Question, CROSSES_BOUNDARY);
+  Req.WantOther:= SameText(Req.Question, CROSSES_BOUNDARY) or SameText(Req.Question, 'sent-not-handled');  { v156 CHB-2 }
   Req.ServerFlag:= ASK_REPORT_SERVER_FLAG;
   Req.SqlFlag:= ASK_REPORT_SQL_FLAG;
   if Req.NeedServer then Result.Server:= pOptions.ServerDbOverride;
