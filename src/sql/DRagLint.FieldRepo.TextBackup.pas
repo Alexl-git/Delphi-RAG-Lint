@@ -111,7 +111,7 @@ procedure BackupRepository(pConnection: TFDConnection; const pFileName: string);
 
 /// <summary>Parses and validates the lines, then replaces every row of the repository in
 /// one transaction. A column omitted in the text is inserted as NULL, never as its default. An older backup restored
-/// into a repository of schema REPO_SCHEMA_VERSION gets the data steps of `repo migrate`.</summary>
+/// into a repository of a newer schema gets the data steps of `repo migrate`; a column its schema lacks (schema 5: NOTES, DERIVED_KIND, PROPERTIES_CLASS_NAME, PROPERTIES) is NULL in every restored row.</summary>
 /// <param name="pConnection">Open read-write repository connection.</param>
 /// <param name="pLines">Backup text lines without terminators.</param>
 /// <param name="pReplace">Must be True when the repository already holds rows.</param>
@@ -153,7 +153,7 @@ procedure RestoreRepository(pConnection: TFDConnection; const pFileName: string;
 
 /// <summary>Reads the schema version a backup file declares on its first line.</summary>
 /// <param name="pFileName">Backup file (ASCII).</param>
-/// <returns>1 for `#DLREPO 1`, 2 for `#DLREPO 2`, 3 for `#DLREPO 3`, 0 for any other first line (or an empty file).</returns>
+/// <returns>N for `#DLREPO N` with N in REPO_SCHEMA_MIN_VERSION..REPO_SCHEMA_VERSION (1 to 5), 0 for any other first line (or an empty file).</returns>
 /// <remarks>Used by `repo restore` to create a missing repository at the backup's own version.</remarks>
 function BackupFileVersion(const pFileName: string): Integer;
 

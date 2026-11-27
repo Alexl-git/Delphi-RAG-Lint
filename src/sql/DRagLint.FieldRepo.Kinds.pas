@@ -56,7 +56,41 @@ type
     IsGrid: Boolean;
   end;
 
+  /// <summary>One DL_GRID_COLUMNS row (schema 5): where a grid column sits and which in-place editor it has.</summary>
+  /// <remarks>The column model the DFM readers, writers and the grid copy share. A value type: no ownership, no
+  /// connection. A NULL cell reads as '' (ColumnIndex as 0).</remarks>
+  TFrGridColumn = record
+    /// <summary>FORM_NAME: the form (DFM root object) that owns the grid view.</summary>
+    FormName: string;
+    /// <summary>VIEW_NAME: component name of the grid view.</summary>
+    ViewName: string;
+    /// <summary>COLUMN_NAME: component name of the column.</summary>
+    ColumnName: string;
+    /// <summary>TABLE_NAME of the field row the column shows; '' when it is bound to none.</summary>
+    TableName: string;
+    /// <summary>FIELD_NAME of the field row the column shows; '' when it is bound to none.</summary>
+    FieldName: string;
+    /// <summary>COLUMN_INDEX: 0-based position of the column in its view.</summary>
+    ColumnIndex: Integer;
+    /// <summary>PROPERTIES_CLASS_NAME: the value of the column's `PropertiesClassName` in the DFM without the quotes,
+    /// e.g. TcxCurrencyEditProperties; '' = the column has no editor of its own.</summary>
+    PropertiesClassName: string;
+    /// <summary>PROPERTIES: the column's `Properties.*` lines as the text DFM has them, in DFM order, CRLF between
+    /// lines, the indentation of the first line removed from every line (a continuation line of a multi-line value
+    /// keeps its extra indentation); no CRLF after the last line. '' = none.</summary>
+    Properties: string;
+    /// <summary>True when the column names an editor properties class.</summary>
+    /// <returns>PropertiesClassName &lt;&gt; ''.</returns>
+    function HasEditor: Boolean;
+  end;
+
 const
+  /// <summary>DL_FIELDS_INFO.DERIVED_KIND values (design 2026-11-27-derived-field-lineage-design.md section 3): the
+  /// field is written by code from other fields. NULL or '' = not derived.</summary>
+  FR_DERIVED_DIRECT = 'direct';
+  FR_DERIVED_AGGREGATE = 'aggregate';
+  FR_DERIVED_UNKNOWN = 'unknown';
+
   /// <summary>The event columns of DL_FIELDS_INFO, in column order.</summary>
   FR_EVENT_COLUMNS: array[0..5] of TFrEventColumn = (
     (Event: 'OnGetText'; Column: 'ONGETTEXT_BODY'; Params: 'Sender,Text,DisplayText'; IsGrid: False),
@@ -91,6 +125,11 @@ function FrKindName(pKind: TFrFieldKind): string;
 /// <param name="pKind">The kind.</param>
 /// <returns>True when the kind carries a body with dependencies.</returns>
 function FrKindHasBody(pKind: TFrFieldKind): Boolean;
+
+/// <summary>Tests whether a text is one of the DERIVED_KIND values.</summary>
+/// <param name="pText">The cell text; case-sensitive, not trimmed.</param>
+/// <returns>True for `direct`, `aggregate` and `unknown`; False for anything else, also for '' (not derived).</returns>
+function FrDerivedKindKnown(const pText: string): Boolean;  // dl:ok unused-public-symbol@99f9 -- REVIEWED 2026-11-26 GC-S: public API of schema 5, called by tests\fieldrepo\GridCol2SchemaTests.dpr (outside this index) and by the 1.57 lineage slice (repo check derived-kind-invalid)
 
 /// <summary>Finds every `{{FIELD}}` macro of a calc body (grammar of spec 4.3); one in a string or a comment is text.</summary>
 /// <param name="pBody">The CALC_BODY text; '' or Pascal text without macros gives an empty array.</param>
@@ -243,6 +282,16 @@ begin
 end;
 
 { The text with every string and comment blanked, offsets and line breaks kept; a macro is copied as it is. }
+function FrDerivedKindKnown(const pText: string): Boolean;
+begin
+  Result := MatchStr(pText, [FR_DERIVED_DIRECT, FR_DERIVED_AGGREGATE, FR_DERIVED_UNKNOWN]);
+end;
+
+function TFrGridColumn.HasEditor: Boolean;
+begin
+  Result := PropertiesClassName <> '';
+end;
+
 function BlankStringsAndComments(const pBody: string): string;
 var
   VPos, VI: Integer;
