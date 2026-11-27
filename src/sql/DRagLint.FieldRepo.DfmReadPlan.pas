@@ -2356,11 +2356,11 @@ begin
       ReadView(VForm, VView, pDataset);
     FUnits.Clear;
   end;
-  if (pDataset <> '') and (Length(FPlan.Datasets) = 0) then
-    raise EDfmReadError.CreateFmt('no dataset %s in the DFM', [pDataset]);
   if FEditorsLeftOut > 0 then
     FWarnings.Add(Format('the repository is schema %d: the editor properties of %d grid columns are not read (run repo migrate --apply)',
       [RepoSchemaVersion(FRepo), FEditorsLeftOut]));
+  if (pDataset <> '') and (Length(FPlan.Datasets) = 0) then
+    raise EDfmReadError.CreateFmt('no dataset %s in the DFM', [pDataset]);
   PlanAll(pFiles, pDataset = '');
   UncheckOffered;
   FPlan.ChangeSet.Changes := FChanges.ToArray;
