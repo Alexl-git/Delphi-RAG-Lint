@@ -790,12 +790,31 @@ end;
 
 { var / out arguments, FreeAndNil, unresolved callees: from the data_flows `arg` rows of the target's
   name, then from the source text for every read that is a bare argument no row covered (the
-  program block and some routines carry no data_flows rows). }
+  program block and some routines carry no data_flows rows).
+
+  1.56 FB-2 (REQUESTS line 47, EXT-B1): since B3 the index also holds VALUE rows (val_class int / float /
+  currency / datetime / bool). They are left out here, deliberately: the rows with val_class '' are
+  exactly the pre-1.56 row set, so a numeric target is classified by the source-text pass below as it
+  was in 1.55. Read without the condition, one call site can return two rows for one argument, and the
+  second row takes the NEXT read of the target for an argument of the same call -- a plain read then
+  becomes a var-arg writer. An index written before 1.56 has no such column and no such rows.
+  For the same reason the 1.56 source kinds `dsfield` (a dataset field, lane EXT-B3) and `except` (a
+  caught exception, lane EXT-B2) are left out: such a source is no read of the target, even when it
+  carries the target's name. With the dst_kind = 'arg' condition this is the pre-1.56 row set. }
 procedure TCollector.CollectArguments;
 begin
+  var Probe:= Rows('SELECT COUNT(*) AS n FROM sqlite_master WHERE type = ''table'' AND name = ''data_flows'' ' +
+    'AND sql LIKE ''%val_class%''');
+  var OnlyFlowRows:= '';
+  try
+    if (Probe.Count > 0) and (Probe[0].I('n') > 0) then OnlyFlowRows:= ' AND d.val_class = ''''';
+  finally
+    Probe.Free;
+  end;
   var R:= Rows('SELECT d.file_id AS fid, d.symbol_id AS enc, d.dst_line AS dl, d.dst_col AS dc, ' +
     'd.dst_index AS di, d.dst_name AS dn FROM data_flows d WHERE d.dst_kind = ''arg'' AND d.src_name = ' +
-    Sq(FTargetName) + ' COLLATE NOCASE ORDER BY d.file_id, d.dst_line, d.dst_col, d.dst_index');
+    Sq(FTargetName) + ' COLLATE NOCASE AND d.src_kind NOT IN (''dsfield'', ''except'')' + OnlyFlowRows +
+    ' ORDER BY d.file_id, d.dst_line, d.dst_col, d.dst_index');
   try
     for var Row in R do
     begin

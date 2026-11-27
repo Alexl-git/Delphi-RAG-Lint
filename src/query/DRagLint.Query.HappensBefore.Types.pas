@@ -54,8 +54,10 @@ type
   THbVerdict = (hvSet, hvNeverSet, hvMayBeUnset, hvUnknownCallee);
 
   /// <summary>Closed list of reason codes (spec 6.4, plus HB3 receiver-unproven, HB5
-  /// relied-on-handler-order, the spec 5.1 guarded-test tag and the owner's unknown-callee: the answer
-  /// holds the target passed to a callee with no source). Literals: ReasonCode.</summary>
+  /// relied-on-handler-order, the spec 5.1 guarded-test tag, the owner's unknown-callee: the answer
+  /// holds the target passed to a callee with no source, and 1.56 relied-on-indirect-edges: a SET that
+  /// took a routine named as a value for one that runs only through the calls the index's
+  /// indirect_edges list). Literals: ReasonCode.</summary>
   /// <remarks>
   /// Append only; tools and the surface runner branch on the literals.
   /// <!-- drag-lint:auto BEGIN -->
@@ -67,7 +69,7 @@ type
     hrCalleeNotMust, hrIndirectCall, hrVirtualFanout, hrInterfaceCall, hrSoftWriter, hrNilWriteOnly,
     hrCtorMissesField, hrNoDeclaredCtor, hrSubclassCtorSkips, hrVirtualCallInAncestorCtor, hrSelfEscapesInCtor,
     hrUnreliableOrder, hrMultiProgram, hrWriterOnThread, hrCfgSkipped, hrBudget, hrIndexIncomplete,
-    hrReliedOnHandlerOrder, hrReceiverUnproven, hrGuardedTest, hrUnknownCallee);
+    hrReliedOnHandlerOrder, hrReceiverUnproven, hrGuardedTest, hrUnknownCallee, hrReliedOnIndirectEdges);
 
   /// <summary>How a writer writes the target (spec 5.1, plan D5). Literals: HowCode.</summary>
   /// <remarks>
@@ -484,7 +486,7 @@ const
     'callee-not-must', 'indirect-call', 'virtual-fanout', 'interface-call', 'soft-writer', 'nil-write-only',
     'ctor-misses-field', 'no-declared-ctor', 'subclass-ctor-skips', 'virtual-call-in-ancestor-ctor', 'self-escapes-in-ctor',
     'unreliable-order', 'multi-program', 'writer-on-thread', 'cfg-skipped', 'budget', 'index-incomplete',
-    'relied-on-handler-order', 'receiver-unproven', 'guarded-test', 'unknown-callee');
+    'relied-on-handler-order', 'receiver-unproven', 'guarded-test', 'unknown-callee', 'relied-on-indirect-edges');
   HOW_CODES: array[THbWriterHow] of string = ('assign', 'assign-nil', 'var-arg', 'out-arg', 'create-into',
     'dfm-stream', 'unresolved', 'with-opaque', 'address-of');
   KIND_CODES: array[THbTargetKind] of string = ('unresolved', 'unit-variable', 'class-var', 'instance-field');

@@ -674,6 +674,11 @@ end;
 procedure TRecvSolver.ComputeMustF;
 begin
   { least fixpoint over the instance methods of F's class and its descendants, in id order }
+  { 1.56 phase 3: a method of F's own class whose stored must-write fact lists F is proven without a
+    flow graph (the fact covers own fields only) }
+  var OwnClass:= Sym(FFieldId).ParentId;
+  for var Id in FFamilyMethods do
+    if (Sym(Id).ParentId = OwnClass) and HbFactMustWrites(FStore, Id, FFieldName) then FMustF.Add(Id);
   var Changed:= True;
   while Changed and not FExhausted do
   begin
@@ -681,6 +686,8 @@ begin
     for var Id in FFamilyMethods do
     begin
       if FMustF.Contains(Id) then Continue;
+      { no writer of F through Self and no call that sets it: the exit bit cannot be set }
+      if SelfMarks(Id) = nil then Continue;
       var St:= Solve(Id, SelfMarks(Id), nil, False);
       if St.Found and St.ExitDone then
       begin
