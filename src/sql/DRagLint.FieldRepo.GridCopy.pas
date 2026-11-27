@@ -168,7 +168,7 @@ function GridCopyEvents(const pForm: TGridCopyForm; const pView: string): TArray
 /// them, the indentation of the property removed) as the DFM has them; TableName = ''.</returns>
 /// <exception cref="EGridCopyError">The form has no such view, or its class is not a grid view this model knows.</exception>
 /// <exception cref="EDfmWriteError">The DFM is binary or cannot be read.</exception>
-function GridViewColumns(const pForm: TGridCopyForm; const pView: string): TArray<TFrGridColumn>;
+function GridViewColumns(const pForm: TGridCopyForm; const pView: string): TArray<TFrGridColumn>;  // dl:ok unused-public-symbol@f56d -- REVIEWED LINTFIX-B 2026-11-27: public so tests\fieldrepo\GridCopyTests.dpr calls it directly (unit test surface)
 
 /// <summary>Plans a copy; nothing is written.</summary>
 /// <param name="pForm">The form: DFM bytes, and the unit's bytes when there is a unit.</param>

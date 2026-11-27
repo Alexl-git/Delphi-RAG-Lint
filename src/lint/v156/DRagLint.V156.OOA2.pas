@@ -55,7 +55,7 @@ type
 implementation
 
 uses
-  DRagLint.V156.OOA2.Support  // dl:ok uses-global-census@f2aa -- REVIEWED 2026-11-26 v156 OOA-2: the Support unit of the lane holds the checks; the pair travels together
+  DRagLint.V156.OOA2.Support
   ;
 
 class procedure TV156OOA2Rules.Catalog(const ADecls: TList<TV151RuleDecl>);

@@ -79,11 +79,6 @@ const
   /// <summary>By-name-only rows are printed only when at most this many repository tables have the field name.</summary>
   WIKI_BYNAME_ROW_CAP = 5;
 
-/// <summary>Writes a string as 7-bit ASCII: every character above 126 becomes `&#N;`.</summary>
-/// <param name="pText">Any text.</param>
-/// <returns>The text with non-ASCII characters as HTML numeric entities.</returns>
-function WikiAscii(const pText: string): string;
-
 /// <summary>Reads the repository into table / field records (no project data).</summary>
 /// <param name="pRepo">Open repository connection (read only is enough).</param>
 /// <param name="pOnly">Upper-case table names to keep; empty = all tables.</param>
@@ -93,6 +88,7 @@ function LoadWikiTables(pRepo: TFDConnection; const pOnly: TArray<string>): TArr
 
 /// <summary>True when the project index has the concept tables.</summary>
 /// <param name="pProject">Open project index connection.</param>
+/// <returns>True when the concept tables exist.</returns>
 function WikiProjectHasConcepts(pProject: TFDConnection): Boolean;
 
 /// <summary>Reads the stored hash and copy time of the repository copy in a project index.</summary>
@@ -121,7 +117,7 @@ uses
   System.Generics.Collections,
   System.Generics.Defaults,
   Data.DB,
-  DRagLint.FieldRepo.Schema;
+  DRagLint.FieldRepo.Schema;  // dl:ok uses-global-census@7cd7 -- the named constants are the whole contract this unit draws; the unit pair travels together
 
 const
   CRLF = #13#10;
@@ -524,7 +520,7 @@ begin
         for K := VLinks.Count - 1 downto 1 do
           if CompareLink(VLinks[K], VLinks[K - 1]) = 0 then VLinks.Delete(K);
         pTables[I].Fields[J].Links := VLinks.ToArray;
-        pTables[I].Fields[J].AlsoShownAs := ReadAlsoShown(pProject, pTables[I].Name, pTables[I].Fields[J].FieldName,
+        pTables[I].Fields[J].AlsoShownAs := ReadAlsoShown(pProject, pTables[I].Name, pTables[I].Fields[J].FieldName,  // dl:ok query-in-loop@1360 -- REVIEWED LINTFIX-B 2026-11-27: one lookup per repository field of a wiki run; a set query would need the per-field caption match done in SQL
           pTables[I].Fields[J].Caption);
       end;
   finally

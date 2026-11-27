@@ -708,33 +708,33 @@ type
                      ATok: Integer; AVia, ACond: Boolean);
     procedure RecordDst(const AKind: string; const APos: TTSNode; AIndex: Integer; const AName, ARecv: string;
                         const AV: TExprVal);
-    procedure AssignSlot(var St: TTaintVal; ASlot: Integer; const AV: TExprVal; AKill: Boolean; const ASite: TTSNode);
-    procedure ReceiveInto(var St: TTaintVal; const ABase: TTSNode; const AV: TExprVal);
-    function ReadSlot(const St: TTaintVal; ASlot: Integer): TExprVal;
-    function Eval(var St: TTaintVal; const N: TTSNode): TExprVal;
-    function EvalIdent(var St: TTaintVal; const N: TTSNode): TExprVal;
-    function EvalDot(var St: TTaintVal; const N: TTSNode): TExprVal;
-    function EvalCall(var St: TTaintVal; const N: TTSNode): TExprVal;
+    procedure AssignSlot(var ASt: TTaintVal; ASlot: Integer; const AV: TExprVal; AKill: Boolean; const ASite: TTSNode);
+    procedure ReceiveInto(var ASt: TTaintVal; const ABase: TTSNode; const AV: TExprVal);
+    function ReadSlot(const ASt: TTaintVal; ASlot: Integer): TExprVal;
+    function Eval(var ASt: TTaintVal; const N: TTSNode): TExprVal;
+    function EvalIdent(var ASt: TTaintVal; const N: TTSNode): TExprVal;
+    function EvalDot(var ASt: TTaintVal; const N: TTSNode): TExprVal;
+    function EvalCall(var ASt: TTaintVal; const N: TTSNode): TExprVal;
     function ArgMayBeWritten(const ACallee: string; AIndex: Integer): Boolean;
-    procedure ApplyAssignment(var St: TTaintVal; const N: TTSNode);
-    procedure ApplyMemberWrite(var St: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
-    procedure ApplyStmtExpr(var St: TTaintVal; const E: TTSNode);
-    procedure ApplyItem(var St: TTaintVal; const N: TTSNode);
-    procedure WalkLambda(const St: TTaintVal; const N: TTSNode);
-    procedure FlatWalk(var St: TTaintVal; const N: TTSNode);
-    procedure EmitExitRows(const St: TTaintVal);
+    procedure ApplyAssignment(var ASt: TTaintVal; const N: TTSNode);
+    procedure ApplyMemberWrite(var ASt: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
+    procedure ApplyStmtExpr(var ASt: TTaintVal; const E: TTSNode);
+    procedure ApplyItem(var ASt: TTaintVal; const N: TTSNode);
+    procedure WalkLambda(const ASt: TTaintVal; const N: TTSNode);
+    procedure FlatWalk(var ASt: TTaintVal; const N: TTSNode);
+    procedure EmitExitRows(const ASt: TTaintVal);
     procedure RunInsensitive;
     procedure RunCfg(const ACfg: TCfg);
     procedure ScanBody(const N: TTSNode);
     function Reclass(const AV: TExprVal; const ACls: string): TExprVal;
-    function EvalNode(var St: TTaintVal; const N: TTSNode): TExprVal;
-    function EvalBinary(var St: TTaintVal; const N: TTSNode): TExprVal;
-    function EvalUnary(var St: TTaintVal; const N: TTSNode): TExprVal;
-    function EvalNoFlowCall(var St: TTaintVal; const ACallee: string; const AArgs: TTSNode;
+    function EvalNode(var ASt: TTaintVal; const N: TTSNode): TExprVal;
+    function EvalBinary(var ASt: TTaintVal; const N: TTSNode): TExprVal;
+    function EvalUnary(var ASt: TTaintVal; const N: TTSNode): TExprVal;
+    function EvalNoFlowCall(var ASt: TTaintVal; const ACallee: string; const AArgs: TTSNode;
                             const AArgVals: TArray<TExprVal>; ABare: Boolean): TExprVal;
-    procedure RunExprHooks(var St: TTaintVal; const N: TTSNode; var AV: TExprVal);
-    procedure RunWriteHooks(var St: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
-    procedure RunStmtHooks(var St: TTaintVal; const N: TTSNode);
+    procedure RunExprHooks(var ASt: TTaintVal; const N: TTSNode; var AV: TExprVal);
+    procedure RunWriteHooks(var ASt: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
+    procedure RunStmtHooks(var ASt: TTaintVal; const N: TTSNode);
     function ScopedCls(AGroup: Char; const AScope, ALowerName: string): string;
     function FieldCls(const ALowerName: string): string;
     function GlobalCls(const ALowerName: string): string;
@@ -1550,7 +1550,7 @@ begin
   end;
 end;
 
-procedure TCollector.AssignSlot(var St: TTaintVal; ASlot: Integer; const AV: TExprVal; AKill: Boolean;
+procedure TCollector.AssignSlot(var ASt: TTaintVal; ASlot: Integer; const AV: TExprVal; AKill: Boolean;
                                 const ASite: TTSNode);
 var
   L, C: Integer;
@@ -1561,13 +1561,13 @@ begin
   V:= if FSlotScalar[ASlot] then Reclass(AV, FSlotCls[ASlot]) else AV;
   if AKill and not FInsensitive then
   begin
-    St.May[ASlot] := V.May;
-    St.Must[ASlot]:= V.Must;
+    ASt.May[ASlot] := V.May;
+    ASt.Must[ASlot]:= V.Must;
   end
   else
   begin
-    St.May[ASlot] := SetUnion(St.May[ASlot], V.May);
-    St.Must[ASlot]:= SetUnion(St.Must[ASlot], V.Must);
+    ASt.May[ASlot] := SetUnion(ASt.May[ASlot], V.May);
+    ASt.Must[ASlot]:= SetUnion(ASt.Must[ASlot], V.Must);
   end;
   if FRecording and (not ASite.IsNull) then
   begin
@@ -1583,7 +1583,7 @@ end;
 
 { `X.Add(e)`, `X.f := e`, `X[i] := e`: the base X receives e. A local/param slot
   gains e's sources; a field or global base is a 'field' / 'global' destination. }
-procedure TCollector.ReceiveInto(var St: TTaintVal; const ABase: TTSNode; const AV: TExprVal);
+procedure TCollector.ReceiveInto(var ASt: TTaintVal; const ABase: TTSNode; const AV: TExprVal);
 var
   Slot: Integer;
   Nm  : string;
@@ -1592,7 +1592,7 @@ begin
   Slot:= SlotOf(ABase);
   if Slot >= 0 then
   begin
-    AssignSlot(St, Slot, AV, False, ABase);
+    AssignSlot(ASt, Slot, AV, False, ABase);
     Exit;
   end;
   Nm:= LowerCase(Text(ABase));
@@ -1600,26 +1600,26 @@ begin
   else if FGlobals.ContainsKey(Nm) then RecordDst(DF_DST_GLOBAL, ABase, -1, Text(ABase), '', AV);
 end;
 
-function TCollector.ReadSlot(const St: TTaintVal; ASlot: Integer): TExprVal;
+function TCollector.ReadSlot(const ASt: TTaintVal; ASlot: Integer): TExprVal;
 var
   I, E: Integer;
 begin
   Result:= ExprEmpty;
   if (ASlot < 0) or (ASlot >= FNSlots) then Exit;
   Result.Cls:= FSlotCls[ASlot];
-  SetLength(Result.May, Length(St.May[ASlot]));
-  for I:= 0 to High(St.May[ASlot]) do
+  SetLength(Result.May, Length(ASt.May[ASlot]));
+  for I:= 0 to High(ASt.May[ASlot]) do
   begin
-    E:= St.May[ASlot][I];
+    E:= ASt.May[ASlot][I];
     { a parameter read as itself is direct; everything else came through state }
     if (E shr 1) <> FSlotPTok[ASlot] then E:= E or 1;
     Result.May[I]:= E;
   end;
   Result.May := SetNorm(Result.May);
-  Result.Must:= St.Must[ASlot];
+  Result.Must:= ASt.Must[ASlot];
 end;
 
-function TCollector.EvalIdent(var St: TTaintVal; const N: TTSNode): TExprVal;
+function TCollector.EvalIdent(var ASt: TTaintVal; const N: TTSNode): TExprVal;
 var
   Slot: Integer;
   Nm  : string;
@@ -1628,13 +1628,13 @@ begin
   Nm:= LowerCase(Text(N));
   if (Nm = '') or (Nm = 'self') then Exit;
   Slot:= SlotOf(N);
-  if Slot >= 0 then Exit(ReadSlot(St, Slot));
+  if Slot >= 0 then Exit(ReadSlot(ASt, Slot));
   if FFields.ContainsKey(Nm) then Exit(TypedTokVal(DF_SRC_FIELD, 0, 0, Text(N), FieldCls(Nm)));
   if FGlobals.ContainsKey(Nm) then Exit(TypedTokVal(DF_SRC_GLOBAL, 0, 0, Text(N), GlobalCls(Nm)));
   Result:= TypedTokVal(DF_SRC_REF, Integer(N.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, N.StartByte, N.StartPoint.Column) + 1, Text(N), BareResultCls(Nm));
 end;
 
-function TCollector.EvalDot(var St: TTaintVal; const N: TTSNode): TExprVal;
+function TCollector.EvalDot(var ASt: TTaintVal; const N: TTSNode): TExprVal;
 var
   L, R, Base: TTSNode;
   LV        : TExprVal;
@@ -1645,11 +1645,11 @@ begin
   R:= N.ChildByField('rhs');
   if (not L.IsNull) and (L.NodeType = 'identifier') and SameText(Text(L), 'Self') then
   begin
-    if R.IsNull or (R.NodeType <> 'identifier') then Exit(Eval(St, R));
+    if R.IsNull or (R.NodeType <> 'identifier') then Exit(Eval(ASt, R));
     if FFields.ContainsKey(LowerCase(Text(R))) then Exit(TypedTokVal(DF_SRC_FIELD, 0, 0, Text(R), FieldCls(LowerCase(Text(R)))));
     Exit(TypedTokVal(DF_SRC_REF, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R), ScopedCls(DF_DECL_RESULT, FScope, LowerCase(Text(R)))));
   end;
-  LV:= Eval(St, L);
+  LV:= Eval(ASt, L);
   Member:= '';
   if (not R.IsNull) and (R.NodeType = 'identifier') then Member:= LowerCase(Text(R));
   Base:= BaseIdent(L);
@@ -1678,7 +1678,7 @@ begin
   else Result.Cls:= if AccessorClass(Member) <> '' then AccessorClass(Member) else MCls;
 end;
 
-function TCollector.EvalCall(var St: TTaintVal; const N: TTSNode): TExprVal;
+function TCollector.EvalCall(var ASt: TTaintVal; const N: TTSNode): TExprVal;
 var
   Ent, Args, NameN, Arg, Recv: TTSNode;
   Callee, RecvText           : string;
@@ -1706,13 +1706,13 @@ begin
   if not Args.IsNull then
   begin
     SetLength(ArgVals, Args.NamedChildCount);
-    for I:= 0 to Args.NamedChildCount - 1 do ArgVals[I]:= Eval(St, Args.NamedChild(I));
+    for I:= 0 to Args.NamedChildCount - 1 do ArgVals[I]:= Eval(ASt, Args.NamedChild(I));
   end;
   RecvVal:= ExprEmpty;
-  if not Recv.IsNull then RecvVal:= Eval(St, Recv);
+  if not Recv.IsNull then RecvVal:= Eval(ASt, Recv);
   if NameN.IsNull or (NameN.NodeType <> 'identifier') then
   begin
-    if (not Ent.IsNull) and (Ent.NodeType <> 'exprDot') and (Ent.NodeType <> 'identifier') then Eval(St, Ent);
+    if (not Ent.IsNull) and (Ent.NodeType <> 'exprDot') and (Ent.NodeType <> 'identifier') then Eval(ASt, Ent);
     Exit;
   end;
   Callee:= LowerCase(Text(NameN));
@@ -1726,7 +1726,7 @@ begin
   begin
     All:= ExprEmpty;
     for I:= 0 to High(ArgVals) do All:= ExprUnion(All, ArgVals[I]);
-    ReceiveInto(St, BaseIdent(Recv), All);
+    ReceiveInto(ASt, BaseIdent(Recv), All);
   end;
   { argout: a plain variable argument may be written by the callee (a var/out slot) }
   if not InList(Callee, TAINT_NOFLOW_RESULT) then
@@ -1737,10 +1737,10 @@ begin
       if (Slot < 0) or not ArgMayBeWritten(Callee, I) then Continue;
       { 1.56 B3: a scalar variable gets the argout source too, as a value source of its class }
       T:= Tok(DF_SRC_ARGOUT, I, CallLine, CallCol, Text(NameN), FSlotCls[Slot]);
-      St.May[Slot] := SetUnion(St.May[Slot], [T * 2]);
-      St.Must[Slot]:= SetUnion(St.Must[Slot], [T]);
+      ASt.May[Slot] := SetUnion(ASt.May[Slot], [T * 2]);
+      ASt.Must[Slot]:= SetUnion(ASt.Must[Slot], [T]);
     end;
-  if InList(Callee, TAINT_NOFLOW_RESULT) then Exit(EvalNoFlowCall(St, Callee, Args, ArgVals, Recv.IsNull));
+  if InList(Callee, TAINT_NOFLOW_RESULT) then Exit(EvalNoFlowCall(ASt, Callee, Args, ArgVals, Recv.IsNull));
   Result:= TypedTokVal(DF_SRC_REF, CallLine, CallCol, Text(NameN),
              if Recv.IsNull then BareResultCls(LowerCase(Text(NameN))) else RecvResultCls(Recv, LowerCase(Text(NameN))));
   { a method of a string-typed local/param (`S.Trim`, `S.Substring(1)`) derives from it }
@@ -1752,7 +1752,7 @@ end;
   result is a scalar derived from the arguments (`Length(S)`, `StrToInt(S)`, `Round(X)`);
   IntToStr's result is a string that keeps its integer sources; Inc(X, D) / Dec(X, D) with a
   scalar variable X feed D into X and have no result. }
-function TCollector.EvalNoFlowCall(var St: TTaintVal; const ACallee: string; const AArgs: TTSNode;
+function TCollector.EvalNoFlowCall(var ASt: TTaintVal; const ACallee: string; const AArgs: TTSNode;
                                    const AArgVals: TArray<TExprVal>; ABare: Boolean): TExprVal;
 var
   I, Slot: Integer;
@@ -1769,7 +1769,7 @@ begin
   else if InList(ACallee, DF_STEP_PROCS) and ABare and (Length(AArgVals) = DF_STEP_ARGS) then
   begin
     Slot:= SlotOf(AArgs.NamedChild(0));
-    if (Slot >= 0) and FSlotScalar[Slot] then AssignSlot(St, Slot, AArgVals[1], False, AArgs.NamedChild(0));
+    if (Slot >= 0) and FSlotScalar[Slot] then AssignSlot(ASt, Slot, AArgVals[1], False, AArgs.NamedChild(0));
   end;
 end;
 
@@ -1777,7 +1777,7 @@ end;
   is its left side; every other operator yields a scalar, which pre-1.56 was no flow: `X is T`
   derives from X only, a comparison is a Boolean derived from both sides, the rest is arithmetic
   or logic (ArithClass). }
-function TCollector.EvalBinary(var St: TTaintVal; const N: TTSNode): TExprVal;
+function TCollector.EvalBinary(var ASt: TTaintVal; const N: TTSNode): TExprVal;
 var
   Op, OpT: string;
   A, B   : TExprVal;
@@ -1785,8 +1785,8 @@ var
 begin
   OpN:= N.ChildByField('operator');
   Op := if OpN.IsNull then '' else OpN.NodeType;
-  A:= Eval(St, N.ChildByField('lhs'));
-  B:= Eval(St, N.ChildByField('rhs'));
+  A:= Eval(ASt, N.ChildByField('lhs'));
+  B:= Eval(ASt, N.ChildByField('rhs'));
   OpT:= LowerCase(Trim(Text(OpN)));
   if Op = 'kAdd' then
   begin
@@ -1801,14 +1801,14 @@ end;
 
 { 1.56 B3: `@X` and `X^` are X (as before); `not X` is Boolean unless X is an integer; a sign
   keeps the operand's class (a number of unknown type: DF_VAL_FLOAT). }
-function TCollector.EvalUnary(var St: TTaintVal; const N: TTSNode): TExprVal;
+function TCollector.EvalUnary(var ASt: TTaintVal; const N: TTSNode): TExprVal;
 var
   Op : string;
   OpN: TTSNode;
 begin
   OpN:= N.ChildByField('operator');
   Op := if OpN.IsNull then '' else OpN.NodeType;
-  Result:= Eval(St, N.ChildByField('operand'));
+  Result:= Eval(ASt, N.ChildByField('operand'));
   if (Op = 'kAt') or (Op = 'kHat') then Exit;
   Result:= Reclass(Result, if Op = 'kNot' then (if Result.Cls = DF_VAL_INT then DF_VAL_INT else DF_VAL_BOOL)
                            else (if Result.Cls <> '' then Result.Cls else DF_VAL_FLOAT));
@@ -1871,13 +1871,13 @@ begin
   end;
 end;
 
-function TCollector.Eval(var St: TTaintVal; const N: TTSNode): TExprVal;
+function TCollector.Eval(var ASt: TTaintVal; const N: TTSNode): TExprVal;
 begin
-  Result:= EvalNode(St, N);
-  if (GExprHooks <> nil) and not N.IsNull then RunExprHooks(St, N, Result);
+  Result:= EvalNode(ASt, N);
+  if (GExprHooks <> nil) and not N.IsNull then RunExprHooks(ASt, N, Result);
 end;
 
-function TCollector.EvalNode(var St: TTaintVal; const N: TTSNode): TExprVal;  // dl:ok too-many-exit-points@1d4a -- node-type dispatcher: one Exit per grammar node kind
+function TCollector.EvalNode(var ASt: TTaintVal; const N: TTSNode): TExprVal;  // dl:ok too-many-exit-points@b8e8 -- node-type dispatcher: one Exit per grammar node kind
 var
   NT  : string;
   I   : Integer;
@@ -1898,65 +1898,65 @@ begin
     Exit;
   end;
   if InList(NT, TAINT_INERT_NODES) then Exit;
-  if NT = 'identifier' then Exit(EvalIdent(St, N));
-  if NT = 'exprDot' then Exit(EvalDot(St, N));
-  if NT = 'exprCall' then Exit(EvalCall(St, N));
+  if NT = 'identifier' then Exit(EvalIdent(ASt, N));
+  if NT = 'exprDot' then Exit(EvalDot(ASt, N));
+  if NT = 'exprCall' then Exit(EvalCall(ASt, N));
   if NT = 'assignment' then
   begin
-    ApplyAssignment(St, N);
+    ApplyAssignment(ASt, N);
     Exit;
   end;
   if NT = 'lambda' then
   begin
-    WalkLambda(St, N);
+    WalkLambda(ASt, N);
     Exit;
   end;
   if NT = 'exprSubscript' then
   begin
-    Eval(St, N.ChildByField('args'));
-    Exit(Eval(St, N.ChildByField('entity')));
+    Eval(ASt, N.ChildByField('args'));
+    Exit(Eval(ASt, N.ChildByField('entity')));
   end;
-  if NT = 'exprBinary' then Exit(EvalBinary(St, N));
-  if NT = 'exprUnary' then Exit(EvalUnary(St, N));
+  if NT = 'exprBinary' then Exit(EvalBinary(ASt, N));
+  if NT = 'exprUnary' then Exit(EvalUnary(ASt, N));
   if NT = 'exprIf' then
   begin
-    Eval(St, N.ChildByField('condition'));
-    A:= Eval(St, N.ChildByField('then'));
-    B:= Eval(St, N.ChildByField('else'));
+    Eval(ASt, N.ChildByField('condition'));
+    A:= Eval(ASt, N.ChildByField('then'));
+    B:= Eval(ASt, N.ChildByField('else'));
     Result.May := SetUnion(A.May, B.May);
     Result.Must:= SetInter(A.Must, B.Must);
     if A.Cls = B.Cls then Result.Cls:= A.Cls;
     Exit;
   end;
   { exprParens, exprBrackets (`[A, B]`: an open array is one value), exprArgs, anything else }
-  if N.NamedChildCount = 1 then Exit(Eval(St, N.NamedChild(0))); { `(X)` keeps X's class }
-  for I:= 0 to N.NamedChildCount - 1 do Result:= ExprUnion(Result, Eval(St, N.NamedChild(I)));
+  if N.NamedChildCount = 1 then Exit(Eval(ASt, N.NamedChild(0))); { `(X)` keeps X's class }
+  for I:= 0 to N.NamedChildCount - 1 do Result:= ExprUnion(Result, Eval(ASt, N.NamedChild(I)));
 end;
 
-procedure TCollector.ApplyMemberWrite(var St: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
+procedure TCollector.ApplyMemberWrite(var ASt: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
 var
   Ent, Member, Recv, Base: TTSNode;
 begin
   Ent:= ALhs;
   if ALhs.NodeType = 'exprSubscript' then
   begin
-    Eval(St, ALhs.ChildByField('args'));
+    Eval(ASt, ALhs.ChildByField('args'));
     Ent:= ALhs.ChildByField('entity');
     if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then
     begin
       { X[i] := e }
-      ReceiveInto(St, Ent, AV);
+      ReceiveInto(ASt, Ent, AV);
       Exit;
     end;
   end;
   if Ent.IsNull or (Ent.NodeType <> 'exprDot') then
   begin
-    Eval(St, Ent);
+    Eval(ASt, Ent);
     Exit;
   end;
   Recv  := Ent.ChildByField('lhs');
   Member:= Ent.ChildByField('rhs');
-  Eval(St, Recv);
+  Eval(ASt, Recv);
   if (not Recv.IsNull) and (Recv.NodeType = 'identifier') and SameText(Text(Recv), 'Self') then
   begin
     if (not Member.IsNull) and (Member.NodeType = 'identifier') then
@@ -1964,12 +1964,12 @@ begin
     Exit;
   end;
   Base:= BaseIdent(Recv);
-  ReceiveInto(St, Base, AV);
+  ReceiveInto(ASt, Base, AV);
   if (not Member.IsNull) and (Member.NodeType = 'identifier') and RefShapeOk(Recv, SameText(Text(Recv), 'Self')) then
     RecordDst(DF_DST_WRITE, Member, -1, Text(Member), Trim(Text(Recv)), AV);
 end;
 
-procedure TCollector.ApplyAssignment(var St: TTaintVal; const N: TTSNode);
+procedure TCollector.ApplyAssignment(var ASt: TTaintVal; const N: TTSNode);
 var
   Lhs, OpN, IdN: TTSNode;
   V            : TExprVal;
@@ -1979,10 +1979,10 @@ var
 begin
   Lhs:= N.ChildByField('lhs');
   OpN:= N.ChildByField('operator');
-  V  := Eval(St, N.ChildByField('rhs'));
+  V  := Eval(ASt, N.ChildByField('rhs'));
   Kill:= OpN.IsNull or (OpN.NodeType = 'kAssign');
   if Lhs.IsNull then Exit;
-  if GWriteHooks <> nil then RunWriteHooks(St, Lhs, V);
+  if GWriteHooks <> nil then RunWriteHooks(ASt, Lhs, V);
   if Lhs.NodeType = 'varAssignDef' then
   begin
     IdN:= Lhs.ChildByField('name');
@@ -1993,7 +1993,7 @@ begin
           IdN:= Lhs.NamedChild(I);
           Break;
         end;
-    AssignSlot(St, SlotOf(IdN), V, True, IdN);
+    AssignSlot(ASt, SlotOf(IdN), V, True, IdN);
     Exit;
   end;
   if Lhs.NodeType = 'identifier' then
@@ -2001,7 +2001,7 @@ begin
     Slot:= SlotOf(Lhs);
     if Slot >= 0 then
     begin
-      AssignSlot(St, Slot, V, Kill, Lhs);
+      AssignSlot(ASt, Slot, V, Kill, Lhs);
       Exit;
     end;
     Nm:= LowerCase(Text(Lhs));
@@ -2012,13 +2012,13 @@ begin
   end;
   if (Lhs.NodeType = 'exprDot') or (Lhs.NodeType = 'exprSubscript') then
   begin
-    ApplyMemberWrite(St, Lhs, V);
+    ApplyMemberWrite(ASt, Lhs, V);
     Exit;
   end;
-  Eval(St, Lhs);
+  Eval(ASt, Lhs);
 end;
 
-procedure TCollector.ApplyStmtExpr(var St: TTaintVal; const E: TTSNode);
+procedure TCollector.ApplyStmtExpr(var ASt: TTaintVal; const E: TTSNode);
 var
   Ent, Args: TTSNode;
 begin
@@ -2030,14 +2030,14 @@ begin
     if (not Ent.IsNull) and (Ent.NodeType = 'identifier') and SameText(Text(Ent), 'exit') then
     begin
       if (not Args.IsNull) and (Args.NamedChildCount > 0) and (FResultSlot >= 0) then
-        AssignSlot(St, FResultSlot, Eval(St, Args.NamedChild(0)), True, E);
+        AssignSlot(ASt, FResultSlot, Eval(ASt, Args.NamedChild(0)), True, E);
       Exit;
     end;
   end;
-  Eval(St, E);
+  Eval(ASt, E);
 end;
 
-procedure TCollector.ApplyItem(var St: TTaintVal; const N: TTSNode);
+procedure TCollector.ApplyItem(var ASt: TTaintVal; const N: TTSNode);
 var
   I : Integer;
   NT: string;
@@ -2045,28 +2045,28 @@ begin
   NT:= N.NodeType;
   if GStmtHooks <> nil then
   begin
-    RunStmtHooks(St, N);
+    RunStmtHooks(ASt, N);
     if NT = 'statement' then
-      for I:= 0 to N.NamedChildCount - 1 do RunStmtHooks(St, N.NamedChild(I));
+      for I:= 0 to N.NamedChildCount - 1 do RunStmtHooks(ASt, N.NamedChild(I));
   end;
-  if NT = 'assignment' then ApplyAssignment(St, N)
+  if NT = 'assignment' then ApplyAssignment(ASt, N)
   else if NT = 'statement' then
-    for I:= 0 to N.NamedChildCount - 1 do ApplyStmtExpr(St, N.NamedChild(I))
-  else if (NT = 'exprCall') or (NT = 'exprDot') or (NT = 'identifier') then ApplyStmtExpr(St, N)
-  else if (NT <> 'varDef') and (NT <> 'asm') then Eval(St, N);
+    for I:= 0 to N.NamedChildCount - 1 do ApplyStmtExpr(ASt, N.NamedChild(I))
+  else if (NT = 'exprCall') or (NT = 'exprDot') or (NT = 'identifier') then ApplyStmtExpr(ASt, N)
+  else if (NT <> 'varDef') and (NT <> 'asm') then Eval(ASt, N);
 end;
 
 { A lambda body: walked structurally with a COPY of the state at the lambda (its
   captured locals), flow-insensitively, recording on the second pass only. Its
   writes never flow back into the enclosing routine's state. }
-procedure TCollector.WalkLambda(const St: TTaintVal; const N: TTSNode);
+procedure TCollector.WalkLambda(const ASt: TTaintVal; const N: TTSNode);
 var
   LS        : TTaintVal;
   SaveRec   : Boolean;
   SaveInsens: Boolean;
 begin
-  if (not FRecording) or (not St.Reached) then Exit;
-  LS:= CopyVal(St);
+  if (not FRecording) or (not ASt.Reached) then Exit;
+  LS:= CopyVal(ASt);
   SaveRec:= FRecording;
   SaveInsens:= FInsensitive;
   FInsensitive:= True;
@@ -2082,7 +2082,7 @@ begin
 end;
 
 { Source-order walk of a statement subtree (the flow-insensitive mode). }
-procedure TCollector.FlatWalk(var St: TTaintVal; const N: TTSNode);
+procedure TCollector.FlatWalk(var ASt: TTaintVal; const N: TTSNode);
 var
   I     : Integer;
   NT    : string;
@@ -2093,12 +2093,12 @@ begin
   if (NT = 'defProc') or (NT = 'with') or (NT = 'asm') or (NT = 'comment') then Exit;
   if (NT = 'assignment') or (NT = 'statement') or (NT = 'raise') then
   begin
-    ApplyItem(St, N);
+    ApplyItem(ASt, N);
     Exit;
   end;
   if NT.StartsWith('expr') or (NT = 'identifier') or (NT = 'lambda') then
   begin
-    ApplyStmtExpr(St, N);
+    ApplyStmtExpr(ASt, N);
     Exit;
   end;
   if NT = 'foreach' then
@@ -2111,14 +2111,14 @@ begin
           It:= It.NamedChild(I);
           Break;
         end;
-    AssignSlot(St, SlotOf(It), Eval(St, N.ChildByField('iterable')), False, It);
-    FlatWalk(St, N.ChildByField('body'));
+    AssignSlot(ASt, SlotOf(It), Eval(ASt, N.ChildByField('iterable')), False, It);
+    FlatWalk(ASt, N.ChildByField('body'));
     Exit;
   end;
   for I:= 0 to N.NamedChildCount - 1 do
   begin
     Cn:= N.NamedChild(I);
-    FlatWalk(St, Cn);
+    FlatWalk(ASt, Cn);
   end;
 end;
 
@@ -2155,12 +2155,12 @@ begin
   end;
 end;
 
-procedure TCollector.EmitExitRows(const St: TTaintVal);
+procedure TCollector.EmitExitRows(const ASt: TTaintVal);
 var
   S, E, T, L, C, Idx: Integer;
   Kind, Nm          : string;
 begin
-  if not St.Reached then Exit;
+  if not ASt.Reached then Exit;
   for S:= 0 to FNSlots - 1 do
   begin
     { 1.56 B3: a scalar Result / var / out slot emits its value rows (it holds no other source) }
@@ -2184,33 +2184,33 @@ begin
       L:= Integer(FProc.StartPoint.Row) + 1;
       C:= Utf8ByteColToCharCol(FSrc, FProc.StartByte, FProc.StartPoint.Column) + 1;
     end;
-    for E in St.May[S] do
+    for E in ASt.May[S] do
     begin
       T:= E shr 1;
       if T = FSlotPTok[S] then Continue; { a var param still holding its own entry value }
-      AddRow(Kind, L, C, Idx, Nm, '', T, (E and 1) = 1, FInsensitive or not SetHas(St.Must[S], T));
+      AddRow(Kind, L, C, Idx, Nm, '', T, (E and 1) = 1, FInsensitive or not SetHas(ASt.Must[S], T));
     end;
   end;
 end;
 
 procedure TCollector.RunInsensitive;
 var
-  St, Prev: TTaintVal;
+  ASt, Prev: TTaintVal;
   Pass    : Integer;
 begin
   Inc(GFallbacks);
   FInsensitive:= True;
   FRecording  := False;
-  St:= Boundary;
+  ASt:= Boundary;
   for Pass:= 1 to DF_FLAT_PASSES do
   begin
-    Prev:= CopyVal(St);
-    FlatWalk(St, FBody);
-    if Same(Prev, St) then Break;
+    Prev:= CopyVal(ASt);
+    FlatWalk(ASt, FBody);
+    if Same(Prev, ASt) then Break;
   end;
   FRecording:= True;
-  FlatWalk(St, FBody);
-  EmitExitRows(St);
+  FlatWalk(ASt, FBody);
+  EmitExitRows(ASt);
 end;
 
 procedure TCollector.RunCfg(const ACfg: TCfg);
@@ -2259,7 +2259,7 @@ end;
 
 { ---- 1.56 seam: the registered hooks and what they may ask (TDataFlowSite) ---- }
 
-procedure TCollector.RunExprHooks(var St: TTaintVal; const N: TTSNode; var AV: TExprVal);
+procedure TCollector.RunExprHooks(var ASt: TTaintVal; const N: TTSNode; var AV: TExprVal);
 var
   Save: PTaintVal;
   NT  : string;
@@ -2267,7 +2267,7 @@ var
 begin
   NT:= N.NodeType;
   Save:= FCur;
-  FCur:= @St;
+  FCur:= @ASt;
   try
     for I:= 0 to High(GExprHooks) do
       if GExprHooks[I].NodeType = NT then GExprHooks[I].Hook(Self, N, AV);
@@ -2276,13 +2276,13 @@ begin
   end;
 end;
 
-procedure TCollector.RunWriteHooks(var St: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
+procedure TCollector.RunWriteHooks(var ASt: TTaintVal; const ALhs: TTSNode; const AV: TExprVal);
 var
   Save: PTaintVal;
   I   : Integer;
 begin
   Save:= FCur;
-  FCur:= @St;
+  FCur:= @ASt;
   try
     for I:= 0 to High(GWriteHooks) do GWriteHooks[I](Self, ALhs, AV);
   finally
@@ -2290,7 +2290,7 @@ begin
   end;
 end;
 
-procedure TCollector.RunStmtHooks(var St: TTaintVal; const N: TTSNode);
+procedure TCollector.RunStmtHooks(var ASt: TTaintVal; const N: TTSNode);
 var
   Save: PTaintVal;
   NT  : string;
@@ -2299,7 +2299,7 @@ begin
   if N.IsNull then Exit;
   NT:= N.NodeType;
   Save:= FCur;
-  FCur:= @St;
+  FCur:= @ASt;
   try
     for I:= 0 to High(GStmtHooks) do
       if GStmtHooks[I].NodeType = NT then GStmtHooks[I].Hook(Self, N);

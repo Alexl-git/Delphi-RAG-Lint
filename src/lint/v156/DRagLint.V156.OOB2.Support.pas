@@ -55,7 +55,6 @@ uses
   , FireDAC.Comp.Client
   , FireDAC.Stan.Param
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Storage.SQLite
@@ -227,7 +226,7 @@ begin
       if (R.Kind = 'method') and Fixtures.ContainsKey(R.ParentId) and MatchStr(R.Attr, TEST_ATTRIBUTES) then
         HasTest.AddOrSetValue(R.ParentId, True);
     for F in Fixtures.Values do
-      if (not HasTest.ContainsKey(F.SymbolId)) and (not MayHaveOtherTests(F.SymbolId)) then
+      if (not HasTest.ContainsKey(F.SymbolId)) and (not MayHaveOtherTests(F.SymbolId)) then  // dl:ok query-in-loop@e601 -- REVIEWED LINTFIX-B 2026-11-27: only fixtures with no [Test] of their own reach the ancestor walk, which is recursive
         Report(Format('Test fixture %s has no test: no method with [Test] or [TestCase], and no ancestor that could bring one', [F.Name]),
           F.StartLine, F.StartCol, F.Name.Length);
     for R in Rows do

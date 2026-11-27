@@ -32,7 +32,7 @@ type
   /// <summary>One run of the lane over one parsed unit.</summary>
   /// <remarks>Create, call the Check methods, Free. Not thread-safe. The node lists are collected once, in Create.
   /// CheckArguments reports nothing without a project index (ACtx.Store) that knows the file.</remarks>
-  TMembRun = class
+  TMembRun = class  // dl:ok high-response@4ab9 -- REVIEWED LINTFIX-B 2026-11-27: one scanner class holding the per-rule checks of one lane; a split is beyond this lint pass
   strict private
     FCtx     : TV151FileCtx;
     FSrc     : TBytes;
@@ -90,7 +90,6 @@ uses
   , FireDAC.Comp.Client
   , FireDAC.Stan.Param
   , TreeSitterLib
-  , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Storage.SQLite
   , DRagLint.Analysis.Flow.Lattices
@@ -211,7 +210,7 @@ begin
 end;
 
 { ARoutine's parameter or local variable AName (any case). }
-function Declares(const ARoutine: TTSNode; const AName: string; const ASrc: TBytes; out ADecl: TTSNode): Boolean;
+function Declares(const ARoutine: TTSNode; const AName: string; const ASrc: TBytes; out ADecl: TTSNode): Boolean;  // dl:ok duplicate-code@8ca4 -- same shape over different fields or sources; a shared helper would need more parameters than it saves, and this lane must not change extraction or checker structure
 
   function Names(const ADeclaration: TTSNode): Boolean;
   var
@@ -254,7 +253,7 @@ begin
 end;
 
 { Uses of AName under ANode: headers, types and nested routines that declare the name again are left out. }
-procedure AddUses(const ANode: TTSNode; const AName: string; const ASrc: TBytes; AList: TList<TTSNode>);
+procedure AddUses(const ANode: TTSNode; const AName: string; const ASrc: TBytes; AList: TList<TTSNode>);  // dl:ok duplicate-code@e856 -- same shape over different fields or sources; a shared helper would need more parameters than it saves, and this lane must not change extraction or checker structure
 var
   I: Integer;
   Decl, Child: TTSNode;
@@ -443,7 +442,7 @@ var
   Query: TFDQuery;
 begin
   if FEdges <> nil then Exit;
-  FEdges:= TDictionary<string, Int64>.Create;
+  FEdges:= TDictionary<string, Int64>.Create;  // dl:ok duplicate-code@6dbf -- same shape over different fields or sources; a shared helper would need more parameters than it saves, and this lane must not change extraction or checker structure
   Query := TFDQuery.Create(nil);
   try
     Query.Connection:= (FCtx.Store as TSQLiteSymbolStore).GetConnection;

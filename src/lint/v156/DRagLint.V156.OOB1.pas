@@ -55,7 +55,7 @@ type
 implementation
 
 uses
-  DRagLint.V156.OOB1.Support  // dl:ok uses-global-census -- REVIEWED v156 OOB-1: the Support unit of the lane holds the checks; the pair travels together
+  DRagLint.V156.OOB1.Support
   ;
 
 class procedure TV156OOB1Rules.Catalog(const ADecls: TList<TV151RuleDecl>);
@@ -72,12 +72,12 @@ begin
   Result:= TOOB1Checks.FieldsCouldBeLocal(ACtx.Store, ACtx.FileId, ACtx.Path, RULE_FIELD_COULD_BE_LOCAL);
 end;
 
-class function TV156OOB1Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;
+class function TV156OOB1Rules.CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>;  // dl:ok unused-parameter@4420 -- REVIEWED LINTFIX-B 2026-11-27: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;
 
-class function TV156OOB1Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;
+class function TV156OOB1Rules.CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>;  // dl:ok unused-parameter@eed4 -- REVIEWED LINTFIX-B 2026-11-27: fixed TV151 frame hook signature; this lane has no rule on that hook
 begin
   Result:= nil;
 end;

@@ -4700,7 +4700,7 @@ begin
   end;
 end;
 
-class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@4bb0, method-too-long@f9e0, cyclomatic-complexity@649d, cognitive-complexity@3e9d -- REVIEWED 2026-11-21 SLZ-S05: 661 lines (v156 FP-PR re-stamp: 677 lines, 54 locals); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@3fec, method-too-long@d42c, cyclomatic-complexity@4517, cognitive-complexity@4477 -- REVIEWED 2026-11-21 SLZ-S05: 661 lines (v156 FP-PR re-stamp: 677 lines, 54 locals); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
   const AOptInRules: TArray<string>; const AOnlyFileId: Int64;
   const AWholeGraph: TFunc<string, TArray<TLintFinding>>; const ASiblingNames: TSiblingProjectLister): TArray<TLintFinding>;

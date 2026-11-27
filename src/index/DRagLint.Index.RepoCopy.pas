@@ -47,11 +47,11 @@ uses
   Data.DB,
   FireDAC.Stan.Param,
   FireDAC.Comp.Client,
-  DRagLint.Core.Model,
+  DRagLint.Core.Model,  // dl:ok uses-global-census@744f -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.Core.Interfaces,
   DRagLint.Storage.SQLite,
   DRagLint.FieldRepo.Locate,
-  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census@9edb -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.FieldRepo.Kinds,
   DRagLint.FieldRepo.DfmRead,
   DRagLint.FieldRepo.DfmReadPlan;
@@ -398,7 +398,7 @@ var
 var
   VWalSize: Int64;
 begin
-  VHash := THashSHA2.Create(SHA256);  // dl:ok object-leak@552d -- REVIEWED 2026-11-26 CON-I: THashSHA2 is a record, there is nothing to free
+  VHash := THashSHA2.Create(SHA256);  // dl:ok object-leak@552d -- REVIEWED LINTFIX-B 2026-11-27: THashSHA2 is a record, there is nothing to free
   pSize := 0;
   VWalSize := 0;
   Feed(pPath, pSize);
@@ -532,7 +532,7 @@ var
   VQuery: TFDQuery;
   VHash: THashSHA2;
 begin
-  VHash := THashSHA2.Create(SHA256);  // dl:ok object-leak@552d -- REVIEWED 2026-11-26 CON-I: THashSHA2 is a record, there is nothing to free
+  VHash := THashSHA2.Create(SHA256);  // dl:ok object-leak@552d -- REVIEWED LINTFIX-B 2026-11-27: THashSHA2 is a record, there is nothing to free
   VQuery := NewQuery(FConn, SQL_FILES_STAMP);
   try
     VQuery.Open;

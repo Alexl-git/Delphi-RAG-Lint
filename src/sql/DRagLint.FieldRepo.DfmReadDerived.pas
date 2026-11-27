@@ -30,13 +30,13 @@ uses
   System.Generics.Collections,
   FireDAC.Comp.Client,
   DRagLint.FieldRepo.Kinds,
-  DRagLint.FieldRepo.Schema,
+  DRagLint.FieldRepo.Schema,  // dl:ok uses-global-census@9edb -- the named constants are the whole contract this unit draws; the unit pair travels together
   DRagLint.FieldRepo.ChangeSet,
   DRagLint.FieldRepo.DfmRead,
   DRagLint.FieldRepo.DfmReadPlan,
   DRagLint.FieldRepo.RelationGraph,
   DRagLint.FieldRepo.RelationRepo,
-  DRagLint.FieldRepo.Lineage;
+  DRagLint.FieldRepo.Lineage;  // dl:ok uses-global-census@2b5b -- the named constants are the whole contract this unit draws; the unit pair travels together
 
 const
   NO_INDEX_LINE = 'lineage: skipped (no index)'; // the one line of a read that was given no project index

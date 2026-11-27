@@ -61,7 +61,6 @@ const
   FIELD_OP = 'operator';
   FIELD_ENTITY = 'entity';
   OVERLOAD_WORD = 'overload';
-  SECTION_INTERFACE = 'interface';
   KIND_MEMBER_ACCESS = 'member-access';
   MAX_ALIAS_HOPS = 4;
 
@@ -436,9 +435,11 @@ begin
   var RhsN: TTSNode:= NameNode(ANode.ChildByField(FIELD_RHS), True);
   var Line: Integer:= Integer(ANode.StartPoint.Row) + 1;
   { one chain: each step runs only when the earlier ones held, so the type lookups are the last resort }
-  var Narrows: Boolean:= (not Op.IsNull) and (Op.NodeType = OP_ASSIGN) and (FWithDepth = 0)
-    and (not LhsN.IsNull) and (not RhsN.IsNull) and (not FCompilerLines.ContainsKey(Line))
-    and NameType(LhsN, LW, LLeaf) and SourceIsPlainValue(RhsN) and NameType(RhsN, RW, RLeaf) and (RW > LW);
+  var IsPlainAssign: Boolean:= (not Op.IsNull) and (Op.NodeType = OP_ASSIGN) and (FWithDepth = 0);
+  if not IsPlainAssign then Exit;
+  var HasBothSides: Boolean:= (not LhsN.IsNull) and (not RhsN.IsNull) and (not FCompilerLines.ContainsKey(Line));
+  if not HasBothSides then Exit;
+  var Narrows: Boolean:= NameType(LhsN, LW, LLeaf) and SourceIsPlainValue(RhsN) and NameType(RhsN, RW, RLeaf) and (RW > LW);
   if not Narrows then Exit;
   var F: TLintFinding:= Default(TLintFinding);
   F.RuleId   := RULE_ASSIGNMENT_NARROWS;

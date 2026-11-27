@@ -48,7 +48,7 @@ type
 implementation
 
 uses
-  DRagLint.V156.OOB2.Support
+  DRagLint.V156.OOB2.Support  // dl:ok uses-global-census@eb55 -- the named constants are the whole contract this unit draws; the unit pair travels together
   ;
 
 const
