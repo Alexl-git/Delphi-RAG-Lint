@@ -17,7 +17,7 @@ type
   /// <summary>Which shape an answer's lines are in.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.BuildLogical (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.DetectFormOf (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.ReportItems (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.ReportLogicalLines (DRagLint.Charts.Adapter.Text.pas) (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.BuildLogical (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.DetectFormOf (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.ReportItems (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.ReportLogicalLines (DRagLint.Charts.Adapter.Text.pas) (+6 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReportForm = (rfUnknown, rfPlain, rfDocInsight);
@@ -25,8 +25,8 @@ type
   /// <summary>One argument of a COMMAND line.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Charts.ReportHeader.pas), DRagLint.Charts.AskVerb.AddArg (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.SetArg (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ArgIndex (DRagLint.Charts.ReportHeader.pas), DRagLint.Charts.ReportHeader.ParseCommandLine (DRagLint.Charts.ReportHeader.pas)</para>
-  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.ReportHeader</para>
+  /// <para>Used by: declaration (DRagLint.Charts.ReportHeader.pas), DRagLint.Charts.Ask.ReportCommandText.Keep (DRagLint.Charts.Ask.pas), DRagLint.Charts.AskVerb.AddArg (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.SetArg (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ArgIndex (DRagLint.Charts.ReportHeader.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.ReportHeader</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCommandArg = record
@@ -47,8 +47,8 @@ type
   /// case-insensitive, so '-target' and '-Target' are one argument here too. Args never
   /// holds two entries with the same name.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ParseCommandLine (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.Compare.CompareBuildCommand (DRagLint.CLI.Compare.pas) (+26 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Question, DRagLint.Charts.Render, DRagLint.Charts.ReportHeader, DRagLint.CLI.Compare</para>
+  /// <para>Used by: DRagLint.Charts.Ask.ReportCommandText (DRagLint.Charts.Ask.pas), DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.Compare.CompareBuildCommand (DRagLint.CLI.Compare.pas) (+29 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Question, DRagLint.Charts.Render, DRagLint.Charts.ReportHeader, DRagLint.CLI.Compare, DRagLint.CLI.MigrateReports</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReportCommand = record
@@ -78,7 +78,7 @@ type
     /// <returns>The value, or '' when the argument is absent.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.MetaJson (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.RegenerateText (DRagLint.Charts.Ask.pas), DRagLint.CLI.Compare.CompareIsSnapshotOnly (DRagLint.CLI.Compare.pas), DRagLint.CLI.Compare.CompareTargetOf (DRagLint.CLI.Compare.pas) (+14 more)</para>
+    /// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.MetaJson (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.RegenerateText (DRagLint.Charts.Ask.pas), DRagLint.CLI.Compare.CompareIsSnapshotOnly (DRagLint.CLI.Compare.pas), DRagLint.CLI.Compare.CompareTargetOf (DRagLint.CLI.Compare.pas) (+15 more)</para>
     /// <para>Calls: DRagLint.Charts.ReportHeader.ArgIndex</para>
     /// <para>Returns: if I = NOT_FOUND then ''</para>
     /// <para>Reads: Args</para>
@@ -117,8 +117,8 @@ type
   /// A legacy header (no time, engine or COMMAND) parses with AskedOn as a date
   /// only, EngineVersion '' and an empty Command.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, declaration (DRagLint.Charts.Remarks.pas) ?, DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas) ?, DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas) (+3 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Adapter.Text, DRagLint.Charts.Compare, DRagLint.Charts.Remarks, DRagLint.Charts.Render, DRagLint.Charts.ReportHeader</para>
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, declaration (DRagLint.Charts.Remarks.pas) ?, DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas) ?, DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Adapter.Text, DRagLint.Charts.Compare, DRagLint.Charts.Remarks, DRagLint.Charts.Render, DRagLint.Charts.ReportHeader, DRagLint.CLI.MigrateReports</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReportHeader = record
@@ -144,6 +144,7 @@ type
     /// <returns>True when Command is not empty.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.MigrateReports.CommandLineIndex (DRagLint.CLI.MigrateReports.pas)</para>
     /// <para>Calls: DRagLint.Charts.ReportHeader.TReportCommand.IsEmpty</para>
     /// <para>Returns: not Command.IsEmpty</para>
     /// <para>Reads: Command</para>
@@ -226,9 +227,10 @@ function ParseCommandLine(const pText: string; out pCmd: TReportCommand): Boolea
 /// re-parses (ParseCommandLine) to a command SameQuestion calls equal to pCmd, and building
 /// that again gives the same text. The PowerShell style is never written.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Render.CommandText (DRagLint.Charts.Render.pas)</para>
-/// <para>Calls: DRagLint.Charts.ReportHeader.IndexOfName, DRagLint.Charts.ReportHeader.NeedsQuotes, DRagLint.Charts.ReportHeader.TReportCommand.Get, DRagLint.Charts.ReportHeader.TReportCommand.Has</para>
+/// <para>Called from: DRagLint.Charts.Ask.ReportCommandText (DRagLint.Charts.Ask.pas), DRagLint.Charts.Compare.CliFlag (DRagLint.Charts.Compare.pas), DRagLint.Charts.Render.CommandText (DRagLint.Charts.Render.pas), DRagLint.CLI.MigrateReports.BuildNewCommand (DRagLint.CLI.MigrateReports.pas)</para>
+/// <para>Calls: DRagLint.Charts.ReportHeader.CliName, DRagLint.Charts.ReportHeader.IndexOfName, DRagLint.Charts.ReportHeader.NeedsQuotes, DRagLint.Charts.ReportHeader.TReportCommand.Get, DRagLint.Charts.ReportHeader.TReportCommand.Has</para>
 /// <para>Returns: SB.ToString</para>
+/// <seealso cref="DRagLint.Charts.ReportHeader.CliName"/>
 /// <seealso cref="DRagLint.Charts.ReportHeader.IndexOfName"/>
 /// <seealso cref="DRagLint.Charts.ReportHeader.NeedsQuotes"/>
 /// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Get"/>
@@ -263,11 +265,13 @@ function DetectCommandStyle(const pText: string): TCommandStyle;
 /// argument against an absent one IS a difference. PS trap handled: PowerShell -eq is
 /// case-insensitive and coerces '03' -eq 3; both behaviours are kept.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas)</para>
-/// <para>Calls: DRagLint.Charts.ReportHeader.DisplayName, DRagLint.Charts.ReportHeader.ValuesMatch, SameText</para>
+/// <para>Called from: DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.CLI.MigrateReports.SameCommand (DRagLint.CLI.MigrateReports.pas)</para>
+/// <para>Calls: DRagLint.Charts.ReportHeader.DisplayName, DRagLint.Charts.ReportHeader.NameKey, DRagLint.Charts.ReportHeader.ValuesMatch, SameText</para>
 /// <para>Returns: SameText(pA.Question, pB.Question) and (Diff.Count = 0)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 44 lines (full implementation)</para>
 /// <para>Mutates: pDiffering (out)</para>
 /// <seealso cref="DRagLint.Charts.ReportHeader.DisplayName"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.NameKey"/>
 /// <seealso cref="DRagLint.Charts.ReportHeader.ValuesMatch"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -280,7 +284,7 @@ function SameQuestion(const pA, pB: TReportCommand; out pDiffering: TArray<strin
 /// <returns>False (pBody '') for a line that is not a '///' comment ('////' is not).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Adapter.Text.CollectDocInsight (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.DetectFormOf (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.ReportHeader.BodyAt (DRagLint.Charts.ReportHeader.pas), DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas)</para>
+/// <para>Called from: DRagLint.Charts.Adapter.Text.CollectDocInsight (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.DetectFormOf (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.ReportHeader.BodyAt (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.MigrateReports.BodyOf (DRagLint.CLI.MigrateReports.pas) (+1 more)</para>
 /// <para>Returns: S.StartsWith(DOC_PREFIX) and not S.StartsWith(DOC_PREFIX + '/')</para>
 /// <para>Mutates: pBody (out)</para>
 /// <!-- drag-lint:auto END -->
@@ -293,7 +297,7 @@ function StripDocPrefix(const pLine: string; out pBody: string): Boolean;
 /// pass ('&amp;amp;lt;' gives '&amp;lt;'); any other '&amp;' is kept as is.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Adapter.Text.CollectDocInsight (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas)</para>
+/// <para>Called from: DRagLint.Charts.Adapter.Text.CollectDocInsight (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.MigrateReports.MigrateReportText (DRagLint.CLI.MigrateReports.pas)</para>
 /// <para>Calls: Copy</para>
 /// <para>Returns: SB.ToString</para>
 /// <!-- drag-lint:auto END -->
