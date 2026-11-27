@@ -597,6 +597,7 @@ uses
   , DRagLint.Diagnostics.AstChecks     { ADP2 T3: TAstChecker.CyclomaticOf -- ONE shared formula with the lint rule }
   , DRagLint.Parser.DFM                { ADP2 T6: TDfmEventBinding/ExtractDfmEventBindings -- the paired-.dfm event-wiring extractor }
   , System.Diagnostics                { TStopwatch -- DRAGLINT_PROFILE per-analysis split of the indexer's facts phase }
+  , System.Generics.Defaults          { 1.56 B5: TComparer -- must-writes in first-write order }
   ;
 
 { v0.85 PERF -- memoize FindAllChildSymbols(ParentId).
@@ -1282,6 +1283,431 @@ begin
     Result:= JoinCappedDisplay(Hits, FIELD_RW_CAP);
   finally
     Hits.Free;
+  end;
+end;
+
+// 1.56 B5 (lane EXT-C1): MUST-WRITE FACTS -- column symbol_facts.must_writes.
+//
+// The names a routine writes on EVERY path that returns normally to its caller,
+// comma separated (no blank), in first-write order:
+//   Result            -- `Result := v`, `FunctionName := v`, `Exit(v)`
+//   a var / out parameter, as declared -- `pOut := v`
+//   an OWN field of the routine's class / record, as declared -- `FField := v`,
+//                        `Self.FField := v`
+// '' = nothing proven (or the routine has no body / its flow graph is skipped).
+//
+// This is a PROOF fact: the happens-before engine (check-init, spec
+// 2026-11-17-happens-before-design.md 5.3 / 5.5, phase 3) reads it as
+// "after a normal return of this routine the target has been assigned". So every
+// doubt resolves to ABSENCE, never to a claim -- the opposite bias to
+// TDefiniteAssignment (DRagLint.Analysis.Flow.Lattices), which exists to keep
+// function-result-not-set quiet and therefore counts a variable merely PASSED
+// to a call as assigned. That lattice must not be reused here.
+//
+// HOW. A forward must-analysis over the routine's TCfg (built with
+// APruneConstLoops, the same shape check-init's TIntraSolver solves): one bit
+// per target and block, meet = AND over the reachable predecessors, entry =
+// nothing written. The answer is the AND over the predecessors of the synthetic
+// Exit block that are reachable and not TCfgBlock.NoReturn (a `raise`, Abort or
+// Halt does not return normally). A routine with no normally-returning path at
+// all yields '' (the vacuous "everything" would be a claim about nothing).
+//
+// WHAT COUNTS AS A WRITE -- one statement-level CFG item, nothing inside it:
+//   - an `assignment` whose lhs is a BARE identifier, or `Self.<identifier>`;
+//   - a valued `Exit(v)` (Result), through Cfg.IsValuedExit.
+// The name is resolved like WalkFieldRW resolves it: the routine's own
+// variable table first (IndexOfAt, so an inline `var` re-declaration shadows),
+// then the owning type's OWN fields. A local, a value or a const parameter of
+// the same name therefore HIDES the field and nothing is reported.
+//
+// WHAT DELIBERATELY DOES NOT COUNT, absence over a wrong proof:
+//   - `X := nil`. check-init separates a counting writer from a nil write
+//     (reason code nil-write-only); a fact that listed it could not be told
+//     apart from a real initialisation.
+//   - a PARTIAL write: `pRec.X := v`, `FArr[i] := v`, `FObj.Prop := v`.
+//   - Inc / Dec / a var or out ARGUMENT of a call (`SetLength(FArr, n)`,
+//     `TryGet(k, pOut)`): the callee's parameter mode is not known per file.
+//     The consumer has the call graph and the callee's own must_writes.
+//   - an item inside a `with` body (TCfgItem.Opaque): the bare name may be a
+//     member of the with-entity.
+//   - anything inside an anonymous method or a nested routine: it is not run by
+//     this routine's flow (it is not a CFG item of it).
+//   - anything inside the try body of a try..except whose except part is EMPTY.
+//     TCfg emits no handler block for it, so the "body raised part-way and the
+//     exception was swallowed" path into the code after the try has no edge;
+//     counting such a write would prove what the graph cannot see. A try..except
+//     WITH a handler is modelled by TCfg (pre-try state -> handler) and needs
+//     no special case; try..finally does not swallow.
+//   - an INHERITED field: only own fields are known when a file's facts are
+//     computed (the ancestry stage runs later; see AnalyzeReadsWrites).
+//   - a `Self.X` write when X is also a routine variable: the stored name
+//     could not say which of the two was meant.
+const
+  MUST_RESULT_NAME  = 'Result';
+  MUST_RESULT_KEY   = 'result';
+  MUST_SELF_KEY     = 'self';
+  MUST_NIL_KEY      = 'nil';
+  MUST_EXIT_KEY     = 'exit';
+  MUST_SEPARATOR    = ',';
+  MUST_NODE_ASSIGN  = 'assignment';
+  MUST_NODE_IDENT   = 'identifier';
+  MUST_NODE_DOT     = 'exprDot';
+  MUST_NODE_CALL    = 'exprCall';
+  MUST_NODE_TRY     = 'try';
+  MUST_NODE_EXCEPT  = 'kExcept';
+  MUST_NODE_HANDLER = 'exceptionHandler';
+  MUST_NODE_STMTS   = 'statements';
+  MUST_NODE_LAMBDA  = 'lambda';
+  MUST_NODE_DEFPROC = 'defProc';
+  MUST_FIELD_LHS    = 'lhs';
+  MUST_FIELD_RHS    = 'rhs';
+  MUST_FIELD_TRY    = 'try';
+  MUST_FIELD_ENTITY = 'entity';
+
+type
+  { One must-write candidate of the routine under analysis. }
+  TMustTarget = record
+    Name    : string;  // as stored: 'Result', the parameter / field as declared
+    FirstPos: Integer; // byte offset of its first counted write (output order)
+    AtExit  : Boolean; // written on every normally-returning path
+  end;
+
+  { The must-write analysis of ONE routine; see the header above. Not thread-safe;
+    created and freed inside AnalyzeMustWrites. Borrows the CFG, the variable
+    table and the field map -- owns only its own lists. }
+  TMustWriteSolver = class
+  strict private
+    FCfg    : TCfg;
+    FSrc    : TBytes;
+    FVars   : TRoutineVarTable;
+    FFields : TDictionary<string, string>;
+    FTargets: TList<TMustTarget>;
+    FIndex  : TDictionary<string, Integer>;       // lower-case stored name -> index in FTargets
+    FSwallow: TList<TPair<Integer, Integer>>;     // [start, end) bytes of try bodies with an empty except
+    FGen    : TArray<TArray<Integer>>;            // per block: the target indexes its items write
+    FReach  : TArray<Boolean>;
+    procedure CollectSwallowed(const N: TTSNode);
+    function InSwallowed(const N: TTSNode): Boolean;
+    function ResolveName(const AIdent: TTSNode; AViaSelf: Boolean): string;
+    function TargetOf(const AItem: TCfgItem): string;
+    procedure CollectGen;
+    procedure ComputeReach;
+    procedure Solve;
+  public
+    constructor Create(ACfg: TCfg; const ASrc: TBytes; AVars: TRoutineVarTable; AFields: TDictionary<string, string>);
+    destructor Destroy; override;
+    function Run: string;
+  end;
+
+constructor TMustWriteSolver.Create(ACfg: TCfg; const ASrc: TBytes; AVars: TRoutineVarTable;
+  AFields: TDictionary<string, string>);
+begin
+  inherited Create;
+  FCfg    := ACfg;
+  FSrc    := ASrc;
+  FVars   := AVars;
+  FFields := AFields;
+  FTargets:= TList<TMustTarget>.Create;
+  FIndex  := TDictionary<string, Integer>.Create;
+  FSwallow:= TList<TPair<Integer, Integer>>.Create;
+end;
+
+destructor TMustWriteSolver.Destroy;
+begin
+  FSwallow.Free;
+  FIndex.Free;
+  FTargets.Free;
+  inherited;
+end;
+
+{ Records the try body of every try..except with an EMPTY except part under N.
+  Nested routines and anonymous methods are their own flow and are not entered. }
+procedure TMustWriteSolver.CollectSwallowed(const N: TTSNode);
+var
+  I                 : Integer;
+  C, Body           : TTSNode;
+  InExcept, Swallows: Boolean;
+begin
+  if N.IsNull then Exit;
+  if N.NodeType = MUST_NODE_TRY then
+  begin
+    InExcept:= False;
+    Swallows:= False;
+    for I:= 0 to N.NamedChildCount - 1 do
+    begin
+      C:= N.NamedChild(I);
+      if C.NodeType = MUST_NODE_EXCEPT then
+      begin
+        InExcept:= True;
+        Swallows:= True;
+      end
+      else if InExcept and ((C.NodeType = MUST_NODE_HANDLER) or (C.NodeType = MUST_NODE_STMTS)) then
+        Swallows:= False;
+    end;
+    Body:= N.ChildByField(MUST_FIELD_TRY);
+    if Swallows and (not Body.IsNull) then
+      FSwallow.Add(TPair<Integer, Integer>.Create(Integer(Body.StartByte), Integer(Body.EndByte)));
+  end;
+  for I:= 0 to N.NamedChildCount - 1 do
+  begin
+    C:= N.NamedChild(I);
+    if (C.NodeType <> MUST_NODE_DEFPROC) and (C.NodeType <> MUST_NODE_LAMBDA) then CollectSwallowed(C);
+  end;
+end;
+
+function TMustWriteSolver.InSwallowed(const N: TTSNode): Boolean;
+var
+  R: TPair<Integer, Integer>;
+begin
+  for R in FSwallow do
+    if (Integer(N.StartByte) >= R.Key) and (Integer(N.EndByte) <= R.Value) then Exit(True);
+  Result:= False;
+end;
+
+{ The stored name AIdent writes to, or '' when it is not a must-write target.
+  AViaSelf: the identifier is the member of `Self.<member>` -- only a field then. }
+function TMustWriteSolver.ResolveName(const AIdent: TTSNode; AViaSelf: Boolean): string;
+var
+  Key: string;
+  Idx: Integer;
+  RV : TRoutineVar;
+begin
+  Result:= '';
+  if AIdent.IsNull or (AIdent.NodeType <> MUST_NODE_IDENT) then Exit;
+  Key:= LowerCase(Trim(FieldNodeStr(AIdent, FSrc)));
+  if Key = '' then Exit;
+  Idx:= if FVars <> nil then FVars.IndexOfAt(Key, Integer(AIdent.StartByte)) else -1;
+  if Idx < 0 then
+  begin
+    if (FFields = nil) or (not FFields.TryGetValue(Key, Result)) then Result:= '';
+  end
+  else if not AViaSelf then // Self.X beside a routine variable X: ambiguous as a stored name
+  begin
+    RV:= FVars.Get(Idx);
+    if RV.Kind = vkResult then Result:= MUST_RESULT_NAME
+    else if RV.Kind in [vkParamVar, vkParamOut] then Result:= RV.Display;
+    // else a local / value / const parameter hides a same-named field
+  end;
+end;
+
+function TMustWriteSolver.TargetOf(const AItem: TCfgItem): string;
+var
+  N, Lhs, Rhs: TTSNode;
+begin
+  Result:= '';
+  N:= AItem.Node;
+  if AItem.Opaque or N.IsNull or InSwallowed(N) then Exit;
+  if N.NodeType = MUST_NODE_ASSIGN then
+  begin
+    Lhs:= N.ChildByField(MUST_FIELD_LHS);
+    Rhs:= N.ChildByField(MUST_FIELD_RHS);
+    if Lhs.IsNull or Rhs.IsNull then Exit;
+    if LowerCase(Trim(FieldNodeStr(Rhs, FSrc))) = MUST_NIL_KEY then Exit;
+    if Lhs.NodeType = MUST_NODE_IDENT then
+      Result:= ResolveName(Lhs, False)
+    else if (Lhs.NodeType = MUST_NODE_DOT)
+      and (LowerCase(Trim(FieldNodeStr(Lhs.ChildByField(MUST_FIELD_LHS), FSrc))) = MUST_SELF_KEY) then
+      Result:= ResolveName(Lhs.ChildByField(MUST_FIELD_RHS), True);
+  end
+  else if IsValuedExit(N, FSrc) and (FVars <> nil) and (FVars.IndexOf(MUST_RESULT_KEY) >= 0) then
+    Result:= MUST_RESULT_NAME;
+end;
+
+procedure TMustWriteSolver.CollectGen;
+var
+  B, I, Idx: Integer;
+  Name     : string;
+  T        : TMustTarget;
+  Pos      : Integer;
+begin
+  SetLength(FGen, FCfg.Blocks.Count);
+  for B:= 0 to FCfg.Blocks.Count - 1 do
+    for I:= 0 to FCfg.Blocks[B].Items.Count - 1 do
+    begin
+      Name:= TargetOf(FCfg.Blocks[B].Items[I]);
+      if Name = '' then Continue;
+      Pos:= Integer(FCfg.Blocks[B].Items[I].Node.StartByte);
+      if FIndex.TryGetValue(LowerCase(Name), Idx) then
+      begin
+        T:= FTargets[Idx];
+        if Pos < T.FirstPos then
+        begin
+          T.FirstPos:= Pos;
+          FTargets[Idx]:= T;
+        end;
+      end
+      else
+      begin
+        T.Name    := Name;
+        T.FirstPos:= Pos;
+        T.AtExit  := False;
+        Idx:= FTargets.Add(T);
+        FIndex.Add(LowerCase(Name), Idx);
+      end;
+      FGen[B]:= FGen[B] + [Idx];
+    end;
+end;
+
+procedure TMustWriteSolver.ComputeReach;
+var
+  Work: TStack<Integer>;
+  S   : Integer;
+begin
+  SetLength(FReach, FCfg.Blocks.Count);
+  Work:= TStack<Integer>.Create;
+  try
+    FReach[FCfg.EntryIdx]:= True;
+    Work.Push(FCfg.EntryIdx);
+    while Work.Count > 0 do
+      for S in FCfg.Blocks[Work.Pop].Succ do  // dl:ok index-possibly-out-of-range@5c77 -- a block index out of TCfg.Succ / Pred, and FReach / OutB are sized to FCfg.Blocks.Count
+        if not FReach[S] then
+        begin
+          FReach[S]:= True;
+          Work.Push(S);
+        end;
+  finally
+    Work.Free;
+  end;
+end;
+
+{ Greatest fixpoint: every reachable block starts at "all written" and only loses bits. }
+procedure TMustWriteSolver.Solve;
+var
+  N, K, B, P, I : Integer;
+  OutB          : TArray<TArray<Boolean>>;
+  V, Changed    : Boolean;
+  AnyExit       : Boolean;
+  T             : TMustTarget;
+begin
+  N:= FCfg.Blocks.Count;
+  SetLength(OutB, N, FTargets.Count);
+  for B:= 0 to N - 1 do
+    for K:= 0 to FTargets.Count - 1 do OutB[B][K]:= FReach[B];
+  repeat
+    Changed:= False;
+    for B:= 0 to N - 1 do
+    begin
+      if not FReach[B] then Continue;
+      for K:= 0 to FTargets.Count - 1 do
+      begin
+        V:= B <> FCfg.EntryIdx;
+        if V then
+          for P in FCfg.Blocks[B].Pred do  // dl:ok index-possibly-out-of-range@47f8 -- a block index out of TCfg.Succ / Pred, and FReach / OutB are sized to FCfg.Blocks.Count
+            if FReach[P] and (not OutB[P][K]) then
+            begin
+              V:= False;
+              Break;
+            end;
+        if not V then
+          for I in FGen[B] do
+            if I = K then
+            begin
+              V:= True;
+              Break;
+            end;
+        if V <> OutB[B][K] then
+        begin
+          OutB[B][K]:= V;
+          Changed:= True;
+        end;
+      end;
+    end;
+  until not Changed;
+
+  for K:= 0 to FTargets.Count - 1 do
+  begin
+    V      := True;
+    AnyExit:= False;
+    for P in FCfg.Blocks[FCfg.ExitIdx].Pred do  // dl:ok index-possibly-out-of-range@7884 -- a block index out of TCfg.Succ / Pred, and FReach / OutB are sized to FCfg.Blocks.Count
+      if FReach[P] and (not FCfg.Blocks[P].NoReturn) then
+      begin
+        AnyExit:= True;
+        V      := V and OutB[P][K];
+      end;
+    T       := FTargets[K];
+    T.AtExit:= AnyExit and V;
+    FTargets[K]:= T;
+  end;
+end;
+
+function TMustWriteSolver.Run: string;
+var
+  Body : TTSNode;
+  Hits : TList<TMustTarget>;
+  T    : TMustTarget;
+begin
+  Result:= '';
+  if FCfg.Skipped then Exit; // goto / asm: no flow graph, nothing proven
+  Body:= FCfg.RoutineNode.ChildByField('body');
+  if Body.IsNull then Body:= FCfg.RoutineNode;
+  CollectSwallowed(Body);
+  CollectGen;
+  if FTargets.Count = 0 then Exit;
+  ComputeReach;
+  Solve;
+  Hits:= TList<TMustTarget>.Create;
+  try
+    for T in FTargets do
+      if T.AtExit then Hits.Add(T);
+    Hits.Sort(TComparer<TMustTarget>.Construct(
+      function(const ALeft, ARight: TMustTarget): Integer
+      begin
+        Result:= ALeft.FirstPos - ARight.FirstPos;
+      end));
+    for T in Hits do
+      Result:= if Result = '' then T.Name else Result + MUST_SEPARATOR + T.Name;
+  finally
+    Hits.Free;
+  end;
+end;
+
+{ True when the subtree holds an assignment or an `Exit(...)` call outside any nested routine /
+  anonymous method: the cheap gate that keeps AnalyzeMustWrites from building a flow graph for a
+  routine that cannot have a must-write. }
+function HasMustWriteCandidate(const N: TTSNode; const ASrc: TBytes): Boolean;
+var
+  I: Integer;
+  C: TTSNode;
+begin
+  Result:= False;
+  if N.IsNull then Exit;
+  if N.NodeType = MUST_NODE_ASSIGN then Exit(True);
+  if (N.NodeType = MUST_NODE_CALL)
+    and (LowerCase(Trim(FieldNodeStr(N.ChildByField(MUST_FIELD_ENTITY), ASrc))) = MUST_EXIT_KEY) then Exit(True);
+  for I:= 0 to N.NamedChildCount - 1 do
+  begin
+    C:= N.NamedChild(I);
+    if (C.NodeType <> MUST_NODE_DEFPROC) and (C.NodeType <> MUST_NODE_LAMBDA) and HasMustWriteCandidate(C, ASrc) then
+      Exit(True);
+  end;
+end;
+
+// 1.56 B5: fills symbol_facts.must_writes for one routine -- see the header above
+// TMustWriteSolver for the contract. AProc is the SAME defProc Analyze matched;
+// AVars its variable table (nil only with a null body); AFields the owning type's
+// own fields by lower-case name (nil for a free or nested routine). All three are
+// borrowed. Costs one TCfg build per routine that has a candidate write.
+function AnalyzeMustWrites(const AProc: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable;
+  AFields: TDictionary<string, string>): string;
+var
+  Body  : TTSNode;
+  Cfg   : TCfg;
+  Solver: TMustWriteSolver;
+begin
+  Result:= '';
+  if AProc.IsNull then Exit;
+  Body:= AProc.ChildByField('body');
+  if Body.IsNull or (not HasMustWriteCandidate(Body, ASrc)) then Exit;
+  Cfg:= TCfgBuilder.Build(AProc, ASrc, True);
+  try
+    Solver:= TMustWriteSolver.Create(Cfg, ASrc, AVars, AFields);
+    try
+      Result:= Solver.Run;
+    finally
+      Solver.Free;
+    end;
+  finally
+    Cfg.Free;
   end;
 end;
 
@@ -3426,11 +3852,11 @@ end;
   unarmed: two QueryPerformanceCounter reads per analysis per routine. }
 const
   FP_PARSE = 0; FP_PROCS = 1; FP_DFM = 2; FP_CYCLO = 3; FP_RW = 4; FP_PARAMS = 5;
-  FP_UI = 6; FP_TOUCH = 7; FP_SQL = 8; FP_OWNER = 9;
-  FP_NAMES: array[0..9] of string = ('ast re-parse', 'find procs', 'dfm event', 'cyclomatic',
-    'reads/writes', 'mutates params', 'ui affinity', 'touches', 'sql tables', 'returns owner');
+  FP_UI = 6; FP_TOUCH = 7; FP_SQL = 8; FP_OWNER = 9; FP_MUST = 10;
+  FP_NAMES: array[0..FP_MUST] of string = ('ast re-parse', 'find procs', 'dfm event', 'cyclomatic',
+    'reads/writes', 'mutates params', 'ui affinity', 'touches', 'sql tables', 'returns owner', 'must writes');
 var
-  GFactsProf: array[0..9] of Int64;
+  GFactsProf: array[0..FP_MUST] of Int64;
 
 procedure FactsProfAdd(ASlot: Integer; var AMark: Int64); inline;
 var
@@ -3538,6 +3964,13 @@ begin
         // WalkMutatedParams' header for the classification rules.
         Result.MutatesParams:= AnalyzeMutatesParams(Body, PF.Src, Vars);
         FactsProfAdd(FP_PARAMS, Mark);
+        // 1.56 B5: must-write facts -- what is written on EVERY normally-returning
+        // path (Result, var / out parameters, own fields). A proof fact for
+        // check-init; see the header above TMustWriteSolver. Own fields only, so
+        // a free or nested routine (ParentId <= 0 / a routine parent) passes none.
+        Result.MustWrites:= AnalyzeMustWrites(Proc, PF.Src, Vars,
+          if ASym.ParentId > 0 then FieldNamesCached(AStore, ASym.ParentId) else nil);
+        FactsProfAdd(FP_MUST, Mark);
         // v(ADP3 T12): UI affinity -- same matched Proc/Body, no 2nd AST scan.
         // POSITIVE FINDINGS ONLY; see AnalyzeUiAffinity's header for why the
         // empty result must never be rendered as a thread-safety claim.
