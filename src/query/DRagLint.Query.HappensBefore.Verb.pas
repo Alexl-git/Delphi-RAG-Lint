@@ -1285,6 +1285,14 @@ function CheckInitProves(const pDbPath: string; const pOptions: THbOptions; var 
 begin
   Result:= False;
   if (pAnswer.A.Kind <> hekWrite) or (pAnswer.B.Kind <> hekRead) or not SameText(pAnswer.A.Name, pAnswer.B.Name) then Exit;
+  { v156 FIX2-A F2: check-init counts a var / out argument as a write; this verb only trusts a DEFINITE
+    site (assign / assign-nil / create-into), so such a site never proves YES here: it stays MAY. }
+  for var S in pAnswer.A.Sites do
+    if not S.Definite then
+    begin
+      AddReason(pAnswer, hvrASiteUncertain);
+      Exit;
+    end;
   var Init:= CheckInit(pDbPath, pAnswer.A.Name, '', pOptions);
   Result:= (Init.Verdict = hvSet) and (Init.JudgedUses <> nil) and (IndexStr(HB_LIMIT_NO_JUDGED_USE, Init.Limits) < 0);
   if not Result then
