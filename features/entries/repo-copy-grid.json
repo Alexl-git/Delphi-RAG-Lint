@@ -1,0 +1,52 @@
+{
+  "id": "repo-copy-grid",
+  "title": "Copy events and columns between grid views",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "Copies the events of a grid view, its columns and their events to another view of the same form (table, banded table, card or layout view), or one event, as a change set, dry run by default",
+  "intro": "Read this when a second grid view of a form should behave like the first. drag-lint repo copy-grid --dfm <form.dfm> --from <view> --to <view> prints the events and the columns it would copy; --apply or --select writes them with a backup, and a --select file must hold the plan id of the dry run its ids are from. With --event only that one event is copied. Both views are in ONE form; --list shows the views and their events.",
+  "wikiPage": "repo-copy-grid",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "copy-grid",
+      "usage": "drag-lint repo copy-grid --dfm <file.dfm> [--unit <file.pas>] (--from <view> --to <view> [--event <name> [--from-column <col> [--to-column <col>]]] | --list [--from <view>]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]",
+      "flags": [
+        { "name": "--dfm", "arg": "<file.dfm>" },
+        { "name": "--unit", "arg": "<file.pas>" },
+        { "name": "--from", "arg": "<view>" },
+        { "name": "--to", "arg": "<view>" },
+        { "name": "--event", "arg": "<name>" },
+        { "name": "--from-column", "arg": "<col>" },
+        { "name": "--to-column", "arg": "<col>" },
+        { "name": "--list" },
+        { "name": "--repo", "arg": "<file>" },
+        { "name": "--project", "arg": "<project file>" },
+        { "name": "--apply" },
+        { "name": "--select", "arg": "<id file>" },
+        { "name": "--dry-run" },
+        { "name": "--json" }
+      ],
+      "helpOrder": 115,
+      "help": ["  drag-lint repo copy-grid      --dfm <file.dfm> [--unit <file.pas>] (--from <view> --to <view> [--event <name> [--from-column <col> [--to-column <col>]]] | --list [--from <view>]) (--repo <file> | --project <project file>) [--apply | --select <id file>] [--dry-run] [--json]   (copies the events of a grid view, its columns and their events to another view of the SAME form, between table / banded table / card / layout views, or with --event ONE event; a new column is declared in the unit; every byte outside a change stays, the new text is checked by the Delphi reader first, each changed file gets a backup; what cannot be settled is BLOCKED, what needs a look is unchecked; --list shows the views and, with --from, their events; the repository is not opened; no --apply = dry run; a --select file needs the # plan line of its dry run; exit 1 view / event / write failure or a changed plan, 2 usage)"]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I give a banded or card view the events and columns of my table view?",
+      "command": "drag-lint repo copy-grid --dfm <form.dfm> --from <tableView> --to <otherView> --repo <file>"
+    },
+    {
+      "ask": "How do I copy just one event handler to another grid view?",
+      "command": "drag-lint repo copy-grid --dfm <form.dfm> --from <view> --to <view> --event OnCustomDrawCell --repo <file>"
+    },
+    {
+      "ask": "Which views and events does a form have?",
+      "command": "drag-lint repo copy-grid --dfm <form.dfm> --list --from <view> --repo <file>"
+    }
+  ]
+}

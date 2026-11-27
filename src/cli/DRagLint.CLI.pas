@@ -1736,6 +1736,10 @@ begin
     { repo alter-table (1.54): DRagLint.CLI.RepoAlter reads these from ParamStr }
     else if (A = '--order') and (i < ParamCount) then Inc(i)
     else if (A = '--hook') and (i < ParamCount) then Inc(i)
+    { v156 GCP-C: repo copy-grid reads these values from ParamStr (DRagLint.CLI.RepoGridCopy); --dfm, --unit, --from, --to, --select, --apply, --dry-run, --list are parsed above }
+    else if (A = '--event') and (i < ParamCount) then Inc(i)
+    else if (A = '--from-column') and (i < ParamCount) then Inc(i)
+    else if (A = '--to-column') and (i < ParamCount) then Inc(i)
     else if A = '--stats' then // repo paths (1.55): a bare switch, DRagLint.CLI.RepoPaths reads it from ParamStr
     else if A = '--safe-path' then // repo alter-table: a bare switch, DRagLint.CLI.RepoAlter reads it from ParamStr
     else if (A = '--step-size') and (i < ParamCount) then Inc(i)
