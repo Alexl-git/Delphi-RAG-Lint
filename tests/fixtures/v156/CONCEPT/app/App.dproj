@@ -1,0 +1,10 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MainSource>App.dpr</MainSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <DCCReference Include="uMain.pas"><Form>frmMain</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uJoin.pas"><Form>frmJoin</Form><FormType>dfm</FormType></DCCReference>
+    <DCCReference Include="uTools.pas"/>
+  </ItemGroup>
+</Project>
