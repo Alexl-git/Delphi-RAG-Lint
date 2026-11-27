@@ -74,7 +74,9 @@ uses
   DRagLint.CLI.RepoHandlers,  // dl:ok uses-global-census@edaf -- REVIEWED 2026-11-24 INT-W2: the sub-verb list of the unit that runs them
   DRagLint.CLI.RepoFib,  // dl:ok uses-global-census@00d5 -- REVIEWED 2026-11-24 INT-W2: the sub-verb list of the unit that runs them
   DRagLint.CLI.RepoAlter,
-  DRagLint.CLI.RepoBackup
+  DRagLint.CLI.RepoBackup,
+  DRagLint.CLI.RepoWiki,
+  DRagLint.CLI.RepoGridCopy
   ;
 
 const
@@ -92,7 +94,8 @@ const
   SAVE_FORM_LEGACY  = 0;
   SAVE_FORM_CURRENT = 1;
   SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, upgrade-orm-headers, migrate, check, paths, gen-const, check-const, read-dfm, alter-table'
-    + REPO_DFMWRITE_SUBS + REPO_HANDLERS_SUBS + REPO_FIB_SUBS; // 1.54 scaffolds: '' until their lane names a sub-verb
+    + REPO_DFMWRITE_SUBS + REPO_HANDLERS_SUBS + REPO_FIB_SUBS // 1.54 scaffolds: '' until their lane names a sub-verb
+    + REPO_WIKI_SUBS + REPO_GRIDCOPY_SUBS; // 1.56 scaffolds (WIKIGEN gen-wiki, GCP-C grid copy): '' until their lane names a sub-verb
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -440,6 +443,8 @@ begin
   if IsRepoDfmSub(pSub) then Exit(RunRepoDfmVerb(Path, pJson)); // 1.54 TT-DFMREAD: read-dfm
   if IsRepoDfmWriteSub(pSub) then Exit(RunRepoDfmWriteVerb(pSub, Path, pJson)); // 1.54 TT-DFMWRITE
   if IsRepoHandlersSub(pSub) then Exit(RunRepoHandlersVerb(pSub, Path, pJson)); // 1.54 TT-HANDLERS
+  if IsRepoWikiSub(pSub) then Exit(RunRepoWikiVerb(pSub, Path, pJson)); // 1.56 WIKIGEN
+  if IsRepoGridCopySub(pSub) then Exit(RunRepoGridCopyVerb(pSub, Path, pJson)); // 1.56 GCP-C
   case IndexText(pSub, ['init', 'info', 'backup', 'restore', 'alter-table']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
@@ -451,10 +456,11 @@ begin
   end;
 end;
 
-{ 1.54: the lanes whose units carry their own sub-verbs (TT-DFMREAD, TT-DFMWRITE, TT-HANDLERS). }
+{ 1.54: the lanes whose units carry their own sub-verbs (TT-DFMREAD, TT-DFMWRITE, TT-HANDLERS); 1.56: WIKIGEN, GCP-C. }
 function IsLaneSub(const pSub: string): Boolean;
 begin
-  Result:= IsRepoDfmSub(pSub) or IsRepoDfmWriteSub(pSub) or IsRepoHandlersSub(pSub);
+  Result:= IsRepoDfmSub(pSub) or IsRepoDfmWriteSub(pSub) or IsRepoHandlersSub(pSub)
+    or IsRepoWikiSub(pSub) or IsRepoGridCopySub(pSub);
 end;
 
 function IsImplementedSub(const pSub: string): Boolean;

@@ -3153,6 +3153,76 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetAttributes(AFileId: Int64): TArray<TAttributeRow>;
+    /// <summary>1.56 (lane EXT-S): True when this database has the four per-file 1.56 fact tables
+    /// (symbol_extras, ds_field_accesses, loop_facts, call_literal_args); probed once.</summary>
+    /// <returns>False on an index no 1.56 writer has opened (read-only open of an older index):
+    /// PutExtFacts is then a no-op and every Get* of these tables answers empty.</returns>
+    function HasV156Facts: Boolean;
+    /// <summary>1.56: REPLACES the file's rows of symbol_extras, ds_field_accesses, loop_facts and
+    /// call_literal_args with AFacts, inside the open file transaction.</summary>
+    /// <param name="AToken">The open file tx; supplies file_id.</param>
+    /// <param name="AFacts">The file's facts; an empty array clears that table for the file. A row's
+    /// Ordinal / FileId are ignored: the ordinal written is the row's index in its array.</param>
+    /// <param name="ASymbolIds">Parse index -> symbols.id (the indexer's IdxToId); maps
+    /// TSymbolExtraRow.SymbolIdx. A row whose index has no id is skipped. May be nil when
+    /// AFacts.SymbolExtras is empty.</param>
+    /// <remarks>No-op when HasV156Facts is False. Two symbol_extras rows for one symbol: the later
+    /// wins. A TCallLiteralArgRow.SymbolId of 0 is stored NULL.</remarks>
+    procedure PutExtFacts(const AToken: TFileTxToken; const AFacts: TExtFileFacts;
+      const ASymbolIds: TDictionary<Integer, Int64>);
+    /// <summary>1.56 B1 / B2 / B8: the symbol_extras row of one symbol.</summary>
+    /// <param name="ASymbolId">symbols.id.</param>
+    /// <returns>The row; when the symbol has none (or HasV156Facts is False) the defaults:
+    /// NoReturn NORETURN_NONE, VariantPart 0, VariantTag False, ParamMode '', ParamIndex -1.
+    /// SymbolIdx is -1, SymbolId is ASymbolId.</returns>
+    function GetSymbolExtra(ASymbolId: Int64): TSymbolExtraRow;
+    /// <summary>1.56 B1 / B2 / B8: every symbol_extras row of one file, by symbol id.</summary>
+    /// <param name="AFileId">files.id.</param>
+    /// <returns>Empty when the file has none or HasV156Facts is False.</returns>
+    function GetSymbolExtras(AFileId: Int64): TArray<TSymbolExtraRow>;
+    /// <summary>1.56 B14-1: ds_field_accesses rows of a file or of one routine, in ordinal order.</summary>
+    /// <param name="AFileId">files.id; 0 = any file (then ASymbolId must be given).</param>
+    /// <param name="ASymbolId">symbols.id of the enclosing routine; 0 = every routine of the file.</param>
+    /// <returns>Empty when both are 0, nothing matches, or HasV156Facts is False.</returns>
+    function GetDsFieldAccesses(AFileId, ASymbolId: Int64): TArray<TDsFieldAccessRow>;
+    /// <summary>1.56 B14-5: loop_facts rows of a file or of one routine, in ordinal order.</summary>
+    /// <param name="AFileId">files.id; 0 = any file (then ASymbolId must be given).</param>
+    /// <param name="ASymbolId">symbols.id of the enclosing routine; 0 = every routine of the file.</param>
+    /// <returns>Empty when both are 0, nothing matches, or HasV156Facts is False.</returns>
+    function GetLoopFacts(AFileId, ASymbolId: Int64): TArray<TLoopFactRow>;
+    /// <summary>1.56 C-1: the literal arguments of one call, or of every call of a file.</summary>
+    /// <param name="AFileId">files.id.</param>
+    /// <param name="ACallLine">Line of the call ref (refs.start_line); 0 = every call of the file.</param>
+    /// <param name="ACallCol">Column of the call ref; ignored when ACallLine is 0.</param>
+    /// <returns>Rows in ordinal order; empty when none or HasV156Facts is False.</returns>
+    function GetCallLiteralArgs(AFileId: Int64; ACallLine, ACallCol: Integer): TArray<TCallLiteralArgRow>;
+    /// <summary>1.56 C-1: every call of a routine NAME with a literal argument, across the index
+    /// (`FieldByName` + 'TOTAL').</summary>
+    /// <param name="ACalleeName">Leaf callee name, compared without case.</param>
+    /// <param name="AValue">The literal value, compared without case; '' = any value.</param>
+    /// <returns>Rows ordered by file, then ordinal; empty when none or HasV156Facts is False.</returns>
+    function FindCallLiteralArgs(const ACalleeName, AValue: string): TArray<TCallLiteralArgRow>;
+    /// <summary>1.56 B5: True when this database has the indirect_edges table; probed once.</summary>
+    /// <returns>False on an index no 1.56 writer has opened.</returns>
+    function HasIndirectEdges: Boolean;
+    /// <summary>1.56 B5: replaces the WHOLE indirect_edges table with ARows, in one transaction
+    /// of its own.</summary>
+    /// <param name="ARows">Every edge of the index; an empty array empties the table. RefId /
+    /// CallerId of 0 are stored NULL.</param>
+    /// <remarks>No-op on a read-only store or when HasIndirectEdges is False. Called by
+    /// ResolveDispatch with the rows of the registered TIndexPassHooks indirect-edges hook.</remarks>
+    procedure ReplaceIndirectEdges(const ARows: TArray<TIndirectEdgeRow>);
+    /// <summary>1.56 B5: indirect_edges rows by calling routine and / or target routine.</summary>
+    /// <param name="ACallerId">symbols.id of the routine holding the call site; 0 = any.</param>
+    /// <param name="ATargetId">symbols.id of the routine that may run; 0 = any.</param>
+    /// <returns>Rows in id order (both 0 = the whole table); empty when HasIndirectEdges is False.</returns>
+    function GetIndirectEdges(ACallerId, ATargetId: Int64): TArray<TIndirectEdgeRow>;
+    /// <summary>1.56 CONCEPT: True when this database has repo_copy, concept_fields, concept_texts
+    /// and concept_links; probed once.</summary>
+    /// <returns>False on an index written before 1.56 ("repository: not copied yet").</returns>
+    /// <remarks>The FTS5 mirror concept_texts_fts is NOT part of this answer (absent on a SQLite
+    /// build without FTS5); its readers probe for it themselves.</remarks>
+    function HasConceptTables: Boolean;
     /// <summary>150 PP: True when this database has the pp_directives table;
     /// probed once.</summary>
     /// <returns>False on a schema-23 DB (or a 149-built v24 DB) opened
@@ -3760,6 +3830,59 @@ type
     // 1.52 BK-EXTRA (B09): custom attributes and the symbol each decorates (attributes table),
     // Delphi parser only; written by ISymbolStore.PutFileFacts.
     Attributes: TArray<TAttributeRow>;
+    // 1.56 (lane EXT-S): B1 noreturn / B2 variant part / B8 parameter mode, Delphi parser only
+    // (lane EXT-A1); SymbolIdx indexes Symbols. Written by ISymbolStore.PutExtFacts.
+    SymbolExtras: TArray<TSymbolExtraRow>;
+    // 1.56 (SPEC-SEARCH C-1): "this literal is argument k of that call", Delphi parser only.
+    // The indexer resolves SymbolId (enclosing routine) and hands the rows to PutExtFacts.
+    CallLiteralArgs: TArray<TCallLiteralArgRow>;
+  end;
+
+  /// <summary>1.56 B5 (lane EXT-C2): computes every indirect-call edge of the index after the calls
+  /// and dispatch passes have written their rows.</summary>
+  /// <param name="AStore">The project store (writable).</param>
+  /// <param name="AExtraStores">The library stores of the run; may be nil.</param>
+  /// <returns>Every edge; the caller replaces indirect_edges with them.</returns>
+  TIndirectEdgesHook = function(const AStore: ISymbolStore;
+    const AExtraStores: TArray<ISymbolStore>): TArray<TIndirectEdgeRow>;
+
+  /// <summary>1.56 CONCEPT: refreshes the copy of the project's field repository (repo_copy,
+  /// concept_*) at the end of an `index --project` run and prints its own `repository: ..` line.</summary>
+  /// <param name="AStore">The project store (writable).</param>
+  /// <param name="AProjectFile">Full path of the .dproj the run was started with.</param>
+  TRepoCopyHook = procedure(const AStore: ISymbolStore; const AProjectFile: string);
+
+  /// <summary>1.56 (lane EXT-S): the two whole-index pass hooks of the 1.56 bump. The unit that
+  /// owns a pass registers it from its `initialization`; the store / the index verb call it through
+  /// here, so neither names the pass unit.</summary>
+  /// <remarks>Not thread-safe: register during unit initialization only. One hook per pass; a
+  /// second registration replaces the first. The per-routine extraction hooks are on TIndexer
+  /// (RegisterRoutineFactsHook), because they take syntax-tree nodes.</remarks>
+  TIndexPassHooks = class sealed
+  strict private
+    class var FIndirectEdges: TIndirectEdgesHook;
+    class var FRepoCopy     : TRepoCopyHook;
+  public
+    /// <summary>Installs the indirect-edges pass (DRagLint.Index.IndirectCalls).</summary>
+    /// <param name="AHook">The pass; nil removes it.</param>
+    class procedure RegisterIndirectEdges(AHook: TIndirectEdgesHook); static;
+    /// <summary>Installs the repository-copy step (DRagLint.Index.RepoCopy).</summary>
+    /// <param name="AHook">The step; nil removes it.</param>
+    class procedure RegisterRepoCopy(AHook: TRepoCopyHook); static;
+    /// <summary>True when an indirect-edges pass is installed.</summary>
+    /// <returns>False until RegisterIndirectEdges was called with a non-nil hook.</returns>
+    class function IndirectEdgesRegistered: Boolean; static;
+    /// <summary>Runs the installed indirect-edges pass.</summary>
+    /// <param name="AStore">The project store.</param>
+    /// <param name="AExtraStores">The library stores of the run; may be nil.</param>
+    /// <returns>The pass's rows; nil when none is installed.</returns>
+    class function CollectIndirectEdges(const AStore: ISymbolStore;
+      const AExtraStores: TArray<ISymbolStore>): TArray<TIndirectEdgeRow>; static;
+    /// <summary>Runs the installed repository-copy step.</summary>
+    /// <param name="AStore">The project store.</param>
+    /// <param name="AProjectFile">Full path of the .dproj.</param>
+    /// <returns>False when no step is installed (nothing was done).</returns>
+    class function RunRepoCopy(const AStore: ISymbolStore; const AProjectFile: string): Boolean; static;
   end;
 
   /// <remarks>
@@ -4128,6 +4251,34 @@ begin
   Result.MaxFileKB:= 2048;
 end;
 
+{ TIndexPassHooks }
+
+class procedure TIndexPassHooks.RegisterIndirectEdges(AHook: TIndirectEdgesHook);
+begin
+  FIndirectEdges:= AHook;
+end;
+
+class procedure TIndexPassHooks.RegisterRepoCopy(AHook: TRepoCopyHook);
+begin
+  FRepoCopy:= AHook;
+end;
+
+class function TIndexPassHooks.IndirectEdgesRegistered: Boolean;
+begin
+  Result:= Assigned(FIndirectEdges);
+end;
+
+class function TIndexPassHooks.CollectIndirectEdges(const AStore: ISymbolStore;
+  const AExtraStores: TArray<ISymbolStore>): TArray<TIndirectEdgeRow>;
+begin
+  Result:= if Assigned(FIndirectEdges) then FIndirectEdges(AStore, AExtraStores) else nil;
+end;
+
+class function TIndexPassHooks.RunRepoCopy(const AStore: ISymbolStore; const AProjectFile: string): Boolean;
+begin
+  Result:= Assigned(FRepoCopy);
+  if Result then FRepoCopy(AStore, AProjectFile);
+end;
 { ----- TFlowOracleCache ----- }
 
 constructor TFlowOracleCache.Create;

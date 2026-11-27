@@ -61,14 +61,14 @@ try {
   $x = Join-Path $work 'x.dlrepo'
   $r = Run @('repo', 'init', '--repo', $x)
   $info = (Run @('repo', 'info', '--repo', $x)).Out
-  Check 'B1 repo init creates a schema-4 file with the three cross-table tables' (($r.Code -eq 0) -and ($info -match 'schema_version: 4') -and ($info -match 'DL_RELATIONS: 0 rows') -and ($info -match 'DL_RELATION_COLUMNS: 0 rows') -and ($info -match 'DL_FIELD_INPUTS: 0 rows')) $info
+  Check 'B1 repo init creates a current-schema (5) file with the three cross-table tables' (($r.Code -eq 0) -and ($info -match 'schema_version: 5') -and ($info -match 'DL_RELATIONS: 0 rows') -and ($info -match 'DL_RELATION_COLUMNS: 0 rows') -and ($info -match 'DL_FIELD_INPUTS: 0 rows')) $info
   $r = Run @('repo', 'restore', '--repo', $x, '--in', $clean)
   Check 'B2 restore of the clean fixture' ($r.Code -eq 0) $r.Out
   $r = Run @('repo', 'check', '--repo', $x)
   Check 'B3 positive control: the IPCHART -> INSPRSLT -> MSCLIST fixture checks clean' (($r.Code -eq 0) -and ($r.Out -match 'check: clean')) "exit=$($r.Code) $($r.Out)"
   $bk = Join-Path $work 'x.txt'
   $r = Run @('repo', 'backup', '--repo', $x, '--output', $bk)
-  Check 'B4 backup of the restored fixture is byte-identical, #DLREPO 4' (($r.Code -eq 0) -and ([IO.File]::ReadAllText($bk) -ceq [IO.File]::ReadAllText($clean)) -and [IO.File]::ReadAllText($bk).StartsWith('#DLREPO 4')) $r.Out
+  Check 'B4 backup of the restored #DLREPO 4 fixture differs only by the schema number (#DLREPO 5, schema_version 5)' (($r.Code -eq 0) -and ([IO.File]::ReadAllText($bk) -ceq [IO.File]::ReadAllText($clean).Replace('#DLREPO 4', '#DLREPO 5').Replace('META_VALUE=4', 'META_VALUE=5')) -and [IO.File]::ReadAllText($clean).StartsWith('#DLREPO 4')) $r.Out
 
   $bad = Join-Path $work 'bad.txt'
   $txt = [IO.File]::ReadAllText($clean)
@@ -83,18 +83,18 @@ try {
   $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'B7 repo check --json lists both codes' (($r.Code -eq 1) -and $j -and (@($j.findings | Where-Object { $_.code -eq 'input-path-broken' }).Count -eq 1) -and (@($j.findings | Where-Object { $_.code -eq 'input-alias-undeclared' }).Count -eq 1)) "exit=$($r.Code)"
 
-  # schema 3 -> 4
+  # schema 3 -> 5
   $v3 = Join-Path $work 'v3.dlrepo'
   $r = Run @('repo', 'restore', '--repo', $v3, '--in', (Join-Path $fix 'golden_v3.txt'))
   Check 'B8 a #DLREPO 3 backup into a missing file creates schema 3' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',$v3)).Out -match 'schema_version: 3')) $r.Out
   $h3 = (Get-FileHash -LiteralPath $v3).Hash
   $r = Run @('repo', 'migrate', '--repo', $v3)
-  Check 'B9 v3 -> v4 dry run: three CREATEs, nothing else, no byte changed' (($r.Code -eq 0) -and ($r.Out -match 'v3 -> v4: create DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, ALIGNMENT -2 to NULL in 0 rows, user_version 4') -and ($h3 -eq (Get-FileHash -LiteralPath $v3).Hash)) $r.Out
+  Check 'B9 v3 -> v5 dry run: the schema-5 columns, three CREATEs, nothing else, no byte changed' (($r.Code -eq 0) -and ($r.Out -match 'v3 -> v5: add DL_FIELDS_INFO\.NOTES, DERIVED_KIND, add DL_GRID_COLUMNS\.PROPERTIES_CLASS_NAME, PROPERTIES, create DL_RELATIONS, DL_RELATION_COLUMNS, DL_FIELD_INPUTS, ALIGNMENT -2 to NULL in 0 rows, user_version 5') -and ($h3 -eq (Get-FileHash -LiteralPath $v3).Hash)) $r.Out
   $r = Run @('repo', 'migrate', '--repo', $v3, '--apply')
   $b3 = @(Get-ChildItem $work -Filter 'v3.dlrepo.before-migrate-*.txt')
-  Check 'B10 v3 -> v4 apply: schema 4, the backup is the schema-3 text, check clean' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',$v3)).Out -match 'schema_version: 4') -and ($b3.Count -eq 1) -and ([IO.File]::ReadAllText($b3[0].FullName) -ceq [IO.File]::ReadAllText((Join-Path $fix 'golden_v3.txt'))) -and ((Run @('repo','check','--repo',$v3)).Out -match 'check: clean')) $r.Out
+  Check 'B10 v3 -> v5 apply: schema 5, the backup is the schema-3 text, check clean' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',$v3)).Out -match 'schema_version: 5') -and ($b3.Count -eq 1) -and ([IO.File]::ReadAllText($b3[0].FullName) -ceq [IO.File]::ReadAllText((Join-Path $fix 'golden_v3.txt'))) -and ((Run @('repo','check','--repo',$v3)).Out -match 'check: clean')) $r.Out
   $r = Run @('repo', 'migrate', '--repo', $v3, '--apply')
-  Check 'B11 a second migrate says already at schema 4' (($r.Code -eq 0) -and ($r.Out -match 'already at schema 4')) $r.Out
+  Check 'B11 a second migrate says already at schema 5' (($r.Code -eq 0) -and ($r.Out -match 'already at schema 5')) $r.Out
   # ---- C: X2 unit tests (relation graph + path finder)
   $bat = Join-Path $Repo 'build\_build_fieldrepo_relgraph_tests_local.bat'
   $bin = Join-Path $Repo 'tests\fieldrepo\RelationGraphTests.exe'

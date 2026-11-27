@@ -93,6 +93,7 @@ uses
 , DRagLint.Core.Encoding { EnsureUtf8Bytes -- ApplyLineMarkers reads a file the way the rules did }
   , DRagLint.Lint.MarkerHash { MarkerVerdict / ExpectedHash -- ApplyLineMarkers: versioned routine-metric markers (v1511 Y4) }
   , DRagLint.Query.SyntaxCountVerb { syntax-count verb (GAP-SYNTAXQ, 1.42) }
+  , DRagLint.Query.ConceptRepo { 1.56 FRAME-1: query --concept over the field-repository copy (lane CON-Q) }
   , DRagLint.CLI.UsesRecover { uses-recover verb (148 HP): own flags, read-only }
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
@@ -9063,6 +9064,8 @@ var
   JObj       : TJSONObject   ;
   JMatched   : TJSONArray    ;
   Col        : string        ;
+  RepoQuery  : TConceptRepoQuery;
+  RepoExit   : Integer       ;
 begin
   if not ExplicitDbsExist(AArgs, 'query --concept') then Exit(2);
   if Trim(AArgs.ConceptQuery) = '' then
@@ -9084,6 +9087,15 @@ begin
     StaleDbRefusesRun(AArgs, 'query --concept', DbPath);
     Exit(2);
   end;
+  { 1.56 FRAME-1 (lane CON-Q): the field-repository copy in the index answers first when it takes the request;
+    the scaffold never does, so the identifier / doc-prose search below runs as before. }
+  RepoQuery:= Default(TConceptRepoQuery);
+  RepoQuery.DbPath:= DbPath;
+  RepoQuery.Words:= AArgs.ConceptQuery;
+  RepoQuery.Kinds:= AArgs.Kind;
+  RepoQuery.Limit:= Lim;
+  RepoQuery.AsJson:= AArgs.AsJson;
+  if TryRunConceptRepoQuery(RepoQuery, RepoExit) then Exit(RepoExit);
   if not Store.ConceptSearchReady then
   begin
     Writeln(ErrOutput, 'note: this index has no concept-search table yet; run "drag-lint index" on it once -- it backfills from the existing rows, no re-parse.');

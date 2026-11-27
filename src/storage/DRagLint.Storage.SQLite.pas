@@ -236,6 +236,13 @@ type
       FHasDfmProps           : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasDfmProperties }
       FHasCommentFacts       : Integer      ; { 151 ST: -1 unprobed, 0 absent, 1 present -- see HasCommentFacts }
       FHasAttributes         : Integer      ; { 1.52 BK-EXTRA (B09): -1 unprobed, 0 absent, 1 present -- see HasAttributes }
+      FHasV156Facts          : Integer      ; { 1.56 EXT-S: -1 unprobed, 0 absent, 1 present -- see HasV156Facts }
+      FHasIndirectEdges      : Integer      ; { 1.56 EXT-S: -1 unprobed, 0 absent, 1 present -- see HasIndirectEdges }
+      FHasConceptTables      : Integer      ; { 1.56 EXT-S: -1 unprobed, 0 absent, 1 present -- see HasConceptTables }
+      FHasDataFlowValClass   : Integer      ; { 1.56 EXT-S (B3): -1 unprobed, 0 absent, 1 present -- see HasDataFlowValClass }
+      FHasMustWrites         : Integer      ; { 1.56 EXT-S (B5): -1 unprobed, 0 absent, 1 present -- see HasMustWrites }
+      FQExtFacts             : array[0..7] of TFDQuery; { 1.56 EXT-S: 4 deletes + 4 inserts of PutExtFacts, prepared on first use (EXT_SQL) }  // dl:ok referenced-never-set@d09e -- FP: the array ELEMENTS are assigned in PutExtFacts.Prepared (FQExtFacts[AIdx]:= Result)
+      FQPutMustWrites        : TFDQuery     ; { 1.56 EXT-S (B5): symbol_facts.must_writes UPDATE, prepared on first use }
       FQFileFacts            : array[0..13] of TFDQuery; { 149 EX2: 3 deletes + 3 inserts (150 PP: + pp_directives delete / insert; 151 ST: + dfm_properties, comment_facts; 1.52 BK-EXTRA: + attributes), prepared on first use (FF_* in PutFileFacts) }  // dl:ok referenced-never-set@592a -- FP: the array ELEMENTS are assigned in PutFileFacts.Prepared (FQFileFacts[AIdx]:= Result)
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
@@ -3392,6 +3399,100 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetAttributes(AFileId: Int64): TArray<TAttributeRow>;
+      /// <summary>1.56 (lane EXT-S): True when this database has the four per-file 1.56 fact tables
+      /// (symbol_extras, ds_field_accesses, loop_facts, call_literal_args); probed once.</summary>
+      /// <returns>False on an index no 1.56 writer has opened (read-only open of an older index):
+      /// PutExtFacts is then a no-op and every Get* of these tables answers empty.</returns>
+      function HasV156Facts: Boolean;
+      /// <summary>1.56: REPLACES the file's rows of symbol_extras, ds_field_accesses, loop_facts and
+      /// call_literal_args with AFacts, inside the open file transaction.</summary>
+      /// <param name="AToken">The open file tx; supplies file_id.</param>
+      /// <param name="AFacts">The file's facts; an empty array clears that table for the file. A row's
+      /// Ordinal / FileId are ignored: the ordinal written is the row's index in its array.</param>
+      /// <param name="ASymbolIds">Parse index -> symbols.id (the indexer's IdxToId); maps
+      /// TSymbolExtraRow.SymbolIdx. A row whose index has no id is skipped. May be nil when
+      /// AFacts.SymbolExtras is empty.</param>
+      /// <remarks>No-op when HasV156Facts is False. Two symbol_extras rows for one symbol: the later
+      /// wins. A TCallLiteralArgRow.SymbolId of 0 is stored NULL.</remarks>
+      procedure PutExtFacts(const AToken: TFileTxToken; const AFacts: TExtFileFacts;
+        const ASymbolIds: TDictionary<Integer, Int64>);
+      /// <summary>1.56 B1 / B2 / B8: the symbol_extras row of one symbol.</summary>
+      /// <param name="ASymbolId">symbols.id.</param>
+      /// <returns>The row; when the symbol has none (or HasV156Facts is False) the defaults:
+      /// NoReturn NORETURN_NONE, VariantPart 0, VariantTag False, ParamMode '', ParamIndex -1.
+      /// SymbolIdx is -1, SymbolId is ASymbolId.</returns>
+      function GetSymbolExtra(ASymbolId: Int64): TSymbolExtraRow;
+      /// <summary>1.56 B1 / B2 / B8: every symbol_extras row of one file, by symbol id.</summary>
+      /// <param name="AFileId">files.id.</param>
+      /// <returns>Empty when the file has none or HasV156Facts is False.</returns>
+      function GetSymbolExtras(AFileId: Int64): TArray<TSymbolExtraRow>;
+      /// <summary>1.56 B14-1: ds_field_accesses rows of a file or of one routine, in ordinal order.</summary>
+      /// <param name="AFileId">files.id; 0 = any file (then ASymbolId must be given).</param>
+      /// <param name="ASymbolId">symbols.id of the enclosing routine; 0 = every routine of the file.</param>
+      /// <returns>Empty when both are 0, nothing matches, or HasV156Facts is False.</returns>
+      function GetDsFieldAccesses(AFileId, ASymbolId: Int64): TArray<TDsFieldAccessRow>;
+      /// <summary>1.56 B14-5: loop_facts rows of a file or of one routine, in ordinal order.</summary>
+      /// <param name="AFileId">files.id; 0 = any file (then ASymbolId must be given).</param>
+      /// <param name="ASymbolId">symbols.id of the enclosing routine; 0 = every routine of the file.</param>
+      /// <returns>Empty when both are 0, nothing matches, or HasV156Facts is False.</returns>
+      function GetLoopFacts(AFileId, ASymbolId: Int64): TArray<TLoopFactRow>;
+      /// <summary>1.56 C-1: the literal arguments of one call, or of every call of a file.</summary>
+      /// <param name="AFileId">files.id.</param>
+      /// <param name="ACallLine">Line of the call ref (refs.start_line); 0 = every call of the file.</param>
+      /// <param name="ACallCol">Column of the call ref; ignored when ACallLine is 0.</param>
+      /// <returns>Rows in ordinal order; empty when none or HasV156Facts is False.</returns>
+      function GetCallLiteralArgs(AFileId: Int64; ACallLine, ACallCol: Integer): TArray<TCallLiteralArgRow>;
+      /// <summary>1.56 C-1: every call of a routine NAME with a literal argument, across the index
+      /// (`FieldByName` + 'TOTAL').</summary>
+      /// <param name="ACalleeName">Leaf callee name, compared without case.</param>
+      /// <param name="AValue">The literal value, compared without case; '' = any value.</param>
+      /// <returns>Rows ordered by file, then ordinal; empty when none or HasV156Facts is False.</returns>
+      function FindCallLiteralArgs(const ACalleeName, AValue: string): TArray<TCallLiteralArgRow>;
+      /// <summary>1.56 B5: True when this database has the indirect_edges table; probed once.</summary>
+      /// <returns>False on an index no 1.56 writer has opened.</returns>
+      function HasIndirectEdges: Boolean;
+      /// <summary>1.56 B5: replaces the WHOLE indirect_edges table with ARows, in one transaction
+      /// of its own.</summary>
+      /// <param name="ARows">Every edge of the index; an empty array empties the table. RefId /
+      /// CallerId of 0 are stored NULL.</param>
+      /// <remarks>No-op on a read-only store or when HasIndirectEdges is False. Called by
+      /// ResolveDispatch with the rows of the registered TIndexPassHooks indirect-edges hook.</remarks>
+      procedure ReplaceIndirectEdges(const ARows: TArray<TIndirectEdgeRow>);
+      /// <summary>1.56 B5: indirect_edges rows by calling routine and / or target routine.</summary>
+      /// <param name="ACallerId">symbols.id of the routine holding the call site; 0 = any.</param>
+      /// <param name="ATargetId">symbols.id of the routine that may run; 0 = any.</param>
+      /// <returns>Rows in id order (both 0 = the whole table); empty when HasIndirectEdges is False.</returns>
+      function GetIndirectEdges(ACallerId, ATargetId: Int64): TArray<TIndirectEdgeRow>;
+      /// <summary>1.56 CONCEPT: True when this database has repo_copy, concept_fields, concept_texts
+      /// and concept_links; probed once.</summary>
+      /// <returns>False on an index written before 1.56 ("repository: not copied yet").</returns>
+      /// <remarks>The FTS5 mirror concept_texts_fts is NOT part of this answer (absent on a SQLite
+      /// build without FTS5); its readers probe for it themselves.</remarks>
+      function HasConceptTables: Boolean;
+      /// <summary>1.56 (lane EXT-S): True when table ATable has a column AColumn (pragma_table_info;
+      /// issues no DDL, safe on a read-only open).</summary>
+      /// <param name="ATable">Table name.</param>
+      /// <param name="AColumn">Column name, compared without case.</param>
+      /// <returns>False when the table or the column is absent.</returns>
+      function ColumnExists(const ATable, AColumn: string): Boolean;
+      /// <summary>1.56 (lane EXT-S): True when every table of ATables exists.</summary>
+      /// <param name="ATables">Table names.</param>
+      /// <returns>False as soon as one is absent.</returns>
+      function AllTablesExist(const ATables: array of string): Boolean;
+      /// <summary>1.56 B3: True when data_flows has the val_class column; probed once, forgotten by Migrate.</summary>
+      /// <returns>False on an index no 1.56 writer has opened: rows then read ValClass ''.</returns>
+      function HasDataFlowValClass: Boolean;
+      /// <summary>1.56 B5: True when symbol_facts has the must_writes column; probed once, forgotten by Migrate.</summary>
+      /// <returns>False on an index no 1.56 writer has opened: facts then read MustWrites ''.</returns>
+      function HasMustWrites: Boolean;
+      /// <summary>1.56 B3: the data_flows SELECT list: DATA_FLOWS_COLS, plus val_class when the DB has it.</summary>
+      /// <returns>The column list ReadDataFlowRows maps positionally.</returns>
+      function DataFlowSelectCols: string;
+      /// <summary>1.56 (lane EXT-S): builds a read query whose parameters are all integers (not opened).</summary>
+      /// <param name="ASql">The SELECT.</param>
+      /// <param name="AParams">Values for the statement's distinct parameter names, in order of first appearance.</param>
+      /// <returns>A query the caller opens and frees.</returns>
+      function NewExtQuery(const ASql: string; const AParams: array of Int64): TFDQuery;
       /// <summary>151 ST: implements ISymbolStore.HasDfmProperties.</summary>
       /// <returns>True when the dfm_properties table exists (probed once).</returns>
       /// <remarks>
@@ -5817,6 +5918,11 @@ begin
   FHasDfmProps      := -1; { 151 ST: probed lazily -- see HasDfmProperties }
   FHasCommentFacts  := -1; { 151 ST: probed lazily -- see HasCommentFacts }
   FHasAttributes    := -1; { 1.52 BK-EXTRA (B09): probed lazily -- see HasAttributes }
+  FHasV156Facts       := -1; { 1.56 EXT-S: the five probes below are lazy, and Migrate forgets them }
+  FHasIndirectEdges   := -1;
+  FHasConceptTables   := -1;
+  FHasDataFlowValClass:= -1;
+  FHasMustWrites      := -1;
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FQBySql        := TObjectDictionary<string, TFDQuery>.Create([doOwnsValues]); // 152b O6F; see CachedQuery
@@ -5894,6 +6000,9 @@ end;
 const
   DATA_FLOWS_COLS = 'file_id, symbol_id, owner_id, dst_kind, dst_line, dst_col, dst_index, dst_name, ' +
                     'dst_receiver, src_kind, src_index, src_line, src_col, src_name, via_local, cond';
+  { 1.56 B3: appended to the SELECT list (DataFlowSelectCols) and to the INSERT only when the DB has
+    the column (HasDataFlowValClass); ReadDataFlowRows reads it as the column AFTER dfcCond. }
+  DATA_FLOWS_VAL_COL = ', val_class';
   { a bare `F := e` (no receiver) in a descendant is a 'write' row: the extractor
     classifies only the owner's own fields, so an inherited field arrives by name }
   SQL_FIELD_WRITERS_HEAD = 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE (dst_kind = ''' + DF_DST_FIELD +
@@ -5902,6 +6011,8 @@ const
   SQL_FIELD_WRITERS_TAIL = ') ORDER BY file_id, dst_line, dst_col';
   SQL_PUT_DATA_FLOWS = 'INSERT INTO data_flows(' + DATA_FLOWS_COLS + ') VALUES (:fid, :sid, :own, :dk, ' +  // dl:ok sql-injection-concat@11f0 -- REVIEWED 2026-10-27: DATA_FLOWS_COLS is a compile-time const column list, no runtime value; every value is a bound :param
                        ':dl, :dc, :di, :dn, :dr, :sk, :si, :sl, :sc, :sn, :vl, :cd)';
+  SQL_PUT_DATA_FLOWS_VAL = 'INSERT INTO data_flows(' + DATA_FLOWS_COLS + DATA_FLOWS_VAL_COL + ') VALUES (:fid, :sid, :own, :dk, ' +  // dl:ok sql-injection-concat@eeed -- REVIEWED 2026-11-26 EXT-S: compile-time constants only (column lists), every value is a bound :param
+                       ':dl, :dc, :di, :dn, :dr, :sk, :si, :sl, :sc, :sn, :vl, :cd, :vc)';
 
 type
   { Positional column order of DATA_FLOWS_COLS -- keep the two in step. }
@@ -5924,7 +6035,7 @@ begin
   begin
     FQPutDataFlows:= TFDQuery.Create(nil);
     FQPutDataFlows.Connection:= FConn;
-    FQPutDataFlows.SQL.Text:= SQL_PUT_DATA_FLOWS;
+    FQPutDataFlows.SQL.Text:= if HasDataFlowValClass then SQL_PUT_DATA_FLOWS_VAL else SQL_PUT_DATA_FLOWS;
     FQPutDataFlows.ParamByName('fid').DataType:= ftLargeint;
     FQPutDataFlows.ParamByName('sid').DataType:= ftLargeint;
     FQPutDataFlows.ParamByName('own').DataType:= ftLargeint;
@@ -5941,6 +6052,7 @@ begin
     FQPutDataFlows.ParamByName('sn' ).DataType:= ftWideString;
     FQPutDataFlows.ParamByName('vl' ).DataType:= ftInteger;
     FQPutDataFlows.ParamByName('cd' ).DataType:= ftInteger;
+    if HasDataFlowValClass then FQPutDataFlows.ParamByName('vc').DataType:= ftWideString;
     FQPutDataFlows.Prepare;
   end;
   for R in ARows do
@@ -5961,10 +6073,614 @@ begin
     FQPutDataFlows.ParamByName('sn' ).AsWideString:= R.SrcName;
     FQPutDataFlows.ParamByName('vl' ).AsInteger   := Ord(R.ViaLocal);
     FQPutDataFlows.ParamByName('cd' ).AsInteger   := Ord(R.Cond);
+    if HasDataFlowValClass then FQPutDataFlows.ParamByName('vc').AsWideString:= R.ValClass;
     FQPutDataFlows.ExecSQL;
   end;
 end;
 
+{ ---- 1.56 store seam (lane EXT-S, S1) ------------------------------------------
+  The per-file fact tables of the 1.56 bump (symbol_extras, ds_field_accesses, loop_facts,
+  call_literal_args: one writer, PutExtFacts), the derived indirect_edges table and the probes.
+  FQExtFacts holds one lazily prepared statement per EXT_SQL entry: four deletes, four inserts. }
+const
+  EXT_DEL_FIRST = 0;
+  EXT_DEL_LAST  = 3;
+  EXT_INS_SYX   = 4;
+  EXT_INS_DFA   = 5;
+  EXT_INS_LOOP  = 6;
+  EXT_INS_CLA   = 7;
+  EXT_SQL: array[0..7] of string = (
+    'DELETE FROM symbol_extras WHERE file_id = :fid',
+    'DELETE FROM ds_field_accesses WHERE file_id = :fid',
+    'DELETE FROM loop_facts WHERE file_id = :fid',
+    'DELETE FROM call_literal_args WHERE file_id = :fid',
+    'INSERT OR REPLACE INTO symbol_extras(symbol_id, file_id, noreturn, variant_part, variant_tag, param_mode, param_index) ' +
+      'VALUES (:sid, :fid, :nr, :vp, :vt, :pm, :pix)',
+    'INSERT INTO ds_field_accesses(file_id, symbol_id, ordinal, mode, line, col, shape, dataset_text, field_text, ' +
+      'field_name, name_kind, name_text, accessor, root_kind, root_name, root_index, with_ctx, rhs_start_line, ' +
+      'rhs_start_col, rhs_end_line, rhs_end_col, stmt_line, stmt_col) VALUES (:fid, :sid, :ord, :md, :ln, :col, :shp, ' +
+      ':dst, :ftx, :fnm, :nk, :ntx, :acc, :rk, :rn, :rix, :wc, :rsl, :rsc, :rel, :rec, :stl, :stc)',
+    'INSERT INTO loop_facts(file_id, symbol_id, ordinal, parent, kind, start_line, start_col, end_line, end_col, ' +
+      'cond_start_line, cond_start_col, cond_end_line, cond_end_col) VALUES (:fid, :sid, :ord, :prn, :knd, :sl, :sc, ' +
+      ':el, :ec, :csl, :csc, :cel, :cec)',
+    'INSERT INTO call_literal_args(file_id, ordinal, symbol_id, call_line, call_col, callee_name, receiver_text, ' +
+      'arg_index, arg_count, lit_line, lit_col, lit_kind, value) VALUES (:fid, :ord, :sid, :cl, :cc, :cn, :rcv, :ai, ' +
+      ':an, :ll, :lc, :lk, :val)');
+  { Parameters bound as text; every other EXT_SQL parameter is an integer. }
+  EXT_TEXT_PARAMS: array[0..16] of string = ('pm', 'md', 'shp', 'dst', 'ftx', 'fnm', 'nk', 'ntx', 'acc', 'rk', 'rn',
+    'wc', 'knd', 'cn', 'rcv', 'lk', 'val');
+  DS_FIELD_ACCESSES_COLS = 'file_id, symbol_id, ordinal, mode, line, col, shape, dataset_text, field_text, field_name, ' +
+    'name_kind, name_text, accessor, root_kind, root_name, root_index, with_ctx, rhs_start_line, rhs_start_col, ' +
+    'rhs_end_line, rhs_end_col, stmt_line, stmt_col';
+  LOOP_FACTS_COLS = 'file_id, symbol_id, ordinal, parent, kind, start_line, start_col, end_line, end_col, ' +
+    'cond_start_line, cond_start_col, cond_end_line, cond_end_col';
+  CALL_LITERAL_ARGS_COLS = 'file_id, COALESCE(symbol_id, 0) AS symbol_id, ordinal, call_line, call_col, callee_name, ' +
+    'receiver_text, arg_index, arg_count, lit_line, lit_col, lit_kind, value';
+  SYMBOL_EXTRAS_COLS = 'symbol_id, noreturn, variant_part, variant_tag, param_mode, param_index';
+  SQL_INDIRECT_EDGES_SELECT = 'SELECT COALESCE(ref_id, 0) AS ref_id, COALESCE(caller_symbol_id, 0) AS caller_symbol_id, ' +
+    'target_symbol_id, kind, via_text, bind_file_id, bind_line, bind_col, confidence FROM indirect_edges ' +
+    'WHERE (:c <= 0 OR caller_symbol_id = :c) AND (:t <= 0 OR target_symbol_id = :t) ORDER BY id';
+  SQL_INDIRECT_EDGES_INSERT = 'INSERT INTO indirect_edges(ref_id, caller_symbol_id, target_symbol_id, kind, via_text, ' +
+    'bind_file_id, bind_line, bind_col, confidence) VALUES (:r, :c, :t, :k, :v, :bf, :bl, :bc, :cf)';
+
+type
+  { Reads the columns of a query's CURRENT row left to right: every Big / Int / Str call takes the
+    next column, so a reader names its fields in the order of its SELECT list (the *_COLS constants
+    above) and no column is looked up by name per row. }
+  TRowCursor = record
+  strict private
+    FQ  : TFDQuery;
+    FPos: Integer;
+    function Next: TField;
+  public
+    class function Start(AQ: TFDQuery): TRowCursor; static;
+    function Big: Int64;
+    function Int: Integer;
+    function Str: string;
+  end;
+
+class function TRowCursor.Start(AQ: TFDQuery): TRowCursor;
+begin
+  Result.FQ  := AQ;
+  Result.FPos:= 0;
+end;
+
+function TRowCursor.Next: TField;
+begin
+  Result:= FQ.Fields[FPos];
+  Inc(FPos);
+end;
+
+function TRowCursor.Big: Int64;
+begin
+  Result:= Next.AsLargeInt;
+end;
+
+function TRowCursor.Int: Integer;
+begin
+  Result:= Next.AsInteger;
+end;
+
+function TRowCursor.Str: string;
+begin
+  Result:= Next.AsString;
+end;
+
+function TSQLiteSymbolStore.ColumnExists(const ATable, AColumn: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { pragma_table_info of an absent table has no rows, so this cannot fail on an open connection }
+    Q.SQL.Text  := 'SELECT 1 FROM pragma_table_info(:t) WHERE name = :c COLLATE NOCASE LIMIT 1';
+    Q.ParamByName('t').AsWideString:= ATable;
+    Q.ParamByName('c').AsWideString:= AColumn;
+    Q.Open;
+    Result:= not Q.IsEmpty;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.AllTablesExist(const ATables: array of string): Boolean;
+var
+  T: string;
+begin
+  Result:= True;
+  for T in ATables do
+    if not TableExists(T) then Exit(False);
+end;
+
+function TSQLiteSymbolStore.HasV156Facts: Boolean;
+begin
+  if FHasV156Facts < 0 then FHasV156Facts:= if AllTablesExist(V156_FILE_FACT_TABLES) then 1 else 0;
+  Result:= FHasV156Facts = 1;
+end;
+
+function TSQLiteSymbolStore.HasIndirectEdges: Boolean;
+begin
+  if FHasIndirectEdges < 0 then FHasIndirectEdges:= if TableExists('indirect_edges') then 1 else 0;
+  Result:= FHasIndirectEdges = 1;
+end;
+
+function TSQLiteSymbolStore.HasConceptTables: Boolean;
+begin
+  if FHasConceptTables < 0 then FHasConceptTables:= if AllTablesExist(V156_CONCEPT_TABLES) then 1 else 0;
+  Result:= FHasConceptTables = 1;
+end;
+
+function TSQLiteSymbolStore.HasDataFlowValClass: Boolean;
+begin
+  if FHasDataFlowValClass < 0 then FHasDataFlowValClass:= if ColumnExists('data_flows', 'val_class') then 1 else 0;
+  Result:= FHasDataFlowValClass = 1;
+end;
+
+function TSQLiteSymbolStore.HasMustWrites: Boolean;
+begin
+  if FHasMustWrites < 0 then FHasMustWrites:= if ColumnExists('symbol_facts', 'must_writes') then 1 else 0;
+  Result:= FHasMustWrites = 1;
+end;
+
+function TSQLiteSymbolStore.DataFlowSelectCols: string;
+begin
+  Result:= DATA_FLOWS_COLS;
+  if HasDataFlowValClass then Result:= Result + DATA_FLOWS_VAL_COL;
+end;
+
+procedure TSQLiteSymbolStore.PutExtFacts(const AToken: TFileTxToken; const AFacts: TExtFileFacts;
+  const ASymbolIds: TDictionary<Integer, Int64>);
+
+  function Prepared(AIdx: Integer): TFDQuery;
+  var
+    K: Integer;
+    P: TFDParam;
+  begin
+    if (AIdx < Low(FQExtFacts)) or (AIdx > High(FQExtFacts)) then
+      raise EArgumentOutOfRangeException.CreateFmt('PutExtFacts: no statement %d', [AIdx]);
+    if FQExtFacts[AIdx] = nil then
+    begin
+      Result:= TFDQuery.Create(nil);
+      try
+        Result.Connection:= FConn;
+        Result.SQL.Text  := EXT_SQL[AIdx];
+        for K:= 0 to Result.Params.Count - 1 do
+        begin
+          P:= Result.Params[K];
+          P.DataType:= if MatchText(P.Name, EXT_TEXT_PARAMS) then ftWideString else ftLargeint;
+        end;
+        Result.Prepare;
+      except
+        Result.Free;
+        raise;
+      end;
+      FQExtFacts[AIdx]:= Result;
+    end;
+    Result:= FQExtFacts[AIdx];
+  end;
+
+var
+  I  : Integer;
+  Q  : TFDQuery;
+  Sid: Int64;
+begin
+  if not HasV156Facts then Exit;
+  for I:= EXT_DEL_FIRST to EXT_DEL_LAST do
+  begin
+    Q:= Prepared(I);
+    Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
+    Q.ExecSQL;
+  end;
+  if Length(AFacts.SymbolExtras) > 0 then
+  begin
+    Q:= Prepared(EXT_INS_SYX);
+    for var X in AFacts.SymbolExtras do
+    begin
+      if (ASymbolIds = nil) or not ASymbolIds.TryGetValue(X.SymbolIdx, Sid) then Continue;
+      Q.ParamByName('sid').AsLargeInt  := Sid;
+      Q.ParamByName('fid').AsLargeInt  := AToken.FileId;
+      Q.ParamByName('nr' ).AsLargeInt  := X.NoReturn;
+      Q.ParamByName('vp' ).AsLargeInt  := X.VariantPart;
+      Q.ParamByName('vt' ).AsLargeInt  := Ord(X.VariantTag);
+      Q.ParamByName('pm' ).AsWideString:= X.ParamMode;
+      Q.ParamByName('pix').AsLargeInt  := X.ParamIndex;
+      Q.ExecSQL;  // dl:ok query-in-loop@6087 -- REVIEWED 2026-11-26 EXT-S: one prepared INSERT per row inside the open transaction -- the store's write pattern (PutFileFacts, PutDataFlows)
+    end;
+  end;
+  if Length(AFacts.DsFieldAccesses) > 0 then
+  begin
+    Q:= Prepared(EXT_INS_DFA);
+    for I:= 0 to High(AFacts.DsFieldAccesses) do
+    begin
+      var A: TDsFieldAccessRow:= AFacts.DsFieldAccesses[I];
+      Q.ParamByName('fid').AsLargeInt  := AToken.FileId;
+      Q.ParamByName('sid').AsLargeInt  := A.SymbolId;
+      Q.ParamByName('ord').AsLargeInt  := I;
+      Q.ParamByName('md' ).AsWideString:= A.Mode;
+      Q.ParamByName('ln' ).AsLargeInt  := A.Line;
+      Q.ParamByName('col').AsLargeInt  := A.Col;
+      Q.ParamByName('shp').AsWideString:= A.Shape;
+      Q.ParamByName('dst').AsWideString:= A.DatasetText;
+      Q.ParamByName('ftx').AsWideString:= A.FieldText;
+      Q.ParamByName('fnm').AsWideString:= A.FieldName;
+      Q.ParamByName('nk' ).AsWideString:= A.NameKind;
+      Q.ParamByName('ntx').AsWideString:= Copy(A.NameText, 1, DSFA_NAME_TEXT_MAX);
+      Q.ParamByName('acc').AsWideString:= A.Accessor;
+      Q.ParamByName('rk' ).AsWideString:= A.RootKind;
+      Q.ParamByName('rn' ).AsWideString:= A.RootName;
+      Q.ParamByName('rix').AsLargeInt  := A.RootIndex;
+      Q.ParamByName('wc' ).AsWideString:= A.WithCtx;
+      Q.ParamByName('rsl').AsLargeInt  := A.RhsStartLine;
+      Q.ParamByName('rsc').AsLargeInt  := A.RhsStartCol;
+      Q.ParamByName('rel').AsLargeInt  := A.RhsEndLine;
+      Q.ParamByName('rec').AsLargeInt  := A.RhsEndCol;
+      Q.ParamByName('stl').AsLargeInt  := A.StmtLine;
+      Q.ParamByName('stc').AsLargeInt  := A.StmtCol;
+      Q.ExecSQL;  // dl:ok query-in-loop@6087 -- REVIEWED 2026-11-26 EXT-S: one prepared INSERT per row inside the open transaction -- the store's write pattern (PutFileFacts, PutDataFlows)
+    end;
+  end;
+  if Length(AFacts.LoopFacts) > 0 then
+  begin
+    Q:= Prepared(EXT_INS_LOOP);
+    for I:= 0 to High(AFacts.LoopFacts) do
+    begin
+      var L: TLoopFactRow:= AFacts.LoopFacts[I];
+      Q.ParamByName('fid').AsLargeInt  := AToken.FileId;
+      Q.ParamByName('sid').AsLargeInt  := L.SymbolId;
+      Q.ParamByName('ord').AsLargeInt  := I;
+      Q.ParamByName('prn').AsLargeInt  := L.Parent;
+      Q.ParamByName('knd').AsWideString:= L.Kind;
+      Q.ParamByName('sl' ).AsLargeInt  := L.StartLine;
+      Q.ParamByName('sc' ).AsLargeInt  := L.StartCol;
+      Q.ParamByName('el' ).AsLargeInt  := L.EndLine;
+      Q.ParamByName('ec' ).AsLargeInt  := L.EndCol;
+      Q.ParamByName('csl').AsLargeInt  := L.CondStartLine;
+      Q.ParamByName('csc').AsLargeInt  := L.CondStartCol;
+      Q.ParamByName('cel').AsLargeInt  := L.CondEndLine;  // dl:ok duplicate-code@ca81 -- REVIEWED 2026-11-26 EXT-S: one writer / reader block per 1.56 fact table, differing in the row type and its column list (the GetAttributes precedent)
+      Q.ParamByName('cec').AsLargeInt  := L.CondEndCol;
+      Q.ExecSQL;  // dl:ok query-in-loop@6087 -- REVIEWED 2026-11-26 EXT-S: one prepared INSERT per row inside the open transaction -- the store's write pattern (PutFileFacts, PutDataFlows)
+    end;
+  end;
+  if Length(AFacts.CallLiteralArgs) > 0 then
+  begin
+    Q:= Prepared(EXT_INS_CLA);
+    for I:= 0 to High(AFacts.CallLiteralArgs) do
+    begin
+      var C: TCallLiteralArgRow:= AFacts.CallLiteralArgs[I];
+      Q.ParamByName('fid').AsLargeInt  := AToken.FileId;
+      Q.ParamByName('ord').AsLargeInt  := I;
+      if C.SymbolId > 0 then Q.ParamByName('sid').AsLargeInt:= C.SymbolId
+      else Q.ParamByName('sid').Clear;
+      Q.ParamByName('cl' ).AsLargeInt  := C.CallLine;
+      Q.ParamByName('cc' ).AsLargeInt  := C.CallCol;
+      Q.ParamByName('cn' ).AsWideString:= C.CalleeName;
+      Q.ParamByName('rcv').AsWideString:= C.ReceiverText;
+      Q.ParamByName('ai' ).AsLargeInt  := C.ArgIndex;
+      Q.ParamByName('an' ).AsLargeInt  := C.ArgCount;
+      Q.ParamByName('ll' ).AsLargeInt  := C.LitLine;
+      Q.ParamByName('lc' ).AsLargeInt  := C.LitCol;
+      Q.ParamByName('lk' ).AsWideString:= C.LitKind;
+      Q.ParamByName('val').AsWideString:= Copy(C.Value, 1, CLA_VALUE_MAX);
+      Q.ExecSQL;  // dl:ok query-in-loop@6087 -- REVIEWED 2026-11-26 EXT-S: one prepared INSERT per row inside the open transaction -- the store's write pattern (PutFileFacts, PutDataFlows)
+    end;
+  end;
+end;
+
+function TSQLiteSymbolStore.NewExtQuery(const ASql: string; const AParams: array of Int64): TFDQuery;
+var
+  I: Integer;
+begin
+  Result:= TFDQuery.Create(nil);
+  try
+    Result.Connection:= FConn;
+    Result.SQL.Text  := ASql;
+    { positional: parameter I of the statement's distinct names, in order of first appearance }
+    for I:= 0 to High(AParams) do Result.Params[I].AsLargeInt:= AParams[I];
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+function ReadSymbolExtraRow(AQ: TFDQuery): TSymbolExtraRow;
+var
+  C: TRowCursor;
+begin
+  C:= TRowCursor.Start(AQ);
+  Result:= Default(TSymbolExtraRow);
+  Result.SymbolIdx  := -1;
+  Result.SymbolId   := C.Big;
+  Result.NoReturn   := C.Int;
+  Result.VariantPart:= C.Int;
+  Result.VariantTag := C.Int <> 0;
+  Result.ParamMode  := C.Str;
+  Result.ParamIndex := C.Int;
+end;
+
+function TSQLiteSymbolStore.GetSymbolExtra(ASymbolId: Int64): TSymbolExtraRow;
+var
+  Q: TFDQuery;
+begin
+  Result:= Default(TSymbolExtraRow);
+  Result.SymbolIdx := -1;
+  Result.SymbolId  := ASymbolId;
+  Result.ParamIndex:= -1;
+  if not HasV156Facts then Exit;
+  Q:= NewExtQuery('SELECT ' + SYMBOL_EXTRAS_COLS + ' FROM symbol_extras WHERE symbol_id = :s', [ASymbolId]);
+  try
+    Q.Open;
+    if not Q.IsEmpty then Result:= ReadSymbolExtraRow(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetSymbolExtras(AFileId: Int64): TArray<TSymbolExtraRow>;
+var
+  Q: TFDQuery;
+  L: TList<TSymbolExtraRow>;
+begin
+  Result:= nil;
+  if not HasV156Facts then Exit;
+  L:= TList<TSymbolExtraRow>.Create;
+  Q:= NewExtQuery('SELECT ' + SYMBOL_EXTRAS_COLS + ' FROM symbol_extras WHERE file_id = :f ORDER BY symbol_id', [AFileId]);
+  try
+    Q.Open;
+    while not Q.Eof do
+    begin
+      L.Add(ReadSymbolExtraRow(Q));
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetDsFieldAccesses(AFileId, ASymbolId: Int64): TArray<TDsFieldAccessRow>;
+var
+  Q: TFDQuery;
+  L: TList<TDsFieldAccessRow>;
+  R: TDsFieldAccessRow;
+  C: TRowCursor;
+begin
+  Result:= nil;
+  if ((AFileId <= 0) and (ASymbolId <= 0)) or not HasV156Facts then Exit;
+  L:= TList<TDsFieldAccessRow>.Create;
+  Q:= NewExtQuery('SELECT ' + DS_FIELD_ACCESSES_COLS + ' FROM ds_field_accesses WHERE (:f <= 0 OR file_id = :f) AND ' +
+    '(:s <= 0 OR symbol_id = :s) ORDER BY file_id, ordinal', [AFileId, ASymbolId]);
+  try
+    Q.Open;
+    while not Q.Eof do
+    begin
+      C:= TRowCursor.Start(Q);
+      R:= Default(TDsFieldAccessRow);
+      R.FileId      := C.Big;
+      R.SymbolId    := C.Big;
+      R.Ordinal     := C.Int;
+      R.Mode        := C.Str;
+      R.Line        := C.Int;
+      R.Col         := C.Int;
+      R.Shape       := C.Str;
+      R.DatasetText := C.Str;
+      R.FieldText   := C.Str;
+      R.FieldName   := C.Str;
+      R.NameKind    := C.Str;
+      R.NameText    := C.Str;
+      R.Accessor    := C.Str;
+      R.RootKind    := C.Str;
+      R.RootName    := C.Str;
+      R.RootIndex   := C.Int;
+      R.WithCtx     := C.Str;
+      R.RhsStartLine:= C.Int;
+      R.RhsStartCol := C.Int;
+      R.RhsEndLine  := C.Int;
+      R.RhsEndCol   := C.Int;
+      R.StmtLine    := C.Int;
+      R.StmtCol     := C.Int;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetLoopFacts(AFileId, ASymbolId: Int64): TArray<TLoopFactRow>;  // dl:ok duplicate-code@110d -- REVIEWED 2026-11-26 EXT-S: one writer / reader block per 1.56 fact table, differing in the row type and its column list (the GetAttributes precedent)
+var
+  Q: TFDQuery;
+  L: TList<TLoopFactRow>;
+  R: TLoopFactRow;
+  C: TRowCursor;
+begin
+  Result:= nil;
+  if ((AFileId <= 0) and (ASymbolId <= 0)) or not HasV156Facts then Exit;
+  L:= TList<TLoopFactRow>.Create;
+  Q:= NewExtQuery('SELECT ' + LOOP_FACTS_COLS + ' FROM loop_facts WHERE (:f <= 0 OR file_id = :f) AND ' +
+    '(:s <= 0 OR symbol_id = :s) ORDER BY file_id, ordinal', [AFileId, ASymbolId]);
+  try
+    Q.Open;
+    while not Q.Eof do
+    begin
+      C:= TRowCursor.Start(Q);
+      R:= Default(TLoopFactRow);
+      R.FileId       := C.Big;
+      R.SymbolId     := C.Big;
+      R.Ordinal      := C.Int;
+      R.Parent       := C.Int;
+      R.Kind         := C.Str;
+      R.StartLine    := C.Int;
+      R.StartCol     := C.Int;
+      R.EndLine      := C.Int;
+      R.EndCol       := C.Int;
+      R.CondStartLine:= C.Int;
+      R.CondStartCol := C.Int;
+      R.CondEndLine  := C.Int;
+      R.CondEndCol   := C.Int;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
+
+function ReadCallLiteralArgRows(AQ: TFDQuery): TArray<TCallLiteralArgRow>;
+var
+  L: TList<TCallLiteralArgRow>;
+  R: TCallLiteralArgRow;
+  C: TRowCursor;
+begin
+  L:= TList<TCallLiteralArgRow>.Create;
+  try
+    while not AQ.Eof do
+    begin
+      C:= TRowCursor.Start(AQ);
+      R:= Default(TCallLiteralArgRow);
+      R.FileId      := C.Big;
+      R.SymbolId    := C.Big;
+      R.Ordinal     := C.Int;
+      R.CallLine    := C.Int;
+      R.CallCol     := C.Int;
+      R.CalleeName  := C.Str;
+      R.ReceiverText:= C.Str;
+      R.ArgIndex    := C.Int;
+      R.ArgCount    := C.Int;
+      R.LitLine     := C.Int;
+      R.LitCol      := C.Int;
+      R.LitKind     := C.Str;
+      R.Value       := C.Str;
+      L.Add(R);
+      AQ.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetCallLiteralArgs(AFileId: Int64; ACallLine, ACallCol: Integer): TArray<TCallLiteralArgRow>;
+var
+  Q: TFDQuery;
+begin
+  Result:= nil;
+  if not HasV156Facts then Exit;
+  Q:= NewExtQuery('SELECT ' + CALL_LITERAL_ARGS_COLS + ' FROM call_literal_args WHERE file_id = :f AND ' +
+    '(:l <= 0 OR (call_line = :l AND call_col = :c)) ORDER BY ordinal', [AFileId, ACallLine, ACallCol]);
+  try
+    Q.Open;
+    Result:= ReadCallLiteralArgRows(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindCallLiteralArgs(const ACalleeName, AValue: string): TArray<TCallLiteralArgRow>;
+var
+  Q: TFDQuery;
+begin
+  Result:= nil;
+  if not HasV156Facts then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT ' + CALL_LITERAL_ARGS_COLS + ' FROM call_literal_args WHERE callee_name = :n COLLATE NOCASE ' +
+                   'AND (:v = '''' OR value = :v COLLATE NOCASE) ORDER BY file_id, ordinal';
+    Q.ParamByName('n').AsWideString:= ACalleeName;
+    Q.ParamByName('v').AsWideString:= AValue;
+    Q.Open;
+    Result:= ReadCallLiteralArgRows(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TSQLiteSymbolStore.ReplaceIndirectEdges(const ARows: TArray<TIndirectEdgeRow>);
+var
+  Q: TFDQuery;
+  R: TIndirectEdgeRow;
+begin
+  if FReadOnly or not HasIndirectEdges then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := SQL_INDIRECT_EDGES_INSERT;
+    Q.ParamByName('r' ).DataType:= ftLargeint;
+    Q.ParamByName('c' ).DataType:= ftLargeint;
+    Q.ParamByName('t' ).DataType:= ftLargeint;
+    Q.ParamByName('k' ).DataType:= ftWideString;
+    Q.ParamByName('v' ).DataType:= ftWideString;
+    Q.ParamByName('bf').DataType:= ftLargeint;
+    Q.ParamByName('bl').DataType:= ftLargeint;
+    Q.ParamByName('bc').DataType:= ftLargeint;
+    Q.ParamByName('cf').DataType:= ftWideString;
+    FConn.StartTransaction;
+    try
+      FConn.ExecSQL('DELETE FROM indirect_edges');  // dl:ok sql-update-delete-without-where@c919 -- REVIEWED 2026-11-26 EXT-S: intentional full clear of a derived table inside its rebuild transaction (the dispatch_edges precedent)
+      for R in ARows do
+      begin
+        if R.RefId > 0 then Q.ParamByName('r').AsLargeInt:= R.RefId else Q.ParamByName('r').Clear;
+        if R.CallerId > 0 then Q.ParamByName('c').AsLargeInt:= R.CallerId else Q.ParamByName('c').Clear;
+        Q.ParamByName('t' ).AsLargeInt  := R.TargetId;
+        Q.ParamByName('k' ).AsWideString:= R.Kind;
+        Q.ParamByName('v' ).AsWideString:= R.ViaText;
+        Q.ParamByName('bf').AsLargeInt  := R.BindFileId;
+        Q.ParamByName('bl').AsLargeInt  := R.BindLine;
+        Q.ParamByName('bc').AsLargeInt  := R.BindCol;
+        Q.ParamByName('cf').AsWideString:= R.Confidence;
+        Q.ExecSQL;  // dl:ok query-in-loop@6087 -- REVIEWED 2026-11-26 EXT-S: one prepared INSERT per row inside the open transaction -- the store's write pattern (PutFileFacts, PutDataFlows)
+      end;
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetIndirectEdges(ACallerId, ATargetId: Int64): TArray<TIndirectEdgeRow>;
+var
+  Q: TFDQuery;
+  L: TList<TIndirectEdgeRow>;
+  R: TIndirectEdgeRow;
+  C: TRowCursor;
+begin
+  Result:= nil;
+  if not HasIndirectEdges then Exit;
+  L:= TList<TIndirectEdgeRow>.Create;
+  Q:= NewExtQuery(SQL_INDIRECT_EDGES_SELECT, [ACallerId, ATargetId]);
+  try
+    Q.Open;
+    while not Q.Eof do
+    begin
+      C:= TRowCursor.Start(Q);
+      R:= Default(TIndirectEdgeRow);
+      R.RefId     := C.Big;
+      R.CallerId  := C.Big;
+      R.TargetId  := C.Big;
+      R.Kind      := C.Str;
+      R.ViaText   := C.Str;
+      R.BindFileId:= C.Big;
+      R.BindLine  := C.Int;
+      R.BindCol   := C.Int;
+      R.Confidence:= C.Str;
+      L.Add(R);
+      Q.Next;
+    end;
+    Result:= L.ToArray;
+  finally
+    Q.Free;
+    L.Free;
+  end;
+end;
 { 149 EX2 (schema v24): the file-fact tables -- see ISymbolStore.PutFileFacts. FQFileFacts holds
   one lazily prepared statement per FF_SQL entry; the first three delete, the last three insert. }
 const
@@ -7055,6 +7771,7 @@ begin
         R.SrcName    := AQ.Fields[Ord(dfcSrcName)].AsString;
         R.ViaLocal   := AQ.Fields[Ord(dfcViaLocal)].AsInteger <> 0;
         R.Cond       := AQ.Fields[Ord(dfcCond)].AsInteger <> 0;
+        if AQ.FieldCount > Ord(dfcCond) + 1 then R.ValClass:= AQ.Fields[Ord(dfcCond) + 1].AsString; { 1.56 B3 }
         L.Add(R);
         AQ.Next;
       end;
@@ -7077,7 +7794,7 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE file_id = :f AND dst_line = :l AND ' +
+    Q.SQL.Text:= 'SELECT ' + DataFlowSelectCols + ' FROM data_flows WHERE file_id = :f AND dst_line = :l AND ' +
       'dst_col = :c AND (:k = '''' OR dst_kind = :k) ORDER BY dst_index, src_kind, src_line, src_col';
     Q.ParamByName('f').AsLargeInt  := AFileId;
     Q.ParamByName('l').AsInteger   := ALine;
@@ -7098,7 +7815,7 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE symbol_id = :s AND ' +
+    Q.SQL.Text:= 'SELECT ' + DataFlowSelectCols + ' FROM data_flows WHERE symbol_id = :s AND ' +
       '(:k = '''' OR dst_kind = :k) ORDER BY dst_kind, dst_index, dst_line, dst_col';
     Q.ParamByName('s').AsLargeInt  := ASymbolId;
     Q.ParamByName('k').AsWideString:= ADstKind;
@@ -7123,7 +7840,7 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= SQL_FIELD_WRITERS_HEAD + Ids + SQL_FIELD_WRITERS_TAIL;  { Ids: IntToStr of Int64 ids only, never text }
+    Q.SQL.Text:= StringReplace(SQL_FIELD_WRITERS_HEAD, DATA_FLOWS_COLS, DataFlowSelectCols, []) + Ids + SQL_FIELD_WRITERS_TAIL;  { Ids: IntToStr of Int64 ids only, never text }
     Q.ParamByName('n').AsWideString:= AName;
     Result:= ReadDataFlowRows(Q);
   finally
@@ -7140,7 +7857,7 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE dst_kind = ''' + DF_DST_GLOBAL + ''' AND ' +
+    Q.SQL.Text:= 'SELECT ' + DataFlowSelectCols + ' FROM data_flows WHERE dst_kind = ''' + DF_DST_GLOBAL + ''' AND ' +
       'dst_name = :n COLLATE NOCASE AND (:f <= 0 OR file_id = :f) ORDER BY file_id, dst_line, dst_col';
     Q.ParamByName('n').AsWideString:= AName;
     Q.ParamByName('f').AsLargeInt  := AFileId;
@@ -7200,6 +7917,9 @@ begin
       FConn.Rollback;
       raise;
     end;
+    { 1.56 B5 (lane EXT-C2): the indirect-call edges are derived from the edges just committed. }
+    if TIndexPassHooks.IndirectEdgesRegistered and HasIndirectEdges then
+      ReplaceIndirectEdges(TIndexPassHooks.CollectIndirectEdges(Self, AExtraStores));
     C:= Res.Counters;
     ResolveLog(Format('dispatch: overrides=%d implements=%d classref-args=%d delegates=%d declined: no-base=%d external=%d ' +
       'no-impl=%d generic=%d indirect=%d stale=%d unread=%d  [%.1fs]',
@@ -7340,6 +8060,7 @@ function TSQLiteSymbolStore.SymbolFactsSelectCols: string;
 begin
   Result:= SYMBOL_FACTS_BASE_COLS;
   if HasEffectCols then Result:= Result + SYMBOL_FACTS_EFFECT_COLS;
+  if HasMustWrites then Result:= Result + ', must_writes'; { 1.56 B5 }
 end;
 
 function TSQLiteSymbolStore.Fts5TableExists: Boolean;
@@ -7451,6 +8172,8 @@ begin
   FQPutSymbolFacts.Free;
   FQPutDataFlows.Free;
   for var FFQ: TFDQuery in FQFileFacts do FFQ.Free; { 149 EX2 }
+  for var EXQ: TFDQuery in FQExtFacts do EXQ.Free; { 1.56 EXT-S }
+  FQPutMustWrites.Free;
   FQGetSymbolFacts.Free;
   FQFindByDocTag.Free;
   FQFindUndocumented.Free;
@@ -7995,6 +8718,9 @@ begin
   TryExec('ALTER TABLE symbol_facts ADD COLUMN effect_free INTEGER'  );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN effect_summary TEXT'  );
   TryExec('ALTER TABLE symbol_facts ADD COLUMN effect_witness TEXT'  );
+  { 1.56 EXT-S (B5): symbol_facts.must_writes, here so the re-point below sees it. }
+  TryExec(SCHEMA_DDL_V156_ALTER[V156_ALTER_MUST_WRITES]);
+  FHasMustWrites:= -1;
   { The columns may have just appeared: forget the HasEffectCols memo, and if
     the constructor already built FQGetSymbolFacts (it prepares BEFORE Migrate
     on a schema-current DB, and the PrepareStatements call below is then a
@@ -8389,6 +9115,20 @@ begin
           '  target_unit    TEXT    NOT NULL,' +
           '  via_name       TEXT    NOT NULL,' +
           '  PRIMARY KEY (unit_symbol_id, target_unit))');
+  { 1.56 lane EXT-S (S1): the tables of the ONE 1.56 extractor bump -- symbol_extras (B1 / B2 / B8),
+    ds_field_accesses and loop_facts (B14), call_literal_args (SPEC-SEARCH C-1), indirect_edges (B5),
+    repo_copy / concept_* (CONCEPT) -- and data_flows.val_class (B3). ADDITIVE and probed
+    (HasV156Facts, HasIndirectEdges, HasConceptTables, HasDataFlowValClass): no SCHEMA_VERSION
+    change in this commit (it moves once, with the extractor version, at the freeze). DDL and the
+    column semantics: SCHEMA_DDL_V156 in DRagLint.Storage.Schema. The probes are forgotten because
+    the constructor may have answered them before this ran. }
+  for I:= Low(SCHEMA_DDL_V156) to High(SCHEMA_DDL_V156) do TryExec(SCHEMA_DDL_V156[I]);
+  TryExec(SCHEMA_DDL_V156_ALTER[V156_ALTER_VAL_CLASS]);
+  if FFts5Available then TryExec(SCHEMA_DDL_V156_FTS5);
+  FHasV156Facts       := -1;
+  FHasIndirectEdges   := -1;
+  FHasConceptTables   := -1;
+  FHasDataFlowValClass:= -1;
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
@@ -10141,7 +10881,7 @@ end;
   tests\autotest\run_v153_symid_fk_classes.ps1 parses this list and FAILS on a
   column that holds a symbol id and is not in it (spec A10). }
 const
-  SYMBOL_ID_COLUMN_CLASSES: array [0..32] of string = (
+  SYMBOL_ID_COLUMN_CLASSES: array [0..40] of string = (
     'attributes.symbol_id=E',                  { PutFileFacts, per file }
     'comment_facts.anchor_symbol_id=E',        { PutFileFacts, per file }
     'data_flows.symbol_id=E',                  { PutDataFlows; PersistGlobalArgWrites rebuilds its kinds whole }
@@ -10174,7 +10914,15 @@ const
     'dispatch_edges.impl_symbol_id=D',
     'classref_args.param_symbol_id=D',         { ResolveDispatch: whole rebuild }
     'classref_args.class_symbol_id=D',
-    'init_deps.unit_symbol_id=D');             { RebuildInitDeps: whole rebuild }
+    'init_deps.unit_symbol_id=D',              { RebuildInitDeps: whole rebuild }
+    'symbol_extras.symbol_id=E',               { 1.56: PutExtFacts, per file (delete by file_id + insert) }
+    'ds_field_accesses.symbol_id=E',           { 1.56: PutExtFacts, per file }
+    'loop_facts.symbol_id=E',                  { 1.56: PutExtFacts, per file }
+    'call_literal_args.symbol_id=E',           { 1.56: PutExtFacts, per file }
+    'indirect_edges.caller_symbol_id=D',       { 1.56: ReplaceIndirectEdges, whole rebuild after ResolveDispatch }
+    'indirect_edges.target_symbol_id=D',
+    'concept_links.symbol_id=D',               { 1.56 CONCEPT: the derived part, recomputed by DRagLint.Index.RepoCopy }
+    'concept_links.enclosing_symbol_id=D');
 
   SYMID_KEY_SEP  = #1; { between the parts of an identity key / a fingerprint }
   SYMID_OCC_SEP  = #2; { before the occurrence ordinal }
@@ -14788,6 +15536,7 @@ begin
   Result.UiAffinity   := AQ.FieldByName('ui_affinity'   ).AsString;
   Result.Touches      := AQ.FieldByName('touches'       ).AsString;
   Result.Wiring       := AQ.FieldByName('wiring'        ).AsString;
+  if AQ.FindField('must_writes') <> nil then Result.MustWrites:= AQ.FieldByName('must_writes').AsString; { 1.56 B5; absent before 1.56 }
   if AQ.FindField('effect_free') <> nil then { tolerate a pre-purity (un-migrated) DB }
   begin
     if not AQ.FieldByName('effect_free').IsNull then
@@ -15794,6 +16543,24 @@ begin
   SetNullableText('tch' , AFacts.Touches     );
   SetNullableText('wir' , AFacts.Wiring      );
   FQPutSymbolFacts.ExecSQL;
+  { 1.56 B5: must_writes is written APART (FQPutSymbolFacts is prepared by the constructor, before
+    Migrate can have added the column). The INSERT OR REPLACE above left it NULL, so only a
+    non-empty value needs the UPDATE. }
+  if (AFacts.MustWrites <> '') and HasMustWrites then
+  begin
+    if FQPutMustWrites = nil then
+    begin
+      FQPutMustWrites:= TFDQuery.Create(nil);
+      FQPutMustWrites.Connection:= FConn;
+      FQPutMustWrites.SQL.Text  := 'UPDATE symbol_facts SET must_writes = :mw WHERE symbol_id = :sid';
+      FQPutMustWrites.ParamByName('mw' ).DataType:= ftWideMemo;
+      FQPutMustWrites.ParamByName('sid').DataType:= ftLargeint;
+      FQPutMustWrites.Prepare;
+    end;
+    FQPutMustWrites.ParamByName('mw' ).Value     := AFacts.MustWrites;
+    FQPutMustWrites.ParamByName('sid').AsLargeInt:= AFacts.SymbolId;
+    FQPutMustWrites.ExecSQL;
+  end;
 end; // procedure
 
 function TSQLiteSymbolStore.GetSymbolFacts(ASymbolId: Int64): TSymbolFacts;
