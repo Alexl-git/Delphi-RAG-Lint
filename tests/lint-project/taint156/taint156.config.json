@@ -1,0 +1,23 @@
+{
+  "taint": {
+    "sources": [
+      { "id": "t156-body",  "name": "GetRequestBody",  "kind": "call", "confidence": "certain" },
+      { "id": "t156-field", "name": "GetRequestField", "kind": "call", "confidence": "certain" }
+    ],
+    "propagators": [
+      { "name": "ValidateBlob", "args": [0] },
+      { "name": "HtmlEncode",   "args": [0] },
+      { "name": "LogEncode",    "args": [0] }
+    ],
+    "sinks": [
+      { "id": "t156-deser", "rule": "taint-deserialization", "name": "ReadComponentText", "kind": "call", "args": [0], "cwe": "CWE-502" },
+      { "id": "t156-html",  "rule": "taint-html-output",     "name": "Content",            "kind": "write", "args": [], "cwe": "CWE-79" },
+      { "id": "t156-log",   "rule": "taint-log",             "name": "LogInfo",            "kind": "call", "args": [0], "cwe": "CWE-117" }
+    ],
+    "sanitizers": [
+      { "name": "ValidateBlob", "sanitizes": ["deser"] },
+      { "name": "HtmlEncode",   "sanitizes": ["html"] },
+      { "name": "LogEncode",    "sanitizes": ["log"] }
+    ]
+  }
+}
