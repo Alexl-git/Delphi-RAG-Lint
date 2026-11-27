@@ -58,7 +58,6 @@ implementation
 
 uses
   System.SysUtils,
-  System.StrUtils,
   System.RegularExpressions,
   DRagLint.FieldRepo.HandlersRegions;
 
@@ -151,10 +150,8 @@ end;
 function LiteralAt(const pText: string; pPos, pLen: Integer): string;
 begin
   Result := Trim(Copy(pText, pPos, pLen));
-  if (Length(Result) >= 2) and (Result[1] = '''') and (Result[Length(Result)] = '''') then
-    Result := Copy(Result, 2, Length(Result) - 2)
-  else
-    Result := '';
+  Result := if Result.StartsWith('''') and Result.EndsWith('''') and (Length(Result) >= 2) then Copy(Result, 2, Length(Result) - 2)
+    else '';
 end;
 
 function ReadFieldWrites(const pText, pDataset: string; const pFields: TArray<TDfmrPair>): TArray<TDfmrPair>;

@@ -59,6 +59,7 @@ const
   SOURCE_FK = 'FK';
   SQL_KEYS =
     'SELECT C."CONSTRAINT_NAME", C."TABLE_NAME" FROM "DL_CONSTRAINTS" C WHERE C."KIND" IN (''PK'', ''UNIQUE'')';
+  SQL_KEYS_ORDERED = SQL_KEYS + ' ORDER BY C."CONSTRAINT_NAME"';
   SQL_COLUMNS =
     'SELECT "CONSTRAINT_NAME", "COLUMN_NAME" FROM "DL_CONSTRAINT_COLUMNS" ORDER BY "CONSTRAINT_NAME", "POSITION"';
   SQL_FKS =
@@ -288,7 +289,7 @@ begin
   try
     ReadColumns(pRepo, VColumns);
     VQuery.Connection := pRepo;
-    VQuery.Open(SQL_KEYS + ' ORDER BY C."CONSTRAINT_NAME"');
+    VQuery.Open(SQL_KEYS_ORDERED);
     while not VQuery.Eof do
     begin
       VKey.ConstraintName := VQuery.Fields[0].AsString;

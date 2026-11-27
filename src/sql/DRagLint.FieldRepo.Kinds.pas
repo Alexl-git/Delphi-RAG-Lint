@@ -342,7 +342,7 @@ begin
     if VClose = 0 then
       Exit;
     VInner := Copy(VCode, VPos + MACRO_OPEN_LEN, VClose - VPos - MACRO_OPEN_LEN);
-    if (Pos('.', VInner) > 0) and not MatchText(MACRO_OPEN + VInner + MACRO_CLOSE, Result) then
+    if VInner.Contains('.') and not MatchText(MACRO_OPEN + VInner + MACRO_CLOSE, Result) then
       Result := Result + [MACRO_OPEN + VInner + MACRO_CLOSE];
     VPos := Pos(MACRO_OPEN, VCode, VClose + MACRO_CLOSE_LEN);
   end;

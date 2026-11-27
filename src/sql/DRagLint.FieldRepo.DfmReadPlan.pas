@@ -770,7 +770,7 @@ end;
 
 { The source of a dataset, through AttachedTo and the literal link calls of its unit when it has no table and no SQL
   (design 3.1). pChain holds `file|dataset` of the datasets already on the way (cycle guard), pNames their names. }
-function TDfmRead.LinkedSource(const pForm: TDfmrForm; const pDataset: TDfmrDataset;
+function TDfmRead.LinkedSource(const pForm: TDfmrForm; const pDataset: TDfmrDataset;  // dl:ok too-many-exit-points@edb2 -- REVIEWED 2026-11-26 XTABLE X3: each Exit is one reason a link gives no source (none, two sources, no dataset, cycle, source without table, not a copy); guard clauses read in rule order
   const pChain, pNames: TArray<string>): TDatasetSource;
 var
   VLinks: TArray<TDfmrLink>;
@@ -933,7 +933,7 @@ begin
     Exit;
   VA := nil;
   VB := nil;
-  for VI := 0 to High(pChildA) do
+  for VI := 0 to High(pChildA) do  // dl:ok index-possibly-out-of-range@c1ec -- REVIEWED 2026-11-26 XTABLE X3: the four lengths are compared equal before the loop (Exit otherwise)
   begin
     VA := VA + [UpperCase(pChildA[VI] + '=' + pParentA[VI])];
     VB := VB + [UpperCase(pChildB[VI] + '=' + pParentB[VI])];
@@ -1042,7 +1042,7 @@ end;
   its code reads directly; the home is the one of them from which every other is reached; every other table is an
   input alias (XQ2: the table name) with the chosen path; the body is read again with ALIAS.COLUMN macros. False with
   pWhy when it cannot be placed (never a pick). }
-function TDfmRead.PlaceSeveral(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource;
+function TDfmRead.PlaceSeveral(const pForm: TDfmrForm; const pDataset: TDfmrDataset; const pSource: TDatasetSource;  // dl:ok too-many-parameters@8c40 -- REVIEWED 2026-11-26 XTABLE X3: private step of JoinOrigins; the parameters are its per-dataset state (form, dataset, source, context, origins, bodies, field, graph, form relations, reason)
   const pContext: TDfmrCodeContext; pOrigins: TOrigins; pBodies: TDictionary<string, TDfmrBody>; const pKey: string;
   pGraph: TFrRelationGraph; const pFormRelations: TArray<string>; out pWhy: string): Boolean;
 var
@@ -2160,7 +2160,7 @@ begin
   PlanInputs;
 end;
 
-function TDfmRead.AddRowChange(pOp: TFrChangeOp; const pTable, pKey, pProp, pOld, pNew: string;
+function TDfmRead.AddRowChange(pOp: TFrChangeOp; const pTable, pKey, pProp, pOld, pNew: string;  // dl:ok too-many-parameters@e000 -- REVIEWED 2026-11-26 XTABLE X3: private: one change = op, table, key, prop, old, new, columns, checked, as TFrChange and TDfmrChangeItem hold them
   const pColumns: TArray<TDfmrPair>; pChecked: Boolean): Integer;
 var
   VChange: TFrChange;
@@ -2471,7 +2471,7 @@ var
   VRel, VPos, VChild, VParent: TField;
 begin
   VName := pItem.Columns[0].Value;
-  pQuery.Open(SQL_RELATION_ROW, [VName]);  // dl:ok dataset-open-without-close@a1c3 -- REVIEWED 2026-11-26 XTABLE X3: the caller ApplyDfmRead owns the query: closes it per change and on an exception, frees it in finally
+  pQuery.Open(SQL_RELATION_ROW, [VName]);  // dl:ok dataset-open-without-close@85d7 -- REVIEWED 2026-11-26 XTABLE X3: the caller ApplyDfmRead owns the query: closes it per change and on an exception, frees it in finally
   if not pQuery.Eof then
     raise ERepoError.CreateFmt('change %d: the row of %s already exists', [pChange.Id, pChange.Target]);
   pQuery.Append;
@@ -2516,7 +2516,7 @@ var
 begin
   VTable := ItemValue(pItem, COL_TABLE);
   VField := ItemValue(pItem, COL_FIELD);
-  pQuery.Open(SQL_FIELD_ROW, [VTable, VField]);  // dl:ok dataset-open-without-close@b2d4 -- REVIEWED 2026-11-26 XTABLE X3: the caller ApplyDfmRead owns the query: closes it per change and on an exception, frees it in finally
+  pQuery.Open(SQL_FIELD_ROW, [VTable, VField]);  // dl:ok dataset-open-without-close@16d4 -- REVIEWED 2026-11-26 XTABLE X3: the caller ApplyDfmRead owns the query: closes it per change and on an exception, frees it in finally
   if pQuery.Eof then
     raise ERepoError.CreateFmt('change %d: %s needs the row DL_FIELDS_INFO %s|%s (select its insert too)',
       [pChange.Id, pChange.Target, VTable, VField]);

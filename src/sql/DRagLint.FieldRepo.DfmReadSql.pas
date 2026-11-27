@@ -270,8 +270,8 @@ begin
   end;
 end;
 
-{ Splits a token run at depth-0 commas. }
-function SplitItems(const pTokens: TSqlTokens): TArray<TSqlTokens>;
+{ Splits a token run at its depth-0 separators: the symbol pSeparator, or the keyword pSeparator when pWord. }
+function SplitAtDepthZero(const pTokens: TSqlTokens; const pSeparator: string; pWord: Boolean): TArray<TSqlTokens>;
 var
   VDepth, VStart, VI: Integer;
 begin
@@ -283,12 +283,18 @@ begin
       Inc(VDepth)
     else if IsSymbol(pTokens[VI], CLOSE_PAREN) then
       Dec(VDepth)
-    else if (VDepth = 0) and IsSymbol(pTokens[VI], COMMA) then
+    else if (VDepth = 0) and (if pWord then IsKeyword(pTokens[VI], [pSeparator]) else IsSymbol(pTokens[VI], pSeparator)) then
     begin
       Result := Result + [Copy(pTokens, VStart, VI - VStart)];
       VStart := VI + 1;
     end;
   Result := Result + [Copy(pTokens, VStart, Length(pTokens) - VStart)];
+end;
+
+{ Splits a token run at depth-0 commas. }
+function SplitItems(const pTokens: TSqlTokens): TArray<TSqlTokens>;
+begin
+  Result := SplitAtDepthZero(pTokens, COMMA, False);
 end;
 
 { Reads `name` or `qualifier.name` (or `qualifier.*`) at the start of pItem; returns the tokens used, 0 = neither. }
@@ -526,25 +532,16 @@ end;
 { Splits a condition at its depth-0 AND words; nil when it has a depth-0 OR (a conjunct of `A AND B OR C` is not true
   on every row). }
 function Conjuncts(const pTokens: TSqlTokens): TArray<TSqlTokens>;
-var
-  VDepth, VStart, VI: Integer;
 begin
-  Result := nil;
-  VDepth := 0;
-  VStart := 0;
-  for VI := 0 to High(pTokens) do
-    if IsSymbol(pTokens[VI], OPEN_PAREN) then
-      Inc(VDepth)
-    else if IsSymbol(pTokens[VI], CLOSE_PAREN) then
-      Dec(VDepth)
-    else if (VDepth = 0) and IsKeyword(pTokens[VI], ['OR']) then
-      Exit(nil)
-    else if (VDepth = 0) and IsKeyword(pTokens[VI], ['AND']) then
-    begin
-      Result := Result + [Copy(pTokens, VStart, VI - VStart)];
-      VStart := VI + 1;
-    end;
-  Result := Result + [Copy(pTokens, VStart, Length(pTokens) - VStart)];
+  if FindAtDepthZero(pTokens, 0, ['OR']) < Length(pTokens) then
+    Exit(nil);
+  Result := SplitAtDepthZero(pTokens, 'AND', True);
+end;
+
+{ True when pTokens[pAt..pAt+2] is `qualifier.column`. }
+function IsQualifiedColumn(const pTokens: TSqlTokens; pAt: Integer): Boolean;
+begin
+  Result := (pAt + 2 < Length(pTokens)) and IsName(pTokens[pAt]) and IsSymbol(pTokens[pAt + 1], DOT) and IsName(pTokens[pAt + 2]);
 end;
 
 { Adds every `q1.c1 = q2.c2` conjunct of a condition between two different FROM entries. }
@@ -561,9 +558,9 @@ begin
   for VConjunct in Conjuncts(Unwrapped(pCondition)) do
   begin
     VPart := Unwrapped(VConjunct);
-    if (Length(VPart) <> EQUALITY_TOKENS) or (not IsName(VPart[0])) or (not IsSymbol(VPart[1], DOT)) or (not IsName(VPart[2]))
-      or (not IsSymbol(VPart[EQUALS_AT], '=')) or (not IsName(VPart[RIGHT_AT])) or (not IsSymbol(VPart[RIGHT_AT + 1], DOT))
-      or (not IsName(VPart[RIGHT_AT + 2])) then
+    if (Length(VPart) <> EQUALITY_TOKENS) or (not IsSymbol(VPart[EQUALS_AT], '=')) then
+      Continue;
+    if not (IsQualifiedColumn(VPart, 0) and IsQualifiedColumn(VPart, RIGHT_AT)) then
       Continue;
     VLeft := FromEntry(pSource, VPart[0].Text);
     VRight := FromEntry(pSource, VPart[RIGHT_AT].Text);
@@ -608,7 +605,7 @@ begin
   while (VEnd > VFrom) and (VEnd = Length(VTokens)) and IsSymbol(VTokens[VEnd - 1], ';') do
   begin
     SetLength(VTokens, Length(VTokens) - 1);
-    Dec(VEnd);
+    Dec(VEnd);  // dl:ok index-possibly-out-of-range@0aaf -- REVIEWED 2026-11-26 XTABLE X3: VEnd <= Length(VTokens) (FindAtDepthZero); the WHERE test reads VTokens[VEnd] only after VEnd < Length(VTokens) in the same condition
   end;
   if ReadFrom(Copy(VTokens, VFrom + 1, VEnd - VFrom - 1), Result, VConditions) and HasMacro(VTokens, VEnd) then
     Result.Reason := 'the SQL has a macro';
@@ -619,7 +616,7 @@ begin
   end;
   for VItem in VConditions do
     AddEqualities(Result, VItem, False);
-  if (VEnd < Length(VTokens)) and IsKeyword(VTokens[VEnd], ['WHERE']) then  // dl:ok index-possibly-out-of-range@6f1a -- REVIEWED 2026-11-26 XTABLE X3: VEnd is tested against Length(VTokens) in the same condition
+  if (VEnd < Length(VTokens)) and IsKeyword(VTokens[VEnd], ['WHERE']) then
   begin
     VWhereEnd := FindAtDepthZero(VTokens, VEnd + 1, WHERE_END_WORDS);
     AddEqualities(Result, Copy(VTokens, VEnd + 1, VWhereEnd - VEnd - 1), True);
