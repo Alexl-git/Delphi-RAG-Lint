@@ -83,7 +83,8 @@ begin
   if ACmd.Has('To') then Result:= Result + ' -> ' + ACmd.Get('To');
 end;
 
-{ The command the caller gave: --command wins over --question/--target (+ -Project from --project). }
+{ The command the caller gave: --command wins over --question/--target (+ --project). --command is read
+  in either style: the CLI one of 1.56 ('--target T') or the PowerShell one before it ('-Target T'). }
 function CompareBuildCommand(const AArgs: TArgs; out ACmd: TReportCommand; out AErr: string): Boolean;
 begin
   ACmd:= Default(TReportCommand);
@@ -109,8 +110,8 @@ begin
       AErr:= '--question needs --target';
       Exit(False);
     end;
-    var Text:= Format('%s -Target "%s"', [AArgs.Question, AArgs.Target]);
-    if AArgs.ProjectPath <> '' then Text:= Text + Format(' -Project "%s"', [ExpandFileName(AArgs.ProjectPath)]);
+    var Text:= Format('%s --target "%s"', [AArgs.Question, AArgs.Target]);
+    if AArgs.ProjectPath <> '' then Text:= Text + Format(' --project "%s"', [ExpandFileName(AArgs.ProjectPath)]);
     if not ParseCommandLine(Text, ACmd) then
     begin
       AErr:= 'cannot build a command from --question "' + AArgs.Question + '"';
@@ -344,7 +345,7 @@ begin
   if (AArgs.CompareNew <> '') and (AArgs.CompareOld = '') then Result:= '--new needs --old'
   else if (AArgs.InFile <> '') and (AArgs.RefLine <= 0) then Result:= '--in needs --line <L> (a line inside the remarks block)'
   else if (AArgs.CompareOldDb <> '') and ACmd.IsEmpty then
-    Result:= '--old-db needs the question: --command "<id> -Target ..." or --question <id> --target <T>'
+    Result:= '--old-db needs the question: --command "<id> --target ..." or --question <id> --target <T>'
   else Result:= '';
 end;
 
