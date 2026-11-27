@@ -15768,6 +15768,11 @@
           "type": "ide-menu",
           "path": "drag-lint > Field Repository > Select Fields of Dataset...",
           "steps": ["Open the form; select the dataset in the designer, or pick it from the list", "Choose drag-lint > Field Repository > Select Fields of Dataset...", "Check the fields the dataset should have and press Preview...", "Check the changes you want and press Apply (repo write-dfm --names --select); the form is reloaded"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Field Repository > Copy Grid Columns...",
+          "steps": ["Choose drag-lint > Field Repository > Copy Grid Columns...", "In 1.56 this row is a placeholder that only shows a message; the grid-copy lanes fill it"]
         }
       ],
       "audience": "both",

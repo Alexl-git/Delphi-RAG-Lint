@@ -143,7 +143,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**463 rules. 131 have an auto-fix. 375 are on by default.** 350 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**463 rules. 131 have an auto-fix. 374 are on by default.** 350 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -467,7 +467,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](dump-refs) | `dump-refs` |  |
 | [Feature registry](Feature-Registry) | `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [featuregen](featuregen) | `featuregen.exe`; `build\_build_featuregen_local.bat builds featuregen.exe from this checkout`; `tools\featuregen-gate.ps1 -Repo -Full`; procedure: `docs\wiki\featuregen.md` | internal |
-| [Field repository: fields of a form in the IDE](field-repository-forms) | drag-lint > Field Repository > Read Fields from Dataset...; drag-lint > Field Repository > Read Fields of All Datasets of Form...; drag-lint > Field Repository > Select Fields of Dataset... |  |
+| [Field repository: fields of a form in the IDE](field-repository-forms) | drag-lint > Field Repository > Read Fields from Dataset...; drag-lint > Field Repository > Read Fields of All Datasets of Form...; drag-lint > Field Repository > Select Fields of Dataset...; drag-lint > Field Repository > Copy Grid Columns... |  |
 | [Field repository: generated handlers](field-repository-handlers) | `repo gen-handlers`; `repo gen-maxlen`; `repo renumber-regions` |  |
 | [Field repository](field-repository) | `dl-field-repo.exe`; `dl-field-repo-std.exe`; `repo init`; `repo info`; `repo import-fb`; `repo seed-fb`; `repo refresh-schema`; `repo backup`; `repo restore`; `repo gen-memtable`; `repo gen-param-array`; `repo gen-orm`; `repo update-orm`; `repo upgrade-orm-headers`; `repo gen-dataservice`; `repo migrate`; `repo check`; `repo paths`; `repo gen-const`; `repo check-const`; drag-lint > Field Repository > Open Field Repository Editor...; drag-lint > Field Repository > Refresh Schema from Database...; drag-lint > Field Repository > FDMemTable from CSV...; drag-lint > Field Repository > Generate / Update ORM Source...; drag-lint > Field Repository > Generate DataService Units...; drag-lint > Field Repository > Param Array Assistant...; `repo` |  |
 | [info](info) | `info` |  |

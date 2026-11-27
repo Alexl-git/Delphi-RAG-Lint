@@ -108,6 +108,7 @@ uses
   DragLint.Plugin.FieldSelectModel,
   DragLint.Plugin.FieldSelectDialog,
   {$ENDIF}
+  DragLint.Plugin.Cmd.GridCopy,
   DragLint.Plugin.Cmd152;
 
 const
@@ -836,6 +837,7 @@ begin
   RegisterRow('field-repository-07-read-dataset', 'Read Fields from Dataset...', True, InvokeReadDataset);
   RegisterRow('field-repository-08-read-form', 'Read Fields of All Datasets of Form...', True, InvokeReadForm);
   RegisterRow('field-repository-09-select-fields', 'Select Fields of Dataset...', True, InvokeSelectFields);
+  RegisterRow(GRID_COPY_CMD_ID, 'Copy Grid Columns...', True, InvokeGridCopy);
 end;
 
 initialization
