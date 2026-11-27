@@ -1875,9 +1875,20 @@ type
     /// took the flow-insensitive fallback. Explainability only: never used to drop a row.</summary>
     Cond       : Boolean;
     /// <summary>1.56 B3: the value class of the flowing value, one of the DF_VAL_* constants: the class the
-    /// value had where it FIRST became a scalar (a later IntToStr does not change it); '' on every
-    /// row written before 1.56 and on string / object / unknown-typed values (the pre-1.56 row set).
-    /// Column data_flows.val_class; absent on an index not migrated by a 1.56 writer (reads '').</summary>
+    /// value had where it FIRST became a scalar (a later IntToStr does not change it).
+    /// THE TWO ROW SETS (REV-1 #7): '' marks exactly the pre-1.56 row set -- every row written before 1.56
+    /// and, since EXT-B1F, the legacy twin that a numeric flow from a typed field / unit variable / function
+    /// result still keeps beside its classed row (so '' does NOT mean "not numeric"). A classed row is a
+    /// VALUE row: a numeric flow may therefore appear twice, once per set, and a reader that walks both sets
+    /// sees it twice, and sees flows 1.55 never wrote (a write from a scalar parameter). Which set a reader
+    /// takes: taint (RowsOf, and the GetFieldWriters / GetGlobalWriters loops of TTaintWalker) and
+    /// happens-before (CollectArguments) take ValClass = '' ONLY (the 1.55 contract: a value is no taint
+    /// carrier and no argument read); Charts.Q.ValueFlow reads the classed rows and names the set in every
+    /// count; field lineage (TUnitReader.LoadFlows) reads BOTH sets on purpose -- a write from a scalar
+    /// parameter / unit variable / call result is a lineage "unknown" reason, which only the classed row
+    /// carries -- and counts a twin once, because every lineage sink (inputs by field key, reasons, via
+    /// texts) is a set. Column data_flows.val_class; absent on an index not migrated by a 1.56 writer
+    /// (reads '').</summary>
     ValClass   : string ;
   end;
 
