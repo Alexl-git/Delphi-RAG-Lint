@@ -622,6 +622,13 @@ begin
   Check('A6c declared after the view', VUnit.Contains('    tv: TcxGridDBTableView;' + NL + '    tvA2: TcxGridDBColumn;' + NL
     + '    tvA21: TcxGridDBColumn;' + NL + '    tvA: TDataSource;'), VUnit);
 
+  VPlan := Everything(MixedForm(MIXED.Replace('    object tv: TcxGridDBTableView' + NL, '    object tv: TcxGridDBTableView' + NL
+    + '      object tvX: TcxGridDBColumn' + NL + '        DataBinding.FieldName = ''a''' + NL + '      end' + NL)), 'bv', 'tv');
+  CheckText('A6d a target column stands for ONE source column: the second of the field is added', PlanLines(VPlan),
+    'copy bv (TcxGridDBBandedTableView) -> tv (TcxGridDBTableView) in F.dfm: 2 changes, 0 blocked, 0 unchecked'
+    + '|[1] insert F.dfm tvX OnGetDisplayText:  -> bvAGetDisplayText'
+    + '|[2] insert F.dfm tvA2:  -> TcxGridDBColumn A');
+
   VPlan := Everything(MixedForm, 'bv', 'b2');
   ApplyBoth(VPlan, GridCopyDefaultIds(VPlan), VDfm, VUnit);
   CheckText('A7 banded -> banded without bands: the source''s bands, the positions kept', Block(VDfm, 'b2'),
