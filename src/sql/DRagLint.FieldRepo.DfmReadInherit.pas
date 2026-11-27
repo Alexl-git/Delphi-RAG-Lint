@@ -7,7 +7,14 @@ unit DRagLint.FieldRepo.DfmReadInherit;
   No DFM, two DFMs, no unit or no class declaration = not followed, with a note that names the reason (never a pick).
   Limits: an ancestor form in another folder is not found; a property an inherited field overrides is not applied to
   the ancestor's field; a property the descendant resets to '' reads as the ancestor's value.
-  Files are only READ. Lane ANCDFM owns this unit; the stub was created by lane FRAME-1. }
+  Files are only READ. Lane ANCDFM owns this unit; the stub was created by lane FRAME-1.
+
+  1.56 GCR-2: IDfmrModuleFinder finds the DFM of a module (`dmX` of `dmX.tblY`) that is NOT in the folder of the form.
+  The form's unit must use the module's unit; the DFM of that unit is looked for in the project folder (the nearest
+  folder, from the form's folder up to MODULE_LEVELS levels above it, that holds a project file; the form's own folder
+  when none does) and every folder below it, except folders whose name starts with `__` or `.` (__history,
+  __recovery, backups). One DFM with that root object = found; two = a note, nothing picked. A module outside the
+  project folder (a search-path folder elsewhere) is not found. }
 
 interface
 
@@ -51,17 +58,35 @@ type
     function Notes: TArray<string>;
   end;
 
+  /// <summary>Finds the DFM of a form or data module a form names (`dmX` of `dmX.tblY`) outside the form's own
+  /// folder; caches the folders and units it read (1.56 GCR-2).</summary>
+  /// <remarks>Not thread-safe: one instance per read, used from one thread. Files are only read; no file is held
+  /// open.</remarks>
+  IDfmrModuleFinder = interface
+    ['{8CA3F4AE-9B5F-431F-A00E-84E3F87FFB93}']
+    /// <summary>The DFM whose root object is pRoot, among the DFMs of the units the form's unit uses.</summary>
+    /// <param name="pDfm">Path of the form's DFM; the unit of the same name beside it gives the used units.</param>
+    /// <param name="pRoot">Root object name of the module, case-insensitive.</param>
+    /// <returns>Full path of the one such DFM in the project folder tree (see the unit header); '' when the form has
+    /// no unit, uses no unit with such a DFM, or two DFMs qualify (then a note names them: never a pick).</returns>
+    function ModuleFile(const pDfm, pRoot: string): string;
+    /// <summary>One line per module that was not picked because two DFMs qualify, in the order found, no line
+    /// twice.</summary>
+    /// <returns>The notes; empty when nothing was ambiguous.</returns>
+    function Notes: TArray<string>;
+  end;
+
 /// <summary>Reads the first object line of a text or binary DFM without parsing the file.</summary>
 /// <param name="pFile">Path of a DFM.</param>
 /// <returns>Kind, name and class of the root; all '' when the file is missing, unreadable or holds no object.</returns>
-function ReadDfmRootHead(const pFile: string): TDfmrRootHead;
+function ReadDfmRootHead(const pFile: string): TDfmrRootHead;  // dl:ok unused-public-symbol@7af7 -- REVIEWED 2026-11-27 GCR-2: tested on its own by tests/fieldrepo/DfmReadInheritTests.dpr, which is outside this project index
 
 /// <summary>The ancestor class a unit declares for a class: `TClass = class(TAncestor, ...)`.</summary>
 /// <param name="pUnitText">Unit source; comments and strings are not read.</param>
 /// <param name="pClass">Class name, case-insensitive.</param>
 /// <returns>The ancestor's bare name (unit qualifier and type arguments removed); '' when the unit does not declare
 /// the class with an ancestor.</returns>
-function AncestorClassOf(const pUnitText, pClass: string): string;
+function AncestorClassOf(const pUnitText, pClass: string): string;  // dl:ok unused-public-symbol@0ca5 -- REVIEWED 2026-11-27 GCR-2: tested on its own by tests/fieldrepo/DfmReadInheritTests.dpr, which is outside this project index
 
 /// <summary>An `inherited` dataset completed from its ancestor's.</summary>
 /// <param name="pOwn">The dataset as the descendant DFM states it.</param>
@@ -69,7 +94,17 @@ function AncestorClassOf(const pUnitText, pClass: string): string;
 /// <returns>The ancestor's dataset with pOwn's name, class and kind; UpdateTableName, TableName, Sql, OnCalcFields
 /// and AttachedTo are pOwn's where pOwn states one; Fields = the ancestor's, then the fields pOwn adds;
 /// InheritedFields = pOwn's overridden fields the ancestor does not have.</returns>
-function MergeInherited(const pOwn, pAncestor: TDfmrDataset): TDfmrDataset;
+function MergeInherited(const pOwn, pAncestor: TDfmrDataset): TDfmrDataset;  // dl:ok unused-public-symbol@8449 -- REVIEWED 2026-11-27 GCR-2: tested on its own by tests/fieldrepo/DfmReadInheritTests.dpr, which is outside this project index
+
+/// <summary>The units a unit names in its uses clauses, interface and implementation.</summary>
+/// <param name="pUnitText">Unit source; comments, strings (the path of `in '...'`) and directives are not read, so a
+/// unit inside a conditional block counts.</param>
+/// <returns>The unit names as written (`System.Classes`, `uMod`), in source order.</returns>
+function UsedUnitsOf(const pUnitText: string): TArray<string>;  // dl:ok unused-public-symbol@89f9 -- REVIEWED 2026-11-27 GCR-2: tested on its own by tests/fieldrepo/DfmReadGcr2Tests.dpr (M1, M2), which is outside this project index
+
+/// <summary>A new module finder.</summary>
+/// <returns>The finder.</returns>
+function NewDfmrModuleFinder: IDfmrModuleFinder;
 
 /// <summary>A new ancestry over a form loader.</summary>
 /// <param name="pLoad">Loads a DFM; must not be nil. The ancestry keeps the reference, not the forms.</param>
@@ -82,6 +117,7 @@ uses
   Winapi.Windows, // FileClose is inline: without the unit it is not expanded (H2443)
   System.SysUtils,
   System.IOUtils,
+  System.StrUtils,
   System.RegularExpressions,
   System.Generics.Collections,
   DRagLint.FieldRepo.HandlersRegions;
@@ -113,6 +149,13 @@ const
   SIZE_INT16 = 2;
   SIZE_INT32 = 4;
   MAX_CHAIN = 32; // ancestor levels followed; more is a cycle
+  EXT_DFM = '.dfm';
+  PROJECT_MASKS: array[0..2] of string = ('*.dpr', '*.dproj', '*.dpk');
+  MODULE_LEVELS = 3; // folders above the form's that may hold the project file
+  SKIP_PREFIXES: array[0..1] of string = ('__', '.'); // __history, __recovery, backups; .git and the like
+  { One uses clause of blanked source: the names up to the semicolon. }
+  PAT_USES = '(?<![\w.])uses\b([^;]*);';
+  PAT_UNIT_NAME = '^\s*([A-Za-z_][\w.]*)';
 
 type
   TRootEntry = record
@@ -136,6 +179,22 @@ type
     destructor Destroy; override;
     function AncestorFile(const pFile: string): string;
     function FindDataset(const pForm: TDfmrForm; const pName: string; out pDataset: TDfmrDataset): Boolean;
+    function Notes: TArray<string>;
+  end;
+
+  TDfmrModuleFinder = class(TInterfacedObject, IDfmrModuleFinder)
+  private
+    FTrees: TDictionary<string, TArray<string>>; // lower project folder -> every DFM in and below it
+    FUses: TDictionary<string, TArray<string>>;  // lower DFM path -> units its unit uses
+    FNotes: TList<string>;
+    function ProjectFolder(const pFolder: string): string;
+    procedure Collect(const pFolder: string; var pFiles: TArray<string>);
+    function Tree(const pFolder: string): TArray<string>;
+    function UsedBy(const pDfm: string): TArray<string>;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function ModuleFile(const pDfm, pRoot: string): string;
     function Notes: TArray<string>;
   end;
 
@@ -277,6 +336,147 @@ begin
   for VName in pOwn.InheritedFields do
     if not HasField(pAncestor.Fields, VName) then
       Result.InheritedFields := Result.InheritedFields + [VName];
+end;
+
+function UsedUnitsOf(const pUnitText: string): TArray<string>;
+var
+  VClause, VName: TMatch;
+  VPart: string;
+begin
+  Result := nil;
+  if pUnitText = '' then
+    Exit;
+  for VClause in TRegEx.Matches(ScanPascal(pUnitText).Code, PAT_USES, [roIgnoreCase]) do
+    for VPart in VClause.Groups[1].Value.Split([',']) do
+    begin
+      VName := TRegEx.Match(VPart, PAT_UNIT_NAME);
+      if VName.Success then
+        Result := Result + [VName.Groups[1].Value];
+    end;
+end;
+
+function NewDfmrModuleFinder: IDfmrModuleFinder;
+begin
+  Result := TDfmrModuleFinder.Create;
+end;
+
+{ TDfmrModuleFinder }
+
+constructor TDfmrModuleFinder.Create;
+begin
+  inherited Create;
+  FTrees := TDictionary<string, TArray<string>>.Create;
+  FUses := TDictionary<string, TArray<string>>.Create;
+  FNotes := TList<string>.Create;
+end;
+
+destructor TDfmrModuleFinder.Destroy;
+begin
+  FNotes.Free;
+  FUses.Free;
+  FTrees.Free;
+  inherited;
+end;
+
+function TDfmrModuleFinder.Notes: TArray<string>;
+begin
+  Result := FNotes.ToArray;
+end;
+
+{ The nearest folder, from pFolder up to MODULE_LEVELS levels above it, that holds a project file; pFolder when none. }
+function TDfmrModuleFinder.ProjectFolder(const pFolder: string): string;
+var
+  VFolder, VMask: string;
+  VLevel: Integer;
+begin
+  Result := pFolder;
+  VFolder := pFolder;
+  for VLevel := 0 to MODULE_LEVELS do
+  begin
+    if (VFolder = '') or not TDirectory.Exists(VFolder) then
+      Exit;
+    for VMask in PROJECT_MASKS do
+      if Length(TDirectory.GetFiles(VFolder, VMask)) > 0 then
+        Exit(VFolder);
+    VFolder := TPath.GetDirectoryName(VFolder);
+  end;
+end;
+
+{ True for a folder that is never searched (SKIP_PREFIXES). }
+function IsSkippedFolder(const pName: string): Boolean;
+var
+  VPrefix: string;
+begin
+  Result := False;
+  for VPrefix in SKIP_PREFIXES do
+    if StartsText(VPrefix, pName) then
+      Exit(True);
+end;
+
+{ Every DFM of pFolder and of the folders below it that are not skipped. }
+procedure TDfmrModuleFinder.Collect(const pFolder: string; var pFiles: TArray<string>);
+var
+  VSub: string;
+begin
+  pFiles := pFiles + TDirectory.GetFiles(pFolder, DFM_MASK);
+  for VSub in TDirectory.GetDirectories(pFolder) do
+    if not IsSkippedFolder(ExtractFileName(VSub)) then
+      Collect(VSub, pFiles);
+end;
+
+function TDfmrModuleFinder.Tree(const pFolder: string): TArray<string>;
+begin
+  if FTrees.TryGetValue(LowerCase(pFolder), Result) then
+    Exit;
+  Result := nil;
+  if TDirectory.Exists(pFolder) then
+    Collect(pFolder, Result);
+  FTrees.Add(LowerCase(pFolder), Result);
+end;
+
+function TDfmrModuleFinder.UsedBy(const pDfm: string): TArray<string>;
+var
+  VPas: string;
+begin
+  if FUses.TryGetValue(LowerCase(pDfm), Result) then
+    Exit;
+  Result := nil;
+  VPas := ChangeFileExt(pDfm, EXT_PAS);
+  if TFile.Exists(VPas) then
+    Result := UsedUnitsOf(TFile.ReadAllText(VPas));
+  FUses.Add(LowerCase(pDfm), Result);
+end;
+
+function TDfmrModuleFinder.ModuleFile(const pDfm, pRoot: string): string;
+var
+  VFull, VRoot, VUnit, VFile, VNote: string;
+  VFound, VNames, VUnits: TArray<string>;
+begin
+  Result := '';
+  VFull := TPath.GetFullPath(pDfm);
+  VRoot := ProjectFolder(TPath.GetDirectoryName(VFull));
+  VFound := nil;
+  VUnits := nil;
+  for VUnit in UsedBy(VFull) do
+    for VFile in Tree(VRoot) do
+      if SameText(ExtractFileName(VFile), VUnit + EXT_DFM) and (not SameText(VFile, VFull))
+        and SameText(ReadDfmRootHead(VFile).Name, pRoot) and not MatchText(VFile, VFound) then
+      begin
+        VFound := VFound + [VFile];
+        if not MatchText(VUnit, VUnits) then
+          VUnits := VUnits + [VUnit];
+      end;
+  if Length(VFound) = 1 then
+    Exit(VFound[0]);
+  if Length(VFound) = 0 then
+    Exit;
+  VNames := nil;
+  for VFile in VFound do
+    VNames := VNames + [ExtractRelativePath(IncludeTrailingPathDelimiter(VRoot), VFile)];
+  VNote := Format('%s: %d DFMs of the used unit %s have the root %s (%s): module not read', [ExtractFileName(VFull),
+    Length(VFound), string.Join(', ', VUnits), pRoot, string.Join(', ', VNames)]);
+  if not FNotes.Contains(VNote) then
+    FNotes.Add(VNote);
 end;
 
 function NewDfmrAncestry(const pLoad: TDfmrFormLoader): IDfmrAncestry;

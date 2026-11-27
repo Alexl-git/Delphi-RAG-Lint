@@ -52,7 +52,9 @@ uses
   DRagLint.Storage.SQLite,
   DRagLint.FieldRepo.Locate,
   DRagLint.FieldRepo.Schema,
-  DRagLint.FieldRepo.DfmReadSql;
+  DRagLint.FieldRepo.Kinds,
+  DRagLint.FieldRepo.DfmRead,
+  DRagLint.FieldRepo.DfmReadPlan;
 
 const
   PLACE_REPOSITORY = 'repository';
@@ -80,10 +82,7 @@ const
   DOT = '.';
   HASH_BUFFER_SIZE = 65536;
   WAL_SUFFIX = '-wal';
-  FIELD_SUFFIX = 'Field';
-  AGGREGATE_CLASS = 'TAggregateField';
   DATA_SOURCE_CLASS = 'TDataSource';
-  KIND_DATA = 'fkData';
   KIND_LIST = 'list';
   KIND_COLLECTION = 'collection';
   VALUE_TRUE = 'True';
@@ -97,10 +96,6 @@ const
   PLACEHOLDER_TEXTS: array[0..1] of string = ('Summary here', 'Remarks here');
   { The accessors whose first string argument is a field name (design 2.8, NQ-7). }
   NAME_ACCESSORS: array[0..2] of string = ('FieldByName', 'FindField', 'FieldValues');
-  { The dataset classes `repo read-dfm` knows (DRagLint.FieldRepo.DfmRead.DATASET_CLASSES, private there). }
-  DATASET_CLASSES: array[0..19] of string = ('TTable', 'TQuery', 'TStoredProc', 'TFDTable', 'TFDQuery', 'TFDMemTable',
-    'TFDStoredProc', 'TClientDataSet', 'TdxMemData', 'TADOTable', 'TADOQuery', 'TADODataSet', 'TADOStoredProc',
-    'TIBTable', 'TIBQuery', 'TIBDataSet', 'TSQLDataSet', 'TSQLQuery', 'TSQLTable', 'TSimpleDataSet');
 
   SQL_READ_ROW = 'SELECT state, repo_path, repo_sha256, repo_schema_version, copied_at_unix, copy_format, ' +
     'derived_format, derived_at_unix FROM repo_copy WHERE id = 1';
@@ -221,19 +216,15 @@ type
 
   TPersistentField = record
     Obj: Integer;
-    FieldName: string;
-    Origin: string;
-    IsData: Boolean;
+    Field: TDfmrField; // CompName, FieldName, FieldClass, Kind, Origin: what FieldSource of read-dfm reads
   end;
 
   TDatasetInfo = record
     Name: string;
     FormName: string;
     FormClass: string;
-    Table: string;      // table of calc / lookup fields and of data fields without a SELECT
-    TableVia: string;
-    HasSql: Boolean;
-    Source: TDfmrSqlSource;
+    Source: TDatasetSource; // DRagLint.FieldRepo.DfmReadPlan.SourceOf: the resolver of `repo read-dfm`
+    TableVia: string;       // how Source.TableName was found: table-name or sql
     Fields: TArray<TPersistentField>;
   end;
 
@@ -832,92 +823,83 @@ begin
   end;
 end;
 
-{ A dataset = a known dataset class, or any component with a persistent field child. Its table follows
-  DRagLint.FieldRepo.DfmReadPlan.SourceOf: UpdateTableName, TableName, then a SELECT over one table. }
+{ A dataset and its persistent fields, from the index rows of the DFM. What is a dataset, what is a persistent field,
+  the kind of a field and the dataset's table are decided by the routines of `repo read-dfm` (IsDatasetClass,
+  IsPersistentFieldClass, DfmFieldKind, SourceOf): one resolver, two callers (1.56 GCR-2). }
 function TRepoCopyRun.ReadDataset(pObject: Integer; out pDataset: TDatasetInfo): Boolean;
 var
   VAt: Integer;
   VField: TPersistentField;
-  VKind: string;
-  VTableName: string;
-  VUpdateTable: string;
-  VSql: string;
+  VKnown: Boolean;
+  VRead: TDfmrDataset;
 begin
   pDataset := Default(TDatasetInfo);
+  VKnown := IsDatasetClass(FObjs[pObject].ClassName);
   VAt := pObject + 1;
   while (VAt < Length(FObjs)) and (FObjs[VAt].Depth > FObjs[pObject].Depth) do
   begin
-    if (FObjs[VAt].Depth = FObjs[pObject].Depth + 1) and EndsText(FIELD_SUFFIX, FObjs[VAt].ClassName)
+    if (FObjs[VAt].Depth = FObjs[pObject].Depth + 1) and IsPersistentFieldClass(FObjs[VAt].ClassName, VKnown)
       and (Prop(VAt, 'FieldName') <> '') then
     begin
-      VKind := Prop(VAt, 'FieldKind');
+      VField := Default(TPersistentField);
       VField.Obj := VAt;
-      VField.FieldName := Prop(VAt, 'FieldName');
-      VField.Origin := Prop(VAt, 'Origin');
-      VField.IsData := ((VKind = '') or SameText(VKind, KIND_DATA)) and not SameText(FObjs[VAt].ClassName, AGGREGATE_CLASS);
-      if VKind = '' then
-        VField.IsData := VField.IsData and not SameText(Prop(VAt, 'Lookup'), VALUE_TRUE)
-          and not SameText(Prop(VAt, 'Calculated'), VALUE_TRUE);
+      VField.Field.CompName := FObjs[VAt].Name;
+      VField.Field.FieldName := Prop(VAt, 'FieldName');
+      VField.Field.FieldClass := FObjs[VAt].ClassName;
+      VField.Field.Origin := Prop(VAt, 'Origin');
+      VField.Field.Kind := DfmFieldKind(FObjs[VAt].ClassName, Prop(VAt, 'FieldKind'), Prop(VAt, 'Lookup'),
+        Prop(VAt, 'Calculated'));
       pDataset.Fields := pDataset.Fields + [VField];
       FIsField[VAt] := True;
     end;
     Inc(VAt);
   end;
-  Result := MatchText(FObjs[pObject].ClassName, DATASET_CLASSES) or (Length(pDataset.Fields) > 0);
+  Result := VKnown or (Length(pDataset.Fields) > 0);
   if not Result then
     Exit;
   pDataset.Name := FObjs[pObject].Name;
   pDataset.FormName := FObjs[0].Name;
   pDataset.FormClass := FObjs[0].ClassName;
-  VUpdateTable := Prop(pObject, 'UpdateOptions.UpdateTableName');
-  VTableName := Prop(pObject, 'TableName');
-  VSql := Prop(pObject, 'SQL.Strings');
-  pDataset.HasSql := (VTableName = '') and (VSql <> '');
-  if pDataset.HasSql then
-    pDataset.Source := ReadSelectSource(VSql);
-  pDataset.TableVia := VIA_TABLE_NAME;
-  if VUpdateTable <> '' then
-    pDataset.Table := CleanTableName(VUpdateTable)
-  else if VTableName <> '' then
-    pDataset.Table := CleanTableName(VTableName)
-  else if pDataset.HasSql and (pDataset.Source.Reason = '') and (Length(pDataset.Source.Tables) = 1) then
-  begin
-    pDataset.Table := pDataset.Source.Tables[0].Name;
-    pDataset.TableVia := VIA_SQL;
-  end;
+  VRead := Default(TDfmrDataset);
+  VRead.Name := pDataset.Name;
+  VRead.DatasetClass := FObjs[pObject].ClassName;
+  VRead.UpdateTableName := Prop(pObject, 'UpdateOptions.UpdateTableName');
+  VRead.TableName := Prop(pObject, 'TableName');
+  VRead.Sql := Prop(pObject, 'SQL.Strings');
+  pDataset.Source := SourceOf(VRead);
+  pDataset.TableVia := if pDataset.Source.HasSql and (VRead.UpdateTableName = '') then VIA_SQL else VIA_TABLE_NAME;
 end;
 
-{ The table column of a field name of a dataset, as DRagLint.FieldRepo.DfmReadPlan.FieldSource decides it. }
+{ The table column of a field name of a dataset: DRagLint.FieldRepo.DfmReadPlan.FieldSource decides it. A name that is no
+  persistent field of the dataset is asked as a data field without an Origin. }
 function ResolveField(const pDataset: TDatasetInfo; const pFieldName: string; out pTable, pField, pVia: string): Boolean;
 var
-  VField: TPersistentField;
-  VIsData: Boolean;
-  VOrigin: string;
+  VEntry: TPersistentField;
+  VField: TDfmrField;
+  VBare: TDfmrField;
   VReason: string;
   VTable: string;
   VColumn: string;
 begin
-  VIsData := True;
-  VOrigin := '';
-  for VField in pDataset.Fields do
-    if SameText(VField.FieldName, pFieldName.Trim) then
+  VField := Default(TDfmrField);
+  VField.FieldName := pFieldName.Trim;
+  VField.Kind := frkData;
+  for VEntry in pDataset.Fields do
+    if SameText(VEntry.Field.FieldName, pFieldName.Trim) then
     begin
-      VIsData := VField.IsData;
-      VOrigin := VField.Origin;
+      VField := VEntry.Field;
       Break;
     end;
-  pTable := pDataset.Table;
-  pField := UpperCase(pFieldName.Trim);
+  Result := FieldSource(pDataset.Source, VField, pTable, pField, VReason);
   pVia := pDataset.TableVia;
-  if VIsData and pDataset.HasSql and (pDataset.Source.Reason = '') then
+  if (VField.Kind = frkData) and pDataset.Source.HasSql and (pDataset.Source.Sql.Reason = '') then
   begin
-    Result := SqlFieldColumn(pDataset.Source, pFieldName, VOrigin, pTable, pField, VReason);
     pVia := VIA_SQL;
-    if Result and (VOrigin <> '') and not SqlFieldColumn(pDataset.Source, pFieldName, '', VTable, VColumn, VReason) then
+    VBare := VField;
+    VBare.Origin := '';
+    if Result and (VField.Origin <> '') and not FieldSource(pDataset.Source, VBare, VTable, VColumn, VReason) then
       pVia := VIA_ORIGIN;
-  end
-  else
-    Result := pTable <> '';
+  end;
   if Result then
     Exit;
   pTable := '';
@@ -965,7 +947,7 @@ begin
   begin
     VLink := FormLink(LINK_PERSISTENT_FIELD, VField.Obj);
     VLink.Dataset := pDataset.Name;
-    VLink.Resolved := ResolveField(pDataset, VField.FieldName, VLink.Table, VLink.Field, VLink.Via);
+    VLink.Resolved := ResolveField(pDataset, VField.Field.FieldName, VLink.Table, VLink.Field, VLink.Via);
     VLink.Caption := CleanText(Prop(VField.Obj, 'DisplayLabel'));
     AddLink(VLink);
     AddText(TEXT_DISPLAY_LABEL, VLink.Table, VLink.Field, VLink.Caption);

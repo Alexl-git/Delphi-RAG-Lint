@@ -32,8 +32,11 @@ warning: uDerived.dfm tblOrders: read from the ancestor uBase.dfm
 | `LookupDataSet` of a lookup field | the same |
 | the dataset behind the data source of a grid view | the same |
 
-The dataset of an inherited form itself (the line `dataset PathToData.dfm tblOSublot ... (inherited: its own properties
-are in the ancestor's DFM)`) is still reported as before: its rows come from the ancestor's DFM when that DFM is read.
+The `inherited` dataset of an inherited form itself is read the same way (1.56 GCR-2): the line
+`dataset PathToData.dfm tblOSublot (TFDTable) -> OSUBLOT: ...` now has the ancestor's table and fields, then the fields
+the descendant adds. Its handler code is read where it is written: the calc bodies from the unit of the form whose DFM
+states `OnCalcFields`, the events of a field from the unit of the form whose DFM declares the field. Only when no
+ancestor is found the line still ends in `UNRESOLVED (... (inherited: its own properties are in the ancestor's DFM))`.
 
 ## How the ancestor is found
 
@@ -57,7 +60,26 @@ the fields are the ancestor's, then the fields the descendant adds.
 
 Known limits: a property an inherited FIELD overrides (for example `DisplayLabel`) is not applied to the ancestor's
 field; a property the descendant resets to an empty value reads as the ancestor's value; a link in the ANCESTOR's unit
-code is not followed for the descendant.
+code is not followed for the descendant; the calc bodies of an inherited dataset that is a JOIN are looked for in the
+descendant's unit only.
+
+## A module in another folder (1.56 GCR-2)
+
+`dmX.tblY` in a link, a `LookupDataSet` or a grid's data source names a module. The module is first looked for in the
+folder of the form (one DFM with the root object `dmX`). When that folder has none:
+
+1. The form's unit must USE the module's unit (interface or implementation `uses`; comments are not read).
+2. The DFM of that unit (`uMod.dfm` for `uses uMod`) is looked for in the project folder and every folder below it.
+   The project folder is the nearest folder, from the form's folder up to three levels above it, that holds a
+   `.dpr`, `.dproj` or `.dpk`; without one it is the form's own folder. Folders whose name starts with `__` or `.`
+   (`__history`, `__recovery`, backup copies, `.git`) are not searched.
+3. Exactly one such DFM with the root object `dmX` is the module. Two give the warning
+   `X.dfm: 2 DFMs of the used unit uMod have the root dmX (dm\uMod.dfm, old\uMod.dfm): module not read` and nothing
+   is picked.
+
+A module whose unit the form does not use, and a module outside the project folder (a search-path folder elsewhere),
+are not found: the dataset stays `UNRESOLVED (linked to dmX.tblY (...), which is no dataset of the form or of a module
+beside it)`.
 
 ## `AttachTable(X.Table, ...)`
 

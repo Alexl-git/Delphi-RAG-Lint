@@ -143,6 +143,29 @@ function LoadDfmForm(const pFile: string): TDfmrForm;
 /// <returns>The root object name.</returns>
 function DfmRootName(const pFile: string): string;
 
+/// <summary>True for a dataset class read-dfm knows by name (TTable, TFDQuery, TClientDataSet, ...).</summary>
+/// <param name="pClass">Component class name, case-insensitive.</param>
+/// <returns>True when the class is in the list. A component of another class is still a dataset when it has a
+/// persistent field child (IsPersistentFieldClass with pOwnerIsDataset False).</returns>
+/// <remarks>1.56 GCR-2: the one list; the index (DRagLint.Index.RepoCopy) asks here.</remarks>
+function IsDatasetClass(const pClass: string): Boolean;
+
+/// <summary>True when a child object of that class is a persistent field.</summary>
+/// <param name="pClass">Class name of the child object.</param>
+/// <param name="pOwnerIsDataset">The parent has a known dataset class (IsDatasetClass).</param>
+/// <returns>True for a class ending in `Field` that is a known TField class, or any class ending in `Field` under a
+/// known dataset class.</returns>
+function IsPersistentFieldClass(const pClass: string; pOwnerIsDataset: Boolean): Boolean;
+
+/// <summary>The kind of a persistent field from what its DFM object states.</summary>
+/// <param name="pFieldClass">Class name of the field object.</param>
+/// <param name="pFieldKind">Its FieldKind property as written (fkData, fkLookup, ...); '' = not stated.</param>
+/// <param name="pLookup">Its legacy Lookup property as written; '' = not stated.</param>
+/// <param name="pCalculated">Its legacy Calculated property as written; '' = not stated.</param>
+/// <returns>The kind FieldKind names; without one frkAggregate for TAggregateField, frkLookup for Lookup = True,
+/// frkCalc for Calculated = True, else frkData.</returns>
+function DfmFieldKind(const pFieldClass, pFieldKind, pLookup, pCalculated: string): TFrFieldKind;
+
 /// <summary>The typed accessor of a TField class (AsInteger, AsString, ...).</summary>
 /// <param name="pFieldClass">A TField class name.</param>
 /// <returns>The accessor, '' for a class without one.</returns>
@@ -367,6 +390,18 @@ begin
   Result := False;
 end;
 
+function IsDatasetClass(const pClass: string): Boolean;
+begin
+  Result := MatchText(pClass, DATASET_CLASSES);
+end;
+
+function IsPersistentFieldClass(const pClass: string; pOwnerIsDataset: Boolean): Boolean;
+var
+  VInfo: TFieldClassInfo;
+begin
+  Result := EndsText(FIELD_SUFFIX, pClass) and (pOwnerIsDataset or FindFieldClass(pClass, VInfo));
+end;
+
 function FieldClassAccessor(const pFieldClass: string): string;
 var
   VInfo: TFieldClassInfo;
@@ -375,22 +410,26 @@ begin
   Result := VInfo.Accessor;
 end;
 
-function KindOf(const pRows: TDfmRows; pObject: Integer): TFrFieldKind;
+function DfmFieldKind(const pFieldClass, pFieldKind, pLookup, pCalculated: string): TFrFieldKind;
 var
-  VText: string;
   VKind: TFrFieldKind;
 begin
-  VText := pRows.Prop(pObject, 'FieldKind');
   for VKind := Low(TFrFieldKind) to High(TFrFieldKind) do
-    if (VText <> '') and SameText(KIND_NAMES[VKind], VText) then
+    if (pFieldKind <> '') and SameText(KIND_NAMES[VKind], pFieldKind) then
       Exit(VKind);
   Result := frkData;
-  if SameText(pRows.Objects[pObject].ClassName, AGGREGATE_CLASS) then
+  if SameText(pFieldClass, AGGREGATE_CLASS) then
     Result := frkAggregate
-  else if SameText(pRows.Prop(pObject, 'Lookup'), VALUE_TRUE) then
+  else if SameText(pLookup, VALUE_TRUE) then
     Result := frkLookup
-  else if SameText(pRows.Prop(pObject, 'Calculated'), VALUE_TRUE) then
+  else if SameText(pCalculated, VALUE_TRUE) then
     Result := frkCalc;
+end;
+
+function KindOf(const pRows: TDfmRows; pObject: Integer): TFrFieldKind;
+begin
+  Result := DfmFieldKind(pRows.Objects[pObject].ClassName, pRows.Prop(pObject, 'FieldKind'), pRows.Prop(pObject, 'Lookup'),
+    pRows.Prop(pObject, 'Calculated'));
 end;
 
 procedure AddPair(var pList: TArray<TDfmrPair>; const pName, pValue: string);
@@ -471,11 +510,8 @@ end;
 
 { True when object pObject is a persistent field; pKnown = its parent has a known dataset class. }
 function IsFieldObject(const pRows: TDfmRows; pObject: Integer; pKnown: Boolean): Boolean;
-var
-  VInfo: TFieldClassInfo;
 begin
-  Result := EndsText(FIELD_SUFFIX, pRows.Objects[pObject].ClassName)
-    and (pKnown or FindFieldClass(pRows.Objects[pObject].ClassName, VInfo));
+  Result := IsPersistentFieldClass(pRows.Objects[pObject].ClassName, pKnown);
 end;
 
 procedure AddField(const pRows: TDfmRows; pObject: Integer; var pDataset: TDfmrDataset);
@@ -492,7 +528,7 @@ var
   VKnown: Boolean;
 begin
   Result := Default(TDfmrDataset);
-  VKnown := MatchText(pRows.Objects[pObject].ClassName, DATASET_CLASSES);
+  VKnown := IsDatasetClass(pRows.Objects[pObject].ClassName);
   VI := pObject + 1;
   while (VI < Length(pRows.Objects)) and (pRows.Objects[VI].Depth > pRows.Objects[pObject].Depth) do
   begin
