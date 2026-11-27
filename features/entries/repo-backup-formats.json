@@ -1,0 +1,54 @@
+{
+  "id": "repo-backup-formats",
+  "title": "Field repository backup formats: text, SQL, zip",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.56.0-alpha",
+  "summary": "Backs the field repository up as the diffable text file (default), an SQL script or a zip of a consistent copy, and restores each of them",
+  "intro": "Read this when you want a copy of the field repository for something other than a code review. The default stays the diffable text backup; --format sql writes the DDL and one INSERT per row (a script any SQLite tool reads), --format zip zips a consistent copy of the repository file. repo restore takes the same --format, validates the whole file first and changes nothing when it is damaged.",
+  "wikiPage": "repo-backup-formats",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "backup",
+      "usage": "drag-lint repo backup (--repo <file> | --project <project file>) [--format text|sql|zip] [--output <file>]",
+      "flags": [
+        {
+          "name": "--format",
+          "arg": "text|sql|zip",
+          "default": "text"
+        }
+      ]
+    },
+    {
+      "type": "cli",
+      "verb": "repo",
+      "sub": "restore",
+      "usage": "drag-lint repo restore --in <backup file> (--repo <file> | --project <project file>) [--format text|sql|zip] [--replace]",
+      "flags": [
+        {
+          "name": "--format",
+          "arg": "text|sql|zip",
+          "default": "text"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I get a copy of the field repository that I can open without drag-lint?",
+      "command": "drag-lint repo backup --project App.dproj --format zip"
+    },
+    {
+      "ask": "How do I back the field repository up as SQL?",
+      "command": "drag-lint repo backup --project App.dproj --format sql --output repo.sql"
+    },
+    {
+      "ask": "How do I restore a repository from a zip or an SQL backup?",
+      "command": "drag-lint repo restore --project App.dproj --format zip --in repo.dlrepo.zip --replace"
+    }
+  ]
+}
