@@ -632,6 +632,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Cycles.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.MemberAccess.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.MemberAccess.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.ValueFlow.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Trace.FormA.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Trace.Shim.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Trace.Anchor.pas"/>

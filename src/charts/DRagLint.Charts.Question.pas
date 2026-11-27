@@ -410,7 +410,7 @@ function QuestionPhrase(const pId: string): string;
 
 /// <summary>Every question id the chart pipeline accepts (New-DiagramArtifact.ps1's
 /// ValidateSet), in the menu-caption order of the header-phrase table.</summary>
-/// <returns>The 27 ids, lower case (implementors is Delphi-only: no Emit-*.ps1).</returns>
+/// <returns>The 29 ids, lower case (implementors, value-origin and value-use are Delphi-only: no Emit-*.ps1).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.AskVerb.AskUsage (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.NormaliseAskQuestion (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas)</para>
@@ -516,7 +516,7 @@ const
   DEFAULT_DEPTHS: array[0..1] of TDepthDefault = (
     (Id: 'exception-paths'; Depth: 3),
     (Id: 'round-trip'; Depth: 4));
-  QUESTION_CAPTIONS: array[0..26] of array[0..1] of string = (
+  QUESTION_CAPTIONS: array[0..28] of array[0..1] of string = (
     ('butterfly', 'Callers and callees (butterfly chart)...'),
     ('who-calls', 'Who calls this routine...'),
     ('what-it-calls', 'What this routine calls...'),
@@ -543,8 +543,11 @@ const
     ('architecture', 'Project architecture (layered zones)...'),
     ('cycles', 'Circular unit dependencies...'),
     ('consumers', 'Who uses this table or column...'),
-    ('shown-where', 'Where this database column is shown...'));
-  QUESTION_VOCAB: array[0..26] of array[0..2] of string = (
+    ('shown-where', 'Where this database column is shown...'),
+    { v156 FB-1 }
+    ('value-origin', 'Where this value comes from...'),
+    ('value-use', 'Where this value goes...'));
+  QUESTION_VOCAB: array[0..28] of array[0..2] of string = (
     ('butterfly', 'callers', 'callees'),
     ('deps', 'used by', 'uses'),
     ('who-calls', 'call sites', 'cycle rows'),
@@ -571,7 +574,10 @@ const
     ('feeds-from', 'chain rows', 'controls in the index that resolve to one table'),
     ('lands-where', 'server DataService rows', 'triggers touching the column'),
     ('round-trip', 'steps', 'unresolved'),
-    ('path', 'shortest paths', 'calls on each path'));
+    ('path', 'shortest paths', 'calls on each path'),
+    { v156 FB-1 }
+    ('value-origin', 'sources', 'routines'),
+    ('value-use', 'destinations', 'routines'));
 
 var
   GRegistry: TDictionary<string, TChartEmitter>;
