@@ -811,7 +811,8 @@ const
     'WHERE r.enclosing_symbol_id = %0:d';
 begin
   Result:= False;
-  var Sql:= if pUp then SQL_UP + IfThen(FHasIndirect, SQL_UP_INDIRECT) else SQL_DOWN + IfThen(FHasIndirect, SQL_DOWN_INDIRECT);
+  var Sql:= if pUp then SQL_UP else SQL_DOWN;
+  if FHasIndirect then Sql:= Sql + (if pUp then SQL_UP_INDIRECT else SQL_DOWN_INDIRECT);
   var Queue:= TQueue<Int64>.Create;
   try
     for var Id in pSeeds do
