@@ -628,7 +628,7 @@ begin
   R.Engine:= if pArgs.Engine <> '' then pArgs.Engine else ParamStr(0);
   R.NeedServer:= MatchStr(Id, [Q_ROUND_TRIP, Q_LANDS_WHERE]);
   R.NeedSql:= MatchStr(Id, [Q_ROUND_TRIP, Q_LANDS_WHERE, Q_CONSUMERS, Q_FEEDS_FROM]);
-  R.WantOther:= (Id = Q_CROSSES) or (Id = 'sent-not-handled');  { v156 CHB-2: the far side of G-71 }
+  R.WantOther:= (Id = Q_CROSSES) or (Id = 'sent-not-handled') or (Id = 'architecture-delta');  { v156 CHB-2: the far side of G-71; G47: the before side of G-47 }
   R.PairSet:= LoadReportPairs(pArgs.PairsFile);
 
 

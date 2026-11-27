@@ -211,6 +211,7 @@ const
   PATH_QUESTION = 'path';
   CROSSES_BOUNDARY = 'crosses-boundary';
   SENT_NOT_HANDLED = 'sent-not-handled';  { v156 CHB-2: the second question that reads --counterpart-db }
+  ARCH_DELTA = 'architecture-delta';  { v156 G47: the third }
   ISO_UTC = 'yyyy"-"mm"-"dd"T"hh":"nn":"ss"Z"';
   ASKED_ON = 'yyyy"-"mm"-"dd hh":"nn';
   HEX_BASE = 16;
@@ -782,7 +783,8 @@ end;
   lines must name it }
 function ReadsCounterpart(const pQuestion: string): Boolean;
 begin
-  Result:= SameText(pQuestion, CROSSES_BOUNDARY) or SameText(pQuestion, SENT_NOT_HANDLED);
+  Result:= SameText(pQuestion, CROSSES_BOUNDARY) or SameText(pQuestion, SENT_NOT_HANDLED)
+    or SameText(pQuestion, ARCH_DELTA);
 end;
 
 function RegenerateText(const pArgs: TQuestionArgs): string;
