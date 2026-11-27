@@ -152,7 +152,9 @@ function Validate(var pArgs: THappensBeforeArgs; out pOptions: THbOptions): stri
 begin
   pOptions:= Default(THbOptions);
   var MaxS: Double:= 0;
-  var WithPreset:= pArgs.Preset <> '';
+  { the presets that take a variable rewrite --a / --b themselves and are then a plain question }
+  var TargetError:= '';
+  var WithPreset:= (pArgs.Preset <> '') and not HbvPresetTarget(pArgs.Preset, pArgs.A, pArgs.B, TargetError);
   var PresetA:= '';
   var PresetB:= '';
   var Known:= WithPreset and HbvPresetEvents(pArgs.Preset, PresetA, PresetB);
@@ -165,7 +167,9 @@ begin
     if not TakesA or (pArgs.B = '') then pArgs.B:= PresetB
     else Clash:= True;
   end;
-  if Clash and TakesA then
+  if TargetError <> '' then
+    Result:= TargetError
+  else if Clash and TakesA then
     Result:= Format('--preset %s names event B: give --a <event> only', [LowerCase(pArgs.Preset)])
   else if Clash then
     Result:= '--preset names both events: do not give --a or --b with it'

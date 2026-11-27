@@ -126,6 +126,26 @@ function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMark
 /// (ruling HB4). Read-only; one store read per call.</remarks>
 function HbFactMustWrites(const pStore: ISymbolStore; pRoutineId: Int64; const pName: string): Boolean;
 
+/// <summary>Forward must-analysis of "A is IN FORCE" inside one routine (1.56 lane HB6): as
+/// <see cref="SolveRoutine"/> with entry = False, but a CFG item whose span contains a CLEAR site
+/// resets the bit. Done = on every path that reaches the query a mark ran and no clear ran since.</summary>
+/// <param name="pStore">Open index; read only.</param>
+/// <param name="pRoutineId">symbols.id of the routine.</param>
+/// <param name="pMarks">Sites that certainly put A in force (a free, an Enter).</param>
+/// <param name="pClears">Sites that MAY undo A (a re-assignment, a Leave, a call that can reach one).
+/// Pass every doubtful site: a clear never makes an answer True.</param>
+/// <param name="pQueries">Sites to judge.</param>
+/// <returns>The state just before each query. Every bit is False (a refusal, not a proof of the
+/// opposite) when a clear lies inside an anonymous-method body (it can run at any later time) or
+/// inside the protected body of a try..except (the handler can be entered from the middle of a
+/// block). A query is False when its own CFG item holds a clear at another position, when the item
+/// is inside a `with`, and inside a finally whose try body holds a clear.</returns>
+/// <remarks>An item that holds a mark AND a clear ends cleared. A clear counts wherever it stands
+/// (inside a `with`, a short-circuit operand, an if-expression); a mark only where SolveRoutine
+/// counts one. Parses through TAstParseCache; not thread-safe. Every doubt answers False.</remarks>
+function SolveRoutineInForce(const pStore: ISymbolStore; pRoutineId: Int64;
+  const pMarks, pClears, pQueries: TArray<THbSite>): THbRoutineState;
+
 /// <summary>True when the source position pSite lies inside the span of pNode.</summary>
 /// <param name="pSrc">The source bytes the tree was parsed from.</param>
 /// <param name="pNode">Any tree-sitter node; a null node contains nothing useful (its span is 0..0).</param>
@@ -208,6 +228,15 @@ type
     FIn: TArray<Boolean>;
     FOut: TArray<Boolean>;
     FMarked: TArray<TArray<Boolean>>;
+    { in-force solve (HB6): the items that undo the bit, the clear sites, and "refused" }
+    FCleared: TArray<TArray<Boolean>>;
+    FClears: TArray<THbSite>;
+    FRefused: Boolean;
+    FInForce: Boolean;
+    procedure ApplyClears(const pBody: TTSNode);
+    procedure CollectExceptBodies(const pNode: TTSNode; pList: TList<TTSNode>);
+    function Step(pBlock, pItem: Integer; pState: Boolean): Boolean;
+    function QueryBlocked(const pRef: TItemRef; const pSite: THbSite): Boolean;
     function PathTo(const pItem: TTSNode; const pSite: THbSite): TSitePath;
     procedure ComputeReach;
     procedure ApplyMarks(const pMarks: TArray<THbSite>);
@@ -219,6 +248,9 @@ type
   public
     constructor Create(pCfg: TCfg; pEntryDone: Boolean);
     procedure Run(const pMarks: TArray<THbSite>; var pState: THbRoutineState);
+    { the clear sites of the in-force solve; set before Run }
+    property Clears: TArray<THbSite> read FClears write FClears;
+    property InForce: Boolean read FInForce write FInForce;
   end;
 
 const
@@ -383,7 +415,7 @@ begin
           if FReach[P] then V:= V and FOut[P];
       end;
       var O:= V;
-      for var Mk in FMarked[B] do O:= O or Mk;
+      for var I:= 0 to High(FMarked[B]) do O:= Step(B, I, O);
       if (V <> FIn[B]) or (O <> FOut[B]) then
       begin
         FIn[B]:= V;
@@ -398,7 +430,68 @@ function TIntraSolver.StateBefore(const pRef: TItemRef): Boolean;
 begin
   if not FReach[pRef.Block] then Exit(False);
   Result:= FIn[pRef.Block];
-  for var I:= 0 to pRef.Item - 1 do Result:= Result or FMarked[pRef.Block][I];
+  for var I:= 0 to pRef.Item - 1 do Result:= Step(pRef.Block, I, Result);
+end;
+
+function TIntraSolver.Step(pBlock, pItem: Integer; pState: Boolean): Boolean;
+begin
+  Result:= not (FInForce and FCleared[pBlock][pItem]) and (pState or FMarked[pBlock][pItem]);
+end;
+
+procedure TIntraSolver.CollectExceptBodies(const pNode: TTSNode; pList: TList<TTSNode>);
+begin
+  for var I:= 0 to pNode.NamedChildCount - 1 do
+  begin
+    var C:= pNode.NamedChild(I);
+    if (C.NodeType = NODE_DEFPROC) or (C.NodeType = NODE_LAMBDA) then Continue;  { own routine }
+    if C.NodeType = 'try' then
+    begin
+      var IsFinally:= False;
+      for var J:= 0 to C.NamedChildCount - 1 do
+        IsFinally:= IsFinally or (C.NamedChild(J).NodeType = 'kFinally');
+      if not IsFinally and not C.ChildByField('try').IsNull then pList.Add(C.ChildByField('try'));
+    end;
+    CollectExceptBodies(C, pList);
+  end;
+end;
+
+{ Marks the items that hold a clear. Refuses the routine when a clear can run at a moment the block
+  states do not describe: inside an anonymous method, or inside the protected body of a try..except. }
+procedure TIntraSolver.ApplyClears(const pBody: TTSNode);
+begin
+  SetLength(FCleared, FCfg.Blocks.Count);
+  for var B:= 0 to FCfg.Blocks.Count - 1 do
+  begin
+    var Blk:= FCfg.Blocks[B];
+    SetLength(FCleared[B], Blk.Items.Count);
+    for var I:= 0 to Blk.Items.Count - 1 do
+      for var C in FClears do
+        if HbNodeContains(FSrc, Blk.Items[I].Node, C) then
+        begin
+          FCleared[B][I]:= True;
+          if PathTo(Blk.Items[I].Node, C).InLambda then FRefused:= True;
+        end;
+  end;
+  var Bodies:= TList<TTSNode>.Create;
+  try
+    CollectExceptBodies(pBody, Bodies);
+    for var Body in Bodies do
+      for var C in FClears do
+        if HbNodeContains(FSrc, Body, C) then FRefused:= True;
+  finally
+    Bodies.Free;
+  end;
+end;
+
+{ In-force solve: True when the query cannot be answered from the state before its item -- the item is
+  inside a `with` (the receiver is not known) or holds a clear at another position (which of the two
+  runs first is not known). }
+function TIntraSolver.QueryBlocked(const pRef: TItemRef; const pSite: THbSite): Boolean;
+begin
+  var It:= FCfg.Blocks[pRef.Block].Items[pRef.Item];
+  Result:= It.Opaque;
+  for var C in FClears do
+    if HbNodeContains(FSrc, It.Node, C) and not ((C.Line = pSite.Line) and (C.Col = pSite.Col)) then Result:= True;
 end;
 
 function TIntraSolver.Occurrences(const pSite: THbSite): TArray<TItemRef>;
@@ -468,9 +561,11 @@ procedure TIntraSolver.Run(const pMarks: TArray<THbSite>; var pState: THbRoutine
 begin
   ComputeReach;
   ApplyMarks(pMarks);
-  Solve;
   var Body:= FCfg.RoutineNode.ChildByField('body');
   if Body.IsNull then Body:= FCfg.RoutineNode;
+  var InForce:= FInForce;
+  if InForce then ApplyClears(Body);
+  Solve;
   var Finallys:= TList<TPair<TTSNode, TTSNode>>.Create;
   try
     CollectFinallys(Body, Finallys);
@@ -486,9 +581,17 @@ begin
         if PathTo(FCfg.Blocks[R.Block].Items[R.Item].Node, Site).InLambda then
           pState.Queries[Q].InClosure:= True;
         Done:= Done and StateBefore(R);
+        if InForce and QueryBlocked(R, Site) then Done:= False;
       end;
       for var F in Finallys do
-        if HbNodeContains(FSrc, F.Value, Site) then Done:= Done and TryEntryState(F.Key);
+        if HbNodeContains(FSrc, F.Value, Site) then
+        begin
+          Done:= Done and TryEntryState(F.Key);
+          { the finally also runs from the middle of the try body: a clear in there may have run }
+          for var C in FClears do
+            if HbNodeContains(FSrc, F.Key, C) then Done:= False;
+        end;
+      if FRefused then Done:= False;
       pState.Queries[Q].Done:= Done and not pState.Queries[Q].InClosure;
     end;
   finally
@@ -548,8 +651,9 @@ begin
   Result:= FindDefProc(PF.Tree.RootNode, Sym);
 end;
 
-function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;
-  pEntryDone: Boolean): THbRoutineState;
+{ The two public solves: pInForce = the in-force solve with pClears (entry False). }
+function SolveShared(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pClears, pQueries: TArray<THbSite>;
+  pEntryDone, pInForce: Boolean): THbRoutineState;
 begin
   Result:= Default(THbRoutineState);
   Result.RoutineId:= pRoutineId;
@@ -568,6 +672,8 @@ begin
     end;
     var Solver:= TIntraSolver.Create(Cfg, pEntryDone);
     try
+      Solver.Clears:= pClears;
+      Solver.InForce:= pInForce;
       Solver.Run(pMarks, Result);
     finally
       Solver.Free;
@@ -575,6 +681,18 @@ begin
   finally
     Cfg.Free;
   end;
+end;
+
+function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;
+  pEntryDone: Boolean): THbRoutineState;
+begin
+  Result:= SolveShared(pStore, pRoutineId, pMarks, nil, pQueries, pEntryDone, {pInForce=}False);
+end;
+
+function SolveRoutineInForce(const pStore: ISymbolStore; pRoutineId: Int64;
+  const pMarks, pClears, pQueries: TArray<THbSite>): THbRoutineState;
+begin
+  Result:= SolveShared(pStore, pRoutineId, pMarks, pClears, pQueries, {pEntryDone=}False, {pInForce=}True);
 end;
 
 function HbFactMustWrites(const pStore: ISymbolStore; pRoutineId: Int64; const pName: string): Boolean;
