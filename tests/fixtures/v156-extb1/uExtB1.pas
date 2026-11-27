@@ -36,7 +36,7 @@ type
     procedure Ambiguous;
   end;
 
-  { the same field name with another type: FCode has no single class in this unit }
+  { the same field name with another type in another class: each FCode has the class of its owner }
   TOtherStub = class
   private
     FCode: string;
@@ -201,7 +201,7 @@ begin
   SinkS(IntToStr(FQty)); { M-F-ARG }
 end;
 
-{ NEGATIVE: FCode is Integer here and string in TOtherStub -- no class is claimed }
+{ FCode is Integer here and string in TOtherStub -- the lookup is by scope: int is claimed here }
 procedure TOrderStub.Ambiguous;
 begin
   SinkI(FCode); { M-F-AMBIG }
